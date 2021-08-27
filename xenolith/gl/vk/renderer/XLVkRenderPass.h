@@ -48,14 +48,15 @@ public:
 		Vector<VkPipelineStageFlags> waitStages;
 		Vector<VkSemaphore> signalSem;
 		Vector<Rc<gl::AttachmentHandle>> signalAttachment;
+		Vector<Rc<SwapchainSync>> swapchainSync;
 	};
 
 	virtual ~RenderPassHandle();
 	virtual void invalidate();
 
 	// if submit is true - do run + submit in one call
-	virtual bool run(gl::FrameHandle &) override;
-	virtual void submit(gl::FrameHandle &) override;
+	virtual bool prepare(gl::FrameHandle &) override;
+	virtual void submit(gl::FrameHandle &, Function<void(const Rc<gl::RenderPass> &)> &&) override;
 
 protected:
 	virtual bool present(gl::FrameHandle &);

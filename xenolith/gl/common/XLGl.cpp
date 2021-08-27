@@ -22,10 +22,18 @@
 
 #include "XLDefine.h"
 
+#define XL_FRAME_DEBUG 1
+
 #ifdef XL_LOOP_DEBUG
 #define XL_LOOP_LOG(...) log::vtext("Gl::Loop", __VA_ARGS__)
 #else
 #define XL_LOOP_LOG(...)
+#endif
+
+#ifdef XL_FRAME_DEBUG
+#define XL_FRAME_LOG(...) log::vtext("Gl::Frame", __VA_ARGS__)
+#else
+#define XL_FRAME_LOG(...)
 #endif
 
 #include "XLGlDevice.cc"

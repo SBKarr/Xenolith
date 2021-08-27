@@ -25,6 +25,8 @@
 
 namespace stappler::xenolith::gl {
 
+RenderPass::~RenderPass() { }
+
 bool RenderPass::init(StringView name, RenderOrdering order, size_t subpassCount) {
 	_name = name.str();
 	_ordering = order;
@@ -39,6 +41,38 @@ void RenderPass::invalidate() {
 Rc<RenderPassHandle> RenderPass::makeFrameHandle(RenderPassData *data, const FrameHandle &handle) {
 	return Rc<RenderPassHandle>::create(*this, data, handle);
 }
+
+bool RenderPass::acquireForFrame(gl::FrameHandle &frame) {
+	if (_owner) {
+		if (_next) {
+			_next->invalidate();
+		}
+		_next = &frame;
+		return false;
+	} else {
+		_owner = &frame;
+		return true;
+	}
+}
+
+bool RenderPass::releaseForFrame(gl::FrameHandle &frame) {
+	if (_owner.get() == &frame) {
+		if (_next) {
+			_owner = move(_next);
+			_next = nullptr;
+			_owner->getLoop()->pushEvent(gl::Loop::Event::FrameUpdate, _owner);
+		} else {
+			_owner = nullptr;
+		}
+		return true;
+	} else if (_next.get() == &frame) {
+		_next = nullptr;
+		return true;
+	}
+	return false;
+}
+
+RenderPassHandle::~RenderPassHandle() { }
 
 bool RenderPassHandle::init(RenderPass &pass, RenderPassData *data, const FrameHandle &frame) {
 	_renderPass = &pass;
@@ -90,11 +124,15 @@ bool RenderPassHandle::isReady() const {
 	return ready;
 }
 
-bool RenderPassHandle::run(FrameHandle &) {
+bool RenderPassHandle::isAvailable(const FrameHandle &handle) const {
+	return _isAsync || _renderPass->getOwner() == &handle;
+}
+
+bool RenderPassHandle::prepare(FrameHandle &) {
 	return true;
 }
 
-void RenderPassHandle::submit(FrameHandle &) {
+void RenderPassHandle::submit(FrameHandle &, Function<void(const Rc<RenderPass> &)> &&) {
 
 }
 

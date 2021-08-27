@@ -279,13 +279,20 @@ protected:
 
 class SwapchainAttachment : public ImageAttachment {
 public:
-	virtual ~SwapchainAttachment() { }
+	virtual ~SwapchainAttachment();
 
 	virtual bool init(StringView, const ImageInfo &, AttachmentLayout init = AttachmentLayout::Ignored,
 			AttachmentLayout fin = AttachmentLayout::Ignored, bool clear = false);
 
+	const Rc<gl::FrameHandle> &getOwner() const { return _owner; }
+	bool acquireForFrame(gl::FrameHandle &);
+	bool releaseForFrame(gl::FrameHandle &);
+
 protected:
 	virtual Rc<AttachmentDescriptor> makeDescriptor(RenderPassData *) override;
+
+	Rc<gl::FrameHandle> _owner;
+	Rc<gl::FrameHandle> _next;
 };
 
 class SwapchainAttachmentDescriptor : public ImageAttachmentDescriptor {
@@ -301,6 +308,8 @@ public:
 	virtual ~AttachmentHandle() { }
 
 	virtual bool init(const Rc<Attachment> &, const FrameHandle &);
+
+	virtual bool isAvailable(const FrameHandle &) const { return true; }
 
 	// returns true for immediate setup, false if seyup job was scheduled
 	virtual bool setup(FrameHandle &);

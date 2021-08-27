@@ -34,7 +34,7 @@ public:
 
 	bool init(Loop &, RenderQueue &, uint64_t order, uint32_t gen, bool readyForSubmit = false);
 
-	void update();
+	void update(bool init = false);
 
 	uint64_t getOrder() const { return _order; }
 	uint64_t getGen() const { return _gen; }
@@ -50,16 +50,19 @@ public:
 	virtual void performInQueue(Function<bool(FrameHandle &)> &&, Function<void(FrameHandle &, bool)> &&, Ref * = nullptr);
 
 	// thread tasks within frame should not be performed directly on loop's queue to preserve FrameHandle object
-	virtual void performOnGlThread(Function<void(FrameHandle &)> &&, Ref * = nullptr);
+	virtual void performOnGlThread(Function<void(FrameHandle &)> &&, Ref * = nullptr, bool immediate = true);
 
 	virtual bool isSubmitted() const { return _submitted; }
 	virtual bool isInputRequired() const;
 	virtual bool isPresentable() const;
 	virtual bool isValid() const;
+	virtual bool isValidFlag() const { return _valid; }
 
 	virtual void setAttachmentReady(const Rc<AttachmentHandle> &); // should be called from GL thread
 	virtual void setRenderPassPrepared(const Rc<RenderPassHandle> &); // should be called from GL thread
 	virtual void setRenderPassSubmitted(const Rc<RenderPassHandle> &); // should be called from GL thread
+
+	virtual void submitRenderPass(const Rc<RenderPassHandle> &);
 
 	virtual bool isReadyForSubmit() const { return _readyForSubmit; }
 	virtual void setReadyForSubmit(bool);
@@ -67,6 +70,8 @@ public:
 	virtual void invalidate();
 
 protected:
+	virtual void releaseResources();
+
 	Loop *_loop = nullptr; // loop can not die until frames are performed
 	Device *_device = nullptr;// device can not die until frames are performed
 	Rc<RenderQueue> _queue; // hard reference to render queue, it should not be released until at least one frame uses it
@@ -76,6 +81,7 @@ protected:
 	bool _readyForSubmit = false;
 	bool _submitted = false;
 	bool _valid = true;
+	Vector<Rc<AttachmentHandle>> _availableAttachments;
 	Vector<Rc<AttachmentHandle>> _requiredAttachments;
 	Vector<Rc<AttachmentHandle>> _inputAttachments;
 	Vector<Rc<AttachmentHandle>> _readyAttachments;
@@ -83,6 +89,8 @@ protected:
 	Vector<Rc<RenderPassHandle>> _requiredRenderPasses;
 	Vector<Rc<RenderPassHandle>> _preparedRenderPasses;
 	Vector<Rc<RenderPassHandle>> _submittedRenderPasses;
+
+	Map<Rc<RenderPassHandle>, Rc<SwapchainAttachment>> _swapchainAttachments;
 };
 
 /*struct FrameData : public Ref {

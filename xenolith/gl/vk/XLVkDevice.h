@@ -59,14 +59,16 @@ class SwapchainSync : public Ref {
 public:
 	virtual ~SwapchainSync();
 
-	bool init(Device &dev);
+	bool init(Device &dev, uint32_t idx);
 	void reset();
 	void invalidate();
 
+	uint32_t getIndex() const { return _index; }
 	const Rc<Semaphore> &getImageReady() const { return _imageReady; }
 	const Rc<Semaphore> &getRenderFinished() const { return _renderFinished; }
 
 protected:
+	uint32_t _index = 0;
 	Rc<Semaphore> _imageReady;
 	Rc<Semaphore> _renderFinished;
 };
@@ -93,6 +95,8 @@ public:
 	using Features = DeviceInfo::Features;
 	using Properties = DeviceInfo::Properties;
 
+	static constexpr uint32_t FramesInFlight = 2;
+
 	Device();
 	virtual ~Device();
 
@@ -116,10 +120,12 @@ public:
 	virtual void begin(Application *, thread::TaskQueue &) override;
 	virtual void end(thread::TaskQueue &) override;
 	virtual void reset(thread::TaskQueue &) override;
+	virtual void waitIdle() override;
 
+	virtual void incrementGeneration() override;
 	virtual void invalidateFrame(gl::FrameHandle &) override;
 
-	bool isBestPresentMode() const;
+	virtual bool isBestPresentMode() const override;
 
 	const DeviceInfo & getInfo() const { return _info; }
 	const DeviceCallTable * getTable() const { return _table; }
@@ -145,11 +151,11 @@ public:
 	Rc<CommandPool> acquireCommandPool(QueueOperations, uint32_t = 0);
 	void releaseCommandPool(Rc<CommandPool> &&);
 
-	Rc<Fence> acquireFence();
+	Rc<Fence> acquireFence(uint32_t);
 	void releaseFence(Rc<Fence> &&);
 	void scheduleFence(gl::Loop &, Rc<Fence> &&);
 
-	Rc<SwapchainSync> acquireSwapchainSync();
+	Rc<SwapchainSync> acquireSwapchainSync(uint32_t);
 	void releaseSwapchainSync(Rc<SwapchainSync> &&);
 
 private:
@@ -179,7 +185,8 @@ private:
 	bool _finished = false;
 
 	Vector<Rc<Fence>> _fences;
-	Vector<Rc<SwapchainSync>> _sems;
+	Set<Rc<Fence>> _scheduled;
+	Vector<Vector<Rc<SwapchainSync>>> _sems;
 };
 
 enum class BufferLevel {

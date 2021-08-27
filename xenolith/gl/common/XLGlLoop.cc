@@ -35,6 +35,7 @@ struct Loop::Internal : memory::AllocPool {
 		eventsSwap = new (p) memory::vector<Event>(); eventsSwap->reserve(4);
 		timers = new (p) memory::vector<Timer>(); timers->reserve(8);
 		reschedule = new (p) memory::vector<Timer>(); reschedule->reserve(8);
+		autorelease = new (p) memory::vector<Rc<Ref>>(); autorelease->reserve(8);
 		memory::pool::pop();
 	}
 
@@ -43,6 +44,7 @@ struct Loop::Internal : memory::AllocPool {
 
 	memory::vector<Timer> *timers;
 	memory::vector<Timer> *reschedule;
+	memory::vector<Rc<Ref>> *autorelease;
 };
 
 struct PresentationData {
@@ -105,7 +107,10 @@ void Loop::threadInit() {
 	memory::pool::push(_pool);
 
 	_queue = Rc<thread::TaskQueue>::alloc(
-			math::clamp(uint16_t(std::thread::hardware_concurrency()), uint16_t(4), uint16_t(16)), nullptr, "Gl::Loop::Queue");
+			math::clamp(uint16_t(std::thread::hardware_concurrency()), uint16_t(4), uint16_t(16)),
+			nullptr, "Gl::Loop::Queue", [this] {
+		_cond.notify_all();
+	});
 	_queue->spawnWorkers();
 	_device->begin(_application, *_queue);
 	_queue->waitForAll();
@@ -118,33 +123,11 @@ void Loop::threadInit() {
 }
 
 bool Loop::worker() {
-	PresentationData data(_frameTimeMicroseconds.load());
+	//PresentationData data(_frameTimeMicroseconds.load());
+	PresentationData data(0);
 
-	auto pushFrame = [&] (FrameHandle *frame, ViewEvent::Value extra = 0) {
-		// schedule task for director
-		_application->performOnMainThread([dir = _application->getDirector(), frame] {
-			dir->render(frame);
-		});
-		// force thread update
-		_view->pushEvent(ViewEvent::Thread);
-	};
-
-	auto update = [&] {
-		/*if (data.low > 0) {
-			-- data.low;
-			if (data.low == 0) {
-				if (!_device->isBestPresentMode()) {
-					pushTask(PresentationEvent::SwapChainForceRecreate);
-				}
-			}
-		}
-		data.frame = data.now;
-		_frameQueue->update();
-		_dataQueue->update();*/
-	};
-
-	auto tryPresentFrame = [&] (const Rc<FrameHandle> &frame, StringView tag, bool force = false) {
-		/*if (force || data.frameInterval == 0 || data.now - data.frame > data.getFrameInterval() - data.updateInterval) {
+	/*auto tryPresentFrame = [&] (const Rc<FrameHandle> &frame, StringView tag, bool force = false) {
+		if (force || data.frameInterval == 0 || data.now - data.frame > data.getFrameInterval() - data.updateInterval) {
 #ifdef XL_LOOP_DEBUG
 			auto clock = platform::device::_clock();
 			auto syncIdx = frame->sync->idx;
@@ -165,22 +148,25 @@ bool Loop::worker() {
 				t.emplace_back(PresentationEvent::FrameTimeoutPassed, frame.get(), data::Value());
 				return true;
 			}, frameDelay);
-		}*/
-	};
-
-	auto pushUpdate = [&] (FrameHandle *frame, StringView reason) {
-		if (!frame || frame->getOrder() == _device->getOrder()) {
-			auto newFrame = _device->beginFrame(*this, *_device->getDefaultRenderQueue());
-			if (newFrame && newFrame->isInputRequired()) {
-				pushFrame(newFrame, ViewEvent::Update);
-			} else if (newFrame) {
-				_view->pushEvent(ViewEvent::Update);
-			}
-			XL_LOOP_LOG("Update: ", data.getLastUpdateInterval(), " ", data.getFrameInterval(), " ",
-					data.low, " [", reason, "]  ", frame ? frame->order : 0);
-		} else {
-			XL_LOOP_LOG("Update: rejected [", reason, "]  ", frame ? frame->order : 0);
 		}
+	};*/
+
+	auto pushFrame = [&] (StringView reason) {
+		auto newFrame = _device->beginFrame(*this, *_device->getDefaultRenderQueue());
+		if (newFrame && newFrame->isInputRequired()) {
+			data.frame = platform::device::_clock();
+			// schedule task for director
+			_application->performOnMainThread([dir = _application->getDirector(), newFrame] {
+				dir->render(newFrame);
+			});
+			// force thread update
+			_view->pushEvent(ViewEvent::Thread);
+		} else if (newFrame) {
+			data.frame = platform::device::_clock();
+			_view->pushEvent(ViewEvent::Update);
+		}
+		XL_LOOP_LOG("Update: ", data.getLastUpdateInterval(), " ", data.getFrameInterval(), " ",
+				data.low, " [", reason, "]  ", frame ? frame->order : 0);
 	};
 
 	auto invalidateSwapchain = [&] (ViewEvent::Value event) {
@@ -190,6 +176,7 @@ bool Loop::worker() {
 
 			_device->incrementGeneration();
 			_queue->waitForAll();
+			_device->waitIdle();
 			_view->pushEvent(event);
 			data.suboptimal = 20;
 			//pushUpdate(nullptr, "InvalidateSwapchain");
@@ -205,13 +192,15 @@ bool Loop::worker() {
 	while (!data.exit) {
 		bool timerPassed = false;
 		do {
+			++ _clock;
 			Context context;
 			context.events = _internal->events;
 			_internal->events = _internal->eventsSwap;
 			_internal->eventsSwap = context.events;
 
 			do {
-				if (!context.events->empty()) {
+				auto counter = _queue->getOutputCounter();
+				if (!context.events->empty() || counter > 0) {
 					data.timer += data.incrementTime();
 					if (data.timer > data.updateInterval) {
 						timerPassed = true;
@@ -220,14 +209,24 @@ bool Loop::worker() {
 				} else {
 					data.timer += data.incrementTime();
 					if (data.timer < data.updateInterval) {
-						if (!_cond.wait_for(lock, std::chrono::microseconds(data.updateInterval - data.timer), [&] {
-							return !_internal->events->empty();
-						})) {
-							timerPassed = true;
-						} else {
+						if (_internal->timers->empty()) {
+							auto t = std::max(std::max(data.updateInterval, data.frameInterval), uint64_t(1000000 / 60));
+							_cond.wait_for(lock, std::chrono::microseconds(t), [&] {
+								return !_internal->events->empty() || _queue->getOutputCounter() > 0;
+							});
 							context.events = _internal->events;
 							_internal->events = _internal->eventsSwap;
 							_internal->eventsSwap = context.events;
+						} else {
+							if (!_cond.wait_for(lock, std::chrono::microseconds(data.updateInterval - data.timer), [&] {
+								return !_internal->events->empty();
+							})) {
+								timerPassed = true;
+							} else {
+								context.events = _internal->events;
+								_internal->events = _internal->eventsSwap;
+								_internal->eventsSwap = context.events;
+							}
 						}
 					} else {
 						timerPassed = true;
@@ -240,10 +239,12 @@ bool Loop::worker() {
 
 			_queue->update();
 
+			uint64_t now = 0;
 			if (timerPassed) {
-				auto now = platform::device::_clock();
+				now = platform::device::_clock();
 				runTimers(now - data.last, context);
 				data.last = now;
+				data.timer = 0;
 			}
 
 			auto &events = *context.events;
@@ -251,15 +252,16 @@ bool Loop::worker() {
 				memory::pool::context<memory::pool_t *> ctx(pool);
 				switch (it.event) {
 				case Event::Update:
-					pushUpdate(nullptr, "Update");
+					pushFrame("Update");
 					break;
 				case Event::SwapChainDeprecated:
 					invalidateSwapchain(ViewEvent::SwapchainRecreation);
 					break;
 				case Event::SwapChainRecreated:
 					data.swapchainValid = true; // resume drawing
+					data.frame = 0;
 					_device->reset(*_queue);
-					pushUpdate(nullptr, "SwapChainRecreated");
+					pushFrame("SwapChainRecreated");
 					break;
 				case Event::SwapChainForceRecreate:
 					invalidateSwapchain(ViewEvent::SwapchainRecreationBest);
@@ -269,30 +271,42 @@ bool Loop::worker() {
 						frame->update();
 					}
 					break;
-				/*case PresentationEvent::FrameImageAcquired:
-					if (data.swapchainValid && _device->isFrameUsable((FrameData *)it.data.get())) {
-						auto frame = it.data.cast<FrameData>();
-						pushFrame(frame);
-					}
-					break;
-				case PresentationEvent::FramePresentReady:
-					// command buffers constructed - wait for next frame slot (or run immediately if framerate is low)
-					if (data.swapchainValid && _device->isFrameUsable((FrameData *)it.data.get())) {
-						auto frame = it.data.cast<FrameData>();
-						frame->status = FrameStatus::PresentReady;
-						if (frame->buffers.empty() || _device->getDraw()->submit(frame)) {
-							tryPresentFrame(frame, "Present[R]");
-						} else {
-							invalidateSwapchain(ViewEvent::SwapchainRecreation);
+				case Event::FrameSubmitted:
+					do {
+						if (data.suboptimal > 0) {
+							-- data.suboptimal;
+							if (data.suboptimal == 0) {
+								if (!_device->isBestPresentMode()) {
+									pushEvent(Event::SwapChainForceRecreate);
+									break;
+								}
+							}
 						}
+						if (data.swapchainValid) {
+							if (data.frameInterval == 0) {
+								pushFrame("FrameSubmitted");
+							} else {
+								if (now == 0) {
+									now = platform::device::_clock();
+								}
+								auto timeFromFrame = (now - data.frame);
+								if (timeFromFrame >= data.frameInterval) {
+									pushFrame("FrameSubmitted");
+								} else {
+									schedule([this] (Context &context) {
+										context.events->emplace_back(Event::FrameTimeoutPassed, nullptr, data::Value());
+										return true;
+									}, data.frameInterval - timeFromFrame);
+								}
+							}
+						}
+					} while (0);
+					break;
+				case Event::FrameTimeoutPassed:
+					if (data.swapchainValid) {
+						pushFrame("FrameTimeoutPassed");
 					}
 					break;
-				case PresentationEvent::FrameTimeoutPassed:
-					if (data.swapchainValid && _device->isFrameUsable((FrameData *)it.data.get())) {
-						auto frame = it.data.cast<FrameData>();
-						tryPresentFrame(frame, "Present[T]", true);
-					}
-					break;*/
 				case Event::UpdateFrameInterval:
 					// view want us to change frame interval
 					data.frameInterval = uint64_t(it.value.getInteger());
@@ -308,6 +322,7 @@ bool Loop::worker() {
 
 			_currentContext = nullptr;
 			events.clear();
+			_internal->autorelease->clear();
 			memory::pool::clear(pool);
 		} while (0);
 		lock.lock();
@@ -318,12 +333,18 @@ bool Loop::worker() {
 	_running.store(false);
 	lock.unlock();
 
+	_device->incrementGeneration();
+
+	_queue->waitForAll();
+
 	memory::pool::push(_pool);
 	_device->end(*_queue);
 	memory::pool::pop();
 
 	_queue->waitForAll();
 	_queue->cancelWorkers();
+
+	_internal->autorelease->clear();
 
 	lock.lock();
 	_internal->events->clear();
@@ -360,15 +381,15 @@ void Loop::pushContextEvent(Event::EventName event, Rc<Ref> && ref, data::Value 
 }
 
 void Loop::schedule(Function<bool(Context &)> &&cb) {
+	XL_ASSERT(isOnThread(), "Gl-Loop: schedule should be called in GL thread");
 	if (_running.load()) {
-		std::unique_lock<std::mutex> lock(_mutex);
 		_internal->timers->emplace_back(0, move(cb));
 	}
 }
 
 void Loop::schedule(Function<bool(Context &)> &&cb, uint64_t delay) {
+	XL_ASSERT(isOnThread(), "Gl-Loop: schedule should be called in GL thread");
 	if (_running.load()) {
-		std::unique_lock<std::mutex> lock(_mutex);
 		_internal->timers->emplace_back(delay, move(cb));
 	}
 }
@@ -386,18 +407,21 @@ void Loop::performOnThread(const Function<void()> &func, Ref *target) {
 	_queue->onMainThread(Rc<thread::Task>::create([func] (const thread::Task &, bool success) {
 		if (success) { func(); }
 	}, target));
-	_cond.notify_all();
 }
 
-void Loop::wake() {
-	_cond.notify_all();
+bool Loop::isOnThread() const {
+	return std::this_thread::get_id() == _thread.get_id();
+}
+
+void Loop::autorelease(Ref *ref) {
+	if (std::this_thread::get_id() == _thread.get_id()) {
+		_internal->autorelease->emplace_back(ref);
+	}
 }
 
 void Loop::runTimers(uint64_t dt, Context &t) {
-	_mutex.lock();
 	auto timers = _internal->timers;
 	_internal->timers = _internal->reschedule;
-	_mutex.unlock();
 
 	auto it = timers->begin();
 	while (it != timers->end()) {
@@ -423,7 +447,6 @@ void Loop::runTimers(uint64_t dt, Context &t) {
 		}
 	}
 
-	_mutex.lock();
 	if (!_internal->timers->empty()) {
 		for (auto &it : *_internal->timers) {
 			timers->emplace_back(std::move(it));
@@ -431,7 +454,6 @@ void Loop::runTimers(uint64_t dt, Context &t) {
 		_internal->timers->clear();
 	}
 	_internal->timers = timers;
-	_mutex.unlock();
 }
 
 }

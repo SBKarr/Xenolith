@@ -40,6 +40,8 @@ static constexpr RenderOrdering RenderOrderingHighest = RenderOrdering::max();
 
 class RenderPass : public NamedRef {
 public:
+	virtual ~RenderPass();
+
 	virtual bool init(StringView, RenderOrdering, size_t subpassCount = 1);
 	virtual void invalidate();
 
@@ -49,14 +51,23 @@ public:
 
 	virtual Rc<RenderPassHandle> makeFrameHandle(RenderPassData *, const FrameHandle &);
 
+	const Rc<gl::FrameHandle> &getOwner() const { return _owner; }
+	bool acquireForFrame(gl::FrameHandle &);
+	bool releaseForFrame(gl::FrameHandle &);
+
 protected:
 	size_t _subpassCount = 1;
 	String _name;
 	RenderOrdering _ordering = RenderOrderingLowest;
+
+	Rc<gl::FrameHandle> _owner;
+	Rc<gl::FrameHandle> _next;
 };
 
 class RenderPassHandle : public NamedRef {
 public:
+	virtual ~RenderPassHandle();
+
 	virtual bool init(RenderPass &, RenderPassData *, const FrameHandle &);
 
 	virtual StringView getName() const override;
@@ -65,13 +76,15 @@ public:
 
 	virtual bool isSubmitted() const { return _submitted; }
 	virtual RenderPassData *getData() const { return _data; }
+	virtual const Rc<RenderPass> &getRenderPass() const { return _renderPass; }
 
 	virtual bool isReady() const;
+	virtual bool isAvailable(const FrameHandle &) const;
 	virtual bool isAsync() const { return _isAsync; }
 
 	// if submit is true - do run + submit in one call
-	virtual bool run(FrameHandle &);
-	virtual void submit(FrameHandle &);
+	virtual bool prepare(FrameHandle &);
+	virtual void submit(FrameHandle &, Function<void(const Rc<RenderPass> &)> &&);
 
 protected:
 	bool _isAsync = false; // async passes can be submitted before previous frame submits all passes

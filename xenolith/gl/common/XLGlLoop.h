@@ -39,8 +39,8 @@ public:
 			SwapChainForceRecreate, // force engine to recreate swapchain with best params
 			FrameUpdate,
 			FrameSubmitted,
+			FrameTimeoutPassed, // framerate heartbeat
 			// FramePresentReady, // frame ready for presentation
-			// FrameTimeoutPassed, // framerate heartbeat
 			UpdateFrameInterval, // view wants us to update frame interval
 			CompileResource, // new GL resource requested
 			Exit,
@@ -86,6 +86,7 @@ public:
 	const Rc<Device> &getDevice() const { return _device; }
 	Application *getApplication() const { return _application; }
 	const Rc<thread::TaskQueue> &getQueue() const { return _queue; }
+	uint64_t getClock() const { return _clock; }
 
 	void performOnThread(const Function<void()> &func, Ref *target = nullptr);
 
@@ -106,7 +107,9 @@ public:
 		pushEvent(Event::SwapChainRecreated, nullptr, data::Value());
 	}
 
-	void wake();
+	bool isOnThread() const;
+
+	void autorelease(Ref *);
 
 protected:
 	struct Internal;
@@ -133,6 +136,7 @@ protected:
 	std::condition_variable _cond;
 
 	Rc<thread::TaskQueue> _queue;
+	uint64_t _clock = 0;
 };
 
 }

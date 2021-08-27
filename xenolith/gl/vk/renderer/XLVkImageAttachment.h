@@ -73,15 +73,10 @@ public:
 
 	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameHandle &);
 
-	SwapchainAttachmentHandle *getCurrentImage() const { return _currentImage; }
-	void setCurrentImage(SwapchainAttachmentHandle *);
-	void dropCurrent();
-
 protected:
 	virtual Rc<gl::AttachmentDescriptor> makeDescriptor(gl::RenderPassData *) override;
 
 	Vector<Rc<Image>> _images;
-	SwapchainAttachmentHandle *_currentImage = nullptr;
 };
 
 class SwapchainAttachmentDescriptor : public gl::SwapchainAttachmentDescriptor {
@@ -101,6 +96,8 @@ class SwapchainAttachmentHandle : public gl::AttachmentHandle {
 public:
 	virtual ~SwapchainAttachmentHandle();
 
+	virtual bool isAvailable(const gl::FrameHandle &) const override;
+
 	// returns true for immediate setup, false if setup job was scheduled
 	virtual bool setup(gl::FrameHandle &) override;
 
@@ -108,11 +105,12 @@ public:
 	const Rc<SwapchainSync> &getSync() const { return _sync; }
 	Swapchain *getSwapchain() const { return _swapchain; }
 
+	Rc<SwapchainSync> acquireSync();
+
 protected:
 	virtual bool acquire(gl::FrameHandle &);
 	virtual void invalidate();
 
-	bool _isCurrent = false;
 	uint32_t _index = maxOf<uint32_t>();
 
 	Rc<SwapchainSync> _sync;

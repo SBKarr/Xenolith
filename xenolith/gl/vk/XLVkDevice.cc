@@ -33,7 +33,8 @@ namespace stappler::xenolith::vk {
 
 SwapchainSync::~SwapchainSync() { }
 
-bool SwapchainSync::init(Device &dev) {
+bool SwapchainSync::init(Device &dev, uint32_t idx) {
+	_index = idx;
 	_imageReady = Rc<Semaphore>::create(dev);
 	_renderFinished = Rc<Semaphore>::create(dev);
 	return true;
@@ -146,6 +147,7 @@ bool Device::init(const Rc<Instance> &inst, VkSurfaceKHR surface, DeviceInfo && 
 		}
 	}
 
+	_sems.resize(2);
 	_swapchain = Rc<Swapchain>::create(*this);
 
 	return true;
@@ -194,7 +196,8 @@ void Device::begin(Application *app, thread::TaskQueue &q) {
 }
 
 void Device::end(thread::TaskQueue &) {
-	_table->vkDeviceWaitIdle(_device);
+	waitIdle();
+
 	for (auto &it : _families) {
 		for (auto &b : it.pools) {
 			b->invalidate(*this);
@@ -210,13 +213,35 @@ void Device::end(thread::TaskQueue &) {
 	_fences.clear();
 
 	for (auto &it : _sems) {
-		it->invalidate();
+		for (auto &iit : it) {
+			iit->invalidate();
+		}
 	}
 	_sems.clear();
 }
 
 void Device::reset(thread::TaskQueue &q) {
 
+}
+
+void Device::waitIdle() {
+	for (auto &it : _scheduled) {
+		it->check(false);
+	}
+	_scheduled.clear();
+	_table->vkDeviceWaitIdle(_device);
+}
+
+void Device::incrementGeneration() {
+	gl::Device::incrementGeneration();
+	for (auto &f : _families) {
+		auto it = f.waiters.begin();
+		while (it != f.waiters.end()) {
+			auto h = it->handle;
+			it->release(*h);
+			it = f.waiters.erase(it);
+		}
+	}
 }
 
 void Device::invalidateFrame(gl::FrameHandle &frame) {
@@ -286,6 +311,7 @@ void Device::releaseQueue(Rc<DeviceQueue> &&queue) {
 	Rc<gl::FrameHandle> handle;
 	Rc<Ref> ref;
 	Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> cb;
+	Function<void(gl::FrameHandle &)> invalidate;
 
 	DeviceQueueFamily *family = nullptr;
 	for (auto &it : _families) {
@@ -304,15 +330,21 @@ void Device::releaseQueue(Rc<DeviceQueue> &&queue) {
 			family->queues.emplace_back(queue->getQueue());
 		} else {
 			cb = move(family->waiters.front().acquire);
+			invalidate = move(family->waiters.front().release);
 			ref = move(family->waiters.front().ref);
 			handle = move(family->waiters.front().handle);
 			family->waiters.erase(family->waiters.begin());
 		}
 	}
 
-	if (cb) {
-		cb(*handle, queue);
+	if (handle && handle->isValid()) {
+		if (cb) {
+			cb(*handle, queue);
+		}
+	} else if (invalidate) {
+		invalidate(*handle);
 	}
+
 	queue = nullptr;
 	handle = nullptr;
 }
@@ -343,13 +375,16 @@ void Device::releaseCommandPool(Rc<CommandPool> &&pool) {
 	}
 }
 
-Rc<Fence> Device::acquireFence() {
+Rc<Fence> Device::acquireFence(uint32_t v) {
 	if (!_fences.empty()) {
 		auto ret = _fences.back();
 		_fences.pop_back();
+		ret->setFrame(v);
 		return ret;
 	}
-	return Rc<Fence>::create(*this);
+	auto f = Rc<Fence>::create(*this);
+	f->setFrame(v);
+	return f;
 }
 
 void Device::releaseFence(Rc<Fence> &&ref) {
@@ -358,8 +393,18 @@ void Device::releaseFence(Rc<Fence> &&ref) {
 }
 
 void Device::scheduleFence(gl::Loop &loop, Rc<Fence> &&fence) {
+	if (fence->check()) {
+		releaseFence(move(fence));
+		return;
+	}
+
+	_scheduled.emplace(fence);
 	loop.schedule([this, fence = move(fence)] (gl::Loop::Context &) {
+		if (_scheduled.find(fence) == _scheduled.end()) {
+			return true;
+		}
 		if (fence->check()) {
+			_scheduled.erase(fence);
 			releaseFence(Rc<Fence>(fence));
 			return true;
 		}
@@ -367,22 +412,65 @@ void Device::scheduleFence(gl::Loop &loop, Rc<Fence> &&fence) {
 	});
 }
 
-Rc<SwapchainSync> Device::acquireSwapchainSync() {
-	if (!_sems.empty()) {
-		auto ret = _sems.back();
-		_sems.pop_back();
+Rc<SwapchainSync> Device::acquireSwapchainSync(uint32_t idx) {
+	idx = idx % FramesInFlight;
+	auto &v = _sems.at(idx);
+	if (!v.empty()) {
+		auto ret = v.back();
+		v.pop_back();
 		return ret;
 	}
-	return Rc<SwapchainSync>::create(*this);
+	return Rc<SwapchainSync>::create(*this, idx);
 }
 
 void Device::releaseSwapchainSync(Rc<SwapchainSync> &&ref) {
-	_sems.emplace_back(move(ref));
+	if (!_sems.empty()) {
+		_sems.at(ref->getIndex() % FramesInFlight).emplace_back(move(ref));
+	}
 }
 
 Rc<gl::FrameHandle> Device::makeFrame(gl::Loop &loop, gl::RenderQueue &queue, bool readyForSubmit) {
 	return Rc<gl::FrameHandle>::create(loop, queue, _order ++, _gen, readyForSubmit);
 }
+
+static std::mutex hook_callLock;
+static DeviceCallTable *hook_origTable = nullptr;
+
+enum VkResult hook_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence) {
+	log::text("Vk-Hook", "vkQueueSubmit");
+	return hook_origTable->vkQueueSubmit(queue, submitCount, pSubmits, fence);
+}
+
+enum VkResult hook_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo) {
+	log::text("Vk-Hook", "vkQueuePresentKHR");
+	return hook_origTable->vkQueuePresentKHR(queue, pPresentInfo);
+}
+
+enum VkResult hook_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t* pImageIndex) {
+	log::text("Vk-Hook", "vkAcquireNextImageKHR");
+	return hook_origTable->vkAcquireNextImageKHR(device, swapchain, timeout, semaphore, fence, pImageIndex);
+}
+
+enum VkResult hook_vkBeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo* pBeginInfo) {
+	log::text("Vk-Hook", "vkBeginCommandBuffer");
+	return hook_origTable->vkBeginCommandBuffer(commandBuffer, pBeginInfo);
+}
+
+enum VkResult hook_vkEndCommandBuffer(VkCommandBuffer commandBuffer) {
+	log::text("Vk-Hook", "vkEndCommandBuffer");
+	return hook_origTable->vkEndCommandBuffer(commandBuffer);
+}
+
+enum VkResult hook_vkAllocateCommandBuffers(VkDevice device, const VkCommandBufferAllocateInfo* pAllocateInfo, VkCommandBuffer* pCommandBuffers) {
+	log::text("Vk-Hook", "vkAllocateCommandBuffers");
+	return hook_origTable->vkAllocateCommandBuffers(device, pAllocateInfo, pCommandBuffers);
+}
+
+enum VkResult hook_vkResetCommandPool(VkDevice device, VkCommandPool commandPool, VkCommandPoolResetFlags flags) {
+	log::text("Vk-Hook", "vkResetCommandPool");
+	return hook_origTable->vkResetCommandPool(device, commandPool, flags);
+}
+
 
 bool Device::setup(const Rc<Instance> &instance, VkPhysicalDevice p, const Properties &prop,
 		const Vector<DeviceQueueFamily> &queueFamilies, Features &features, const Vector<const char *> &requiredExtension) {
@@ -456,6 +544,16 @@ bool Device::setup(const Rc<Instance> &instance, VkPhysicalDevice p, const Prope
 	auto table = new DeviceCallTable();
 	loadDeviceTable(instance.get(), _device, table);
 	_table = table;
+
+	hook_origTable = new DeviceCallTable(*_table);
+	table->vkQueueSubmit = hook_vkQueueSubmit;
+	table->vkQueuePresentKHR = hook_vkQueuePresentKHR;
+	table->vkAcquireNextImageKHR = hook_vkAcquireNextImageKHR;
+	table->vkBeginCommandBuffer = hook_vkBeginCommandBuffer;
+	table->vkEndCommandBuffer = hook_vkEndCommandBuffer;
+	table->vkAllocateCommandBuffers = hook_vkAllocateCommandBuffers;
+	table->vkResetCommandPool = hook_vkResetCommandPool;
+
 	return true;
 }
 
@@ -479,6 +577,8 @@ void CommandPool::invalidate(Device &dev) {
 	if (_commandPool) {
 		dev.getTable()->vkDestroyCommandPool(dev.getDevice(), _commandPool, nullptr);
 		_commandPool = VK_NULL_HANDLE;
+	} else {
+		log::vtext("VK-Error", "CommandPool is not defined");
 	}
 }
 

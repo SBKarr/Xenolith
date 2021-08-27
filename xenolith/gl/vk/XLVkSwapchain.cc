@@ -400,6 +400,7 @@ Pair<gl::PresentMode, gl::PresentMode> Swapchain::getPresentModes(const SurfaceI
 	}
 
 	return pair(best, fast);
+	//return pair(fast, fast);
 }
 
 }

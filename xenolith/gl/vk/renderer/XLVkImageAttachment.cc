@@ -66,14 +66,6 @@ Rc<gl::AttachmentHandle> SwapchainAttachment::makeFrameHandle(const gl::FrameHan
 	return Rc<SwapchainAttachmentHandle>::create(this, handle);
 }
 
-void SwapchainAttachment::setCurrentImage(SwapchainAttachmentHandle *img) {
-	_currentImage = img;
-}
-
-void SwapchainAttachment::dropCurrent() {
-	_currentImage = nullptr;
-}
-
 Rc<gl::AttachmentDescriptor> SwapchainAttachment::makeDescriptor(gl::RenderPassData *pass) {
 	return Rc<SwapchainAttachmentDescriptor>::create(pass, this);
 }
@@ -93,28 +85,32 @@ SwapchainAttachmentHandle::~SwapchainAttachmentHandle() {
 	invalidate();
 }
 
+bool SwapchainAttachmentHandle::isAvailable(const gl::FrameHandle &frame) const {
+	auto a = (SwapchainAttachment *)_attachment.get();
+	if (a->getOwner() == &frame) {
+		return true;
+	}
+	return false;
+}
+
 bool SwapchainAttachmentHandle::setup(gl::FrameHandle &handle) {
 	_device = (Device *)handle.getDevice();
 	_swapchain = _device->getSwapchain();
-
-	auto a = (SwapchainAttachment *)_attachment.get();
-	_sync = _device->acquireSwapchainSync();
-	if (a->getCurrentImage() == nullptr) {
-		// no image scheduled to presentation, try acquire next
-		if (acquire(handle)) {
-			return true;
-		}
-		return false;
-	} else {
-		// wait until previous image is presented
+	_sync = _device->acquireSwapchainSync(handle.getOrder() % 2);
+	if (acquire(handle)) {
+		return true;
 	}
+	return false;
+}
 
-	return true;
+Rc<SwapchainSync> SwapchainAttachmentHandle::acquireSync() {
+	auto ret = move(_sync);
+	_sync = nullptr;
+	return ret;
 }
 
 bool SwapchainAttachmentHandle::acquire(gl::FrameHandle &handle) {
 	auto table = _device->getTable();
-	auto a = (SwapchainAttachment *)_attachment.get();
 
 	VkResult result = table->vkAcquireNextImageKHR(_device->getDevice(), _device->getSwapchain()->getSwapchain(),
 			0, _sync->getImageReady()->getUnsignalled(), VK_NULL_HANDLE, &_index);
@@ -123,12 +119,11 @@ bool SwapchainAttachmentHandle::acquire(gl::FrameHandle &handle) {
 	case VK_ERROR_OUT_OF_DATE_KHR:
 		handle.invalidate(); // exit with swapchain invalidation
 		handle.getLoop()->recreateSwapChain();
+		handle.invalidate();
 		return true;
 		break;
 	case VK_SUCCESS: // acquired successfully
 	case VK_SUBOPTIMAL_KHR: // swapchain recreation signal will be sent by view, but we can try to do some frames until that
-		a->setCurrentImage(this);
-		_isCurrent = true;
 		_sync->getImageReady()->setSignaled(true);
 		return true;
 		break;
@@ -139,8 +134,6 @@ bool SwapchainAttachmentHandle::acquire(gl::FrameHandle &handle) {
 		// see https://community.amd.com/t5/opengl-vulkan/vkacquirenextimagekhr-with-0-timeout-returns-vk-timeout-instead/td-p/350023
 	case VK_TIMEOUT:
 		// schedule
-		a->setCurrentImage(this);
-		_isCurrent = true;
 		handle.schedule([this] (gl::FrameHandle &handle, gl::Loop::Context &context) {
 			if (!handle.isValid()) {
 				invalidate();
@@ -187,10 +180,6 @@ bool SwapchainAttachmentHandle::acquire(gl::FrameHandle &handle) {
 }
 
 void SwapchainAttachmentHandle::invalidate() {
-	if (_isCurrent) {
-		auto a = (SwapchainAttachment *)_attachment.get();
-		a->dropCurrent();
-	}
 	if (_sync) {
 		_device->releaseSwapchainSync(move(_sync));
 		_sync = nullptr;

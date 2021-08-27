@@ -81,10 +81,13 @@ public:
 	bool isSignaled() const { return _signaled; }
 	VkFence getFence() const { return _fence; }
 
+	void setFrame(uint32_t f) { _frame = f; }
+	uint32_t getFrame() const { return _frame; }
+
 	// function will be called and ref will be released on fence's signal
 	void addRelease(Function<void()> &&, Ref * = nullptr);
 
-	bool check();
+	bool check(bool lockfree = true);
 	void reset();
 
 protected:
@@ -93,6 +96,7 @@ protected:
 		Rc<Ref> ref;
 	};
 
+	uint32_t _frame = 0;
 	bool _signaled = false;
 	VkFence _fence = VK_NULL_HANDLE;
 	Vector<ReleaseHandle> _release;

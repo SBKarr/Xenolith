@@ -37,9 +37,16 @@ Rc<gl::RenderPassHandle> RenderPass::makeFrameHandle(gl::RenderPassData *data, c
 	return Rc<RenderPassHandle>::create(*this, data, handle);
 }
 
-RenderPassHandle::~RenderPassHandle() { }
+RenderPassHandle::~RenderPassHandle() {
+	invalidate();
+}
 
 void RenderPassHandle::invalidate() {
+	if (_pool) {
+		_device->releaseCommandPool(move(_pool));
+		_pool = nullptr;
+	}
+
 	if (_fence) {
 		_device->releaseFence(move(_fence));
 		_fence = nullptr;
@@ -57,30 +64,31 @@ void RenderPassHandle::invalidate() {
 	_sync.signalAttachment.clear();
 }
 
-bool RenderPassHandle::run(gl::FrameHandle &frame) {
+bool RenderPassHandle::prepare(gl::FrameHandle &frame) {
 	_device = (Device *)frame.getDevice();
-	_fence = _device->acquireFence();
 	_pool = _device->acquireCommandPool(QueueOperations::Graphics);
-	if (!_fence || !_pool) {
+	if (!_pool) {
 		invalidate();
 		return false;
 	}
 
-	_fence->addRelease([dev = _device, pool = _pool] {
-		dev->releaseCommandPool(Rc<CommandPool>(pool));
-	});
+	uint32_t index = 0;
+	for (auto &it : _attachments) {
+		if (it->getAttachment()->getType() == gl::AttachmentType::SwapchainImage) {
+			auto img = it.cast<SwapchainAttachmentHandle>();
+			index = img->getIndex();
+		}
+	}
 
-	frame.performInQueue([this] (gl::FrameHandle &frame) {
+	if (index == maxOf<uint32_t>()) {
+		invalidate();
+		return false;
+	}
+
+	frame.performInQueue([this, index] (gl::FrameHandle &frame) {
 		auto table = _device->getTable();
 		auto buf = _pool->allocBuffer(*_device);
 
-		uint32_t index = 0;
-		for (auto &it : _attachments) {
-			if (it->getAttachment()->getType() == gl::AttachmentType::SwapchainImage) {
-				auto img = (SwapchainAttachmentHandle *)it.get();
-				index = img->getIndex();
-			}
-		}
 
 		auto targetFb = _data->framebuffers[index].cast<Framebuffer>();
 		auto currentExtent = targetFb->getExtent();
@@ -116,26 +124,40 @@ bool RenderPassHandle::run(gl::FrameHandle &frame) {
 		table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, ((Pipeline *)pipeline->pipeline.get())->getPipeline());
 		table->vkCmdDraw(buf, 3, 1, 0, 0);
 		table->vkCmdEndRenderPass(buf);
-		if (table->vkEndCommandBuffer(buf) != VK_SUCCESS) {
-			frame.performOnGlThread([this] (gl::FrameHandle &frame) {
-				log::vtext("VK-Error", "Fail to vkEndCommandBuffer");
-				frame.invalidate();
-			});
-		} else {
-			frame.performOnGlThread([this, buf] (gl::FrameHandle &frame) {
-				_buffers.emplace_back(buf);
-				frame.setRenderPassPrepared(this);
-			});
+		if (table->vkEndCommandBuffer(buf) == VK_SUCCESS) {
+			_buffers.emplace_back(buf);
+			return true;
 		}
-		return true;
+		return false;
+	}, [this] (gl::FrameHandle &frame, bool success) {
+		if (success) {
+			frame.setRenderPassPrepared(this);
+		} else {
+			log::vtext("VK-Error", "Fail to vkEndCommandBuffer");
+			frame.invalidate();
+		}
 	}, this);
 	return false;
 }
 
-void RenderPassHandle::submit(gl::FrameHandle &frame) {
+void RenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl::RenderPass> &)> &&func) {
 	Rc<gl::FrameHandle> f = &frame; // capture frame ref
 
+	_fence = _device->acquireFence(frame.getOrder());
+	_fence->addRelease([dev = _device, pool = move(_pool)] {
+		dev->releaseCommandPool(Rc<CommandPool>(pool));
+	});
+	_fence->addRelease([func = move(func), pass = _renderPass] {
+		func(pass);
+	});
+
+	_pool = nullptr;
 	_sync = makeSyncInfo();
+	for (auto &it : _sync.swapchainSync) {
+		_fence->addRelease([dev = _device, sync = it] {
+			dev->releaseSwapchainSync(Rc<SwapchainSync>(sync));
+		});
+	}
 
 	_device->acquireQueue(QueueOperations::Graphics, frame, [this] (gl::FrameHandle &frame, const Rc<DeviceQueue> &queue) {
 		_queue = queue;
@@ -148,6 +170,7 @@ void RenderPassHandle::submit(gl::FrameHandle &frame) {
 				}
 			}
 		}
+
 		frame.performInQueue([this] (gl::FrameHandle &frame) {
 			auto table = _device->getTable();
 			VkSubmitInfo submitInfo{};
@@ -162,18 +185,7 @@ void RenderPassHandle::submit(gl::FrameHandle &frame) {
 			submitInfo.pSignalSemaphores = _sync.signalSem.data();
 
 			if (table->vkQueueSubmit(_queue->getQueue(), 1, &submitInfo, _fence->getFence()) != VK_SUCCESS) {
-				frame.performOnGlThread([this] (gl::FrameHandle &frame) {
-					if (_queue) {
-						_device->releaseQueue(move(_queue));
-						_queue = nullptr;
-					}
-					log::vtext("VK-Error", "Fail to vkQueueSubmit");
-					_device->releaseFence(move(_fence));
-					_fence = nullptr;
-					invalidate();
-					frame.invalidate();
-				}, this);
-				return;
+				return false;
 			}
 
 			if (_presentAttachment) {
@@ -184,15 +196,28 @@ void RenderPassHandle::submit(gl::FrameHandle &frame) {
 				}
 			}
 
-			frame.performOnGlThread([this] (gl::FrameHandle &frame) {
+			return true;
+		}, [this] (gl::FrameHandle &frame, bool success) {
+			if (success) {
 				if (_queue) {
 					_device->releaseQueue(move(_queue));
 					_queue = nullptr;
 				}
 				_device->scheduleFence(*frame.getLoop(), move(_fence));
+				_fence = nullptr;
 				frame.setRenderPassSubmitted(this);
 				invalidate();
-			}, this);
+			} else {
+				if (_queue) {
+					_device->releaseQueue(move(_queue));
+					_queue = nullptr;
+				}
+				log::vtext("VK-Error", "Fail to vkQueueSubmit");
+				_device->releaseFence(move(_fence));
+				_fence = nullptr;
+				invalidate();
+				frame.invalidate();
+			}
 		}, this);
 	}, [this] (gl::FrameHandle &frame) {
 		invalidate();
@@ -202,14 +227,18 @@ void RenderPassHandle::submit(gl::FrameHandle &frame) {
 bool RenderPassHandle::present(gl::FrameHandle &frame) {
 	auto table = _device->getTable();
 
+	Vector<VkSemaphore> presentSem;
+
 	auto imageIndex = _presentAttachment->getIndex();
-	auto presentSem = _presentAttachment->getSync()->getRenderFinished()->getSemaphore();
+	for (auto &it : _sync.swapchainSync) {
+		presentSem.emplace_back(it->getRenderFinished()->getSemaphore());
+	}
 
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
-	presentInfo.waitSemaphoreCount = 1;
-	presentInfo.pWaitSemaphores = &presentSem;
+	presentInfo.waitSemaphoreCount = presentSem.size();
+	presentInfo.pWaitSemaphores = presentSem.data();
 
 	VkSwapchainKHR swapChains[] = {_presentAttachment->getSwapchain()->getSwapchain()};
 	presentInfo.swapchainCount = 1;
@@ -252,6 +281,7 @@ RenderPassHandle::Sync RenderPassHandle::makeSyncInfo() {
 					sync.signalSem.emplace_back(d->getSync()->getRenderFinished()->getUnsignalled());
 					sync.signalAttachment.emplace_back(it);
 					d->getSync()->getRenderFinished()->setSignaled(true);
+					sync.swapchainSync.emplace_back(d->acquireSync());
 				}
 			}
 		}

@@ -432,6 +432,8 @@ void ImageAttachmentRef::updateLayout() {
 	}
 }
 
+SwapchainAttachment::~SwapchainAttachment() { }
+
 bool SwapchainAttachment::init(StringView str, const ImageInfo &info, AttachmentLayout init,
 		AttachmentLayout fin, bool clear) {
 	if (Attachment::init(str, AttachmentType::SwapchainImage)) {
@@ -440,6 +442,36 @@ bool SwapchainAttachment::init(StringView str, const ImageInfo &info, Attachment
 		_initialLayout = init;
 		_finalLayout = fin;
 		_clearOnLoad = clear;
+		return true;
+	}
+	return false;
+}
+
+bool SwapchainAttachment::acquireForFrame(gl::FrameHandle &frame) {
+	if (_owner) {
+		if (_next) {
+			_next->invalidate();
+		}
+		_next = &frame;
+		return false;
+	} else {
+		_owner = &frame;
+		return true;
+	}
+}
+
+bool SwapchainAttachment::releaseForFrame(gl::FrameHandle &frame) {
+	if (_owner.get() == &frame) {
+		if (_next) {
+			_owner = move(_next);
+			_next = nullptr;
+			_owner->getLoop()->pushEvent(gl::Loop::Event::FrameUpdate, _owner);
+		} else {
+			_owner = nullptr;
+		}
+		return true;
+	} else if (_next.get() == &frame) {
+		_next = nullptr;
 		return true;
 	}
 	return false;

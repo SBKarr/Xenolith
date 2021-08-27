@@ -47,6 +47,7 @@ public:
 	virtual void begin(Application *, thread::TaskQueue &);
 	virtual void end(thread::TaskQueue &);
 	virtual void reset(thread::TaskQueue &);
+	virtual void waitIdle();
 
 	virtual Rc<gl::FrameHandle> beginFrame(gl::Loop &, gl::RenderQueue &);
 	virtual void setFrameSubmitted(Rc<gl::FrameHandle>);
@@ -54,7 +55,7 @@ public:
 	virtual bool isFrameValid(const gl::FrameHandle &handle);
 
 	// invalidate all frames in process before that
-	void incrementGeneration();
+	virtual void incrementGeneration();
 
 	virtual Rc<Shader> makeShader(const ProgramData &) = 0;
 	virtual Rc<Pipeline> makePipeline(const gl::RenderQueue &, const RenderPassData &, const PipelineData &) = 0;
@@ -75,6 +76,10 @@ public:
 	void removeObject(ObjectInterface *);
 
 	virtual const Rc<gl::RenderQueue> getDefaultRenderQueue() const;
+
+	virtual bool isBestPresentMode() const { return true; }
+
+	size_t getFramesActive() const { return _frames.size(); }
 
 protected:
 	virtual Rc<FrameHandle> makeFrame(gl::Loop &, gl::RenderQueue &, bool readyForSubmit) = 0;

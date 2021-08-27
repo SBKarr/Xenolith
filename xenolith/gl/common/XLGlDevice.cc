@@ -54,15 +54,23 @@ void Device::reset(thread::TaskQueue &) {
 
 }
 
+void Device::waitIdle() {
+
+}
+
 Rc<gl::FrameHandle> Device::beginFrame(gl::Loop &loop, gl::RenderQueue &queue) {
 	if (!canStartFrame()) {
 		scheduleNextFrame();
 		return nullptr;
 	}
 
+	_nextFrameScheduled = false;
 	auto frame = makeFrame(loop, queue, _frames.empty());
-	_frames.push_back(frame);
-	return frame;
+	if (frame && frame->isValidFlag()) {
+		_frames.push_back(frame);
+		return frame;
+	}
+	return nullptr;
 }
 
 void Device::setFrameSubmitted(Rc<gl::FrameHandle> frame) {
@@ -81,11 +89,17 @@ void Device::setFrameSubmitted(Rc<gl::FrameHandle> frame) {
 			break;
 		}
 	}
+
+	if (_nextFrameScheduled) {
+		frame->getLoop()->pushEvent(Loop::Event::FrameTimeoutPassed);
+	}
 }
 
 void Device::invalidateFrame(gl::FrameHandle &handle) {
 	auto it = std::find(_frames.begin(), _frames.end(), &handle);
-	_frames.erase(it);
+	if (it != _frames.end()) {
+		_frames.erase(it);
+	}
 }
 
 bool Device::isFrameValid(const gl::FrameHandle &handle) {
@@ -97,6 +111,13 @@ bool Device::isFrameValid(const gl::FrameHandle &handle) {
 
 void Device::incrementGeneration() {
 	++ _gen;
+	if (!_frames.empty()) {
+		auto f = move(_frames);
+		_frames.clear();
+		for (auto &it : f) {
+			it->invalidate();
+		}
+	}
 }
 
 Rc<Shader> Device::getProgram(StringView name) {
