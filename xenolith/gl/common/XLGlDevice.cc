@@ -181,7 +181,7 @@ void CompilationProcess::runShaders(thread::TaskQueue &queue) {
 		queue.perform(Rc<Task>::create([this, req = it, queue = Rc<thread::TaskQueue>(&queue)] (const thread::Task &) -> bool {
 			auto ret = draw->makeShader(*req);
 			if (!ret) {
-				log::vtext("vk", "Fail to compile shader program ", req->key);
+				log::vtext("Gl-Device", "Fail to compile shader program ", req->key);
 				return false;
 			} else {
 				req->program = draw->addProgram(ret);
@@ -199,7 +199,7 @@ void CompilationProcess::runShaders(thread::TaskQueue &queue) {
 		queue.perform(Rc<Task>::create([this, req = it, queue = Rc<thread::TaskQueue>(&queue)] (const thread::Task &) -> bool {
 			auto ret = draw->makeRenderPass(*req);
 			if (!ret) {
-				log::vtext("vk", "Fail to compile render pass ", req->key);
+				log::vtext("Gl-Device", "Fail to compile render pass ", req->key);
 				return false;
 			} else {
 				req->impl = ret;
@@ -214,7 +214,7 @@ void CompilationProcess::runShaders(thread::TaskQueue &queue) {
 	queue.perform(Rc<Task>::create([this, queue = Rc<thread::TaskQueue>(&queue)] (const thread::Task &) -> bool {
 		auto ret = draw->makePipelineLayout(req->getPipelineLayout());
 		if (!ret) {
-			log::vtext("vk", "Fail to compile pipeline layout ", req->getName());
+			log::vtext("Gl-Device", "Fail to compile pipeline layout ", req->getName());
 			return false;
 		} else {
 			req->setPipelineLayout(move(ret));
@@ -242,7 +242,7 @@ void CompilationProcess::runPipelines(thread::TaskQueue &queue) {
 			queue.perform(Rc<Task>::create([this, pass = pit, pipeline = it] (const thread::Task &) -> bool {
 				auto ret = draw->makePipeline(*req, *pass, *pipeline);
 				if (!ret) {
-					log::vtext("vk", "Fail to compile pipeline ", pipeline->key);
+					log::vtext("Gl-Device", "Fail to compile pipeline ", pipeline->key);
 					return false;
 				} else {
 					pipeline->pipeline = ret;

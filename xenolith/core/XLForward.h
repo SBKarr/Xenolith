@@ -42,7 +42,19 @@ THE SOFTWARE.
 #endif
 #endif
 
-// basd on VK_MAKE_API_VERSION
+// GL thread loop debug (uncomment to enable)
+// #define XL_LOOP_DEBUG 1
+
+// RenderGraph/Frame debug (uncomment to enable)
+// #define XL_FRAME_DEBUG 1
+
+// General Vulkan debug (uncomment to enable)
+// #define XL_VK_DEBUG 1
+
+// Enable Vulkan function call hooks (uncomment to enable)
+// #define XL_VK_HOOK_DEBUG 1
+
+// based on VK_MAKE_API_VERSION
 #define XL_MAKE_API_VERSION(variant, major, minor, patch) \
     ((((uint32_t)(variant)) << 29) | (((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
 

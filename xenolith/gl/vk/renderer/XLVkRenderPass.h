@@ -59,6 +59,8 @@ public:
 	virtual void submit(gl::FrameHandle &, Function<void(const Rc<gl::RenderPass> &)> &&) override;
 
 protected:
+	virtual Vector<VkCommandBuffer> doPrepare(gl::FrameHandle &, uint32_t index);
+
 	virtual bool present(gl::FrameHandle &);
 
 	virtual Sync makeSyncInfo();
@@ -72,6 +74,31 @@ protected:
 	Rc<SwapchainAttachmentHandle> _presentAttachment;
 	Sync _sync;
 };
+
+class RenderPassVertexes : public RenderPass {
+public:
+	virtual ~RenderPassVertexes();
+
+	virtual Rc<gl::RenderPassHandle> makeFrameHandle(gl::RenderPassData *, const gl::FrameHandle &);
+};
+
+class RenderPassVertexesHandle : public RenderPassHandle {
+public:
+	struct Sync {
+		Vector<Rc<gl::AttachmentHandle>> waitAttachment;
+		Vector<VkSemaphore> waitSem;
+		Vector<VkPipelineStageFlags> waitStages;
+		Vector<VkSemaphore> signalSem;
+		Vector<Rc<gl::AttachmentHandle>> signalAttachment;
+		Vector<Rc<SwapchainSync>> swapchainSync;
+	};
+
+	virtual ~RenderPassVertexesHandle();
+
+protected:
+	virtual Vector<VkCommandBuffer> doPrepare(gl::FrameHandle &, uint32_t index) override;
+};
+
 
 }
 

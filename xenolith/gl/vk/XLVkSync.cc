@@ -98,19 +98,9 @@ bool Fence::check(bool lockfree) {
 	auto dev = ((Device *)_device);
 	enum VkResult status;
 	if (lockfree) {
-		auto t = platform::device::_clock();
 		status = dev->getTable()->vkGetFenceStatus(dev->getDevice(), _fence);
-		auto clock = platform::device::_clock() - t;
-		if (clock > 10000) {
-			log::vtext("Fence", "vkGetFenceStatus: ", _frame, " ", clock);
-		}
 	} else {
-		auto t = platform::device::_clock();
 		status = dev->getTable()->vkWaitForFences(dev->getDevice(), 1, &_fence, VK_TRUE, UINT64_MAX);
-		auto clock = platform::device::_clock() - t;
-		if (clock > 10000) {
-			log::vtext("Fence", "vkWaitForFences: ", _frame, " ", clock);
-		}
 	}
 	switch (status) {
 	case VK_SUCCESS:

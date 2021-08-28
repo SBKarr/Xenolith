@@ -31,6 +31,46 @@
 
 namespace stappler::xenolith::vk {
 
+#ifdef XL_VK_HOOK_DEBUG
+static std::mutex hook_callLock;
+static DeviceCallTable *hook_origTable = nullptr;
+
+enum VkResult hook_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence) {
+	log::text("Vk-Hook", "vkQueueSubmit");
+	return hook_origTable->vkQueueSubmit(queue, submitCount, pSubmits, fence);
+}
+
+enum VkResult hook_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo) {
+	log::text("Vk-Hook", "vkQueuePresentKHR");
+	return hook_origTable->vkQueuePresentKHR(queue, pPresentInfo);
+}
+
+enum VkResult hook_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t* pImageIndex) {
+	log::text("Vk-Hook", "vkAcquireNextImageKHR");
+	return hook_origTable->vkAcquireNextImageKHR(device, swapchain, timeout, semaphore, fence, pImageIndex);
+}
+
+enum VkResult hook_vkBeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo* pBeginInfo) {
+	log::text("Vk-Hook", "vkBeginCommandBuffer");
+	return hook_origTable->vkBeginCommandBuffer(commandBuffer, pBeginInfo);
+}
+
+enum VkResult hook_vkEndCommandBuffer(VkCommandBuffer commandBuffer) {
+	log::text("Vk-Hook", "vkEndCommandBuffer");
+	return hook_origTable->vkEndCommandBuffer(commandBuffer);
+}
+
+enum VkResult hook_vkAllocateCommandBuffers(VkDevice device, const VkCommandBufferAllocateInfo* pAllocateInfo, VkCommandBuffer* pCommandBuffers) {
+	log::text("Vk-Hook", "vkAllocateCommandBuffers");
+	return hook_origTable->vkAllocateCommandBuffers(device, pAllocateInfo, pCommandBuffers);
+}
+
+enum VkResult hook_vkResetCommandPool(VkDevice device, VkCommandPool commandPool, VkCommandPoolResetFlags flags) {
+	log::text("Vk-Hook", "vkResetCommandPool");
+	return hook_origTable->vkResetCommandPool(device, commandPool, flags);
+}
+#endif
+
 SwapchainSync::~SwapchainSync() { }
 
 bool SwapchainSync::init(Device &dev, uint32_t idx) {
@@ -433,45 +473,6 @@ Rc<gl::FrameHandle> Device::makeFrame(gl::Loop &loop, gl::RenderQueue &queue, bo
 	return Rc<gl::FrameHandle>::create(loop, queue, _order ++, _gen, readyForSubmit);
 }
 
-static std::mutex hook_callLock;
-static DeviceCallTable *hook_origTable = nullptr;
-
-enum VkResult hook_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence) {
-	log::text("Vk-Hook", "vkQueueSubmit");
-	return hook_origTable->vkQueueSubmit(queue, submitCount, pSubmits, fence);
-}
-
-enum VkResult hook_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo) {
-	log::text("Vk-Hook", "vkQueuePresentKHR");
-	return hook_origTable->vkQueuePresentKHR(queue, pPresentInfo);
-}
-
-enum VkResult hook_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t* pImageIndex) {
-	log::text("Vk-Hook", "vkAcquireNextImageKHR");
-	return hook_origTable->vkAcquireNextImageKHR(device, swapchain, timeout, semaphore, fence, pImageIndex);
-}
-
-enum VkResult hook_vkBeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo* pBeginInfo) {
-	log::text("Vk-Hook", "vkBeginCommandBuffer");
-	return hook_origTable->vkBeginCommandBuffer(commandBuffer, pBeginInfo);
-}
-
-enum VkResult hook_vkEndCommandBuffer(VkCommandBuffer commandBuffer) {
-	log::text("Vk-Hook", "vkEndCommandBuffer");
-	return hook_origTable->vkEndCommandBuffer(commandBuffer);
-}
-
-enum VkResult hook_vkAllocateCommandBuffers(VkDevice device, const VkCommandBufferAllocateInfo* pAllocateInfo, VkCommandBuffer* pCommandBuffers) {
-	log::text("Vk-Hook", "vkAllocateCommandBuffers");
-	return hook_origTable->vkAllocateCommandBuffers(device, pAllocateInfo, pCommandBuffers);
-}
-
-enum VkResult hook_vkResetCommandPool(VkDevice device, VkCommandPool commandPool, VkCommandPoolResetFlags flags) {
-	log::text("Vk-Hook", "vkResetCommandPool");
-	return hook_origTable->vkResetCommandPool(device, commandPool, flags);
-}
-
-
 bool Device::setup(const Rc<Instance> &instance, VkPhysicalDevice p, const Properties &prop,
 		const Vector<DeviceQueueFamily> &queueFamilies, Features &features, const Vector<const char *> &requiredExtension) {
 	Vector<VkDeviceQueueCreateInfo> queueCreateInfos;
@@ -545,6 +546,7 @@ bool Device::setup(const Rc<Instance> &instance, VkPhysicalDevice p, const Prope
 	loadDeviceTable(instance.get(), _device, table);
 	_table = table;
 
+#ifdef XL_VK_HOOK_DEBUG
 	hook_origTable = new DeviceCallTable(*_table);
 	table->vkQueueSubmit = hook_vkQueueSubmit;
 	table->vkQueuePresentKHR = hook_vkQueuePresentKHR;
@@ -553,6 +555,7 @@ bool Device::setup(const Rc<Instance> &instance, VkPhysicalDevice p, const Prope
 	table->vkEndCommandBuffer = hook_vkEndCommandBuffer;
 	table->vkAllocateCommandBuffers = hook_vkAllocateCommandBuffers;
 	table->vkResetCommandPool = hook_vkResetCommandPool;
+#endif
 
 	return true;
 }

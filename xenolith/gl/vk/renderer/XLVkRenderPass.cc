@@ -86,46 +86,9 @@ bool RenderPassHandle::prepare(gl::FrameHandle &frame) {
 	}
 
 	frame.performInQueue([this, index] (gl::FrameHandle &frame) {
-		auto table = _device->getTable();
-		auto buf = _pool->allocBuffer(*_device);
-
-
-		auto targetFb = _data->framebuffers[index].cast<Framebuffer>();
-		auto currentExtent = targetFb->getExtent();
-
-		VkCommandBufferBeginInfo beginInfo { };
-		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-		beginInfo.pInheritanceInfo = nullptr;
-
-		if (table->vkBeginCommandBuffer(buf, &beginInfo) != VK_SUCCESS) {
-			return false;
-		}
-
-		VkRenderPassBeginInfo renderPassInfo { };
-		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		renderPassInfo.renderPass = _data->impl.cast<RenderPassImpl>()->getRenderPass();
-		renderPassInfo.framebuffer = targetFb->getFramebuffer();
-		renderPassInfo.renderArea.offset = { 0, 0 };
-		renderPassInfo.renderArea.extent = VkExtent2D{currentExtent.width, currentExtent.height};
-		VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
-		renderPassInfo.clearValueCount = 1;
-		renderPassInfo.pClearValues = &clearColor;
-		table->vkCmdBeginRenderPass(buf, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-		VkViewport viewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
-		table->vkCmdSetViewport(buf, 0, 1, &viewport);
-
-		VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
-		table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
-
-		auto pipeline = _data->pipelines.get(StringView("Default"));
-
-		table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, ((Pipeline *)pipeline->pipeline.get())->getPipeline());
-		table->vkCmdDraw(buf, 3, 1, 0, 0);
-		table->vkCmdEndRenderPass(buf);
-		if (table->vkEndCommandBuffer(buf) == VK_SUCCESS) {
-			_buffers.emplace_back(buf);
+		auto ret = doPrepare(frame, index);
+		if (!ret.empty()) {
+			_buffers = move(ret);
 			return true;
 		}
 		return false;
@@ -224,6 +187,50 @@ void RenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl:
 	}, this);
 }
 
+Vector<VkCommandBuffer> RenderPassHandle::doPrepare(gl::FrameHandle &frame, uint32_t index) {
+	auto table = _device->getTable();
+	auto buf = _pool->allocBuffer(*_device);
+
+	auto targetFb = _data->framebuffers[index].cast<Framebuffer>();
+	auto currentExtent = targetFb->getExtent();
+
+	VkCommandBufferBeginInfo beginInfo { };
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	beginInfo.pInheritanceInfo = nullptr;
+
+	if (table->vkBeginCommandBuffer(buf, &beginInfo) != VK_SUCCESS) {
+		return Vector<VkCommandBuffer>();
+	}
+
+	VkRenderPassBeginInfo renderPassInfo { };
+	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	renderPassInfo.renderPass = _data->impl.cast<RenderPassImpl>()->getRenderPass();
+	renderPassInfo.framebuffer = targetFb->getFramebuffer();
+	renderPassInfo.renderArea.offset = { 0, 0 };
+	renderPassInfo.renderArea.extent = VkExtent2D{currentExtent.width, currentExtent.height};
+	VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+	renderPassInfo.clearValueCount = 1;
+	renderPassInfo.pClearValues = &clearColor;
+	table->vkCmdBeginRenderPass(buf, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+	VkViewport viewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
+	table->vkCmdSetViewport(buf, 0, 1, &viewport);
+
+	VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
+	table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
+
+	auto pipeline = _data->pipelines.get(StringView("Default"));
+
+	table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, ((Pipeline *)pipeline->pipeline.get())->getPipeline());
+	table->vkCmdDraw(buf, 3, 1, 0, 0);
+	table->vkCmdEndRenderPass(buf);
+	if (table->vkEndCommandBuffer(buf) == VK_SUCCESS) {
+		return Vector<VkCommandBuffer>{buf};
+	}
+	return Vector<VkCommandBuffer>();
+}
+
 bool RenderPassHandle::present(gl::FrameHandle &frame) {
 	auto table = _device->getTable();
 
@@ -288,6 +295,21 @@ RenderPassHandle::Sync RenderPassHandle::makeSyncInfo() {
 	}
 
 	return sync;
+}
+
+
+RenderPassVertexes::~RenderPassVertexes() {
+
+}
+
+Rc<gl::RenderPassHandle> RenderPassVertexes::makeFrameHandle(gl::RenderPassData *data, const gl::FrameHandle &handle) {
+	return Rc<RenderPassVertexesHandle>::create(*this, data, handle);
+}
+
+RenderPassVertexesHandle::~RenderPassVertexesHandle() { }
+
+Vector<VkCommandBuffer> RenderPassVertexesHandle::doPrepare(gl::FrameHandle &, uint32_t index) {
+	return Vector<VkCommandBuffer>();
 }
 
 }
