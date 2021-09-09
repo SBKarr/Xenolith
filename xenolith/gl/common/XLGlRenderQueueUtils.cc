@@ -33,7 +33,6 @@ struct RenderQueue::QueueData : NamedMem {
 	HashTable<RenderPassData *> passes;
 	HashTable<ProgramData *> programs;
 	HashTable<Rc<Resource>> resources;
-	PipelineLayoutData pipelineLayout;
 	bool compiled = false;
 
 	void clear() {
@@ -59,15 +58,14 @@ struct RenderQueue::QueueData : NamedMem {
 			it->clear();
 		}
 
-		pipelineLayout.layout = nullptr;
 		resources.clear();
 	}
 };
 
-static void RenderQueue_buildRenderPaths(RenderQueue::QueueData *_data) {
+static void RenderQueue_buildRenderPaths(RenderQueue &queue, RenderQueue::QueueData *_data) {
 	// fill attachment descriptors
 	for (auto &attachment : _data->attachments) {
-		attachment->sortDescriptors();
+		attachment->sortDescriptors(queue);
 	}
 }
 
@@ -357,96 +355,11 @@ static void RenderQueue_buildLoadStore(RenderQueue::QueueData *data) {
 }
 
 static void RenderQueue_buildDescriptors(RenderQueue::QueueData *data) {
-	ProgramStage globalStages;
 	for (auto &pass : data->passes) {
-		for (auto &pipeline : pass->pipelines) {
-			for (auto &it : pipeline->shaders) {
-				if (auto sh = data->programs.get(it)) {
-					globalStages |= sh->stage;
-				}
-			}
-		}
-	}
-
-	auto findUsageStages = [&] (Attachment *attachment) {
-		return globalStages;
-	};
-
-	for (auto &attachment : data->attachments) {
-		if (attachment->getType() == AttachmentType::Buffer) {
-			auto buffer = (BufferAttachment *)attachment.get();
-			if (attachment->getDescriptorType() != DescriptorType::Unknown) {
-				ProgramStage stages = ProgramStage::None;
-				if (buffer->getInfo().stages != ProgramStage::None) {
-					stages = buffer->getInfo().stages;
-				} else {
-					stages = findUsageStages(attachment);
-				}
-				data->pipelineLayout.queueDescriptors.emplace_back(
-						PipelineDescriptor({attachment, attachment->getDescriptorType(), stages}));
-			} else {
-				DescriptorType descriptor = DescriptorType::Unknown;
-				if ((buffer->getInfo().usage & BufferUsage::UniformTexelBuffer) != BufferUsage::None) {
-					if (descriptor == DescriptorType::Unknown) {
-						descriptor = DescriptorType::UniformTexelBuffer;
-					} else {
-						log::vtext("Gl-Error", "Fail to deduce DescriptorType from attachment '", attachment->getName(), "'");
-					}
-				}
-				if ((buffer->getInfo().usage & BufferUsage::StorageTexelBuffer) != BufferUsage::None) {
-					if (descriptor == DescriptorType::Unknown) {
-						descriptor = DescriptorType::StorageTexelBuffer;
-					} else {
-						log::vtext("Gl-Error", "Fail to deduce DescriptorType from attachment '", attachment->getName(), "'");
-					}
-				}
-				if ((buffer->getInfo().usage & BufferUsage::UniformBuffer) != BufferUsage::None) {
-					if (descriptor == DescriptorType::Unknown) {
-						descriptor = DescriptorType::UniformBuffer;
-					} else {
-						log::vtext("Gl-Error", "Fail to deduce DescriptorType from attachment '", attachment->getName(), "'");
-					}
-				}
-				if ((buffer->getInfo().usage & BufferUsage::StorageBuffer) != BufferUsage::None) {
-					if (descriptor == DescriptorType::Unknown) {
-						descriptor = DescriptorType::StorageBuffer;
-					} else {
-						log::vtext("Gl-Error", "Fail to deduce DescriptorType from attachment '", attachment->getName(), "'");
-					}
-				}
-
-				if (descriptor != DescriptorType::Unknown) {
-					attachment->setDescriptorType(descriptor);
-					ProgramStage stages = ProgramStage::None;
-					if (buffer->getInfo().stages != ProgramStage::None) {
-						stages = buffer->getInfo().stages;
-					} else {
-						stages = findUsageStages(attachment);
-					}
-					data->pipelineLayout.queueDescriptors.emplace_back(
-							PipelineDescriptor({attachment, attachment->getDescriptorType(), stages}));
-				}
-			}
-		} else {
-			bool isInputAttachment = false;
-			for (auto &desc : attachment->getDescriptors()) {
-				for (auto &usage : desc->getRefs()) {
-					if ((usage->getUsage() & AttachmentUsage::Input) != AttachmentUsage::None) {
-						isInputAttachment = true;
-						break;
-					}
-				}
-			}
-			if (isInputAttachment) {
-				auto image = (ImageAttachment *)attachment.get();
-				ProgramStage stages = ProgramStage::None;
-				if (image->getInfo().stages != ProgramStage::None) {
-					stages = image->getInfo().stages;
-				} else {
-					stages = findUsageStages(attachment);
-				}
-				data->pipelineLayout.queueDescriptors.emplace_back(
-						PipelineDescriptor({attachment, DescriptorType::InputAttachment, stages}));
+		for (auto &attachment : pass->descriptors) {
+			auto &desc = attachment->getDescriptor();
+			if (desc.type != DescriptorType::Unknown) {
+				pass->pipelineLayout.queueDescriptors.emplace_back(&desc);
 			}
 		}
 	}

@@ -62,8 +62,13 @@ bool FrameHandle::init(Loop &loop, RenderQueue &queue, uint64_t order, uint32_t 
 				}
 			}
 		}
+
 		auto h = it->makeFrameHandle(*this);
 		_requiredAttachments.emplace_back(h);
+		if (h->isInput()) {
+			++ _inputs;
+		}
+
 		if (h->isAvailable(*this)) {
 			XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] setup attachment '", h->getAttachment()->getName(), "'");
 			if (h->setup(*this)) {
@@ -72,8 +77,8 @@ bool FrameHandle::init(Loop &loop, RenderQueue &queue, uint64_t order, uint32_t 
 					_inputAttachments.emplace_back(h);
 				} else {
 					_readyAttachments.emplace_back(h);
+					h->setReady(true);
 				}
-				h->setReady(true);
 			}
 		} else {
 			XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] wait available '", h->getAttachment()->getName(), "'");
@@ -92,6 +97,10 @@ bool FrameHandle::init(Loop &loop, RenderQueue &queue, uint64_t order, uint32_t 
 
 	if (!_valid) {
 		releaseResources();
+	}
+
+	if (_inputAttachments.size() == _inputs) {
+		_loop->pushEvent(Loop::Event::FrameInputReady, this);
 	}
 
 	return true;
@@ -114,8 +123,8 @@ void FrameHandle::update(bool init) {
 						_inputAttachments.emplace_back((*it));
 					} else {
 						_readyAttachments.emplace_back((*it));
+						(*it)->setReady(true);
 					}
-					(*it)->setReady(true);
 				}
 				it = _availableAttachments.erase(it);
 			} else {
@@ -211,6 +220,16 @@ bool FrameHandle::isValid() const {
 	return _valid && _device->isFrameValid(*this);
 }
 
+bool FrameHandle::submitInput(const Rc<AttachmentHandle> &attachemnt, Rc<AttachmentInputData> &&data) {
+	if (attachemnt->isInput()) {
+		if (attachemnt->submitInput(*this, move(data))) {
+			++ _inputSubmitted;
+			return true;
+		}
+	}
+	return false;
+}
+
 void FrameHandle::setAttachmentReady(const Rc<AttachmentHandle> &handle) {
 	if (!isValid()) {
 		XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] [invalid] attachment ready '", handle->getAttachment()->getName(), "'");
@@ -220,11 +239,22 @@ void FrameHandle::setAttachmentReady(const Rc<AttachmentHandle> &handle) {
 	XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] attachment ready '", handle->getAttachment()->getName(), "'");
 	if (handle->isInput()) {
 		_inputAttachments.emplace_back(handle);
+		if (_inputAttachments.size() == _inputs) {
+			_loop->pushContextEvent(Loop::Event::FrameInputReady, this);
+		}
 	} else {
 		_readyAttachments.emplace_back(handle);
+		handle->setReady(true);
 	}
-	handle->setReady(true);
 	_loop->pushContextEvent(Loop::Event::FrameUpdate, this);
+}
+
+void FrameHandle::setInputSubmitted(const Rc<AttachmentHandle> &handle) {
+	if (handle->isInput()) {
+		_readyAttachments.emplace_back(handle);
+		handle->setReady(true);
+		_loop->pushContextEvent(Loop::Event::FrameUpdate, this);
+	}
 }
 
 void FrameHandle::setRenderPassPrepared(const Rc<RenderPassHandle> &pass) {
@@ -277,12 +307,7 @@ void FrameHandle::submitRenderPass(const Rc<RenderPassHandle> &pass) {
 
 	XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] submit render pass '", pass->getRenderPass()->getName(), "'");
 	pass->submit(*this, [this, a] (const Rc<RenderPass> &pass) {
-		XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] release render pass '", pass->getName(), "'");
-		pass->releaseForFrame(*this);
-		if (a) {
-			XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] release swapchain '", a->getName(), "'");
-			a->releaseForFrame(*this);
-		}
+		releaseRenderPassResources(pass, a);
 	});
 }
 
@@ -300,14 +325,20 @@ void FrameHandle::setReadyForSubmit(bool value) {
 }
 
 void FrameHandle::invalidate() {
-	if (_valid) {
-		retain();
-		XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] frame invalidated");
-		_valid = false;
-		_device->invalidateFrame(*this);
-		releaseResources();
-		_loop->autorelease(this);
-		release();
+	if (_loop->isOnThread()) {
+		if (_valid) {
+			retain();
+			XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] frame invalidated");
+			_valid = false;
+			_device->invalidateFrame(*this);
+			releaseResources();
+			_loop->autorelease(this);
+			release();
+		}
+	} else {
+		_loop->performOnThread([this] {
+			invalidate();
+		}, this);
 	}
 }
 
@@ -325,6 +356,15 @@ void FrameHandle::releaseResources() {
 		}
 	}
 	_preparedRenderPasses.clear();
+}
+
+void FrameHandle::releaseRenderPassResources(const Rc<RenderPass> &pass, const Rc<SwapchainAttachment> &a) {
+	XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] release render pass '", pass->getName(), "'");
+	pass->releaseForFrame(*this);
+	if (a) {
+		XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] release swapchain '", a->getName(), "'");
+		a->releaseForFrame(*this);
+	}
 }
 
 }

@@ -28,36 +28,6 @@ THE SOFTWARE.
 
 namespace stappler::xenolith {
 
-enum class VertexFormat {
-	None,
-	V4F_C4F_T2F, // texture surface - default
-};
-
-enum class LayoutFormat {
-	None,
-
-	/* Set 0:	0 - <empty> samplers [opts]
-	 * 			1 - <empty> sampled images
-	 * Set 1: 	0 - <empty> uniform buffers
-	 *			1 - <empty> storage buffers
-	 * Set 2: 	0 - storage readonly vertex buffer
-	 */
-	Vertexes,
-
-	/* Set 0:	0 - samplers [opts]
-	 * 			1 - sampled images
-	 * Set 1: 	0 - uniform buffers
-	 *			1 - storage buffers
-	 * Set 2: 	0 - <empty> storage readonly vertex buffer
-	 */
-	Default,
-};
-
-}
-
-
-namespace stappler::xenolith {
-
 static constexpr uint64_t InvalidTag = maxOf<uint64_t>();
 
 enum class NodeFlags {

@@ -25,7 +25,7 @@
 #include "XLGlObject.h"
 #include "XLVkSwapchain.h"
 #include "XLVkPipeline.h"
-#include "XLGlFrame.h"
+#include "XLVkFrame.h"
 #include "XLGlLoop.h"
 #include "XLVkRenderPassImpl.h"
 
@@ -71,41 +71,13 @@ enum VkResult hook_vkResetCommandPool(VkDevice device, VkCommandPool commandPool
 }
 #endif
 
-SwapchainSync::~SwapchainSync() { }
-
-bool SwapchainSync::init(Device &dev, uint32_t idx) {
-	_index = idx;
-	_imageReady = Rc<Semaphore>::create(dev);
-	_renderFinished = Rc<Semaphore>::create(dev);
-	return true;
-}
-
-void SwapchainSync::reset() {
-	_imageReady->reset();
-	_renderFinished->reset();
-}
-
-void SwapchainSync::invalidate() {
-	_imageReady->invalidate();
-	_imageReady = nullptr;
-	_renderFinished->invalidate();
-	_renderFinished = nullptr;
-}
-
-DeviceQueue::~DeviceQueue() { }
-
-bool DeviceQueue::init(Device &device, VkQueue queue, uint32_t index, QueueOperations ops) {
-	_device = &device;
-	_queue = queue;
-	_index = index;
-	_ops = ops;
-	return true;
-}
-
 Device::Device() { }
 
 Device::~Device() {
 	if (_vkInstance && _device) {
+		if (_allocator) {
+			_allocator->invalidate(*this);
+		}
 		_swapchain->invalidate(*this);
 		_swapchain = nullptr;
 
@@ -120,8 +92,7 @@ Device::~Device() {
 	}
 }
 
-bool Device::init(const Rc<Instance> &inst, VkSurfaceKHR surface, DeviceInfo && info,
-		const Features &features) {
+bool Device::init(const Rc<Instance> &inst, VkSurfaceKHR surface, DeviceInfo && info, const Features &features) {
 	Set<uint32_t> uniqueQueueFamilies = { info.graphicsFamily.index, info.presentFamily.index, info.transferFamily.index, info.computeFamily.index };
 
 	auto emplaceQueueFamily = [&] (DeviceInfo::QueueFamilyInfo &info, uint32_t count, QueueOperations preferred) {
@@ -189,6 +160,8 @@ bool Device::init(const Rc<Instance> &inst, VkSurfaceKHR surface, DeviceInfo && 
 
 	_sems.resize(2);
 	_swapchain = Rc<Swapchain>::create(*this);
+	_allocator = Rc<Allocator>::create(*this, _info.device, _info.features,
+			_info.properties.device10.properties.limits.bufferImageGranularity);
 
 	return true;
 }
@@ -214,7 +187,6 @@ void Device::cleanupSwapChain() {
 	_swapchain->cleanupSwapChain(*this);
 }
 
-
 Rc<gl::Shader> Device::makeShader(const gl::ProgramData &data) {
 	return Rc<Shader>::create(*this, data);
 }
@@ -225,10 +197,6 @@ Rc<gl::Pipeline> Device::makePipeline(const gl::RenderQueue &queue, const gl::Re
 
 Rc<gl::RenderPassImpl> Device::makeRenderPass(gl::RenderPassData &data) {
 	return Rc<RenderPassImpl>::create(*this, data);
-}
-
-Rc<gl::PipelineLayout> Device::makePipelineLayout(const gl::PipelineLayoutData &data) {
-	return Rc<PipelineLayout>::create(*this, data);
 }
 
 void Device::begin(Application *app, thread::TaskQueue &q) {
@@ -470,7 +438,7 @@ void Device::releaseSwapchainSync(Rc<SwapchainSync> &&ref) {
 }
 
 Rc<gl::FrameHandle> Device::makeFrame(gl::Loop &loop, gl::RenderQueue &queue, bool readyForSubmit) {
-	return Rc<gl::FrameHandle>::create(loop, queue, _order ++, _gen, readyForSubmit);
+	return Rc<FrameHandle>::create(loop, queue, _order ++, _gen, readyForSubmit);
 }
 
 bool Device::setup(const Rc<Instance> &instance, VkPhysicalDevice p, const Properties &prop,
@@ -558,78 +526,6 @@ bool Device::setup(const Rc<Instance> &instance, VkPhysicalDevice p, const Prope
 #endif
 
 	return true;
-}
-
-CommandPool::~CommandPool() {
-	if (_commandPool) {
-		log::vtext("VK-Error", "CommandPool was not destroyed");
-	}
-}
-
-bool CommandPool::init(Device &dev, uint32_t familyIdx, QueueOperations c, bool transient) {
-	_class = c;
-	VkCommandPoolCreateInfo poolInfo{};
-	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	poolInfo.queueFamilyIndex = familyIdx;
-	poolInfo.flags = transient ? VK_COMMAND_POOL_CREATE_TRANSIENT_BIT : 0;
-
-	return dev.getTable()->vkCreateCommandPool(dev.getDevice(), &poolInfo, nullptr, &_commandPool) == VK_SUCCESS;
-}
-
-void CommandPool::invalidate(Device &dev) {
-	if (_commandPool) {
-		dev.getTable()->vkDestroyCommandPool(dev.getDevice(), _commandPool, nullptr);
-		_commandPool = VK_NULL_HANDLE;
-	} else {
-		log::vtext("VK-Error", "CommandPool is not defined");
-	}
-}
-
-VkCommandBuffer CommandPool::allocBuffer(Device &dev, Level level) {
-	if (_commandPool) {
-		VkCommandBufferAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.commandPool = _commandPool;
-		allocInfo.level = VkCommandBufferLevel(level);
-		allocInfo.commandBufferCount = 1;
-
-		VkCommandBuffer ret;
-		if (dev.getTable()->vkAllocateCommandBuffers(dev.getDevice(), &allocInfo, &ret) == VK_SUCCESS) {
-			return ret;
-		}
-	}
-	return nullptr;
-}
-
-Vector<VkCommandBuffer> CommandPool::allocBuffers(Device &dev, uint32_t count, Level level) {
-	Vector<VkCommandBuffer> vec;
-	if (_commandPool) {
-		VkCommandBufferAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.commandPool = _commandPool;
-		allocInfo.level = VkCommandBufferLevel(level);
-		allocInfo.commandBufferCount = count;
-
-		vec.resize(count);
-		if (dev.getTable()->vkAllocateCommandBuffers(dev.getDevice(), &allocInfo, vec.data()) == VK_SUCCESS) {
-			return vec;
-		}
-		vec.clear();
-	}
-	return vec;
-}
-
-void CommandPool::freeDefaultBuffers(Device &dev, Vector<VkCommandBuffer> &vec) {
-	if (_commandPool) {
-		dev.getTable()->vkFreeCommandBuffers(dev.getDevice(), _commandPool, static_cast<uint32_t>(vec.size()), vec.data());
-	}
-	vec.clear();
-}
-
-void CommandPool::reset(Device &dev, bool release) {
-	if (_commandPool) {
-		dev.getTable()->vkResetCommandPool(dev.getDevice(), _commandPool, release ? VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT : 0);
-	}
 }
 
 }

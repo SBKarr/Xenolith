@@ -34,8 +34,8 @@ public:
 		// 0 - 2
 		// |   |
 		// 1 - 3
-		SpanView<gl::Vertex_V4F_C4F_T2F> vertexes; // tl bl tr br
-		SpanView<uint16_t> indexes; // 0 1 2 3 2 1
+		SpanView<gl::Vertex_V4F_V4F_T2F2U> vertexes; // tl bl tr br
+		SpanView<uint32_t> indexes; // 0 1 2 3 2 1
 		size_t firstVertex;
 		size_t firstIndex;
 
@@ -47,6 +47,7 @@ public:
 		Quad & setGeometry(const Vec4 &origin, const Size &size);
 		Quad & setColor(const Color4F &color);
 		Quad & setColor(SpanView<Color4F>); // tl bl tr br
+		Quad & setColor(std::initializer_list<Color4F> &&); // tl bl tr br
 	};
 
 	virtual ~VertexArray() { }

@@ -60,11 +60,10 @@ struct CmdDrawIndexedIndirect {
 };
 
 struct Command {
-	static Command *create(memory::pool_t *, CommandType t, const Rc<Pipeline> &);
+	static Command *create(memory::pool_t *, CommandType t);
 
 	Command *next;
 	CommandType type;
-	Rc<Pipeline> pipeline;
 	void *data;
 };
 

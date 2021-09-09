@@ -34,7 +34,6 @@ class RenderQueue;
 class Shader;
 class Pipeline;
 class RenderPassImpl;
-class PipelineLayout;
 class Framebuffer;
 class Image;
 class ImageView;
@@ -86,8 +85,6 @@ struct ProgramData : ProgramInfo {
 };
 
 struct PipelineInfo : NamedMem {
-	VertexFormat vertexFormat = VertexFormat::None;
-	LayoutFormat layoutFormat = LayoutFormat::Default;
 	DynamicState dynamicState = DynamicState::Default;
 	memory::vector<StringView> shaders;
 };
@@ -204,29 +201,35 @@ struct ImageData : ImageInfo {
 	memory::function<void(const DataCallback &)> callback = nullptr;
 };
 
-// Designed to use with SSBO and std140
-struct alignas(16) Vertex_V4F_C4F_T2F {
-	alignas(16) Vec4 pos;
-	alignas(16) Color4F color;
-	alignas(16) Vec2 tex;
+// Designed to use with SSBO and std430
+struct alignas(16) Vertex_V4F_V4F_T2F2U {
+	Vec4 pos;
+	Vec4 color;
+	Vec2 tex;
+	uint32_t attr0;
+	uint32_t attr1;
 };
 
 struct Triangle_V3F_C4F_T2F {
-	Vertex_V4F_C4F_T2F a;
-	Vertex_V4F_C4F_T2F b;
-	Vertex_V4F_C4F_T2F c;
+	Vertex_V4F_V4F_T2F2U a;
+	Vertex_V4F_V4F_T2F2U b;
+	Vertex_V4F_V4F_T2F2U c;
 };
 
 struct Quad_V3F_C4F_T2F {
-	Vertex_V4F_C4F_T2F tl;
-	Vertex_V4F_C4F_T2F bl;
-	Vertex_V4F_C4F_T2F tr;
-	Vertex_V4F_C4F_T2F br;
+	Vertex_V4F_V4F_T2F2U tl;
+	Vertex_V4F_V4F_T2F2U bl;
+	Vertex_V4F_V4F_T2F2U tr;
+	Vertex_V4F_V4F_T2F2U br;
 };
 
-struct VertexData : public Ref {
-	Vector<Vertex_V4F_C4F_T2F> data;
-	Vector<uint16_t> indexes;
+struct AttachmentInputData : public Ref {
+
+};
+
+struct VertexData : public AttachmentInputData {
+	Vector<Vertex_V4F_V4F_T2F2U> data;
+	Vector<uint32_t> indexes;
 };
 
 String getBufferFlagsDescription(BufferFlags fmt);

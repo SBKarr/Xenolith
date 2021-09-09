@@ -74,6 +74,7 @@ using Extent3 = layout::Extent3;
 using Mat4 = layout::Mat4;
 using Quaternion = layout::Quaternion;
 
+using Color = layout::Color;
 using Color4B = layout::Color4B;
 using Color4F = layout::Color4F;
 using Color3B = layout::Color3B;

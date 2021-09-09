@@ -86,12 +86,16 @@ public:
 	virtual bool prepare(FrameHandle &);
 	virtual void submit(FrameHandle &, Function<void(const Rc<RenderPass> &)> &&);
 
+	virtual AttachmentHandle *getAttachmentHandle(const Attachment *) const;
+
 protected:
+	virtual void addRequiredAttachment(const Attachment *, const Rc<AttachmentHandle> &);
+
 	bool _isAsync = false; // async passes can be submitted before previous frame submits all passes
 	bool _submitted = false;
 	Rc<RenderPass> _renderPass;
 	RenderPassData *_data = nullptr;
-	Vector<Rc<AttachmentHandle>> _attachments;
+	Map<const gl::Attachment *, Rc<AttachmentHandle>> _attachments;
 	Vector<Rc<RenderPassHandle>> _requiredPasses;
 };
 

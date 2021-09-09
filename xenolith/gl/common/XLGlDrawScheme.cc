@@ -39,7 +39,7 @@ void DrawScheme::destroy(DrawScheme *s) {
 	memory::pool::destroy(p);
 }
 
-static void appendToBuffer(memory::pool_t *p, DrawBuffer &vec, BytesView b) {
+/*static void appendToBuffer(memory::pool_t *p, DrawBuffer &vec, BytesView b) {
 	// dirty hack with low-level stappler memory types to bypass safety validation
 	auto origSize = vec.size();
 	auto newSize = origSize + b.size();
@@ -48,10 +48,10 @@ static void appendToBuffer(memory::pool_t *p, DrawBuffer &vec, BytesView b) {
 	vec.grow_alloc(alloc, newmem);
 	memcpy(vec.data() + origSize, b.data(), b.size());
 	vec.set_size(newSize);
-}
+}*/
 
 
-void DrawScheme::pushVertexArrayCmd(const Rc<Pipeline> &pipeline, const Rc<VertexData> &vert, const Mat4 &t, SpanView<int16_t> zPath) {
+void DrawScheme::pushVertexArrayCmd(const Rc<VertexData> &vert, const Mat4 &t, SpanView<int16_t> zPath) {
 	memory::pool::context ctx(pool);
 
 	if (!group) {
@@ -59,7 +59,7 @@ void DrawScheme::pushVertexArrayCmd(const Rc<Pipeline> &pipeline, const Rc<Verte
 	}
 
 	auto g = group;
-	auto cmd = Command::create(pool, CommandType::DrawIndexedIndirect, pipeline);
+	auto cmd = Command::create(pool, CommandType::DrawIndexedIndirect);
 	auto cmdData = (CmdVertexArray *)cmd->data;
 	cmdData->vertexes = vert;
 	cmdData->transform = t;
@@ -73,7 +73,7 @@ void DrawScheme::pushVertexArrayCmd(const Rc<Pipeline> &pipeline, const Rc<Verte
 	g->last = cmd;
 }
 
-void DrawScheme::pushDrawIndexed(CommandGroup *g, Pipeline *p, SpanView<Vertex_V4F_C4F_T2F> vertexes, SpanView<uint16_t> indexes) {
+void DrawScheme::pushDrawIndexed(CommandGroup *g, SpanView<Vertex_V4F_V4F_T2F2U> vertexes, SpanView<uint16_t> indexes) {
 	memory::pool::context ctx(pool);
 
 	if (!g) {
@@ -83,9 +83,9 @@ void DrawScheme::pushDrawIndexed(CommandGroup *g, Pipeline *p, SpanView<Vertex_V
 		g = group;
 	}
 
-	if (!g->last || g->last->type != CommandType::DrawIndexedIndirect || g->last->pipeline != p) {
+	if (!g->last || g->last->type != CommandType::DrawIndexedIndirect) {
 		// add new command
-		auto cmd = Command::create(pool, CommandType::DrawIndexedIndirect, p);
+		auto cmd = Command::create(pool, CommandType::DrawIndexedIndirect);
 		auto cmdData = (CmdDrawIndexedIndirect *)cmd->data;
 		cmdData->offset = draw.size(); // byte offset
 		cmdData->drawCount = 1;
@@ -104,7 +104,7 @@ void DrawScheme::pushDrawIndexed(CommandGroup *g, Pipeline *p, SpanView<Vertex_V
 		++ cmdData->drawCount;
 	}
 
-	auto it = vertex.find(VertexFormat::V4F_C4F_T2F);
+	/*auto it = vertex.find(VertexFormat::V4F_C4F_T2F);
 	if (it == vertex.end()) {
 		it = vertex.emplace(VertexFormat::V4F_C4F_T2F).first;
 	}
@@ -118,7 +118,7 @@ void DrawScheme::pushDrawIndexed(CommandGroup *g, Pipeline *p, SpanView<Vertex_V
 
 	appendToBuffer(pool, index, indexes.bytes());
 	appendToBuffer(pool, it->second, vertexes.bytes());
-	appendToBuffer(pool, draw, BytesView((const uint8_t *)&data, sizeof(CmdDrawIndexedIndirectData)));
+	appendToBuffer(pool, draw, BytesView((const uint8_t *)&data, sizeof(CmdDrawIndexedIndirectData)));*/
 }
 
 DrawScheme::DrawScheme(memory::pool_t *pool) : pool(pool) { }

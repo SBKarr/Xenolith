@@ -24,12 +24,11 @@
 
 namespace stappler::xenolith::gl {
 
-Command *Command::create(memory::pool_t *p, CommandType t, const Rc<Pipeline> &pipeline) {
+Command *Command::create(memory::pool_t *p, CommandType t) {
 	auto bytes = memory::pool::palloc(p, sizeof(Command));
 	auto c = new (bytes) Command;
 	c->next = nullptr;
 	c->type = t;
-	c->pipeline = pipeline;
 	switch (t) {
 	case CommandType::CommandGroup:
 		c->data = nullptr;

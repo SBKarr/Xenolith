@@ -20,7 +20,6 @@
  THE SOFTWARE.
  **/
 
-
 #ifndef XENOLITH_GL_COMMON_XLGLRENDERATTACHMENT_H_
 #define XENOLITH_GL_COMMON_XLGLRENDERATTACHMENT_H_
 
@@ -46,6 +45,8 @@ class ImageAttachmentRef;
 class FrameHandle;
 
 class AttachmentHandle;
+
+class RenderPassHandle;
 
 class Attachment : public NamedRef {
 public:
@@ -74,7 +75,7 @@ public:
 
 	virtual bool isCompatible(const ImageInfo &) const { return false; }
 
-	virtual void sortDescriptors();
+	virtual void sortDescriptors(RenderQueue &queue);
 
 	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameHandle &);
 
@@ -97,7 +98,16 @@ protected:
 	Vector<Rc<AttachmentDescriptor>> _descriptors;
 };
 
-class AttachmentDescriptor : public Ref {
+struct PipelineDescriptor {
+	StringView name; // for external descriptors
+	Attachment *attachment = nullptr;
+	DescriptorType type = DescriptorType::Unknown;
+	ProgramStage stages = ProgramStage::None;
+	uint32_t count = 1;
+	uint32_t maxCount = 1;
+};
+
+class AttachmentDescriptor : public NamedRef {
 public:
 	virtual ~AttachmentDescriptor() { }
 
@@ -112,13 +122,19 @@ public:
 	AttachmentOps getOps() const { return _ops; }
 	void setOps(AttachmentOps ops) { _ops = ops; }
 
+	bool hasDescriptor() const { return _descriptor.type != DescriptorType::Unknown; }
+
+	virtual StringView getName() const override { return _descriptor.attachment->getName(); }
+
 	RenderPassData *getRenderPass() const { return _renderPass; }
-	Attachment *getAttachment() const { return _attachment; }
+	Attachment *getAttachment() const { return _descriptor.attachment; }
 	const Vector<Rc<AttachmentRef>> &getRefs() const { return _refs; }
 
 	virtual AttachmentRef *addRef(uint32_t idx, AttachmentUsage);
 
-	virtual void sortRefs();
+	virtual void sortRefs(RenderQueue &);
+
+	const PipelineDescriptor &getDescriptor() const { return _descriptor; }
 
 protected:
 	virtual Rc<AttachmentRef> makeRef(uint32_t idx, AttachmentUsage) {
@@ -126,10 +142,10 @@ protected:
 	}
 
 	RenderPassData *_renderPass;
-	Attachment *_attachment = nullptr;
 	uint32_t _index = maxOf<uint32_t>();
 	AttachmentOps _ops = AttachmentOps::Undefined;
 	Vector<Rc<AttachmentRef>> _refs;
+	PipelineDescriptor _descriptor;
 };
 
 class AttachmentRef : public Ref {
@@ -302,7 +318,6 @@ public:
 protected:
 };
 
-
 class AttachmentHandle : public Ref {
 public:
 	virtual ~AttachmentHandle() { }
@@ -319,6 +334,13 @@ public:
 
 	virtual bool isInput() const;
 	virtual const Rc<Attachment> &getAttachment() const { return _attachment; }
+
+	virtual bool submitInput(FrameHandle &, Rc<AttachmentInputData> &&) {
+		return false;
+	}
+
+	virtual uint32_t getDescriptorArraySize(const RenderPassHandle &, const PipelineDescriptor &, bool isExternal) const;
+	virtual bool isDescriptorDirty(const RenderPassHandle &, const PipelineDescriptor &, uint32_t, bool isExternal) const;
 
 protected:
 	bool _ready = false;

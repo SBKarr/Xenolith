@@ -74,11 +74,17 @@ struct RenderSubpassData {
 	memory::vector<uint32_t> preserve;
 };
 
+struct PipelineLayoutData {
+	memory::vector<const PipelineDescriptor *> queueDescriptors;
+	memory::vector<PipelineDescriptor> extraDescriptors;
+};
+
 struct RenderPassData : NamedMem {
 	HashTable<PipelineData *> pipelines;
 	memory::vector<AttachmentDescriptor *> descriptors;
 	memory::vector<RenderSubpassData> subpasses;
 	memory::vector<RenderSubpassDependency> dependencies;
+	PipelineLayoutData pipelineLayout;
 
 	RenderOrdering ordering = RenderOrderingLowest;
 	bool isPresentable = false;
@@ -86,20 +92,6 @@ struct RenderPassData : NamedMem {
 	Rc<RenderPass> renderPass;
 	Rc<RenderPassImpl> impl;
 	memory::vector<Rc<Framebuffer>> framebuffers;
-};
-
-struct PipelineDescriptor {
-	Attachment *attachment = nullptr;
-	DescriptorType type = DescriptorType::Sampler;
-	ProgramStage stages = ProgramStage::None;
-};
-
-struct PipelineLayoutData {
-	memory::vector<PipelineDescriptor> queueDescriptors;
-	memory::vector<PipelineDescriptor> extraDescriptors;
-	size_t textureSwapSize = 0;
-
-	Rc<PipelineLayout> layout;
 };
 
 class RenderQueue : public NamedRef {
@@ -131,9 +123,6 @@ public:
 	const HashTable<Rc<Resource>> &getResources() const;
 
 	const ProgramData *getProgram(StringView) const;
-
-	const PipelineLayoutData &getPipelineLayout() const;
-	void setPipelineLayout(Rc<PipelineLayout> &&);
 
 	Vector<Rc<Attachment>> getOutput() const;
 	Vector<Rc<Attachment>> getOutput(AttachmentType) const;
@@ -195,8 +184,6 @@ protected:
 	PipelineData *emplacePipeline(const Rc<RenderPass> &, StringView key);
 	void erasePipeline(const Rc<RenderPass> &, PipelineData *);
 
-	bool setPipelineOption(PipelineData &f, VertexFormat);
-	bool setPipelineOption(PipelineData &f, LayoutFormat);
 	bool setPipelineOption(PipelineData &f, DynamicState);
 	bool setPipelineOption(PipelineData &f, const Vector<const ProgramData *> &);
 

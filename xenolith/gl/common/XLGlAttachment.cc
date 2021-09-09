@@ -53,7 +53,7 @@ AttachmentDescriptor *Attachment::addDescriptor(RenderPassData *data) {
 	return nullptr;
 }
 
-void Attachment::sortDescriptors() {
+void Attachment::sortDescriptors(RenderQueue &queue) {
 	Set<uint32_t> priorities;
 
 	for (auto &it : _descriptors) {
@@ -73,7 +73,7 @@ void Attachment::sortDescriptors() {
 	});
 
 	for (auto &it : _descriptors) {
-		it->sortRefs();
+		it->sortRefs(queue);
 	}
 
 	if (_type == gl::AttachmentType::SwapchainImage) {
@@ -131,7 +131,8 @@ RenderPassData *Attachment::getPrevRenderPass(RenderPassData *pass) const {
 
 bool AttachmentDescriptor::init(RenderPassData *pass, Attachment *attachment) {
 	_renderPass = pass;
-	_attachment = attachment;
+	_descriptor.attachment = attachment;
+
 	return true;
 }
 
@@ -162,13 +163,98 @@ AttachmentRef *AttachmentDescriptor::addRef(uint32_t idx, AttachmentUsage usage)
 	return nullptr;
 }
 
-void AttachmentDescriptor::sortRefs() {
+void AttachmentDescriptor::sortRefs(RenderQueue &queue) {
 	std::sort(_refs.begin(), _refs.end(), [&] (const Rc<AttachmentRef> &l, const Rc<AttachmentRef> &r) {
 		return l->getSubpass() < r->getSubpass();
 	});
 
 	for (auto &it : _refs) {
 		it->updateLayout();
+	}
+
+	ProgramStage globalStages;
+	for (auto &pipeline : _renderPass->pipelines) {
+		for (auto &it : pipeline->shaders) {
+			if (auto sh = queue.getProgram(it)) {
+				globalStages |= sh->stage;
+			}
+		}
+	}
+
+	auto findUsageStages = [&] (Attachment *attachment) {
+		return globalStages;
+	};
+
+	if (_descriptor.type != DescriptorType::Unknown) {
+		return;
+	}
+
+	if (_descriptor.attachment->getType() == AttachmentType::Buffer) {
+		auto buffer = (BufferAttachment *)_descriptor.attachment;
+		if (_descriptor.attachment->getDescriptorType() != DescriptorType::Unknown) {
+			_descriptor.type = _descriptor.attachment->getDescriptorType();
+			if (buffer->getInfo().stages != ProgramStage::None) {
+				_descriptor.stages = buffer->getInfo().stages;
+			} else {
+				_descriptor.stages = findUsageStages(_descriptor.attachment);
+			}
+		} else {
+			DescriptorType descriptor = DescriptorType::Unknown;
+			if ((buffer->getInfo().usage & BufferUsage::UniformTexelBuffer) != BufferUsage::None) {
+				if (descriptor == DescriptorType::Unknown) {
+					descriptor = DescriptorType::UniformTexelBuffer;
+				} else {
+					log::vtext("Gl-Error", "Fail to deduce DescriptorType from attachment '", _descriptor.attachment->getName(), "'");
+				}
+			}
+			if ((buffer->getInfo().usage & BufferUsage::StorageTexelBuffer) != BufferUsage::None) {
+				if (descriptor == DescriptorType::Unknown) {
+					descriptor = DescriptorType::StorageTexelBuffer;
+				} else {
+					log::vtext("Gl-Error", "Fail to deduce DescriptorType from attachment '", _descriptor.attachment->getName(), "'");
+				}
+			}
+			if ((buffer->getInfo().usage & BufferUsage::UniformBuffer) != BufferUsage::None) {
+				if (descriptor == DescriptorType::Unknown) {
+					descriptor = DescriptorType::UniformBuffer;
+				} else {
+					log::vtext("Gl-Error", "Fail to deduce DescriptorType from attachment '", _descriptor.attachment->getName(), "'");
+				}
+			}
+			if ((buffer->getInfo().usage & BufferUsage::StorageBuffer) != BufferUsage::None) {
+				if (descriptor == DescriptorType::Unknown) {
+					descriptor = DescriptorType::StorageBuffer;
+				} else {
+					log::vtext("Gl-Error", "Fail to deduce DescriptorType from attachment '", _descriptor.attachment->getName(), "'");
+				}
+			}
+
+			if (descriptor != DescriptorType::Unknown) {
+				_descriptor.type = descriptor;
+				if (buffer->getInfo().stages != ProgramStage::None) {
+					_descriptor.stages = buffer->getInfo().stages;
+				} else {
+					_descriptor.stages = findUsageStages(_descriptor.attachment);
+				}
+			}
+		}
+	} else {
+		bool isInputAttachment = false;
+		for (auto &usage : _refs) {
+			if ((usage->getUsage() & AttachmentUsage::Input) != AttachmentUsage::None) {
+				isInputAttachment = true;
+				break;
+			}
+		}
+		if (isInputAttachment) {
+			auto image = (ImageAttachment *)_descriptor.attachment;
+			_descriptor.type = DescriptorType::InputAttachment;
+			if (image->getInfo().stages != ProgramStage::None) {
+				_descriptor.stages = image->getInfo().stages;
+			} else {
+				_descriptor.stages = findUsageStages(_descriptor.attachment);
+			}
+		}
 	}
 }
 
@@ -258,7 +344,7 @@ ImageAttachmentRef *ImageAttachmentDescriptor::addImageRef(uint32_t idx, Attachm
 			} else {
 				auto ref = (ImageAttachmentRef *)it.get();
 				if (ref->getLayout() != layout) {
-					log::vtext("Gl-Error", "Multiple layouts defined for attachment '", _attachment->getName(),
+					log::vtext("Gl-Error", "Multiple layouts defined for attachment '", _descriptor.attachment->getName(),
 							"' within renderpass ", _renderPass->key, ":", idx);
 					return nullptr;
 				}
@@ -493,6 +579,14 @@ bool AttachmentHandle::setup(FrameHandle &) {
 
 bool AttachmentHandle::isInput() const {
 	return (_attachment->getUsage() & AttachmentUsage::Input) != AttachmentUsage::None;
+}
+
+uint32_t AttachmentHandle::getDescriptorArraySize(const RenderPassHandle &, const PipelineDescriptor &d, bool isExternal) const {
+	return d.count;
+}
+
+bool AttachmentHandle::isDescriptorDirty(const RenderPassHandle &, const PipelineDescriptor &, uint32_t, bool isExternal) const {
+	return false;
 }
 
 void AttachmentHandle::setReady(bool value) {

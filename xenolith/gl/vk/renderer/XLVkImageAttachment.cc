@@ -81,6 +81,10 @@ void SwapchainAttachmentDescriptor::setImageViews(Vector<Rc<ImageView>> &&imageV
 	_imageViews = move(imageViews);
 }
 
+ImageAttachmentHandle::~ImageAttachmentHandle() {
+
+}
+
 SwapchainAttachmentHandle::~SwapchainAttachmentHandle() {
 	invalidate();
 }

@@ -26,6 +26,31 @@
 namespace stappler::xenolith::vk {
 
 bool RenderPassImpl::init(Device &dev, gl::RenderPassData &data) {
+	VkRenderPass renderPass = VK_NULL_HANDLE;
+	Vector<VkDescriptorSetLayout> descriptors;
+	VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+	VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+	Vector<VkDescriptorSet> descriptorSets;
+
+	auto cleanup = [&] () {
+		for (VkDescriptorSetLayout &it : descriptors) {
+			dev.getTable()->vkDestroyDescriptorSetLayout(dev.getDevice(), it, nullptr);
+		}
+
+		if (renderPass) {
+			dev.getTable()->vkDestroyRenderPass(dev.getDevice(), renderPass, nullptr);
+		}
+
+		if (pipelineLayout) {
+			dev.getTable()->vkDestroyPipelineLayout(dev.getDevice(), pipelineLayout, nullptr);
+		}
+
+		if (descriptorPool) {
+			dev.getTable()->vkDestroyDescriptorPool(dev.getDevice(), descriptorPool, nullptr);
+		}
+		return false;
+	};
+
 	size_t attachmentReferences = 0;
 	for (auto &it : data.descriptors) {
 		attachmentReferences += it->getRefs().size();
@@ -186,14 +211,159 @@ bool RenderPassImpl::init(Device &dev, gl::RenderPassData &data) {
 	renderPassInfo.dependencyCount = _subpassDependencies.size();
 	renderPassInfo.pDependencies = _subpassDependencies.data();
 
-	if (dev.getTable()->vkCreateRenderPass(dev.getDevice(), &renderPassInfo, nullptr, &_renderPass) == VK_SUCCESS) {
-		return gl::RenderPassImpl::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
-			auto d = ((Device *)dev);
-			d->getTable()->vkDestroyRenderPass(d->getDevice(), (VkRenderPass)ptr, nullptr);
-		}, gl::ObjectType::RenderPass, _renderPass);
+	if (dev.getTable()->vkCreateRenderPass(dev.getDevice(), &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
+		return cleanup();
 	}
 
-	return false;
+	Vector<VkDescriptorPoolSize> sizes;
+
+	auto incrementSize = [&sizes] (VkDescriptorType type, uint32_t count) {
+		auto lb = std::lower_bound(sizes.begin(), sizes.end(), type, [] (const VkDescriptorPoolSize &l, VkDescriptorType r) {
+			return l.type < r;
+		});
+		if (lb == sizes.end()) {
+			sizes.emplace_back(VkDescriptorPoolSize({type, count}));
+		} else if (lb->type == type) {
+			lb->descriptorCount += count;
+		} else {
+			sizes.emplace(lb, VkDescriptorPoolSize({type, count}));
+		}
+	};
+
+	uint32_t maxSets = 0;
+	if (!data.pipelineLayout.queueDescriptors.empty()) {
+		++ maxSets;
+
+		VkDescriptorSetLayout setLayout = VK_NULL_HANDLE;
+		Vector<VkDescriptorSetLayoutBinding> bindings; bindings.reserve(data.pipelineLayout.queueDescriptors.size());
+		size_t bindingIdx = 0;
+		for (auto &binding : data.pipelineLayout.queueDescriptors) {
+			VkDescriptorSetLayoutBinding b;
+			b.binding = bindingIdx;
+			b.descriptorCount = binding->count;
+			b.descriptorType = VkDescriptorType(binding->type);
+			b.pImmutableSamplers = nullptr;
+			b.stageFlags = VkShaderStageFlags(binding->stages);
+			bindings.emplace_back(b);
+			incrementSize(VkDescriptorType(binding->type), std::max(binding->count, binding->maxCount));
+			++ bindingIdx;
+		}
+		VkDescriptorSetLayoutCreateInfo layoutInfo { };
+		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+
+		layoutInfo.bindingCount = bindings.size();
+		layoutInfo.pBindings = bindings.data();
+		layoutInfo.flags = 0;
+
+		if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &setLayout) == VK_SUCCESS) {
+			descriptors.emplace_back(setLayout);
+		} else {
+			return cleanup();
+		}
+	}
+
+	if (!data.pipelineLayout.extraDescriptors.empty()) {
+		++ maxSets;
+
+		VkDescriptorSetLayout setLayout = VK_NULL_HANDLE;
+		Vector<VkDescriptorSetLayoutBinding> bindings; bindings.reserve(data.pipelineLayout.queueDescriptors.size());
+		size_t bindingIdx = 0;
+		for (auto &binding : data.pipelineLayout.extraDescriptors) {
+			VkDescriptorSetLayoutBinding b;
+			b.binding = bindingIdx;
+			b.descriptorCount = binding.count;
+			b.descriptorType = VkDescriptorType(binding.type);
+			b.pImmutableSamplers = nullptr;
+			b.stageFlags = VkShaderStageFlags(binding.stages);
+			bindings.emplace_back(b);
+			incrementSize(VkDescriptorType(binding.type), std::max(binding.count, binding.maxCount));
+			++ bindingIdx;
+		}
+		VkDescriptorSetLayoutCreateInfo layoutInfo { };
+		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+
+		layoutInfo.bindingCount = bindings.size();
+		layoutInfo.pBindings = bindings.data();
+		layoutInfo.flags = 0;
+
+		if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &setLayout) == VK_SUCCESS) {
+			descriptors.emplace_back(setLayout);
+		} else {
+			return cleanup();
+		}
+	}
+
+	VkDescriptorPoolCreateInfo poolInfo{};
+	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolInfo.pNext = nullptr;
+	poolInfo.flags = 0;
+	poolInfo.poolSizeCount = sizes.size();
+	poolInfo.pPoolSizes = sizes.data();
+	poolInfo.maxSets = maxSets;
+
+	if (dev.getTable()->vkCreateDescriptorPool(dev.getDevice(), &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+		return cleanup();
+	}
+
+	VkDescriptorSetAllocateInfo allocInfo{};
+	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	allocInfo.pNext = nullptr;
+	allocInfo.descriptorPool = descriptorPool;
+	allocInfo.descriptorSetCount = static_cast<uint32_t>(descriptors.size());
+	allocInfo.pSetLayouts = descriptors.data();
+
+	descriptorSets.resize(descriptors.size());
+	if (dev.getTable()->vkAllocateDescriptorSets(dev.getDevice(), &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
+		descriptorSets.clear();
+		return cleanup();
+	}
+
+	// allow 12 bytes for Vertex and fragment shaders
+	VkPushConstantRange range = {
+		VkShaderStageFlagBits::VK_SHADER_STAGE_VERTEX_BIT | VkShaderStageFlagBits::VK_SHADER_STAGE_FRAGMENT_BIT,
+		0,
+		12
+	};
+
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo;
+	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	pipelineLayoutInfo.pNext = nullptr;
+	pipelineLayoutInfo.flags = 0;
+	pipelineLayoutInfo.setLayoutCount = descriptors.size();
+	pipelineLayoutInfo.pSetLayouts = descriptors.data();
+	pipelineLayoutInfo.pushConstantRangeCount = 1;
+	pipelineLayoutInfo.pPushConstantRanges = { &range };
+
+	if (dev.getTable()->vkCreatePipelineLayout(dev.getDevice(), &pipelineLayoutInfo, nullptr, &pipelineLayout) == VK_SUCCESS) {
+		auto l = new PassData;
+		l->renderPass = renderPass;
+		l->layout = pipelineLayout;
+		l->layouts = move(descriptors);
+		l->sets = move(descriptorSets);
+		l->descriptorPool = descriptorPool;
+		_data = l;
+		return gl::RenderPassImpl::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+			auto d = ((Device *)dev);
+			auto l = (PassData *)ptr;
+
+			d->getTable()->vkDestroyDescriptorPool(d->getDevice(), l->descriptorPool, nullptr);
+			d->getTable()->vkDestroyPipelineLayout(d->getDevice(), l->layout, nullptr);
+			for (auto &it : l->layouts) {
+				d->getTable()->vkDestroyDescriptorSetLayout(d->getDevice(), it, nullptr);
+			}
+			d->getTable()->vkDestroyRenderPass(d->getDevice(), l->renderPass, nullptr);
+			delete l;
+		}, gl::ObjectType::RenderPass, l);
+	}
+
+	return cleanup();
+}
+
+VkDescriptorSet RenderPassImpl::getDescriptorSet(uint32_t idx) const {
+	if (idx >= _data->sets.size()) {
+		return VK_NULL_HANDLE;
+	}
+	return _data->sets[idx];
 }
 
 }

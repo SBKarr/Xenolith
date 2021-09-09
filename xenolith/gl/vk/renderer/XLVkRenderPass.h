@@ -59,11 +59,15 @@ public:
 	virtual void submit(gl::FrameHandle &, Function<void(const Rc<gl::RenderPass> &)> &&) override;
 
 protected:
-	virtual Vector<VkCommandBuffer> doPrepare(gl::FrameHandle &, uint32_t index);
+	virtual bool doPrepareDescriptors(gl::FrameHandle &, uint32_t index);
+	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &, uint32_t index);
 
 	virtual bool present(gl::FrameHandle &);
 
 	virtual Sync makeSyncInfo();
+
+	bool _commandsReady = false;
+	bool _descriptorsReady = false;
 
 	Device *_device = nullptr;
 	Rc<Fence> _fence;
@@ -75,28 +79,24 @@ protected:
 	Sync _sync;
 };
 
-class RenderPassVertexes : public RenderPass {
+class VertexRenderPass : public RenderPass {
 public:
-	virtual ~RenderPassVertexes();
+	virtual ~VertexRenderPass();
 
 	virtual Rc<gl::RenderPassHandle> makeFrameHandle(gl::RenderPassData *, const gl::FrameHandle &);
 };
 
-class RenderPassVertexesHandle : public RenderPassHandle {
-public:
-	struct Sync {
-		Vector<Rc<gl::AttachmentHandle>> waitAttachment;
-		Vector<VkSemaphore> waitSem;
-		Vector<VkPipelineStageFlags> waitStages;
-		Vector<VkSemaphore> signalSem;
-		Vector<Rc<gl::AttachmentHandle>> signalAttachment;
-		Vector<Rc<SwapchainSync>> swapchainSync;
-	};
+class VertexBufferAttachmentHandle;
 
-	virtual ~RenderPassVertexesHandle();
+class VertexRenderPassHandle : public RenderPassHandle {
+public:
+	virtual ~VertexRenderPassHandle();
 
 protected:
-	virtual Vector<VkCommandBuffer> doPrepare(gl::FrameHandle &, uint32_t index) override;
+	virtual void addRequiredAttachment(const gl::Attachment *, const Rc<gl::AttachmentHandle> &);
+	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &, uint32_t index) override;
+
+	VertexBufferAttachmentHandle *_mainBuffer;
 };
 
 

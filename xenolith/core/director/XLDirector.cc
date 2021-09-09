@@ -25,8 +25,10 @@
 #include "XLGlDevice.h"
 #include "XLScene.h"
 #include "XLDefaultShaders.h"
+#include "XLVertexArray.h"
 
 #include "XLVkImageAttachment.h"
+#include "XLVkBufferAttachment.h"
 #include "XLVkRenderPass.h"
 
 namespace stappler::xenolith {
@@ -97,8 +99,26 @@ bool Director::mainLoop(uint64_t t) {
 	return true;
 }
 
-void Director::render(const Rc<gl::FrameHandle> &) {
+void Director::render(const Rc<gl::FrameHandle> &frame) {
+	for (auto &it : frame->getInputAttachments()) {
+		if (it->getAttachment()->getName() == "VertexInput") {
+			VertexArray array;
+			array.init(4, 6);
 
+			auto quad = array.addQuad();
+			quad.setGeometry(Vec4(-0.5f, -0.5f, 0, 0), Size(1.0f, 1.0f));
+			quad.setColor({
+				Color::Red_500,
+				Color::Green_500,
+				Color::Blue_500,
+				Color::White
+			});
+
+			frame->submitInput(it, Rc<gl::VertexData>(array.pop()));
+		} else {
+			log::vtext("Director", "Unknown attachment: ", it->getAttachment()->getName());
+		}
+	}
 }
 
 Rc<gl::DrawScheme> Director::construct() {
@@ -153,29 +173,35 @@ void Director::runScene(Rc<Scene> scene) {
 
 Rc<gl::RenderQueue> Director::onDefaultRenderQueue(const gl::ImageInfo &info) {
 	gl::RenderQueue::Builder builder("DefaultRenderQueue", gl::RenderQueue::Continuous);
-	auto frag = builder.addProgramByRef("DefaultRenderQueue_DefaultVert", gl::ProgramStage::Vertex, shaders::DefaultVert);
-	auto vert = builder.addProgramByRef("DefaultRenderQueue_DefaultFrag", gl::ProgramStage::Fragment, shaders::DefaultFrag);
+	auto defaultFrag = builder.addProgramByRef("DefaultRenderQueue_DefaultVert", gl::ProgramStage::Vertex, shaders::DefaultVert);
+	auto defaultVert = builder.addProgramByRef("DefaultRenderQueue_DefaultFrag", gl::ProgramStage::Fragment, shaders::DefaultFrag);
+	auto vertexFrag = builder.addProgramByRef("DefaultRenderQueue_VertexVert", gl::ProgramStage::Vertex, shaders::VertexVert);
+	auto vertexVert = builder.addProgramByRef("DefaultRenderQueue_VertexFrag", gl::ProgramStage::Fragment, shaders::VertexFrag);
 
 	auto out = Rc<vk::SwapchainAttachment>::create("Swapchain", gl::ImageInfo(info),
 			gl::AttachmentLayout::Undefined, gl::AttachmentLayout::PresentSrc);
 
-	// auto input = Rc<gl::BufferAttachment>::create("Input", gl::BufferInfo(gl::BufferUsage::StorageBuffer));
+	auto input = Rc<vk::VertexBufferAttachment>::create("VertexInput", gl::BufferInfo(gl::BufferUsage::StorageBuffer, gl::ProgramStage::Vertex));
 
-	auto pass = Rc<vk::RenderPass>::create("SwapchainPass", gl::RenderOrderingHighest);
+	auto pass = Rc<vk::VertexRenderPass>::create("SwapchainPass", gl::RenderOrderingHighest);
 	builder.addRenderPass(pass);
 	builder.addPipeline(pass, "Default", Vector<const gl::ProgramData *>({
-		vert,
-		frag
-	}), LayoutFormat::Vertexes, VertexFormat::V4F_C4F_T2F);
+		defaultVert,
+		defaultFrag
+	}));
+	builder.addPipeline(pass, "Vertexes", Vector<const gl::ProgramData *>({
+		vertexVert,
+		vertexFrag
+	}));
 
 	/*builder.addSubpassDependency(pass,
 			gl::RenderSubpassDependency::External, gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::None,
 			0, gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::ColorAttachmentWrite, false);*/
 
-	// builder.addPassInput(pass, 0, input);
+	builder.addPassInput(pass, 0, input);
 	builder.addPassOutput(pass, 0, out);
 
-	// builder.addInput(input);
+	builder.addInput(input);
 	builder.addOutput(out);
 
 	return Rc<gl::RenderQueue>::create(move(builder));

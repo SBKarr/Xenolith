@@ -89,13 +89,13 @@ void RenderPassHandle::buildRequirements(const FrameHandle &frame, const Vector<
 	for (auto &it : attachments) {
 		for (auto &a : _data->descriptors) {
 			if (it->getAttachment() == a->getAttachment()) {
-				_attachments.emplace_back(it);
+				addRequiredAttachment(a->getAttachment(), it);
 			}
 		}
 	}
 
 	for (auto &a : _attachments) {
-		auto &desc = a->getAttachment()->getDescriptors();
+		auto &desc = a.first->getDescriptors();
 		auto it = desc.begin();
 		while (it != desc.end() && (*it)->getRenderPass() != _data) {
 			for (auto &pass : passes) {
@@ -116,7 +116,7 @@ bool RenderPassHandle::isReady() const {
 	}
 
 	for (auto &it : _attachments) {
-		if (!it->isReady()) {
+		if (!it.second->isReady()) {
 			ready = false;
 		}
 	}
@@ -134,6 +134,18 @@ bool RenderPassHandle::prepare(FrameHandle &) {
 
 void RenderPassHandle::submit(FrameHandle &, Function<void(const Rc<RenderPass> &)> &&) {
 
+}
+
+AttachmentHandle *RenderPassHandle::getAttachmentHandle(const Attachment *a) const {
+	auto it = _attachments.find(a);
+	if (it != _attachments.end()) {
+		return it->second;
+	}
+	return nullptr;
+}
+
+void RenderPassHandle::addRequiredAttachment(const Attachment *a, const Rc<AttachmentHandle> &h) {
+	_attachments.emplace(a, h);
 }
 
 }

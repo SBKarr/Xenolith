@@ -24,71 +24,13 @@
 #define XENOLITH_GL_VK_XLVKDEVICE_H_
 
 #include "XLVkInstance.h"
-#include "XLGlDevice.h"
+#include "XLVkDeviceQueue.h"
 
 namespace stappler::xenolith::vk {
 
 class Swapchain;
-class Device;
-class DeviceQueue;
-class CommandPool;
 class Fence;
-class Semaphore;
-
-struct DeviceQueueFamily {
-	struct Waiter {
-		Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> acquire;
-		Function<void(gl::FrameHandle &)> release;
-		Rc<gl::FrameHandle> handle;
-		Rc<Ref> ref;
-
-		Waiter(Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> &&a, Function<void(gl::FrameHandle &)> &&r, gl::FrameHandle *h, Rc<Ref> &&ref)
-		: acquire(move(a)), release(move(r)), handle(h), ref(move(ref)) { }
-	};
-
-	uint32_t index;
-	uint32_t count;
-	QueueOperations preferred = QueueOperations::None;
-	QueueOperations ops = QueueOperations::None;
-	Vector<VkQueue> queues;
-	Vector<Rc<CommandPool>> pools;
-	Vector<Waiter> waiters;
-};
-
-class SwapchainSync : public Ref {
-public:
-	virtual ~SwapchainSync();
-
-	bool init(Device &dev, uint32_t idx);
-	void reset();
-	void invalidate();
-
-	uint32_t getIndex() const { return _index; }
-	const Rc<Semaphore> &getImageReady() const { return _imageReady; }
-	const Rc<Semaphore> &getRenderFinished() const { return _renderFinished; }
-
-protected:
-	uint32_t _index = 0;
-	Rc<Semaphore> _imageReady;
-	Rc<Semaphore> _renderFinished;
-};
-
-class DeviceQueue : public Ref {
-public:
-	virtual ~DeviceQueue();
-
-	virtual bool init(Device &, VkQueue, uint32_t, QueueOperations);
-
-	uint32_t getIndex() const { return _index; }
-	VkQueue getQueue() const { return _queue; }
-	QueueOperations getOps() const { return _ops; }
-
-protected:
-	Rc<Device> _device;
-	uint32_t _index;
-	QueueOperations _ops = QueueOperations::None;
-	VkQueue _queue;
-};
+class Allocator;
 
 class Device : public gl::Device {
 public:
@@ -115,7 +57,6 @@ public:
 	virtual Rc<gl::Shader> makeShader(const gl::ProgramData &) override;
 	virtual Rc<gl::Pipeline> makePipeline(const gl::RenderQueue &, const gl::RenderPassData &, const gl::PipelineData &) override;
 	virtual Rc<gl::RenderPassImpl> makeRenderPass(gl::RenderPassData &) override;
-	virtual Rc<gl::PipelineLayout> makePipelineLayout(const gl::PipelineLayoutData &) override;
 
 	virtual void begin(Application *, thread::TaskQueue &) override;
 	virtual void end(thread::TaskQueue &) override;
@@ -129,6 +70,7 @@ public:
 
 	const DeviceInfo & getInfo() const { return _info; }
 	const DeviceCallTable * getTable() const { return _table; }
+	const Rc<Allocator> &getAllocator() const { return _allocator; }
 
 	virtual const Rc<gl::RenderQueue> getDefaultRenderQueue() const;
 
@@ -178,6 +120,7 @@ private:
 
 	VkSurfaceKHR _surface = VK_NULL_HANDLE;
 	Rc<Swapchain> _swapchain;
+	Rc<Allocator> _allocator;
 
 	Vector<DeviceQueueFamily> _families;
 
@@ -187,35 +130,6 @@ private:
 	Vector<Rc<Fence>> _fences;
 	Set<Rc<Fence>> _scheduled;
 	Vector<Vector<Rc<SwapchainSync>>> _sems;
-};
-
-enum class BufferLevel {
-	Primary = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-	Secondary = VK_COMMAND_BUFFER_LEVEL_SECONDARY,
-};
-
-class CommandPool : public Ref {
-public:
-	using Level = BufferLevel;
-
-	virtual ~CommandPool();
-
-	bool init(Device &dev, uint32_t familyIdx, QueueOperations c = QueueOperations::Graphics, bool transient = true);
-	void invalidate(Device &dev);
-
-	QueueOperations getClass() const { return _class; }
-	VkCommandPool getCommandPool() const { return _commandPool; }
-
-	VkCommandBuffer allocBuffer(Device &dev, Level = Level::Primary);
-	Vector<VkCommandBuffer> allocBuffers(Device &dev, uint32_t, Level = Level::Secondary);
-	void freeDefaultBuffers(Device &dev, Vector<VkCommandBuffer> &);
-	void reset(Device &dev, bool release = false);
-
-protected:
-	uint32_t _currentComplexity = 0;
-	uint32_t _bestComplexity = 0;
-	QueueOperations _class = QueueOperations::Graphics;
-	VkCommandPool _commandPool = VK_NULL_HANDLE;
 };
 
 }

@@ -33,18 +33,14 @@ class Sprite : public Node {
 public:
 	virtual ~Sprite() { }
 
-	//virtual bool init(const Rc<Pipeline> &);
+	virtual bool init();
 
 	virtual void draw(RenderFrameInfo &, NodeFlags flags) override;
-
-	//const Rc<Pipeline> &getPipeline() const { return _pipeline; }
-	//virtual void setPipeline(const Rc<Pipeline> &);
 
 protected:
 	virtual void updateColor() override;
 	virtual void updateVertexes();
 
-	//Rc<Pipeline> _pipeline;
 	VertexArray _vertexes;
 
 	bool _flippedX = false;

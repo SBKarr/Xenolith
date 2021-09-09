@@ -20,42 +20,18 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_GL_VK_XLVKRENDERPASSIMPL_H_
-#define XENOLITH_GL_VK_XLVKRENDERPASSIMPL_H_
-
-#include "XLVk.h"
+#include "XLVkFrame.h"
+#include "XLVkDevice.h"
 
 namespace stappler::xenolith::vk {
 
-class Device;
+bool FrameHandle::init(gl::Loop &loop, gl::RenderQueue &queue, uint64_t order, uint32_t gen, bool readyForSubmit) {
+	if (!gl::FrameHandle::init(loop, queue, order, gen, readyForSubmit)) {
+		return false;
+	}
 
-class RenderPassImpl : public gl::RenderPassImpl {
-public:
-	struct PassData {
-		VkPipelineLayout layout = VK_NULL_HANDLE;
-		VkRenderPass renderPass = VK_NULL_HANDLE;
-		VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-		Vector<VkDescriptorSetLayout> layouts;
-		Vector<VkDescriptorSet> sets;
-	};
-
-	virtual bool init(Device &dev, gl::RenderPassData &);
-
-	VkRenderPass getRenderPass() const { return _data->renderPass; }
-	VkPipelineLayout getPipelineLayout() const { return _data->layout; }
-	const Vector<VkDescriptorSet> &getDescriptorSets() const { return _data->sets; }
-
-	VkDescriptorSet getDescriptorSet(uint32_t) const;
-
-protected:
-	Vector<VkAttachmentDescription> _attachmentDescriptions;
-	Vector<VkAttachmentReference> _attachmentReferences;
-	Vector<uint32_t> _preservedAttachments;
-	Vector<VkSubpassDependency> _subpassDependencies;
-	Vector<VkSubpassDescription> _subpasses;
-	PassData *_data = nullptr;
-};
-
+	_memPool = Rc<DeviceMemoryPool>::create(((Device *)_device)->getAllocator());
+	return true;
 }
 
-#endif /* XENOLITH_GL_VK_XLVKRENDERPASSIMPL_H_ */
+}

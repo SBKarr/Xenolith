@@ -102,14 +102,6 @@ const ProgramData *RenderQueue::getProgram(StringView key) const {
 	return _data->programs.get(key);
 }
 
-const PipelineLayoutData &RenderQueue::getPipelineLayout() const {
-	return _data->pipelineLayout;
-}
-
-void RenderQueue::setPipelineLayout(Rc<PipelineLayout> &&l) {
-	_data->pipelineLayout.layout = move(l);
-}
-
 Vector<Rc<Attachment>> RenderQueue::getOutput() const {
 	Vector<Rc<Attachment>> ret; ret.reserve(_data->output.size());
 	for (auto &it : _data->output) {
@@ -131,7 +123,7 @@ Vector<Rc<Attachment>> RenderQueue::getOutput(AttachmentType t) const {
 bool RenderQueue::prepare() {
 	memory::pool::context ctx(_data->pool);
 
-	RenderQueue_buildRenderPaths(_data);
+	RenderQueue_buildRenderPaths(*this, _data);
 	RenderQueue_buildLoadStore(_data);
 	RenderQueue_buildDescriptors(_data);
 
@@ -202,8 +194,8 @@ inline T * emplaceAttachment(RenderPassData *pass, T *val) {
 	return ret;
 }
 
-AttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p,
-		uint32_t subpassIdx, const Rc<BufferAttachment> &attachment) {
+AttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p, uint32_t subpassIdx,
+		const Rc<BufferAttachment> &attachment) {
 	auto pass = getPassData(p);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
@@ -227,8 +219,8 @@ AttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p,
 	return nullptr;
 }
 
-AttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p,
-		uint32_t subpassIdx, const Rc<BufferAttachment> &attachment) {
+AttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p, uint32_t subpassIdx,
+		const Rc<BufferAttachment> &attachment) {
 	auto pass = getPassData(p);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
@@ -252,8 +244,8 @@ AttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p,
 	return nullptr;
 }
 
-ImageAttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p,
-		uint32_t subpassIdx, const Rc<ImageAttachment> &attachment) {
+ImageAttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p, uint32_t subpassIdx,
+		const Rc<ImageAttachment> &attachment) {
 	auto pass = getPassData(p);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
@@ -277,8 +269,8 @@ ImageAttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p,
 	return nullptr;
 }
 
-ImageAttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p,
-		uint32_t subpassIdx, const Rc<ImageAttachment> &attachment) {
+ImageAttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p, uint32_t subpassIdx,
+		const Rc<ImageAttachment> &attachment) {
 	auto pass = getPassData(p);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
@@ -430,11 +422,11 @@ bool RenderQueue::Builder::addInput(const Rc<Attachment> &data, AttachmentOps op
 	auto lb = std::lower_bound(_data->input.begin(), _data->input.end(), data);
 	if (lb == _data->input.end()) {
 		_data->input.emplace_back(data);
-		data->addUsage(AttachmentUsage::Output, ops);
+		data->addUsage(AttachmentUsage::Input, ops);
 		return true;
 	} else if (*lb != data) {
 		_data->input.emplace(lb, data);
-		data->addUsage(AttachmentUsage::Output, ops);
+		data->addUsage(AttachmentUsage::Input, ops);
 		return true;
 	}
 
@@ -564,16 +556,6 @@ void RenderQueue::Builder::erasePipeline(const Rc<RenderPass> &p, PipelineData *
 	}
 
 	pass->pipelines.erase(data->key);
-}
-
-bool RenderQueue::Builder::setPipelineOption(PipelineData &f, VertexFormat value) {
-	f.vertexFormat = value;
-	return true;
-}
-
-bool RenderQueue::Builder::setPipelineOption(PipelineData &f, LayoutFormat value) {
-	f.layoutFormat = value;
-	return true;
 }
 
 bool RenderQueue::Builder::setPipelineOption(PipelineData &f, DynamicState state) {

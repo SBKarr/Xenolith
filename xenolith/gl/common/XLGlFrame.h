@@ -57,8 +57,13 @@ public:
 	virtual bool isPresentable() const;
 	virtual bool isValid() const;
 	virtual bool isValidFlag() const { return _valid; }
+	virtual bool isInputSubmitted() const { return _inputSubmitted == _inputAttachments.size(); }
+
+	virtual const Vector<Rc<AttachmentHandle>> &getInputAttachments() const { return _inputAttachments; }
+	virtual bool submitInput(const Rc<AttachmentHandle> &, Rc<AttachmentInputData> &&);
 
 	virtual void setAttachmentReady(const Rc<AttachmentHandle> &); // should be called from GL thread
+	virtual void setInputSubmitted(const Rc<AttachmentHandle> &); // should be called from GL thread
 	virtual void setRenderPassPrepared(const Rc<RenderPassHandle> &); // should be called from GL thread
 	virtual void setRenderPassSubmitted(const Rc<RenderPassHandle> &); // should be called from GL thread
 
@@ -71,6 +76,7 @@ public:
 
 protected:
 	virtual void releaseResources();
+	virtual void releaseRenderPassResources(const Rc<RenderPass> &, const Rc<SwapchainAttachment> &);
 
 	Loop *_loop = nullptr; // loop can not die until frames are performed
 	Device *_device = nullptr;// device can not die until frames are performed
@@ -78,6 +84,8 @@ protected:
 
 	uint64_t _order = 0;
 	uint32_t _gen = 0;
+	uint32_t _inputs = 0;
+	uint32_t _inputSubmitted = 0;
 	bool _readyForSubmit = false;
 	bool _submitted = false;
 	bool _valid = true;

@@ -39,8 +39,8 @@ public:
 			SwapChainForceRecreate, // force engine to recreate swapchain with best params
 			FrameUpdate,
 			FrameSubmitted,
-			FrameTimeoutPassed, // framerate heartbeat
-			// FramePresentReady, // frame ready for presentation
+			FrameTimeoutPassed,
+			FrameInputReady,
 			UpdateFrameInterval, // view wants us to update frame interval
 			CompileResource, // new GL resource requested
 			Exit,

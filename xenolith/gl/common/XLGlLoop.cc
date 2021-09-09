@@ -153,15 +153,7 @@ bool Loop::worker() {
 
 	auto pushFrame = [&] (StringView reason) {
 		auto newFrame = _device->beginFrame(*this, *_device->getDefaultRenderQueue());
-		if (newFrame && newFrame->isInputRequired()) {
-			data.frame = platform::device::_clock();
-			// schedule task for director
-			_application->performOnMainThread([dir = _application->getDirector(), newFrame] {
-				dir->render(newFrame);
-			});
-			// force thread update
-			_view->pushEvent(ViewEvent::Thread);
-		} else if (newFrame) {
+		if (newFrame) {
 			data.frame = platform::device::_clock();
 			_view->pushEvent(ViewEvent::Update);
 		}
@@ -301,6 +293,17 @@ bool Loop::worker() {
 							}
 						}
 					} while (0);
+					break;
+				case Event::FrameInputReady:
+					if (auto frame = it.data.cast<FrameHandle>()) {
+						_application->performOnMainThread([dir = _application->getDirector(), frame] {
+							dir->render(frame);
+							if (!frame->isInputSubmitted()) {
+								frame->invalidate();
+							}
+						});
+						_view->pushEvent(ViewEvent::Thread);
+					}
 					break;
 				case Event::FrameTimeoutPassed:
 					if (data.swapchainValid) {

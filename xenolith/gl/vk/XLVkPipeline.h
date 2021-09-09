@@ -38,24 +38,9 @@ protected:
 	VkShaderModule _shaderModule = VK_NULL_HANDLE;
 };
 
-class PipelineLayout : public gl::PipelineLayout {
-public:
-	struct LayoutData {
-		Vector<VkDescriptorSetLayout> descriptors;
-		VkPipelineLayout layout = VK_NULL_HANDLE;
-	};
-
-	bool init(Device &dev, const gl::PipelineLayoutData &);
-
-	VkPipelineLayout getPipelineLayout() const { return _data->layout; }
-
-protected:
-	LayoutData *_data = nullptr;
-};
-
 class Pipeline : public gl::Pipeline {
 public:
-	bool init(Device &dev, const gl::PipelineData &, const gl::RenderPassData &, const gl::RenderQueue &);
+	bool init(Device &dev, const gl::PipelineData &params, const gl::RenderPassData &, const gl::RenderQueue &);
 
 	VkPipeline getPipeline() const { return _pipeline; }
 

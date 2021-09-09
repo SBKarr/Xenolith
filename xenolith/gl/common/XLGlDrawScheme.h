@@ -36,9 +36,9 @@ public:
 	static Rc<DrawScheme> create();
 	static void destroy(DrawScheme *);
 
-	void pushVertexArrayCmd(const Rc<Pipeline> &, const Rc<VertexData> &, const Mat4 &, SpanView<int16_t> zPath);
+	void pushVertexArrayCmd(const Rc<VertexData> &, const Mat4 &, SpanView<int16_t> zPath);
 
-	void pushDrawIndexed(CommandGroup *g, Pipeline *, SpanView<Vertex_V4F_C4F_T2F> vertexes, SpanView<uint16_t> indexes);
+	void pushDrawIndexed(CommandGroup *g, SpanView<Vertex_V4F_V4F_T2F2U> vertexes, SpanView<uint16_t> indexes);
 
 	memory::pool_t *getPool() const { return pool; }
 
@@ -53,8 +53,6 @@ protected:
 
 	DrawBuffer data; // uniforms[0] : draw::DrawData
 	DrawBuffer transforms; // uniforms[1] : layout::Mat4
-
-	memory::map<VertexFormat, DrawBuffer> vertex; // buffer[N] : VertexFormat
 };
 
 }

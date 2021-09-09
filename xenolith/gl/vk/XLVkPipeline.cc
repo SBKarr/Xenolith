@@ -64,106 +64,10 @@ bool Shader::init(Device &dev, const gl::ProgramData &data) {
 	return false;
 }
 
-bool PipelineLayout::init(Device &dev, const gl::PipelineLayoutData &data) {
-	Vector<VkDescriptorSetLayout> descriptors;
-	VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
-
-	if (!data.queueDescriptors.empty()) {
-		VkDescriptorSetLayout setLayout = VK_NULL_HANDLE;
-		Vector<VkDescriptorSetLayoutBinding> bindings; bindings.reserve(data.queueDescriptors.size());
-		size_t bindingIdx = 0;
-		for (auto &binding : data.queueDescriptors) {
-			VkDescriptorSetLayoutBinding b;
-			b.binding = bindingIdx;
-			b.descriptorCount = 1;
-			b.descriptorType = VkDescriptorType(binding.type);
-			b.pImmutableSamplers = nullptr;
-			b.stageFlags = VkShaderStageFlags(binding.stages);
-			bindings.emplace_back(b);
-			++ bindingIdx;
-		}
-		VkDescriptorSetLayoutCreateInfo layoutInfo { };
-		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-
-		layoutInfo.bindingCount = bindings.size();
-		layoutInfo.pBindings = bindings.data();
-		layoutInfo.flags = 0;
-
-		if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &setLayout) == VK_SUCCESS) {
-			descriptors.emplace_back(setLayout);
-		}
-	}
-
-	if (!data.extraDescriptors.empty()) {
-		VkDescriptorSetLayout setLayout = VK_NULL_HANDLE;
-		Vector<VkDescriptorSetLayoutBinding> bindings; bindings.reserve(data.queueDescriptors.size());
-		size_t bindingIdx = 0;
-		for (auto &binding : data.extraDescriptors) {
-			VkDescriptorSetLayoutBinding b;
-			b.binding = bindingIdx;
-			b.descriptorCount = 1;
-			b.descriptorType = VkDescriptorType(binding.type);
-			b.pImmutableSamplers = nullptr;
-			b.stageFlags = VkShaderStageFlags(binding.stages);
-			bindings.emplace_back(b);
-			++ bindingIdx;
-		}
-		VkDescriptorSetLayoutCreateInfo layoutInfo { };
-		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-
-		layoutInfo.bindingCount = bindings.size();
-		layoutInfo.pBindings = bindings.data();
-		layoutInfo.flags = 0;
-
-		if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &setLayout) == VK_SUCCESS) {
-			descriptors.emplace_back(setLayout);
-		}
-	}
-
-	// allow 12 bytes for Vertex and fragment shaders
-	VkPushConstantRange range = {
-		VkShaderStageFlagBits::VK_SHADER_STAGE_VERTEX_BIT | VkShaderStageFlagBits::VK_SHADER_STAGE_FRAGMENT_BIT,
-		0,
-		12
-	};
-
-	VkPipelineLayoutCreateInfo pipelineLayoutInfo;
-	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.pNext = nullptr;
-	pipelineLayoutInfo.flags = 0;
-	pipelineLayoutInfo.setLayoutCount = descriptors.size();
-	pipelineLayoutInfo.pSetLayouts = descriptors.data();
-	pipelineLayoutInfo.pushConstantRangeCount = 1;
-	pipelineLayoutInfo.pPushConstantRanges = { &range };
-
-	if (dev.getTable()->vkCreatePipelineLayout(dev.getDevice(), &pipelineLayoutInfo, nullptr, &pipelineLayout) == VK_SUCCESS) {
-		auto l = new LayoutData;
-		l->layout = pipelineLayout;
-		l->descriptors = move(descriptors);
-		_data = l;
-		return gl::PipelineLayout::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
-			auto d = ((Device *)dev);
-			auto l = (LayoutData *)ptr;
-
-			d->getTable()->vkDestroyPipelineLayout(d->getDevice(), l->layout, nullptr);
-			for (auto &it : l->descriptors) {
-				d->getTable()->vkDestroyDescriptorSetLayout(d->getDevice(), it, nullptr);
-			}
-			delete l;
-		}, gl::ObjectType::PipelineLayout, l);
-	}
-
-	for (VkDescriptorSetLayout &it : descriptors) {
-		dev.getTable()->vkDestroyDescriptorSetLayout(dev.getDevice(), it, nullptr);
-	}
-
-	return false;
-}
-
-
 bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::RenderPassData &pass, const gl::RenderQueue &queue) {
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertexInputInfo.pNext = nullptr;
 	vertexInputInfo.vertexBindingDescriptionCount = 0;
 	vertexInputInfo.pVertexBindingDescriptions = nullptr; // Optional
 	vertexInputInfo.vertexAttributeDescriptionCount = 0;
@@ -171,7 +75,9 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	inputAssembly.pNext = nullptr;
 	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	//inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
 	inputAssembly.primitiveRestartEnable = VK_FALSE;
 
 	VkViewport viewport{};
@@ -190,6 +96,7 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 
 	VkPipelineViewportStateCreateInfo viewportState{};
 	viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewportState.pNext = nullptr;
 	viewportState.viewportCount = 1;
 	viewportState.pViewports = &viewport;
 	viewportState.scissorCount = 1;
@@ -197,12 +104,15 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 
 	VkPipelineRasterizationStateCreateInfo rasterizer{};
 	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	rasterizer.pNext = nullptr;
 	rasterizer.depthClampEnable = VK_FALSE;
 	rasterizer.rasterizerDiscardEnable = VK_FALSE;
 	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 	rasterizer.lineWidth = 1.0f;
-	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+	//rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+	rasterizer.cullMode = VK_CULL_MODE_NONE;
 	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+	//rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 	rasterizer.depthBiasEnable = VK_FALSE;
 	rasterizer.depthBiasConstantFactor = 0.0f; // Optional
 	rasterizer.depthBiasClamp = 0.0f; // Optional
@@ -210,6 +120,7 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 
 	VkPipelineMultisampleStateCreateInfo multisampling{};
 	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	multisampling.pNext = nullptr;
 	multisampling.sampleShadingEnable = VK_FALSE;
 	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 	multisampling.minSampleShading = 1.0f; // Optional
@@ -281,7 +192,7 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 	pipelineInfo.pDepthStencilState = nullptr; // Optional
 	pipelineInfo.pColorBlendState = &colorBlending;
 	pipelineInfo.pDynamicState = (dynamicStates.size() > 0) ? &dynamicState : nullptr; // Optional
-	pipelineInfo.layout = queue.getPipelineLayout().layout.cast<PipelineLayout>()->getPipelineLayout();
+	pipelineInfo.layout = pass.impl.cast<RenderPassImpl>()->getPipelineLayout();
 	pipelineInfo.renderPass = pass.impl.cast<RenderPassImpl>()->getRenderPass();
 	pipelineInfo.subpass = 0;
 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional

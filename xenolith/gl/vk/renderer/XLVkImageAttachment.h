@@ -33,6 +33,7 @@ class Device;
 class Semaphore;
 class SwapchainAttachmentHandle;
 class SwapchainSync;
+class RenderPassHandle;
 
 class ImageAttachment : public gl::ImageAttachment {
 public:
@@ -92,7 +93,14 @@ protected:
 	Vector<Rc<ImageView>> _imageViews;
 };
 
-class SwapchainAttachmentHandle : public gl::AttachmentHandle {
+class ImageAttachmentHandle : public gl::AttachmentHandle {
+public:
+	virtual ~ImageAttachmentHandle();
+
+	virtual bool writeDescriptor(const RenderPassHandle &, const gl::PipelineDescriptor &, uint32_t, bool, VkDescriptorImageInfo &) { return false; }
+};
+
+class SwapchainAttachmentHandle : public ImageAttachmentHandle {
 public:
 	virtual ~SwapchainAttachmentHandle();
 

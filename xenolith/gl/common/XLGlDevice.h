@@ -60,7 +60,6 @@ public:
 	virtual Rc<Shader> makeShader(const ProgramData &) = 0;
 	virtual Rc<Pipeline> makePipeline(const gl::RenderQueue &, const RenderPassData &, const PipelineData &) = 0;
 	virtual Rc<RenderPassImpl> makeRenderPass(RenderPassData &) = 0;
-	virtual Rc<PipelineLayout> makePipelineLayout(const PipelineLayoutData &) = 0;
 
 	Rc<Shader> getProgram(StringView);
 	Rc<Shader> addProgram(Rc<Shader>);

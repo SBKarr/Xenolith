@@ -25,7 +25,7 @@
 
 namespace stappler::xenolith {
 
-/*bool Sprite::init(const Rc<Pipeline> &p) {
+bool Sprite::init() {
 	if (!Node::init()) {
 		return false;
 	}
@@ -33,19 +33,12 @@ namespace stappler::xenolith {
 	_vertexes.init(4, 6);
 	updateVertexes();
 
-	_pipeline = p;
 	return true;
 }
 
 void Sprite::draw(RenderFrameInfo &frame, NodeFlags flags) {
-	if (_pipeline && _pipeline->getPipeline()) {
-		frame.scheme->pushVertexArrayCmd(_pipeline->getPipeline(), _vertexes.pop(), frame.transformStack.back(), frame.zPath);
-	}
+	frame.scheme->pushVertexArrayCmd(_vertexes.pop(), frame.transformStack.back(), frame.zPath);
 }
-
-void Sprite::setPipeline(const Rc<Pipeline> &pipeline) {
-	_pipeline = pipeline;
-}*/
 
 void Sprite::updateColor() {
 	_vertexes.updateColor(_displayedColor);

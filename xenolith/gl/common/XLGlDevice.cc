@@ -163,8 +163,6 @@ void CompilationProcess::runShaders(thread::TaskQueue &queue) {
 	size_t tasksCount = 0;
 	Vector<ProgramData *> programs;
 
-	++ programsInQueue;
-
 	programsInQueue += req->getPasses().size();
 	tasksCount += req->getPasses().size();
 	for (auto &it : req->getPrograms()) {
@@ -210,20 +208,6 @@ void CompilationProcess::runShaders(thread::TaskQueue &queue) {
 			return true;
 		}));
 	}
-
-	queue.perform(Rc<Task>::create([this, queue = Rc<thread::TaskQueue>(&queue)] (const thread::Task &) -> bool {
-		auto ret = draw->makePipelineLayout(req->getPipelineLayout());
-		if (!ret) {
-			log::vtext("Gl-Device", "Fail to compile pipeline layout ", req->getName());
-			return false;
-		} else {
-			req->setPipelineLayout(move(ret));
-			if (programsInQueue.fetch_sub(1) == 1) {
-				runPipelines(*queue);
-			}
-		}
-		return true;
-	}));
 
 	if (tasksCount == 0) {
 		runPipelines(queue);

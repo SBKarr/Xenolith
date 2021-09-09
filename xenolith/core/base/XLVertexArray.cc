@@ -27,7 +27,7 @@ namespace stappler::xenolith {
 VertexArray::Quad & VertexArray::Quad::setTextureRect(const Rect &texRect,
 		float texWidth, float texHeight, bool flippedX, bool flippedY, bool rotated) {
 
-	gl::Vertex_V4F_C4F_T2F *data = const_cast<gl::Vertex_V4F_C4F_T2F *>(vertexes.data());
+	gl::Vertex_V4F_V4F_T2F2U *data = const_cast<gl::Vertex_V4F_V4F_T2F2U *>(vertexes.data());
 
 	float texLeft = texRect.origin.x / texWidth;
 	float texRight = (texRect.origin.x + texRect.size.width) / texWidth;
@@ -62,7 +62,7 @@ VertexArray::Quad & VertexArray::Quad::setTextureRect(const Rect &texRect,
 VertexArray::Quad & VertexArray::Quad::setTexturePoints(
 		const Vec2 &tl, const Vec2 &bl, const Vec2 &tr, const Vec2 &br, float texWidth, float texHeight) {
 
-	gl::Vertex_V4F_C4F_T2F *data = const_cast<gl::Vertex_V4F_C4F_T2F *>(vertexes.data());
+	gl::Vertex_V4F_V4F_T2F2U *data = const_cast<gl::Vertex_V4F_V4F_T2F2U *>(vertexes.data());
 
 	 // tl bl tr br
 	data[0].tex = Vec2(tl.x / texWidth, tl.y / texHeight);
@@ -102,7 +102,7 @@ VertexArray::Quad & VertexArray::Quad::setGeometry(const Vec4 &pos, const Size &
 	const float dx = x1 * cr - y2 * sr2 + x;
 	const float dy = x1 * sr + y2 * cr2 + y;
 
-	gl::Vertex_V4F_C4F_T2F *data = const_cast<gl::Vertex_V4F_C4F_T2F *>(vertexes.data());
+	gl::Vertex_V4F_V4F_T2F2U *data = const_cast<gl::Vertex_V4F_V4F_T2F2U *>(vertexes.data());
 
 	 // tl bl tr br
 	data[0].pos = Vec4( dx, dy, pos.z, pos.w);
@@ -120,7 +120,7 @@ VertexArray::Quad & VertexArray::Quad::setGeometry(const Vec4 &pos, const Size &
 	const float x2 = x1 + size.width;
 	const float y2 = y1 + size.height;
 
-	gl::Vertex_V4F_C4F_T2F *data = const_cast<gl::Vertex_V4F_C4F_T2F *>(vertexes.data());
+	gl::Vertex_V4F_V4F_T2F2U *data = const_cast<gl::Vertex_V4F_V4F_T2F2U *>(vertexes.data());
 
 	// (x1, y2) - (x2, y2)
 	// |          |
@@ -136,7 +136,7 @@ VertexArray::Quad & VertexArray::Quad::setGeometry(const Vec4 &pos, const Size &
 }
 
 VertexArray::Quad & VertexArray::Quad::setColor(const Color4F &color) {
-	gl::Vertex_V4F_C4F_T2F *data = const_cast<gl::Vertex_V4F_C4F_T2F *>(vertexes.data());
+	gl::Vertex_V4F_V4F_T2F2U *data = const_cast<gl::Vertex_V4F_V4F_T2F2U *>(vertexes.data());
 	data[0].color = color;
 	data[1].color = color;
 	data[2].color = color;
@@ -149,12 +149,16 @@ VertexArray::Quad & VertexArray::Quad::setColor(SpanView<Color4F> colors) { // t
 		return *this;
 	}
 
-	gl::Vertex_V4F_C4F_T2F *data = const_cast<gl::Vertex_V4F_C4F_T2F *>(vertexes.data());
+	gl::Vertex_V4F_V4F_T2F2U *data = const_cast<gl::Vertex_V4F_V4F_T2F2U *>(vertexes.data());
 	data[0].color = colors[0];
 	data[1].color = colors[1];
 	data[2].color = colors[2];
 	data[3].color = colors[3];
 	return *this;
+}
+
+VertexArray::Quad & VertexArray::Quad::setColor(std::initializer_list<Color4F> &&colors) { // tl bl tr br
+	return setColor(SpanView<Color4F>(colors.begin(), colors.size()));
 }
 
 bool VertexArray::init(uint32_t bufferCapacity, uint32_t indexCapacity) {
@@ -200,7 +204,7 @@ VertexArray::Quad VertexArray::addQuad() {
 	auto firstIndex = _data->indexes.size();
 
 	_data->data.resize(_data->data.size() + 4);
-	_data->indexes.resize(_data->data.size() + 6);
+	_data->indexes.resize(_data->indexes.size() + 6);
 
 	// 0 - 2
 	// |   |
@@ -216,8 +220,8 @@ VertexArray::Quad VertexArray::addQuad() {
 	_data->indexes[firstIndex + 5] = firstVertex + 1;
 
 	return Quad({
-		SpanView<gl::Vertex_V4F_C4F_T2F>(_data->data.data() + firstVertex, 4),
-		SpanView<uint16_t>(_data->indexes.data() + firstIndex, 6),
+		SpanView<gl::Vertex_V4F_V4F_T2F2U>(_data->data.data() + firstVertex, 4),
+		SpanView<uint32_t>(_data->indexes.data() + firstIndex, 6),
 				firstVertex, firstIndex});
 }
 
@@ -227,8 +231,8 @@ VertexArray::Quad VertexArray::getQuad(size_t firstVertex, size_t firstIndex) {
 	}
 
 	return Quad({
-			SpanView<gl::Vertex_V4F_C4F_T2F>(_data->data.data() + firstVertex, 4),
-			SpanView<uint16_t>(_data->indexes.data() + firstIndex, 6),
+			SpanView<gl::Vertex_V4F_V4F_T2F2U>(_data->data.data() + firstVertex, 4),
+			SpanView<uint32_t>(_data->indexes.data() + firstIndex, 6),
 					firstVertex, firstIndex});
 }
 

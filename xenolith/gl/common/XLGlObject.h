@@ -91,16 +91,6 @@ protected:
 	String _name;
 };
 
-class PipelineLayout : public NamedObject {
-public:
-	virtual ~PipelineLayout() { }
-
-	virtual StringView getName() const override { return _name; }
-
-protected:
-	String _name;
-};
-
 class Framebuffer : public Object {
 public:
 	virtual ~Framebuffer() { }

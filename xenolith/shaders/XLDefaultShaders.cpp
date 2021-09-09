@@ -27,8 +27,13 @@ namespace stappler::xenolith::shaders {
 
 #include "compiled/shader_default.frag"
 #include "compiled/shader_default.vert"
+#include "compiled/shader_vertex.frag"
+#include "compiled/shader_vertex.vert"
 
 SpanView<uint32_t> DefaultFrag(default_frag, sizeof(default_frag) / sizeof(uint32_t));
 SpanView<uint32_t> DefaultVert(default_vert, sizeof(default_vert) / sizeof(uint32_t));
+
+SpanView<uint32_t> VertexFrag(vertex_frag, sizeof(vertex_frag) / sizeof(uint32_t));
+SpanView<uint32_t> VertexVert(vertex_vert, sizeof(vertex_vert) / sizeof(uint32_t));
 
 }

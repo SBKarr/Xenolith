@@ -20,42 +20,43 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_GL_VK_XLVKRENDERPASSIMPL_H_
-#define XENOLITH_GL_VK_XLVKRENDERPASSIMPL_H_
+#ifndef XENOLITH_GL_VK_XLVKBUFFER_H_
+#define XENOLITH_GL_VK_XLVKBUFFER_H_
 
-#include "XLVk.h"
+#include "XLVkAllocator.h"
 
 namespace stappler::xenolith::vk {
 
-class Device;
-
-class RenderPassImpl : public gl::RenderPassImpl {
+class DeviceBuffer : public Ref {
 public:
-	struct PassData {
-		VkPipelineLayout layout = VK_NULL_HANDLE;
-		VkRenderPass renderPass = VK_NULL_HANDLE;
-		VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-		Vector<VkDescriptorSetLayout> layouts;
-		Vector<VkDescriptorSet> sets;
-	};
+	virtual ~DeviceBuffer();
 
-	virtual bool init(Device &dev, gl::RenderPassData &);
+	bool init(DeviceMemoryPool *, VkBuffer, Allocator::MemBlock &&, AllocationUsage usage, const gl::BufferInfo &);
 
-	VkRenderPass getRenderPass() const { return _data->renderPass; }
-	VkPipelineLayout getPipelineLayout() const { return _data->layout; }
-	const Vector<VkDescriptorSet> &getDescriptorSets() const { return _data->sets; }
+	void invalidate(Device &dev);
 
-	VkDescriptorSet getDescriptorSet(uint32_t) const;
+	void setPersistentMapping(bool);
+	bool isPersistentMapping() const;
+
+	bool setData(BytesView, VkDeviceSize offset = 0);
+	Bytes getData(VkDeviceSize size = maxOf<VkDeviceSize>(), VkDeviceSize offset = 0);
+
+	VkBuffer getBuffer() const { return _buffer; }
+	VkDeviceSize getSize() const { return _info.size; }
+	const gl::BufferInfo & getUsage() const { return _info; }
 
 protected:
-	Vector<VkAttachmentDescription> _attachmentDescriptions;
-	Vector<VkAttachmentReference> _attachmentReferences;
-	Vector<uint32_t> _preservedAttachments;
-	Vector<VkSubpassDependency> _subpassDependencies;
-	Vector<VkSubpassDescription> _subpasses;
-	PassData *_data = nullptr;
+	AllocationUsage _usage = AllocationUsage::DeviceLocal;
+	gl::BufferInfo _info;
+	Allocator::MemBlock _memory;
+	DeviceMemoryPool *_pool = nullptr;
+	VkBuffer _buffer;
+
+	void *_mapped = nullptr;
+	bool _persistentMapping = false;
+	bool _needInvalidate = false;
 };
 
 }
 
-#endif /* XENOLITH_GL_VK_XLVKRENDERPASSIMPL_H_ */
+#endif /* XENOLITH_GL_VK_XLVKBUFFER_H_ */
