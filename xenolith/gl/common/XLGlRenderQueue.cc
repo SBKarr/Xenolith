@@ -21,9 +21,357 @@
  **/
 
 #include "XLGlRenderQueue.h"
-#include "XLGlRenderQueueUtils.cc"
 
 namespace stappler::xenolith::gl {
+
+struct RenderQueue::QueueData : NamedMem {
+	memory::pool_t *pool = nullptr;
+	Mode mode = Mode::RenderOnDemand;
+	memory::vector<Attachment *> input;
+	memory::vector<Attachment *> output;
+	HashTable<Rc<Attachment>> attachments;
+	HashTable<RenderPassData *> passes;
+	HashTable<ProgramData *> programs;
+	HashTable<PipelineData *> pipelines;
+	HashTable<Rc<Resource>> linked;
+	Function<void(gl::FrameHandle &)> beginCallback;
+	Function<void(gl::FrameHandle &)> endCallback;
+	Function<void(gl::FrameHandle &, const Rc<AttachmentHandle> &)> inputCallback;
+	Function<void(const Swapchain *)> enableCallback;
+	Function<void()> disableCallback;
+	Rc<Resource> resource;
+	bool compiled = false;
+
+	void clear() {
+		for (auto &it : programs) {
+			it->program = nullptr;
+		}
+
+		for (auto &it : passes) {
+			it->framebuffers.clear();
+			for (auto &desc : it->descriptors) {
+				desc->clear();
+			}
+
+			for (auto &subpass : it->subpasses) {
+				for (auto &pipeline : subpass.pipelines) {
+					pipeline->pipeline = nullptr;
+				}
+			}
+
+			it->renderPass->invalidate();
+			it->renderPass = nullptr;
+			it->impl = nullptr;
+		}
+
+		for (auto &it : attachments) {
+			it->clear();
+		}
+
+		if (resource) {
+			resource->clear();
+			resource = nullptr;
+		}
+		linked.clear();
+		compiled = false;
+	}
+};
+
+static void RenderQueue_buildLoadStore(RenderQueue::QueueData *data) {
+	for (auto &attachment : data->attachments) {
+		if (!isImageAttachmentType(attachment->getType())) {
+			continue;
+		}
+
+		auto img = (ImageAttachment *)attachment.get();
+
+		bool hasColor = false;
+		bool hasStencil = false;
+		switch (img->getInfo().format) {
+		case ImageFormat::S8_UINT:
+			hasStencil = true;
+			break;
+		case ImageFormat::D16_UNORM_S8_UINT:
+		case ImageFormat::D24_UNORM_S8_UINT:
+		case ImageFormat::D32_SFLOAT_S8_UINT:
+			hasColor = true;
+			hasStencil = true;
+			break;
+		default:
+			hasColor = true;
+			break;
+		}
+
+		for (auto &descriptor : img->getDescriptors()) {
+			if (descriptor->getOps() != AttachmentOps::Undefined) {
+				// operations was hinted, no heuristics required
+				continue;
+			}
+
+			AttachmentOps ops = AttachmentOps::Undefined;
+			for (auto &it : descriptor->getRefs()) {
+				if (it->getOps() != AttachmentOps::Undefined) {
+					ops |= it->getOps();
+					continue;
+				}
+
+				AttachmentOps refOps = AttachmentOps::Undefined;
+				auto imgRef = (ImageAttachmentRef *)it.get();
+				bool hasWriters = false;
+				bool hasReaders = false;
+				bool colorReadOnly = true;
+				bool stencilReadOnly = true;
+
+				if ((it->getUsage() & AttachmentUsage::Output) != AttachmentUsage::None
+						|| (it->getUsage() & AttachmentUsage::Resolve) != AttachmentUsage::None
+						|| (it->getUsage() & AttachmentUsage::DepthStencil) != AttachmentUsage::None) {
+					hasWriters = true;
+				}
+				if ((it->getUsage() & AttachmentUsage::Input) != AttachmentUsage::None
+						|| (it->getUsage() & AttachmentUsage::DepthStencil) != AttachmentUsage::None) {
+					hasReaders = true;
+				}
+				if ((it->getUsage() & AttachmentUsage::DepthStencil) != AttachmentUsage::None) {
+					switch (imgRef->getLayout()) {
+					case AttachmentLayout::DepthStencilAttachmentOptimal:
+					case AttachmentLayout::DepthReadOnlyStencilAttachmentOptimal:
+					case AttachmentLayout::DepthAttachmentStencilReadOnlyOptimal:
+					case AttachmentLayout::DepthAttachmentOptimal:
+					case AttachmentLayout::StencilAttachmentOptimal:
+					case AttachmentLayout::General:
+						hasWriters = true;
+						break;
+					default:
+						break;
+					}
+				}
+
+				switch (imgRef->getLayout()) {
+				case AttachmentLayout::General:
+				case AttachmentLayout::DepthStencilAttachmentOptimal:
+					stencilReadOnly = false;
+					colorReadOnly = false;
+					break;
+				case AttachmentLayout::ColorAttachmentOptimal:
+				case AttachmentLayout::DepthAttachmentStencilReadOnlyOptimal:
+				case AttachmentLayout::DepthAttachmentOptimal:
+					colorReadOnly = false;
+					break;
+				case AttachmentLayout::DepthReadOnlyStencilAttachmentOptimal:
+				case AttachmentLayout::StencilAttachmentOptimal:
+					stencilReadOnly = false;
+					break;
+				default:
+					break;
+				}
+
+				if (hasWriters) {
+					if (hasColor && !colorReadOnly) {
+						refOps |= AttachmentOps::WritesColor;
+					}
+					if (hasStencil && !stencilReadOnly) {
+						refOps |= AttachmentOps::WritesStencil;
+					}
+				}
+
+				if (hasReaders) {
+					if (hasColor) {
+						refOps |= AttachmentOps::ReadColor;
+					}
+					if (hasStencil) {
+						refOps |= AttachmentOps::ReadStencil;
+					}
+				}
+
+				it->setOps(refOps);
+				ops |= refOps;
+			}
+			descriptor->setOps(ops);
+		}
+	};
+
+	auto dataWasWritten = [] (Attachment *data, uint32_t idx) -> Pair<bool, bool> {
+		if ((data->getUsage() & AttachmentUsage::Input) != AttachmentUsage::None) {
+			if ((data->getOps() & (AttachmentOps::WritesColor | AttachmentOps::WritesStencil)) != AttachmentOps::Undefined) {
+				return pair(true, true);
+			}
+		}
+
+		bool colorWasWritten = (data->getOps() & AttachmentOps::WritesColor) != AttachmentOps::Undefined;
+		bool stencilWasWritten = (data->getOps() & AttachmentOps::WritesStencil) != AttachmentOps::Undefined;
+
+		auto &descriptors = data->getDescriptors();
+		for (size_t i = 0; i < idx; ++ i) {
+			auto desc = descriptors[i].get();
+			if ((desc->getOps() & AttachmentOps::WritesColor) != AttachmentOps::Undefined) {
+				colorWasWritten = true;
+			}
+			if ((desc->getOps() & AttachmentOps::WritesStencil) != AttachmentOps::Undefined) {
+				stencilWasWritten = true;
+			}
+		}
+
+		return pair(colorWasWritten, stencilWasWritten);
+	};
+
+	auto dataWillBeRead = [] (Attachment *data, uint32_t idx) -> Pair<bool, bool> {
+		if ((data->getUsage() & AttachmentUsage::Output) != AttachmentUsage::None) {
+			if ((data->getOps() & (AttachmentOps::ReadColor | AttachmentOps::ReadStencil)) != AttachmentOps::Undefined) {
+				return pair(true, true);
+			}
+		}
+
+		bool colorWillBeRead = (data->getOps() & AttachmentOps::ReadColor) != AttachmentOps::Undefined;
+		bool stencilWillBeRead = (data->getOps() & AttachmentOps::ReadStencil) != AttachmentOps::Undefined;
+
+		auto &descriptors = data->getDescriptors();
+		for (size_t i = idx + 1; i < descriptors.size(); ++ i) {
+			auto desc = descriptors[i].get();
+			if ((desc->getOps() & AttachmentOps::ReadColor) != AttachmentOps::Undefined) {
+				colorWillBeRead = true;
+			}
+			if ((desc->getOps() & AttachmentOps::ReadStencil) != AttachmentOps::Undefined) {
+				stencilWillBeRead = true;
+			}
+		}
+
+		return pair(colorWillBeRead, stencilWillBeRead);
+	};
+
+	// fill layout chain
+	for (auto &attachment : data->attachments) {
+		if (attachment->getDescriptors().empty()) {
+			continue;
+		}
+
+		if (attachment->getDescriptors().size() == 1 && attachment->getUsage() == AttachmentUsage::None) {
+			attachment->setTransient(true);
+
+			if (!isImageAttachmentType(attachment->getType())) {
+				continue;
+			}
+
+			for (auto &desc : attachment->getDescriptors()) {
+				auto img = (ImageAttachmentDescriptor *)desc.get();
+
+				img->setLoadOp(AttachmentLoadOp::DontCare);
+				img->setStencilLoadOp(AttachmentLoadOp::DontCare);
+				img->setStoreOp(AttachmentStoreOp::DontCare);
+				img->setStencilStoreOp(AttachmentStoreOp::DontCare);
+			}
+		} else {
+			if (!isImageAttachmentType(attachment->getType())) {
+				continue;
+			}
+
+			size_t descIndex = 0;
+			for (auto &desc : attachment->getDescriptors()) {
+				auto imgDesc = (ImageAttachmentDescriptor *)desc.get();
+				auto wasWritten = dataWasWritten(attachment, descIndex); // Color, Stencil
+				auto willBeRead = dataWillBeRead(attachment, descIndex);
+
+				if (wasWritten.first) {
+					if ((desc->getOps() & AttachmentOps::ReadColor) != AttachmentOps::Undefined) {
+						imgDesc->setLoadOp(AttachmentLoadOp::Load);
+					} else {
+						imgDesc->setLoadOp(AttachmentLoadOp::DontCare);
+					}
+				} else {
+					bool isRead = ((desc->getOps() & AttachmentOps::ReadColor) != AttachmentOps::Undefined);
+					bool isWrite = ((desc->getOps() & AttachmentOps::WritesColor) != AttachmentOps::Undefined);
+					if (isRead && !isWrite) {
+						log::vtext("Gl-Error", "Attachment's color component '", attachment->getName(), "' is read in renderpass ",
+								desc->getRenderPass()->key, " before written");
+					}
+
+					auto img = (ImageAttachment *)attachment.get();
+					imgDesc->setLoadOp(img->shouldClearOnLoad() ? AttachmentLoadOp::Clear : AttachmentLoadOp::DontCare);
+				}
+
+				if (wasWritten.second) {
+					if ((desc->getOps() & AttachmentOps::ReadStencil) != AttachmentOps::Undefined) {
+						imgDesc->setStencilLoadOp(AttachmentLoadOp::Load);
+					} else {
+						imgDesc->setStencilLoadOp(AttachmentLoadOp::DontCare);
+					}
+				} else {
+					bool isRead = ((desc->getOps() & AttachmentOps::ReadStencil) != AttachmentOps::Undefined);
+					bool isWrite = ((desc->getOps() & AttachmentOps::WritesStencil) != AttachmentOps::Undefined);
+					if (isRead && !isWrite) {
+						log::vtext("Gl-Error", "Attachment's stencil component '", attachment->getName(), "' is read in renderpass ",
+								desc->getRenderPass()->key, " before written");
+					}
+					auto img = (ImageAttachment *)attachment.get();
+					imgDesc->setStencilLoadOp(img->shouldClearOnLoad() ? AttachmentLoadOp::Clear : AttachmentLoadOp::DontCare);
+				}
+
+				if (willBeRead.first) {
+					if ((desc->getOps() & AttachmentOps::WritesColor) != AttachmentOps::Undefined) {
+						imgDesc->setStoreOp(AttachmentStoreOp::Store);
+					} else {
+						imgDesc->setStoreOp(AttachmentStoreOp::DontCare);
+					}
+				} else {
+					bool isRead = ((desc->getOps() & AttachmentOps::ReadColor) != AttachmentOps::Undefined);
+					bool isWrite = ((desc->getOps() & AttachmentOps::WritesColor) != AttachmentOps::Undefined);
+					if (!isRead && isWrite) {
+						log::vtext("Gl-Error", "Attachment's color component '", attachment->getName(), "' is writeen in renderpass ",
+								desc->getRenderPass()->key, " but never read");
+					}
+					imgDesc->setStoreOp(AttachmentStoreOp::DontCare);
+				}
+
+				if (willBeRead.second) {
+					if ((desc->getOps() & AttachmentOps::WritesStencil) != AttachmentOps::Undefined) {
+						imgDesc->setStencilStoreOp(AttachmentStoreOp::Store);
+					} else {
+						imgDesc->setStencilStoreOp(AttachmentStoreOp::DontCare);
+					}
+				} else {
+					bool isRead = ((desc->getOps() & AttachmentOps::ReadStencil) != AttachmentOps::Undefined);
+					bool isWrite = ((desc->getOps() & AttachmentOps::WritesStencil) != AttachmentOps::Undefined);
+					if (!isRead && isWrite) {
+						log::vtext("Gl-Error", "Attachment's stencil component '", attachment->getName(), "' is writeen in renderpass ",
+								desc->getRenderPass()->key, " but never read");
+					}
+					imgDesc->setStencilStoreOp(AttachmentStoreOp::DontCare);
+				}
+			}
+			++ descIndex;
+		}
+
+		if (!isImageAttachmentType(attachment->getType())) {
+			continue;
+		}
+
+		auto img = (ImageAttachment *)attachment.get();
+		AttachmentLayout layout = img->getInitialLayout();
+		for (auto &desc : attachment->getDescriptors()) {
+			auto imgDesc = (ImageAttachmentDescriptor *)desc.get();
+			if (layout == AttachmentLayout::Ignored) {
+				imgDesc->setInitialLayout(((ImageAttachmentRef *)desc->getRefs().front().get())->getLayout());
+			} else {
+				imgDesc->setInitialLayout(layout);
+			}
+			layout = ((ImageAttachmentRef *)desc->getRefs().back().get())->getLayout();
+			imgDesc->setFinalLayout(layout);
+		}
+		if (img->getFinalLayout() != AttachmentLayout::Ignored) {
+			((ImageAttachmentDescriptor *)attachment->getDescriptors().back().get())->setFinalLayout(img->getFinalLayout());
+		}
+	}
+}
+
+static void RenderQueue_buildDescriptors(RenderQueue::QueueData *data) {
+	for (auto &pass : data->passes) {
+		for (auto &attachment : pass->descriptors) {
+			auto &desc = attachment->getDescriptor();
+			if (desc.type != DescriptorType::Unknown) {
+				pass->queueDescriptors.emplace_back(&desc);
+			}
+		}
+	}
+}
 
 RenderQueue::RenderQueue() { }
 
@@ -40,9 +388,22 @@ bool RenderQueue::init(Builder && buf) {
 	if (buf._data) {
 		_data = buf._data;
 		buf._data = nullptr;
+
+		for (auto &it : _data->passes) {
+			it->renderPass->_data = it;
+		}
+
+		if (_data->resource) {
+			_data->resource->setOwner(this);
+		}
+
 		return true;
 	}
 	return false;
+}
+
+bool RenderQueue::isCompiled() const {
+	return _data->compiled;
 }
 
 void RenderQueue::setCompiled(bool value) {
@@ -52,7 +413,7 @@ void RenderQueue::setCompiled(bool value) {
 bool RenderQueue::updateSwapchainInfo(const ImageInfo &info) {
 	if (_data && _data->output.size() == 1) {
 		auto out = _data->output.front();
-		if (out->getType() == AttachmentType::SwapchainImage || out->getType() == AttachmentType::Image) {
+		if (isImageAttachmentType(out->getType())) {
 			if (out->isCompatible(info)) {
 				for (auto &it : _data->attachments) {
 					it->onSwapchainUpdate(info);
@@ -64,6 +425,16 @@ bool RenderQueue::updateSwapchainInfo(const ImageInfo &info) {
 	return false;
 }
 
+const ImageInfo *RenderQueue::getSwapchainImageInfo() const {
+	if (_data && _data->output.size() == 1) {
+		auto out = _data->output.front();
+		if (out->getType() == AttachmentType::SwapchainImage) {
+			return &((SwapchainAttachment *)out)->getInfo();
+		}
+	}
+	return nullptr;
+}
+
 bool RenderQueue::isPresentable() const {
 	return _data && _data->output.size() == 1 && _data->output.front()->getType() == AttachmentType::SwapchainImage;
 }
@@ -71,7 +442,7 @@ bool RenderQueue::isPresentable() const {
 bool RenderQueue::isCompatible(const ImageInfo &info) const {
 	if (_data && _data->output.size() == 1) {
 		auto out = _data->output.front();
-		if (out->getType() == AttachmentType::SwapchainImage || out->getType() == AttachmentType::Image) {
+		if (isImageAttachmentType(out->getType())) {
 			return out->isCompatible(info);
 		}
 	}
@@ -86,20 +457,32 @@ const HashTable<ProgramData *> &RenderQueue::getPrograms() const {
 	return _data->programs;
 }
 
-const HashTable<Rc<Resource>> &RenderQueue::getResources() const {
-	return _data->resources;
-}
-
 const HashTable<RenderPassData *> &RenderQueue::getPasses() const {
 	return _data->passes;
+}
+
+const HashTable<PipelineData *> &RenderQueue::getPipelines() const {
+	return _data->pipelines;
 }
 
 const HashTable<Rc<Attachment>> &RenderQueue::getAttachments() const {
 	return _data->attachments;
 }
 
+const HashTable<Rc<Resource>> &RenderQueue::getLinkedResources() const {
+	return _data->linked;
+}
+
+Rc<Resource> RenderQueue::getInternalResource() const {
+	return _data->resource;
+}
+
 const ProgramData *RenderQueue::getProgram(StringView key) const {
 	return _data->programs.get(key);
+}
+
+const PipelineData *RenderQueue::getPipeline(StringView key) const {
+	return _data->pipelines.get(key);
 }
 
 Vector<Rc<Attachment>> RenderQueue::getOutput() const {
@@ -120,14 +503,56 @@ Vector<Rc<Attachment>> RenderQueue::getOutput(AttachmentType t) const {
 	return ret;
 }
 
-bool RenderQueue::prepare() {
+bool RenderQueue::prepare(Device &dev) {
 	memory::pool::context ctx(_data->pool);
 
-	RenderQueue_buildRenderPaths(*this, _data);
+	// fill attachment descriptors
+	for (auto &attachment : _data->attachments) {
+		attachment->sortDescriptors(*this, dev);
+	}
+
 	RenderQueue_buildLoadStore(_data);
 	RenderQueue_buildDescriptors(_data);
 
+	for (auto &it : _data->passes) {
+		it->renderPass->prepare(dev);
+	}
+
 	return true;
+}
+
+void RenderQueue::beginFrame(gl::FrameHandle &frame) {
+	if (_data->beginCallback) {
+		_data->beginCallback(frame);
+	}
+}
+
+void RenderQueue::endFrame(gl::FrameHandle &frame) {
+	if (_data->endCallback) {
+		_data->endCallback(frame);
+	}
+}
+
+void RenderQueue::acquireInput(gl::FrameHandle &frame, const Rc<AttachmentHandle> &handle) {
+	if (_data->inputCallback) {
+		_data->inputCallback(frame, handle);
+	}
+}
+
+void RenderQueue::enable(const Swapchain *swapchain) {
+	if (_data->enableCallback) {
+		_data->enableCallback(swapchain);
+	}
+}
+
+void RenderQueue::disable() {
+	if (_data->disableCallback) {
+		_data->disableCallback();
+	}
+}
+
+bool RenderQueue::usesSamplers() const {
+	return true; // TODO - implement check
 }
 
 RenderQueue::Builder::Builder(StringView name, Mode mode) {
@@ -152,20 +577,27 @@ void RenderQueue::Builder::setMode(Mode mode) {
 	_data->mode = mode;
 }
 
-void RenderQueue::Builder::addRenderPass(const Rc<RenderPass> &renderPass) {
+RenderPassData * RenderQueue::Builder::addRenderPass(const Rc<RenderPass> &renderPass) {
 	auto it = _data->passes.find(renderPass->getName());
-	if (it == _data->passes.end()) {
+	if (renderPass->getData() == nullptr && it == _data->passes.end()) {
 		memory::pool::push(_data->pool);
 		auto ret = new (_data->pool) RenderPassData();
 		ret->key = StringView(renderPass->getName()).pdup(_data->pool);
-		ret->subpasses.resize(renderPass->getSubpassCount());
+		ret->subpasses.reserve(renderPass->getSubpassCount());
+		for (size_t i = 0; i < renderPass->getSubpassCount(); ++ i) {
+			auto &it = ret->subpasses.emplace_back();
+			it.index = i;
+			it.renderPass = ret;
+		}
 		ret->ordering = renderPass->getOrdering();
 		ret->renderPass = renderPass;
 		_data->passes.emplace(ret);
 		memory::pool::pop();
+		return ret;
 	} else {
 		log::vtext("Gl-Error", "RenderPass for name already defined: ", renderPass->getName());
 	}
+	return nullptr;
 }
 
 static bool subpass_attachment_exists(memory::vector<ImageAttachmentRef *> &vec, ImageAttachmentDescriptor *ref) {
@@ -244,6 +676,56 @@ AttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p, uint
 	return nullptr;
 }
 
+AttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p, uint32_t subpassIdx,
+		const Rc<GenericAttachment> &attachment) {
+	auto pass = getPassData(p);
+	if (!pass) {
+		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
+		return nullptr;
+	}
+
+	memory::pool::context ctx(_data->pool);
+	if (subpassIdx >= pass->subpasses.size()) {
+		log::vtext("Gl-Error", "Invalid subpass index: '", subpassIdx, "' for pass '", pass->key ,"'");
+		return nullptr;
+	}
+
+	_data->attachments.emplace(attachment);
+	auto desc = emplaceAttachment(pass, attachment->addDescriptor(pass));
+	if (auto ref = desc->addRef(subpassIdx, AttachmentUsage::Input)) {
+		pass->subpasses[subpassIdx].inputGenerics.emplace_back(ref);
+		return ref;
+	}
+
+	log::vtext("Gl-Error", "Attachment '", attachment->getName(), "' is already added to subpass '", pass->key ,"' input");
+	return nullptr;
+}
+
+AttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p, uint32_t subpassIdx,
+		const Rc<GenericAttachment> &attachment) {
+	auto pass = getPassData(p);
+	if (!pass) {
+		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
+		return nullptr;
+	}
+
+	memory::pool::context ctx(_data->pool);
+	if (subpassIdx >= pass->subpasses.size()) {
+		log::vtext("Gl-Error", "Invalid subpass index: '", subpassIdx, "' for pass '", pass->key ,"'");
+		return nullptr;
+	}
+
+	_data->attachments.emplace(attachment);
+	auto desc = emplaceAttachment(pass, attachment->addDescriptor(pass));
+	if (auto ref = desc->addRef(subpassIdx, AttachmentUsage::Output)) {
+		pass->subpasses[subpassIdx].outputGenerics.emplace_back(ref);
+		return ref;
+	}
+
+	log::vtext("Gl-Error", "Attachment '", attachment->getName(), "' is already added to subpass '", pass->key ,"' output");
+	return nullptr;
+}
+
 ImageAttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p, uint32_t subpassIdx,
 		const Rc<ImageAttachment> &attachment) {
 	auto pass = getPassData(p);
@@ -311,14 +793,15 @@ Pair<ImageAttachmentRef *, ImageAttachmentRef *> RenderQueue::Builder::addPassRe
 	switch (color->getType()) {
 	case AttachmentType::SwapchainImage:
 	case AttachmentType::Buffer:
+	case AttachmentType::Generic:
 		log::vtext("Gl-Error", "Attachment '", color->getName(), "' can not be resolved output attachment for pass '", pass->key ,"'");
 		return pair(nullptr, nullptr);
 		break;
-	default:
+	case AttachmentType::Image:
 		break;
 	}
 
-	if (resolve->getType() == AttachmentType::Buffer) {
+	if (resolve->getType() != AttachmentType::Image) {
 		log::vtext("Gl-Error", "Buffer attachment '", resolve->getName(), "' can not be resolve attachment for pass '", pass->key ,"'");
 		return pair(nullptr, nullptr);
 	}
@@ -372,10 +855,11 @@ ImageAttachmentRef * RenderQueue::Builder::addPassDepthStencil(const Rc<RenderPa
 	switch (attachment->getType()) {
 	case AttachmentType::SwapchainImage:
 	case AttachmentType::Buffer:
+	case AttachmentType::Generic:
 		log::vtext("Gl-Error", "Attachment '", attachment->getName(), "' can not be depth/stencil attachment for pass '", pass->key ,"'");
 		return nullptr;
 		break;
-	default:
+	case AttachmentType::Image:
 		break;
 	}
 
@@ -451,19 +935,6 @@ bool RenderQueue::Builder::addOutput(const Rc<Attachment> &data, AttachmentOps o
 	return false;
 }
 
-bool RenderQueue::Builder::addResource(const Rc<Resource> &resource) {
-	auto it = _data->resources.find(resource->getName());
-	if (it == _data->resources.end()) {
-		memory::pool::push(_data->pool);
-		_data->resources.emplace(resource);
-		memory::pool::pop();
-		return true;
-	} else {
-		log::vtext("Gl-Error", "Resource for name already defined: ", resource->getName());
-	}
-	return false;
-}
-
 const ProgramData * RenderQueue::Builder::addProgram(StringView key, ProgramStage stage, SpanView<uint32_t> data) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add shader: ", key, ", not initialized");
@@ -524,8 +995,60 @@ const ProgramData * RenderQueue::Builder::addProgram(StringView key, ProgramStag
 	return nullptr;
 }
 
-PipelineData *RenderQueue::Builder::emplacePipeline(const Rc<RenderPass> &d, StringView key) {
-	auto pass = getPassData(d);
+void RenderQueue::Builder::setInternalResource(Rc<Resource> &&res) {
+	if (!_data) {
+		log::vtext("Resource", "Fail to set internal resource: ", res->getName(), ", not initialized");
+		return;
+	}
+	if (_data->resource) {
+		log::vtext("Resource", "Fail to set internal resource: resource already defined");
+		return;
+	}
+	if (res->getOwner() != nullptr) {
+		log::vtext("Resource", "Fail to set internal resource: ", res->getName(), ", already owned by ", res->getOwner()->getName());
+		return;
+	}
+	_data->resource = move(res);
+}
+
+void RenderQueue::Builder::addLinkedResource(const Rc<Resource> &res) {
+	if (!_data) {
+		log::vtext("Resource", "Fail to add linked resource: ", res->getName(), ", not initialized");
+		return;
+	}
+	if (res->getOwner() != nullptr) {
+		log::vtext("Resource", "Fail to add linked resource: ", res->getName(), ", it's owned by ", res->getOwner()->getName());
+		return;
+	}
+	if (!res->isCompiled()) {
+		log::vtext("Resource", "Fail to add linked resource: ", res->getName(), ", resource is not compiled");
+		return;
+	}
+	_data->linked.emplace(res);
+}
+
+void RenderQueue::Builder::setBeginCallback(Function<void(gl::FrameHandle &)> &&cb) {
+	_data->beginCallback = move(cb);
+}
+
+void RenderQueue::Builder::setEndCallback(Function<void(gl::FrameHandle &)> &&cb) {
+	_data->endCallback = move(cb);
+}
+
+void RenderQueue::Builder::setInputCallback(Function<void(gl::FrameHandle &, const Rc<AttachmentHandle> &)> &&cb) {
+	_data->inputCallback = move(cb);
+}
+
+void RenderQueue::Builder::setEnableCallback(Function<void(const Swapchain *)> &&cb) {
+	_data->enableCallback = move(cb);
+}
+
+void RenderQueue::Builder::setDisableCallback(Function<void()> &&cb) {
+	_data->disableCallback = move(cb);
+}
+
+PipelineData *RenderQueue::Builder::emplacePipeline(const Rc<RenderPass> &d, uint32_t subpass, StringView key) {
+	auto pass = getSubpassData(d, subpass);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", d->getName(),"' was not added to render queue '", _data->key, "'");
 		return nullptr;
@@ -536,25 +1059,36 @@ PipelineData *RenderQueue::Builder::emplacePipeline(const Rc<RenderPass> &d, Str
 		return nullptr;
 	}
 
+	auto it = _data->pipelines.find(key);
+	if (it != _data->pipelines.end()) {
+		log::vtext("Resource", _data->key, ": Pipeline '", key, "' already added");
+		return nullptr;
+	}
+
 	auto p = Resource_conditionalInsert<PipelineData>(pass->pipelines, key, [&] () -> PipelineData * {
 		auto pipeline = new (_data->pool) PipelineData;
 		pipeline->key = key.pdup(_data->pool);
+		pipeline->renderPass = d.get();
 		return pipeline;
 	}, _data->pool);
 	if (!p) {
-		log::vtext("Resource", _data->key, ": Pipeline '", key, "' already added to pass '", pass->key, "'");
+		log::vtext("Resource", _data->key, ": Pipeline '", key, "' already added to pass '", d->getName(), "'");
 		return nullptr;
+	}
+	if (p) {
+		_data->pipelines.emplace(p);
 	}
 	return p;
 }
 
-void RenderQueue::Builder::erasePipeline(const Rc<RenderPass> &p, PipelineData *data) {
-	auto pass = getPassData(p);
+void RenderQueue::Builder::erasePipeline(const Rc<RenderPass> &p, uint32_t subpass, PipelineData *data) {
+	auto pass = getSubpassData(p, subpass);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
 		return;
 	}
 
+	_data->pipelines.erase(data->key);
 	pass->pipelines.erase(data->key);
 }
 
@@ -588,6 +1122,15 @@ RenderPassData *RenderQueue::Builder::getPassData(const Rc<RenderPass> &pass) co
 	if (it != _data->passes.end()) {
 		if ((*it)->renderPass == pass) {
 			return *it;
+		}
+	}
+	return nullptr;
+}
+
+RenderSubpassData *RenderQueue::Builder::getSubpassData(const Rc<RenderPass> &pass, uint32_t subpass) const {
+	if (auto p = getPassData(pass)) {
+		if (subpass < p->subpasses.size()) {
+			return &p->subpasses[subpass];
 		}
 	}
 	return nullptr;

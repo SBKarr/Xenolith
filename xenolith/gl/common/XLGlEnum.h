@@ -117,6 +117,17 @@ enum class ImageType {
 	Image3D = 2,
 };
 
+// Mapping to VkImageViewType
+enum class ImageViewType {
+    ImageView1D = 0,
+    ImageView2D = 1,
+	ImageView3D = 2,
+	ImageViewCube = 3,
+	ImageView1DArray = 4,
+	ImageView2DArray = 5,
+	ImageViewCubeArray = 6,
+};
+
 // Mapping to VkFormat
 enum class ImageFormat {
 	Undefined = 0,
@@ -528,8 +539,29 @@ enum class AttachmentLayout : uint32_t {
 enum class AttachmentType {
 	SwapchainImage,
 	Image,
-	Buffer
+	Buffer,
+	Generic
 };
+
+enum class RenderPassType {
+	Graphics,
+	Compute,
+	Transfer,
+	Generic
+};
+
+static inline bool isImageAttachmentType(AttachmentType t) {
+	switch (t) {
+	case AttachmentType::SwapchainImage:
+	case AttachmentType::Image:
+		return true;
+		break;
+	default:
+		return false;
+		break;
+	}
+	return false;
+}
 
 // read-write operations on attachment within passes
 enum class AttachmentOps {
@@ -567,6 +599,55 @@ enum class AttachmentUsage {
 };
 
 SP_DEFINE_ENUM_AS_MASK(AttachmentUsage);
+
+// VkComponentSwizzle
+enum class ComponentMapping {
+	Identity = 0,
+	Zero = 1,
+	One = 2,
+	R = 3,
+	G = 4,
+	B = 5,
+	A = 6,
+};
+
+// VkFilter
+enum class Filter {
+	Nearest = 0,
+	Linear = 1,
+	Cubic = 1000015000
+};
+
+// VkSamplerMipmapMode
+enum class SamplerMipmapMode {
+	Nearest = 0,
+	Linear = 1,
+};
+
+// VkSamplerAddressMode
+enum class SamplerAddressMode {
+	Repeat = 0,
+	MirroredRepeat = 1,
+	ClampToEdge = 2,
+	ClampToBorder = 3,
+};
+
+// VkCompareOp
+enum class CompareOp {
+    Never = 0,
+    Less = 1,
+    Equal = 2,
+    LessOrEqual = 3,
+    Greater = 4,
+    NotEqual = 5,
+    GreaterOrEqual = 6,
+    Always = 7,
+};
+
+enum class SwapchanCreationMode {
+	Best,
+	Fast
+};
 
 }
 

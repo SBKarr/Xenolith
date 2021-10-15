@@ -26,6 +26,7 @@
 #include "XLPlatform.h"
 #include "XLAppScene.h"
 #include "XLAppShaders.h"
+#include "XLDefaultShaders.h"
 
 namespace stappler::xenolith::app {
 
@@ -40,18 +41,38 @@ bool AppDelegate::onFinishLaunching() {
 		return false;
 	}
 
-	if (getDirector()->getView()) {
-		return runScene();
-	}
-	return false;
+	return true;
 }
 
-bool AppDelegate::runScene() {
-	auto dir = getDirector();
-	auto scene = Rc<AppScene>::create(dir);
+bool AppDelegate::onMainLoop() {
+	auto device = getGlInstance()->makeDevice();
+	_glLoop = Rc<gl::Loop>::alloc(this, device);
+	_glLoop->begin();
 
-	dir->runScene(scene);
-	return true;
+	auto scene = Rc<AppScene>::create(Extent2(1024, 768));
+
+	_glLoop->compileRenderQueue(scene->getRenderQueue(), [&] (bool success) {
+		performOnMainThread([&] {
+			runMainView(move(scene));
+		});
+		log::text("App", "Compiled");
+	});
+
+	auto ret = _loop->run();
+	_glLoop->end();
+	_glLoop = nullptr;
+	return ret;
+}
+
+void AppDelegate::runMainView(Rc<Scene> &&scene) {
+	auto dir = Rc<Director>::create(this, move(scene));
+
+	auto view = platform::graphic::createView(_loop, _glLoop, "Xenolith",
+			URect{0, 0, uint32_t(_data.screenSize.width), uint32_t(_data.screenSize.height)});
+
+	view->begin(dir, [this] {
+		_loop->pushEvent(AppEvent::Terminate);
+	});
 }
 
 }

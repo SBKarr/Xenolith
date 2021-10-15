@@ -99,8 +99,8 @@ bool SwapchainAttachmentHandle::isAvailable(const gl::FrameHandle &frame) const 
 
 bool SwapchainAttachmentHandle::setup(gl::FrameHandle &handle) {
 	_device = (Device *)handle.getDevice();
-	_swapchain = _device->getSwapchain();
-	_sync = _device->acquireSwapchainSync(handle.getOrder() % 2);
+	_swapchain = (Swapchain *)handle.getSwapchain();
+	_sync = static_cast<FrameHandle &>(handle).acquireSwapchainSync();
 	if (acquire(handle)) {
 		return true;
 	}
@@ -114,21 +114,15 @@ Rc<SwapchainSync> SwapchainAttachmentHandle::acquireSync() {
 }
 
 bool SwapchainAttachmentHandle::acquire(gl::FrameHandle &handle) {
-	auto table = _device->getTable();
-
-	VkResult result = table->vkAcquireNextImageKHR(_device->getDevice(), _device->getSwapchain()->getSwapchain(),
-			0, _sync->getImageReady()->getUnsignalled(), VK_NULL_HANDLE, &_index);
-
+	VkResult result = _sync->acquireImage(*_device, *_swapchain, &_index);
 	switch (result) {
 	case VK_ERROR_OUT_OF_DATE_KHR:
-		handle.invalidate(); // exit with swapchain invalidation
-		handle.getLoop()->recreateSwapChain();
+		handle.getLoop()->recreateSwapChain(handle.getSwapchain());
 		handle.invalidate();
 		return true;
 		break;
 	case VK_SUCCESS: // acquired successfully
 	case VK_SUBOPTIMAL_KHR: // swapchain recreation signal will be sent by view, but we can try to do some frames until that
-		_sync->getImageReady()->setSignaled(true);
 		return true;
 		break;
 
@@ -144,15 +138,12 @@ bool SwapchainAttachmentHandle::acquire(gl::FrameHandle &handle) {
 				return true; // end spinning
 			}
 
-			auto table = _device->getTable();
-
-			VkResult result = table->vkAcquireNextImageKHR(_device->getDevice(), _device->getSwapchain()->getSwapchain(),
-					0, _sync->getImageReady()->getUnsignalled(), VK_NULL_HANDLE, &_index);
+			VkResult result = _sync->acquireImage(*_device, *_swapchain, &_index);
 			switch (result) {
 			case VK_ERROR_OUT_OF_DATE_KHR:
 				// push swapchain invalidation
 				XL_VK_LOG("vkAcquireNextImageKHR: VK_ERROR_OUT_OF_DATE_KHR");
-				context.events->emplace_back(gl::Loop::Event::SwapChainDeprecated, nullptr, data::Value());
+				context.events->emplace_back(gl::Loop::EventName::SwapChainDeprecated, _swapchain, data::Value());
 				handle.invalidate();
 				invalidate();
 				return true; // end spinning
@@ -160,7 +151,6 @@ bool SwapchainAttachmentHandle::acquire(gl::FrameHandle &handle) {
 			case VK_SUCCESS:
 			case VK_SUBOPTIMAL_KHR:
 				// acquired successfully
-				_sync->getImageReady()->setSignaled(true); // inform semaphore handle about pending signal
 				handle.setAttachmentReady(this);
 				return true; // end spinning
 				break;
@@ -170,6 +160,7 @@ bool SwapchainAttachmentHandle::acquire(gl::FrameHandle &handle) {
 				break;
 			default:
 				invalidate();
+				handle.invalidate();
 				return true; // end spinning
 				break;
 			}
@@ -178,6 +169,8 @@ bool SwapchainAttachmentHandle::acquire(gl::FrameHandle &handle) {
 		return false;
 		break;
 	default:
+		invalidate();
+		handle.invalidate();
 		break;
 	}
 	return false;
@@ -185,7 +178,7 @@ bool SwapchainAttachmentHandle::acquire(gl::FrameHandle &handle) {
 
 void SwapchainAttachmentHandle::invalidate() {
 	if (_sync) {
-		_device->releaseSwapchainSync(move(_sync));
+		_swapchain->releaseSwapchainSync(move(_sync));
 		_sync = nullptr;
 	}
 }

@@ -28,6 +28,9 @@
 
 namespace stappler::xenolith::gl {
 
+struct RenderPassData;
+class Swapchain;
+
 /* RenderQueue/RenderGraph implementation notes:
  *
  * 	- RenderQueue
@@ -64,8 +67,15 @@ inline bool operator == (const RenderSubpassDependency &l, const RenderSubpassDe
 inline bool operator != (const RenderSubpassDependency &l, const RenderSubpassDependency &r) { return l.value() != r.value(); }
 
 struct RenderSubpassData {
+	uint32_t index = 0;
+	RenderPassData *renderPass;
+
+	HashTable<PipelineData *> pipelines;
 	memory::vector<BufferAttachmentRef *> inputBuffers;
 	memory::vector<BufferAttachmentRef *> outputBuffers;
+
+	memory::vector<AttachmentRef *> inputGenerics;
+	memory::vector<AttachmentRef *> outputGenerics;
 
 	memory::vector<ImageAttachmentRef *> inputImages;
 	memory::vector<ImageAttachmentRef *> outputImages;
@@ -74,17 +84,12 @@ struct RenderSubpassData {
 	memory::vector<uint32_t> preserve;
 };
 
-struct PipelineLayoutData {
-	memory::vector<const PipelineDescriptor *> queueDescriptors;
-	memory::vector<PipelineDescriptor> extraDescriptors;
-};
-
 struct RenderPassData : NamedMem {
-	HashTable<PipelineData *> pipelines;
 	memory::vector<AttachmentDescriptor *> descriptors;
 	memory::vector<RenderSubpassData> subpasses;
 	memory::vector<RenderSubpassDependency> dependencies;
-	PipelineLayoutData pipelineLayout;
+	memory::vector<const PipelineDescriptor *> queueDescriptors;
+	memory::vector<PipelineDescriptor> extraDescriptors;
 
 	RenderOrdering ordering = RenderOrderingLowest;
 	bool isPresentable = false;
@@ -109,8 +114,11 @@ public:
 
 	virtual bool init(Builder &&);
 
-	virtual void setCompiled(bool);
-	virtual bool updateSwapchainInfo(const ImageInfo &);
+	bool isCompiled() const;
+	void setCompiled(bool);
+
+	bool updateSwapchainInfo(const ImageInfo &);
+	const ImageInfo *getSwapchainImageInfo() const;
 
 	bool isPresentable() const;
 	bool isCompatible(const ImageInfo &) const;
@@ -119,15 +127,28 @@ public:
 
 	const HashTable<ProgramData *> &getPrograms() const;
 	const HashTable<RenderPassData *> &getPasses() const;
+	const HashTable<PipelineData *> &getPipelines() const;
 	const HashTable<Rc<Attachment>> &getAttachments() const;
-	const HashTable<Rc<Resource>> &getResources() const;
+	const HashTable<Rc<Resource>> &getLinkedResources() const;
+	Rc<Resource> getInternalResource() const;
 
 	const ProgramData *getProgram(StringView) const;
+	const PipelineData *getPipeline(StringView) const;
 
 	Vector<Rc<Attachment>> getOutput() const;
 	Vector<Rc<Attachment>> getOutput(AttachmentType) const;
 
-	bool prepare();
+	bool prepare(Device &);
+
+	void beginFrame(gl::FrameHandle &);
+	void endFrame(gl::FrameHandle &);
+
+	void acquireInput(gl::FrameHandle &, const Rc<AttachmentHandle> &handle);
+
+	void enable(const Swapchain *);
+	void disable();
+
+	bool usesSamplers() const;
 
 protected:
 	QueueData *_data = nullptr;
@@ -140,10 +161,13 @@ public:
 
 	void setMode(Mode);
 
-	void addRenderPass(const Rc<RenderPass> &);
+	RenderPassData * addRenderPass(const Rc<RenderPass> &);
 
 	AttachmentRef *addPassInput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<BufferAttachment> &);
 	AttachmentRef *addPassOutput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<BufferAttachment> &);
+
+	AttachmentRef *addPassInput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<GenericAttachment> &);
+	AttachmentRef *addPassOutput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<GenericAttachment> &);
 
 	ImageAttachmentRef *addPassInput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<ImageAttachment> &);
 	ImageAttachmentRef *addPassOutput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<ImageAttachment> &);
@@ -158,8 +182,6 @@ public:
 	bool addInput(const Rc<Attachment> &, AttachmentOps ops = AttachmentOps::WritesColor | AttachmentOps::WritesStencil);
 	bool addOutput(const Rc<Attachment> &, AttachmentOps ops = AttachmentOps::ReadColor | AttachmentOps::ReadStencil);
 
-	bool addResource(const Rc<Resource> &);
-
 	// add program, copy all data
 	const ProgramData * addProgram(StringView key, ProgramStage, SpanView<uint32_t>);
 
@@ -170,19 +192,32 @@ public:
 	const ProgramData * addProgram(StringView key, ProgramStage, const memory::function<void(const ProgramData::DataCallback &)> &);
 
 	template <typename ... Args>
-	const PipelineData * addPipeline(const Rc<RenderPass> &pass, StringView key, Args && ...args) {
-		if (auto p = emplacePipeline(pass, key)) {
+	const PipelineData * addPipeline(const Rc<RenderPass> &pass, uint32_t subpass, StringView key, Args && ...args) {
+		if (auto p = emplacePipeline(pass, subpass, key)) {
 			if (setPipelineOptions(*p, std::forward<Args>(args)...)) {
 				return p;
 			}
-			erasePipeline(pass, p);
+			erasePipeline(pass, subpass, p);
 		}
 		return nullptr;
 	}
 
+	// resources, that will be compiled with RenderQueue
+	void setInternalResource(Rc<Resource> &&);
+
+	// external resources, that should be compiled when added
+	void addLinkedResource(const Rc<Resource> &);
+
+	void setBeginCallback(Function<void(gl::FrameHandle &)> &&);
+	void setEndCallback(Function<void(gl::FrameHandle &)> &&);
+	void setInputCallback(Function<void(gl::FrameHandle &, const Rc<AttachmentHandle> &)> &&);
+
+	void setEnableCallback(Function<void(const Swapchain *)> &&);
+	void setDisableCallback(Function<void()> &&);
+
 protected:
-	PipelineData *emplacePipeline(const Rc<RenderPass> &, StringView key);
-	void erasePipeline(const Rc<RenderPass> &, PipelineData *);
+	PipelineData *emplacePipeline(const Rc<RenderPass> &, uint32_t, StringView key);
+	void erasePipeline(const Rc<RenderPass> &, uint32_t, PipelineData *);
 
 	bool setPipelineOption(PipelineData &f, DynamicState);
 	bool setPipelineOption(PipelineData &f, const Vector<const ProgramData *> &);
@@ -203,6 +238,7 @@ protected:
 	memory::pool_t *getPool() const;
 
 	RenderPassData *getPassData(const Rc<RenderPass> &) const;
+	RenderSubpassData *getSubpassData(const Rc<RenderPass> &, uint32_t) const;
 
 	friend class RenderQueue;
 

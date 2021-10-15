@@ -26,27 +26,6 @@
 
 namespace stappler::xenolith::vk {
 
-SwapchainSync::~SwapchainSync() { }
-
-bool SwapchainSync::init(Device &dev, uint32_t idx) {
-	_index = idx;
-	_imageReady = Rc<Semaphore>::create(dev);
-	_renderFinished = Rc<Semaphore>::create(dev);
-	return true;
-}
-
-void SwapchainSync::reset() {
-	_imageReady->reset();
-	_renderFinished->reset();
-}
-
-void SwapchainSync::invalidate() {
-	_imageReady->invalidate();
-	_imageReady = nullptr;
-	_renderFinished->invalidate();
-	_renderFinished = nullptr;
-}
-
 DeviceQueue::~DeviceQueue() { }
 
 bool DeviceQueue::init(Device &device, VkQueue queue, uint32_t index, QueueOperations ops) {
@@ -64,6 +43,7 @@ CommandPool::~CommandPool() {
 }
 
 bool CommandPool::init(Device &dev, uint32_t familyIdx, QueueOperations c, bool transient) {
+	_familyIdx = familyIdx;
 	_class = c;
 	VkCommandPoolCreateInfo poolInfo{};
 	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;

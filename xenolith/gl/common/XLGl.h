@@ -35,12 +35,15 @@ class Shader;
 class Pipeline;
 class RenderPassImpl;
 class Framebuffer;
-class Image;
+class ImageObject;
 class ImageView;
+class BufferObject;
+class RenderPass;
 
 using MipLevels = ValueWrapper<uint32_t, class MipLevelFlag>;
 using ArrayLayers = ValueWrapper<uint32_t, class ArrayLayersFlag>;
 using Extent1 = ValueWrapper<uint32_t, class Extent1Flag>;
+using BaseArrayLayer = ValueWrapper<uint32_t, class BaseArrayLayerFlag>;
 
 enum class ResourceObjectType {
 	None,
@@ -69,7 +72,24 @@ enum class ObjectType {
 	RenderPass,
 	Sampler,
 	Semaphore,
-	ShaderModule
+	ShaderModule,
+	DeviceMemory
+};
+
+struct SamplerInfo {
+	Filter magFilter = Filter::Nearest;
+	Filter minFilter = Filter::Nearest;
+	SamplerMipmapMode mipmapMode = SamplerMipmapMode::Nearest;
+	SamplerAddressMode addressModeU = SamplerAddressMode::Repeat;
+	SamplerAddressMode addressModeV = SamplerAddressMode::Repeat;
+	SamplerAddressMode addressModeW = SamplerAddressMode::Repeat;
+	float mipLodBias = 0.0f;
+	bool anisotropyEnable = false;
+	float maxAnisotropy = 0.0f;
+	bool compareEnable = false;
+	CompareOp compareOp = CompareOp::Never;
+	float minLod = 0.0;
+	float maxLod = 0.0;
 };
 
 struct ProgramInfo : NamedMem {
@@ -90,9 +110,9 @@ struct PipelineInfo : NamedMem {
 };
 
 struct PipelineData : PipelineInfo {
+	const RenderPass *renderPass = nullptr;
 	Rc<Pipeline> pipeline; // GL implementation-dependent object
 };
-
 
 using ForceBufferFlags = ValueWrapper<BufferFlags, class ForceBufferFlagsFlag>;
 using ForceBufferUsage = ValueWrapper<BufferUsage, class ForceBufferUsageFlag>;
@@ -139,6 +159,8 @@ struct BufferData : BufferInfo {
 
 	BytesView data;
 	memory::function<void(const DataCallback &)> callback = nullptr;
+	Rc<BufferObject> buffer; // GL implementation-dependent object
+	Rc<RenderPass> renderPass;
 };
 
 
@@ -199,6 +221,58 @@ struct ImageData : ImageInfo {
 
 	BytesView data;
 	memory::function<void(const DataCallback &)> callback = nullptr;
+	Rc<ImageObject> image; // GL implementation-dependent object
+	Rc<RenderPass> renderPass;
+};
+
+
+using ComponentMappingR = ValueWrapper<ComponentMapping, class ComponentMappingRFlag>;
+using ComponentMappingG = ValueWrapper<ComponentMapping, class ComponentMappingGFlag>;
+using ComponentMappingB = ValueWrapper<ComponentMapping, class ComponentMappingBFlag>;
+using ComponentMappingA = ValueWrapper<ComponentMapping, class ComponentMappingAFlag>;
+
+struct ImageViewInfo {
+	ImageFormat format = ImageFormat::Undefined; // inherited from Image if undefined
+	ImageViewType type = ImageViewType::ImageView2D;
+	ComponentMapping r = ComponentMapping::Identity;
+	ComponentMapping g = ComponentMapping::Identity;
+	ComponentMapping b = ComponentMapping::Identity;
+	ComponentMapping a = ComponentMapping::Identity;
+	BaseArrayLayer baseArrayLayer = BaseArrayLayer(0);
+	ArrayLayers layerCount = ArrayLayers(maxOf<uint32_t>());
+
+	ImageViewInfo() = default;
+
+	template<typename ... Args>
+	ImageViewInfo(Args && ... args) {
+		define(std::forward<Args>(args)...);
+	}
+
+	void setup(ImageViewType value) { type = value; }
+	void setup(ImageFormat value) { format = value; }
+	void setup(ArrayLayers value) { layerCount = value; }
+	void setup(BaseArrayLayer value) { baseArrayLayer = value; }
+	void setup(ComponentMappingR value) { r = value.get(); }
+	void setup(ComponentMappingG value) { g = value.get(); }
+	void setup(ComponentMappingB value) { b = value.get(); }
+	void setup(ComponentMappingA value) { a = value.get(); }
+
+	template <typename T>
+	void define(T && t) {
+		setup(std::forward<T>(t));
+	}
+
+	template <typename T, typename ... Args>
+	void define(T && t, Args && ... args) {
+		define(std::forward<T>(t));
+		define(std::forward<Args>(args)...);
+	}
+
+	bool isCompatible(const ImageInfo &) const;
+	String description() const;
+
+	bool operator==(const ImageViewInfo &) const;
+	bool operator!=(const ImageViewInfo &) const;
 };
 
 // Designed to use with SSBO and std430
@@ -206,8 +280,8 @@ struct alignas(16) Vertex_V4F_V4F_T2F2U {
 	Vec4 pos;
 	Vec4 color;
 	Vec2 tex;
-	uint32_t attr0;
-	uint32_t attr1;
+	uint32_t material;
+	uint32_t object;
 };
 
 struct Triangle_V3F_C4F_T2F {
@@ -228,8 +302,16 @@ struct AttachmentInputData : public Ref {
 };
 
 struct VertexData : public AttachmentInputData {
+	struct VertexSpan {
+		uint32_t material;
+		uint32_t indexCount;
+		uint32_t instanceCount;
+		uint32_t firstIndex;
+	};
+
 	Vector<Vertex_V4F_V4F_T2F2U> data;
 	Vector<uint32_t> indexes;
+	Vector<VertexSpan> spans;
 };
 
 String getBufferFlagsDescription(BufferFlags fmt);
@@ -237,10 +319,13 @@ String getBufferUsageDescription(BufferUsage fmt);
 String getImageFlagsDescription(ImageFlags fmt);
 String getSampleCountDescription(SampleCount fmt);
 StringView getImageTypeName(ImageType type);
+StringView getImageViewTypeName(ImageViewType type);
 StringView getImageFormatName(ImageFormat fmt);
 StringView getImageTilingName(ImageTiling type);
+StringView getComponentMappingName(ComponentMapping);
 String getImageUsageDescription(ImageUsage fmt);
 String getProgramStageDescription(ProgramStage fmt);
+size_t getFormatBlockSize(ImageFormat format);
 
 }
 

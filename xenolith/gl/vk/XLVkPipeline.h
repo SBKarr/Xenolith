@@ -40,7 +40,7 @@ protected:
 
 class Pipeline : public gl::Pipeline {
 public:
-	bool init(Device &dev, const gl::PipelineData &params, const gl::RenderPassData &, const gl::RenderQueue &);
+	bool init(Device &dev, const gl::PipelineData &params, const gl::RenderSubpassData &, const gl::RenderQueue &);
 
 	VkPipeline getPipeline() const { return _pipeline; }
 

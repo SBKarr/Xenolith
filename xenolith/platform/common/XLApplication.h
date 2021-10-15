@@ -32,6 +32,31 @@ THE SOFTWARE.
 
 namespace stappler::xenolith {
 
+class EventLoop : public Ref {
+public:
+	EventLoop();
+	virtual ~EventLoop();
+
+	virtual bool init(Application *app);
+	virtual bool run();
+
+	virtual uint64_t getMinFrameTime() const;
+	virtual uint64_t getClock();
+	virtual void sleep(uint64_t);
+
+	virtual Pair<uint64_t, uint64_t> getDiskSpace() const;
+
+	virtual void pushEvent(AppEvent::Value);
+	virtual AppEvent::Value popEvents();
+
+	virtual void addView(gl::View *);
+	virtual void removeView(gl::View *);
+
+protected:
+	Application *_application = nullptr;
+	std::atomic<AppEvent::Value> _events = AppEvent::None;
+};
+
 class Application : public Ref {
 public:
 	static constexpr uint32_t ApplicationThreadId = 1;
@@ -51,27 +76,30 @@ public:
 
 	static EventHeader onLaunchUrl;
 
+	struct Data {
+		String bundleName = "org.stappler.xenolith";
+		String applicationName = "Xenolith";
+		String applicationVersion = "0.0.1";
+		String userLanguage = "ru-ru";
+
+		String launchUrl;
+
+		Size screenSize = Size(1024, 768);
+		bool isPhone = false;
+		bool isFixed = false;
+		float density = 1.0f;
+	};
+
 	static Application *getInstance();
 
-	static void sleep(double);
+	static int parseOptionString(data::Value &ret, const StringView &str, int argc, const char * argv[]);
 
 public:
 	Application();
 	virtual ~Application();
 
-	/** Called when application is loaded
-	 *
-	 * Default behavior: create director, then create default view
-	 */
 	virtual bool onFinishLaunching();
-
-	/** Called when new default RenderQueue is required
-	 *
-	 * gl::RenderQueue::Builder - builder for new RenderQueue
-	 * gl::ImageInfo - swapchain image info
-	 */
-	virtual Rc<gl::RenderQueue> onDefaultRenderQueue(const gl::ImageInfo &);
-
+	virtual bool onMainLoop();
 	virtual void onMemoryWarning();
 
 	virtual void update(uint64_t dt);
@@ -87,7 +115,7 @@ public: // Threading, Events
 
 	/* If current thread is main thread: executes function/task
 	   If not: adds function/task to main thread queue */
-	void performOnMainThread(const Callback &func, Ref *target = nullptr, bool onNextFrame = false);
+	void performOnMainThread(const Function<void()> &func, Ref *target = nullptr, bool onNextFrame = false);
 
 	/* If current thread is main thread: executes function/task
 	   If not: adds function/task to main thread queue */
@@ -123,8 +151,12 @@ public: // Threading, Events
 
 	void dispatchEvent(const Event &ev);
 
+	// sleep in microseconds
+	void sleep(uint64_t);
+	uint64_t getClock() const;
+
 public:
-	virtual int run(Director * = nullptr);
+	virtual int run(data::Value &&);
 
 	virtual bool openURL(const StringView &url);
 
@@ -139,21 +171,9 @@ public:
 	/* Device notification token on APNS or GCM */
 	StringView getDeviceToken() const { return _deviceToken; }
 
-	/* application bundle name (reverce-DNS ordered usually) */
-	StringView getBundleName() const { return _bundleName; }
-
-	/* Human-readable application name, that displayed in application list */
-	StringView getApplicationName() const { return _applicationName; }
-
-	/* Application version string as in info.plist or manifest */
-	StringView getApplicationVersion() const { return _applicationVersion; }
-
 	/* Returns applcation version, encoded in integer N*XXXYYY, where N+ - major verion,
 	XXX - middle version, YYY - minor version, 1.15.1 = 1 015 001 */
 	int64_t getApplicationVersionCode();
-
-	/* Device user locale string (like en-gb, fr-fr) */
-	StringView getUserLanguage() const { return _userLanguage; }
 
 	/* Device token for APNS/GCM */
 	void registerDeviceToken(const uint8_t *data, size_t len);
@@ -185,32 +205,23 @@ public:
 	// produce onLaunchUrl event, url can be read from event or by getLaunchUrl()
 	void processLaunchUrl(const StringView &);
 
-	StringView getLaunchUrl() const;
-
-	// bool listen(uint16_t port = 0);
-
-	Rc<Director> getDirector() const;
+	const Data &getData() const { return _data; }
 
 	const Rc<thread::TaskQueue> &getQueue() const { return _queue; }
+	const gl::Instance *getGlInstance() const { return _instance; }
 
-private:
+protected:
 	uint64_t _clockStart = 0;
 	String _userAgent;
 	String _deviceIdentifier;
 	String _deviceToken;
-	String _bundleName;
-	String _applicationName;
-	String _applicationVersion;
-	String _userLanguage;
 
-	String _launchUrl;
+	Data _data;
 
 	uint64_t _updateTimer = 0;
 	bool _isNetworkOnline = false;
 
-	Rc<gl::View> _mainView;
-	Rc<Director> _director;
-
+	Rc<EventLoop> _loop;
 	Rc<thread::TaskQueue> _queue;
 	std::thread::id _threadId;
 	bool _singleThreaded = false;

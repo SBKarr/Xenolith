@@ -32,6 +32,25 @@ namespace stappler::xenolith::vk {
 
 RenderPass::~RenderPass() { }
 
+bool RenderPass::init(StringView name, gl::RenderPassType type, gl::RenderOrdering ordering, size_t subpassCount) {
+	if (gl::RenderPass::init(name, type, ordering, subpassCount)) {
+		switch (type) {
+		case gl::RenderPassType::Graphics:
+		case gl::RenderPassType::Generic:
+			_queueOps = QueueOperations::Graphics;
+			break;
+		case gl::RenderPassType::Compute:
+			_queueOps = QueueOperations::Compute;
+			break;
+		case gl::RenderPassType::Transfer:
+			_queueOps = QueueOperations::Transfer;
+			break;
+		}
+		return true;
+	}
+	return false;
+}
+
 void RenderPass::invalidate() { }
 
 Rc<gl::RenderPassHandle> RenderPass::makeFrameHandle(gl::RenderPassData *data, const gl::FrameHandle &handle) {
@@ -67,6 +86,7 @@ void RenderPassHandle::invalidate() {
 
 bool RenderPassHandle::prepare(gl::FrameHandle &frame) {
 	_device = (Device *)frame.getDevice();
+	_swapchain = (Swapchain *)frame.getSwapchain();
 	_pool = _device->acquireCommandPool(QueueOperations::Graphics);
 	if (!_pool) {
 		invalidate();
@@ -86,24 +106,35 @@ bool RenderPassHandle::prepare(gl::FrameHandle &frame) {
 		return false;
 	}
 
-	frame.performInQueue([this, index] (gl::FrameHandle &frame) {
-		return doPrepareDescriptors(frame, index);
-	}, [this] (gl::FrameHandle &frame, bool success) {
-		if (success) {
-			_descriptorsReady = true;
-			if (_commandsReady && _descriptorsReady) {
-				frame.setRenderPassPrepared(this);
-			}
-		} else {
-			log::vtext("VK-Error", "Fail to doPrepareDescriptors");
-			frame.invalidate();
-		}
-	}, this);
+	// If updateAfterBind feature supported for all renderpass bindings
+	// - we can use separate thread to update them
+	// (ordering of bind|update is not defined in this case)
 
-	frame.performInQueue([this, index] (gl::FrameHandle &frame) {
-		/*if (!doPrepareDescriptors(frame, index)) {
-			return false;
-		}*/
+	auto pass = (RenderPassImpl *)_data->impl.get();
+	bool updateAfterBind = pass->supportsUpdateAfterBind();
+
+	if (updateAfterBind) {
+		frame.performInQueue([this, index] (gl::FrameHandle &frame) {
+			return doPrepareDescriptors(frame, index);
+		}, [this] (gl::FrameHandle &frame, bool success) {
+			if (success) {
+				_descriptorsReady = true;
+				if (_commandsReady && _descriptorsReady) {
+					frame.setRenderPassPrepared(this);
+				}
+			} else {
+				log::vtext("VK-Error", "Fail to doPrepareDescriptors");
+				frame.invalidate();
+			}
+		}, this, "RenderPass::doPrepareDescriptors");
+	}
+
+	frame.performInQueue([this, index, updateAfterBind] (gl::FrameHandle &frame) {
+		if (!updateAfterBind) {
+			if (!doPrepareDescriptors(frame, index)) {
+				return false;
+			}
+		}
 
 		auto ret = doPrepareCommands(frame, index);
 		if (!ret.empty()) {
@@ -111,10 +142,12 @@ bool RenderPassHandle::prepare(gl::FrameHandle &frame) {
 			return true;
 		}
 		return false;
-	}, [this] (gl::FrameHandle &frame, bool success) {
+	}, [this, updateAfterBind] (gl::FrameHandle &frame, bool success) {
 		if (success) {
 			_commandsReady = true;
-			//_descriptorsReady = true;
+			if (!updateAfterBind) {
+				_descriptorsReady = true;
+			}
 			if (_commandsReady && _descriptorsReady) {
 				frame.setRenderPassPrepared(this);
 			}
@@ -122,7 +155,7 @@ bool RenderPassHandle::prepare(gl::FrameHandle &frame) {
 			log::vtext("VK-Error", "Fail to doPrepareCommands");
 			frame.invalidate();
 		}
-	}, this);
+	}, this, "RenderPass::doPrepareCommands");
 	return false;
 }
 
@@ -140,12 +173,14 @@ void RenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl:
 	_pool = nullptr;
 	_sync = makeSyncInfo();
 	for (auto &it : _sync.swapchainSync) {
-		_fence->addRelease([dev = _device, sync = it] {
+		_fence->addRelease([dev = _swapchain, sync = it] {
 			dev->releaseSwapchainSync(Rc<SwapchainSync>(sync));
 		});
 	}
 
-	_device->acquireQueue(QueueOperations::Graphics, frame, [this] (gl::FrameHandle &frame, const Rc<DeviceQueue> &queue) {
+	auto ops = ((RenderPass *)_renderPass.get())->getQueueOps();
+
+	_device->acquireQueue(ops, frame, [this] (gl::FrameHandle &frame, const Rc<DeviceQueue> &queue) {
 		_queue = queue;
 		if (_data->isPresentable) {
 			for (auto &it : _attachments) {
@@ -158,19 +193,18 @@ void RenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl:
 		}
 
 		frame.performInQueue([this] (gl::FrameHandle &frame) {
-			auto table = _device->getTable();
-			VkSubmitInfo submitInfo{};
-			submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+			bool isValid = true;
+			for (auto &it : _sync.swapchainSync) {
+				it->lock();
+				if (!it->isSwapchainValid()) {
+					isValid = false;
+				}
+			}
 
-			submitInfo.waitSemaphoreCount = _sync.waitSem.size();
-			submitInfo.pWaitSemaphores = _sync.waitSem.data();
-			submitInfo.pWaitDstStageMask = _sync.waitStages.data();
-			submitInfo.commandBufferCount = _buffers.size();
-			submitInfo.pCommandBuffers = _buffers.data();
-			submitInfo.signalSemaphoreCount = _sync.signalSem.size();
-			submitInfo.pSignalSemaphores = _sync.signalSem.data();
-
-			if (table->vkQueueSubmit(_queue->getQueue(), 1, &submitInfo, _fence->getFence()) != VK_SUCCESS) {
+			if (!isValid || !doSubmit(frame)) {
+				for (auto &it : _sync.swapchainSync) {
+					it->unlock();
+				}
 				return false;
 			}
 
@@ -182,6 +216,9 @@ void RenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl:
 				}
 			}
 
+			for (auto &it : _sync.swapchainSync) {
+				it->unlock();
+			}
 			return true;
 		}, [this] (gl::FrameHandle &frame, bool success) {
 			if (success) {
@@ -204,7 +241,7 @@ void RenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl:
 				invalidate();
 				frame.invalidate();
 			}
-		}, this);
+		}, this, "RenderPass::submit");
 	}, [this] (gl::FrameHandle &frame) {
 		invalidate();
 	}, this);
@@ -345,10 +382,10 @@ bool RenderPassHandle::doPrepareDescriptors(gl::FrameHandle &frame, uint32_t ind
 	};
 
 	uint32_t currentSet = 0;
-	if (!_data->pipelineLayout.queueDescriptors.empty()) {
+	if (!_data->queueDescriptors.empty()) {
 		auto set = pass->getDescriptorSet(currentSet);
 		uint32_t currentDescriptor = 0;
-		for (auto &it : _data->pipelineLayout.queueDescriptors) {
+		for (auto &it : _data->queueDescriptors) {
 			if (!writeDescriptor(set, *it, currentDescriptor, false)) {
 				return false;
 			}
@@ -357,10 +394,10 @@ bool RenderPassHandle::doPrepareDescriptors(gl::FrameHandle &frame, uint32_t ind
 		++ currentSet;
 	}
 
-	if (!_data->pipelineLayout.extraDescriptors.empty()) {
+	if (!_data->extraDescriptors.empty()) {
 		auto set = pass->getDescriptorSet(currentSet);
 		uint32_t currentDescriptor = 0;
-		for (auto &it : _data->pipelineLayout.extraDescriptors) {
+		for (auto &it : _data->extraDescriptors) {
 			if (!writeDescriptor(set, it, currentDescriptor, true)) {
 				return false;
 			}
@@ -410,7 +447,7 @@ Vector<VkCommandBuffer> RenderPassHandle::doPrepareCommands(gl::FrameHandle &fra
 	VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
 	table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
 
-	auto pipeline = _data->pipelines.get(StringView("Default"));
+	auto pipeline = _data->subpasses[0].pipelines.get(StringView("Default"));
 
 	table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, ((Pipeline *)pipeline->pipeline.get())->getPipeline());
 	table->vkCmdDraw(buf, 3, 1, 0, 0);
@@ -421,13 +458,41 @@ Vector<VkCommandBuffer> RenderPassHandle::doPrepareCommands(gl::FrameHandle &fra
 	return Vector<VkCommandBuffer>();
 }
 
+bool RenderPassHandle::doSubmit(gl::FrameHandle &) {
+	auto table = _device->getTable();
+	VkSubmitInfo submitInfo{};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+	submitInfo.waitSemaphoreCount = _sync.waitSem.size();
+	submitInfo.pWaitSemaphores = _sync.waitSem.data();
+	submitInfo.pWaitDstStageMask = _sync.waitStages.data();
+	submitInfo.commandBufferCount = _buffers.size();
+	submitInfo.pCommandBuffers = _buffers.data();
+	submitInfo.signalSemaphoreCount = _sync.signalSem.size();
+	submitInfo.pSignalSemaphores = _sync.signalSem.data();
+
+	if (table->vkQueueSubmit(_queue->getQueue(), 1, &submitInfo, _fence->getFence()) == VK_SUCCESS) {
+		// mark semaphores
+
+		for (auto &it : _sync.waitSwapchainSync) {
+			it->getImageReady()->setSignaled(false);
+		}
+		for (auto &it : _sync.signalSwapchainSync) {
+			it->getRenderFinished()->setSignaled(true);
+		}
+
+		return true;
+	}
+	return false;
+}
+
 bool RenderPassHandle::present(gl::FrameHandle &frame) {
 	auto table = _device->getTable();
 
 	Vector<VkSemaphore> presentSem;
 
 	auto imageIndex = _presentAttachment->getIndex();
-	for (auto &it : _sync.swapchainSync) {
+	for (auto &it : _sync.signalSwapchainSync) {
 		presentSem.emplace_back(it->getRenderFinished()->getSemaphore());
 	}
 
@@ -447,10 +512,13 @@ bool RenderPassHandle::present(gl::FrameHandle &frame) {
 	auto result = table->vkQueuePresentKHR(_queue->getQueue(), &presentInfo);
 	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
 		frame.performOnGlThread([this] (gl::FrameHandle &frame) {
-			frame.getLoop()->pushContextEvent(gl::Loop::Event::SwapChainDeprecated);
+			frame.getLoop()->pushContextEvent(gl::Loop::EventName::SwapChainDeprecated, frame.getSwapchain());
 			frame.invalidate();
 		});
 	} else if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
+		for (auto &it : _sync.signalSwapchainSync) {
+			it->getRenderFinished()->setSignaled(false);
+		}
 		return true;
 	} else {
 		log::vtext("VK-Error", "Fail to vkQueuePresentKHR: ", result);
@@ -467,18 +535,22 @@ RenderPassHandle::Sync RenderPassHandle::makeSyncInfo() {
 	for (auto &it : _attachments) {
 		if (it.first->getType() == gl::AttachmentType::SwapchainImage) {
 			if (auto d = it.second.cast<SwapchainAttachmentHandle>()) {
-				if (it.first->getFirstRenderPass() == _data) {
+				auto firstPass = it.first->getFirstRenderPass();
+				auto lastPass = it.first->getLastRenderPass();
+
+				auto dSync = (lastPass == _data) ? d->acquireSync() : d->getSync();
+
+				if (firstPass == _data) {
 					sync.waitAttachment.emplace_back(it.second);
-					sync.waitSem.emplace_back(d->getSync()->getImageReady()->getSemaphore());
+					sync.waitSem.emplace_back(dSync->getImageReady()->getSemaphore());
 					sync.waitStages.emplace_back(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-					d->getSync()->getImageReady()->setSignaled(false);
+					sync.swapchainSync.emplace(sync.waitSwapchainSync.emplace_back(dSync));
 				}
 
-				if (it.first->getLastRenderPass() == _data) {
-					sync.signalSem.emplace_back(d->getSync()->getRenderFinished()->getUnsignalled());
+				if (lastPass == _data) {
+					sync.signalSem.emplace_back(dSync->getRenderFinished()->getUnsignalled());
 					sync.signalAttachment.emplace_back(it.second);
-					d->getSync()->getRenderFinished()->setSignaled(true);
-					sync.swapchainSync.emplace_back(d->acquireSync());
+					sync.swapchainSync.emplace(sync.signalSwapchainSync.emplace_back(dSync));
 				}
 			}
 		}
@@ -488,8 +560,10 @@ RenderPassHandle::Sync RenderPassHandle::makeSyncInfo() {
 }
 
 
-VertexRenderPass::~VertexRenderPass() {
+VertexRenderPass::~VertexRenderPass() { }
 
+bool VertexRenderPass::init(StringView name, gl::RenderOrdering ordering, size_t subpassCount) {
+	return RenderPass::init(name, gl::RenderPassType::Graphics, ordering, subpassCount);
 }
 
 Rc<gl::RenderPassHandle> VertexRenderPass::makeFrameHandle(gl::RenderPassData *data, const gl::FrameHandle &handle) {
@@ -507,7 +581,7 @@ void VertexRenderPassHandle::addRequiredAttachment(const gl::Attachment *a, cons
 	}
 }
 
-Vector<VkCommandBuffer> VertexRenderPassHandle::doPrepareCommands(gl::FrameHandle &, uint32_t index) {
+Vector<VkCommandBuffer> VertexRenderPassHandle::doPrepareCommands(gl::FrameHandle &handle, uint32_t index) {
 	auto table = _device->getTable();
 	auto buf = _pool->allocBuffer(*_device);
 	auto pass = (RenderPassImpl *)_data->impl.get();
@@ -524,26 +598,6 @@ Vector<VkCommandBuffer> VertexRenderPassHandle::doPrepareCommands(gl::FrameHandl
 		return Vector<VkCommandBuffer>();
 	}
 
-	Vector<VkBufferMemoryBarrier> bufferBarriers;
-	bufferBarriers.emplace_back(VkBufferMemoryBarrier({
-		VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
-		VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		_mainBuffer->getVertexes()->getBuffer(), 0, VK_WHOLE_SIZE
-	}));
-
-	bufferBarriers.emplace_back(VkBufferMemoryBarrier({
-		VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
-		VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_INDEX_READ_BIT,
-		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		_mainBuffer->getIndexes()->getBuffer(), 0, VK_WHOLE_SIZE
-	}));
-
-	table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0,
-			0, nullptr,
-			bufferBarriers.size(), bufferBarriers.data(),
-			0, nullptr);
-
 	VkRenderPassBeginInfo renderPassInfo { };
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 	renderPassInfo.renderPass = _data->impl.cast<RenderPassImpl>()->getRenderPass();
@@ -555,31 +609,33 @@ Vector<VkCommandBuffer> VertexRenderPassHandle::doPrepareCommands(gl::FrameHandl
 	renderPassInfo.pClearValues = &clearColor;
 	table->vkCmdBeginRenderPass(buf, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-
 	VkViewport viewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
 	table->vkCmdSetViewport(buf, 0, 1, &viewport);
 
 	VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
 	table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
 
-	table->vkCmdBindDescriptorSets(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, pass->getPipelineLayout(), 0,
-			pass->getDescriptorSets().size(), pass->getDescriptorSets().data(), 0, nullptr);
-
-	auto pipeline = _data->pipelines.get(StringView("Vertexes"));
+	auto pipeline = _data->subpasses[0].pipelines.get(StringView("Vertexes"));
 	table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, ((Pipeline *)pipeline->pipeline.get())->getPipeline());
 
 	auto idx = _mainBuffer->getIndexes()->getBuffer();
 
 	table->vkCmdBindIndexBuffer(buf, idx, 0, VK_INDEX_TYPE_UINT32);
 
+	table->vkCmdBindDescriptorSets(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, pass->getPipelineLayout(), 0,
+			pass->getDescriptorSets().size(), pass->getDescriptorSets().data(), 0, nullptr);
 	table->vkCmdDrawIndexed(buf, 6, 1, 0, 0, 0);
-	//table->vkCmdDraw(buf, 1, 1, 0, 0);
 
 	table->vkCmdEndRenderPass(buf);
 	if (table->vkEndCommandBuffer(buf) == VK_SUCCESS) {
 		return Vector<VkCommandBuffer>{buf};
 	}
 	return Vector<VkCommandBuffer>();
+}
+
+bool VertexRenderPassHandle::doSubmit(gl::FrameHandle &handle) {
+	_mainBuffer->writeVertexes(handle);
+	return RenderPassHandle::doSubmit(handle);
 }
 
 }

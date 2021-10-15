@@ -34,6 +34,51 @@ void __xenolith_log(const StringView &tag, CustomLog::Type t, CustomLog::VA &va)
 
 namespace stappler::xenolith {
 
+EventLoop::EventLoop() { }
+
+EventLoop::~EventLoop() { }
+
+bool EventLoop::init(Application *app) {
+	_application = app;
+	return true;
+}
+
+bool EventLoop::run() {
+	return false;
+}
+
+uint64_t EventLoop::getMinFrameTime() const {
+	return 1000'000ULL / 60;
+}
+
+uint64_t EventLoop::getClock() {
+	return 0;
+}
+
+void EventLoop::sleep(uint64_t) {
+	// do nothing
+}
+
+Pair<uint64_t, uint64_t> EventLoop::getDiskSpace() const {
+	return pair(0, 0);
+}
+
+void EventLoop::pushEvent(AppEvent::Value events) {
+	_events |= events;
+}
+
+AppEvent::Value EventLoop::popEvents() {
+	return _events.exchange(AppEvent::None);
+}
+
+void EventLoop::addView(gl::View *) {
+
+}
+
+void EventLoop::removeView(gl::View *) {
+
+}
+
 XL_DECLARE_EVENT_CLASS(Application, onDeviceToken);
 XL_DECLARE_EVENT_CLASS(Application, onNetwork);
 XL_DECLARE_EVENT_CLASS(Application, onUrlOpened);
@@ -52,21 +97,50 @@ Application *Application::getInstance() {
 	return s_application;
 }
 
-void Application::sleep(double v) {
-	platform::device::_sleep(v);
+int Application::parseOptionString(data::Value &ret, const StringView &str, int argc, const char * argv[]) {
+	if (str.starts_with("w=") == 0) {
+		auto s = str.sub(2).readInteger().get(0);
+		if (s > 0) {
+			ret.setInteger(s, "width");
+		}
+	} else if (str.starts_with("h=") == 0) {
+		auto s = str.sub(2).readInteger().get(0);
+		if (s > 0) {
+			ret.setInteger(s, "height");
+		}
+	} else if (str.starts_with("d=") == 0) {
+		auto s = str.sub(2).readDouble().get(0.0);
+		if (s > 0) {
+			ret.setDouble(s, "density");
+		}
+	} else if (str.starts_with("l=") == 0) {
+		ret.setString(str.sub(2), "locale");
+	} else if (str == "phone") {
+		ret.setBool(true, "phone");
+	} else if (str == "package") {
+		ret.setString(argv[0], "package");
+	} else if (str == "fixed") {
+		ret.setBool(true, "fixed");
+	}
+	return 1;
+}
+
+void Application::sleep(uint64_t v) {
+	_loop->sleep(v);
+}
+
+uint64_t Application::getClock() const {
+	return _loop->getClock();
 }
 
 Application::Application() : _appLog(&log::__xenolith_log) {
 	XLASSERT(s_application == nullptr, "Application should be only one");
 
-	_clockStart = platform::device::_clock();
+	_loop = platform::device::createEventLoop(this);
+	_clockStart = _loop->getClock();
 
 	_userAgent = platform::device::_userAgent();
 	_deviceIdentifier  = platform::device::_deviceIdentifier();
-	_bundleName = platform::device::_bundleName();
-	_applicationName = platform::device::_applicationName();
-	_applicationVersion = platform::device::_applicationVersion();
-	_userLanguage = platform::device::_userLanguage();
 	_isNetworkOnline = platform::network::_isNetworkOnline();
 
 	platform::network::_setNetworkCallback([this] (bool online) {
@@ -79,11 +153,19 @@ Application::Application() : _appLog(&log::__xenolith_log) {
 }
 
 Application::~Application() {
+
 }
 
 bool Application::onFinishLaunching() {
+	_threadId = std::this_thread::get_id();
+
 	thread::ThreadInfo::setMainThread();
-	_queue = Rc<thread::TaskQueue>::alloc(std::min(uint16_t(2), uint16_t(std::thread::hardware_concurrency() / 4)), nullptr, StringView("Main"));
+
+	_queue = Rc<thread::TaskQueue>::alloc(
+			math::clamp(uint16_t(std::thread::hardware_concurrency() / 2), uint16_t(2), uint16_t(16)),
+			nullptr, "Main", [this] {
+		_loop->pushEvent(AppEvent::Thread);
+	});
 	if (!_queue->spawnWorkers(ApplicationThreadId, _queue->getName())) {
 		log::text("Application", "Fail to spawn worker threads");
 		return false;
@@ -91,51 +173,73 @@ bool Application::onFinishLaunching() {
 
 	_instance = platform::graphic::createInstance(this);
 
-	if (!_instance->hasDevices()) {
+	if (!_instance || !_instance->hasDevices()) {
 		_instance = nullptr;
 		return false;
 	}
 
-	_director = Rc<Director>::create();
-	auto view = _director->getView();
+	/*auto view = _director->getView();
 	if (!view) {
 		auto screenSize = platform::desktop::getScreenSize();
-		if (auto v = platform::graphic::createView(_instance, getBundleName(), URect{0, 0,
+		if (auto v = platform::graphic::createView(this, _instance, getBundleName(), URect{0, 0,
 				static_cast<uint32_t>(screenSize.width), static_cast<uint32_t>(screenSize.height)})) {
 			_director->setView(v);
 		}
-	}
+	}*/
 
 	return true;
 }
 
-Rc<gl::RenderQueue> Application::onDefaultRenderQueue(const gl::ImageInfo &info) {
-	return _director->onDefaultRenderQueue(info);
+bool Application::onMainLoop() {
+	return false;
 }
 
 void Application::onMemoryWarning() {
 
 }
 
-int Application::run(Director *director) {
+int Application::run(data::Value &&data) {
+	for (auto &it : data.asDict()) {
+		if (it.first == "width") {
+			if (it.second.isInteger()) {
+				_data.screenSize.width = float(it.second.getInteger());
+			} else if (it.second.isDouble()) {
+				_data.screenSize.width = float(it.second.getDouble());
+			}
+		} else if (it.first == "height") {
+			if (it.second.isInteger()) {
+				_data.screenSize.height = float(it.second.getInteger());
+			} else if (it.second.isDouble()) {
+				_data.screenSize.height = float(it.second.getDouble());
+			}
+		} else if (it.first == "density") {
+			if (it.second.isInteger()) {
+				_data.density = float(it.second.getInteger());
+			} else if (it.second.isDouble()) {
+				_data.density = float(it.second.getDouble());
+			}
+		} else if (it.first == "locale") {
+			if (it.second.isString() && !it.second.getString().empty()) {
+				_data.userLanguage = it.second.getString();
+			}
+		} else if (it.first == "bundle") {
+			if (it.second.isString() && !it.second.getString().empty()) {
+				_data.bundleName = it.second.getString();
+			}
+		} else if (it.first == "phone") {
+			_data.isPhone = it.second.getBool();
+		} else if (it.first == "fixed") {
+			_data.isFixed = it.second.getBool();
+		}
+	}
+
 	if (!onFinishLaunching()) {
 		return 1;
 	}
 
-	if (!_instance) {
-		return -1;
-	}
+	auto ret = onMainLoop();
 
-	if (!director) {
-		director = _director;
-	}
-
-	Rc<gl::View> glview = director->getView();
-	if (!glview) {
-		return -1;
-	}
-
-	_mainView = glview;
+	/*_mainView = glview;
 	glview->run(this, director, [&] (uint64_t val) -> bool {
 		auto id = std::this_thread::get_id();
 		if (id != _threadId) {
@@ -146,11 +250,10 @@ int Application::run(Director *director) {
 		director->mainLoop(val);
 		update(val);
 		return true;
-	});
-	director->end();
-	_mainView = nullptr;
+	});*/
+
 	_instance = nullptr;
-    return 0;
+    return ret ? 0 : -1;
 }
 
 bool Application::openURL(const StringView &url) {
@@ -222,10 +325,10 @@ void Application::rateApplication() {
 }
 
 std::pair<uint64_t, uint64_t> Application::getTotalDiskSpace() {
-	return platform::device::_diskSpace();
+	return _loop->getDiskSpace();
 }
 uint64_t Application::getApplicationDiskSpace() {
-	auto path = filesystem::writablePath(getBundleName());
+	auto path = filesystem::writablePath(_data.bundleName);
 	uint64_t size = 0;
 	filesystem::ftw(path, [&size] (const StringView &path, bool isFile) {
 		if (isFile) {
@@ -233,7 +336,7 @@ uint64_t Application::getApplicationDiskSpace() {
 		}
 	});
 
-	path = filesystem::cachesPath(getBundleName());
+	path = filesystem::cachesPath(_data.bundleName);
 	filesystem::ftw(path, [&size] (const StringView &path, bool isFile) {
 		if (isFile) {
 			size += filesystem::size(path);
@@ -246,7 +349,7 @@ uint64_t Application::getApplicationDiskSpace() {
 int64_t Application::getApplicationVersionCode() {
 	static int64_t version = 0;
 	if (version == 0) {
-		String str(_applicationVersion);
+		String str(_data.applicationVersion);
 		int major = 0, middle = 0, minor = 0, state = 0;
 
 		for (char c : str) {
@@ -276,28 +379,19 @@ void Application::notification(const String &title, const String &text) {
 }
 
 void Application::setLaunchUrl(const StringView &url) {
-    _launchUrl = url.str();
+    _data.launchUrl = url.str();
 }
 
 void Application::processLaunchUrl(const StringView &url) {
-    _launchUrl = url.str();
+	_data.launchUrl = url.str();
     onLaunchUrl(this, url);
 }
-
-StringView Application::getLaunchUrl() const {
-    return _launchUrl;
-}
-
-Rc<Director> Application::getDirector() const {
-	return _director;
-}
-
 
 bool Application::isMainThread() const {
 	return _threadId == std::this_thread::get_id();
 }
 
-void Application::performOnMainThread(const Callback &func, Ref *target, bool onNextFrame) {
+void Application::performOnMainThread(const Function<void()> &func, Ref *target, bool onNextFrame) {
 	if (!_queue || ((isMainThread() || _singleThreaded) && !onNextFrame)) {
 		func();
 	} else {

@@ -24,6 +24,7 @@
 #define XENOLITH_GL_VK_XLVKALLOCATOR_H_
 
 #include "XLVkInfo.h"
+#include "XLVkObject.h"
 
 namespace stappler::xenolith::vk {
 
@@ -41,6 +42,12 @@ enum class AllocationType {
 	Unknown,
 	Linear,
 	Optimal,
+};
+
+struct MemoryRequirements {
+	bool prefersDedicated = false;
+	bool requiresDedicated = false;
+	VkMemoryRequirements requirements;
 };
 
 class Allocator : public Ref {
@@ -63,6 +70,7 @@ public:
 		VkDeviceSize size = 0; // size in bytes
 		VkDeviceSize offset = 0;  // current usage offset
 		AllocationType lastAllocation = AllocationType::Unknown; // last allocation type (for bufferImageGranularity)
+		void *ptr = nullptr;
 
 		operator bool () const { return mem != VK_NULL_HANDLE; }
 
@@ -75,6 +83,7 @@ public:
 		VkDeviceSize offset = 0; // offset in block
 		VkDeviceSize size = 0; // reserved size after offset
 		uint32_t type = 0; // memory type index
+		void *ptr = nullptr;
 
 		operator bool () const { return mem != VK_NULL_HANDLE; }
 	};
@@ -108,7 +117,7 @@ public:
 
 	virtual ~Allocator();
 
-	bool init(Device &dev, VkPhysicalDevice device, const DeviceInfo::Features &features, VkDeviceSize bufferImageGranularity);
+	bool init(Device &dev, VkPhysicalDevice device, const DeviceInfo::Features &features, const DeviceInfo::Properties &props);
 	void invalidate(Device &dev);
 
 	void update();
@@ -123,8 +132,17 @@ public:
 	bool hasMemReq2Feature() const { return _hasMemReq2; }
 	bool hasDedicatedFeature() const { return _hasDedicated; }
 	VkDeviceSize getBufferImageGranularity() const { return _bufferImageGranularity; }
+	VkDeviceSize getNonCoherentAtomSize() const { return _nonCoherentAtomSize; }
 
 	const MemType *getType(uint32_t) const;
+
+	MemType * findMemoryType(uint32_t typeFilter, AllocationUsage) const;
+
+	MemoryRequirements getMemoryRequirements(VkBuffer target);
+	MemoryRequirements getMemoryRequirements(VkImage target);
+
+	Rc<Buffer> spawnPersistent(AllocationUsage, const gl::BufferInfo &);
+	Rc<Image> spawnPersistent(AllocationUsage, const gl::ImageInfo &, bool preinitialized);
 
 protected:
 	friend class DeviceMemoryPool;
@@ -132,10 +150,9 @@ protected:
 	void lock();
 	void unlock();
 
-	MemNode alloc(MemType *, uint64_t);
+	MemNode alloc(MemType *, uint64_t, bool persistent = false);
 	void free(MemType *, SpanView<MemNode>);
 
-	Allocator::MemType * findMemoryType(uint32_t typeFilter, AllocationUsage);
 	// bool requestTransfer(Rc<Buffer>, void *data, uint32_t size, uint32_t offset);
 
 	// AllocatorHeapBlock allocateBlock(uint32_t, uint32_t);
@@ -150,6 +167,7 @@ protected:
 	Vector<const MemType *> _memTypes;
 
 	VkDeviceSize _bufferImageGranularity = 1;
+	VkDeviceSize _nonCoherentAtomSize = 1;
 	bool _hasBudget = false;
 	bool _hasMemReq2 = false;
 	bool _hasDedicated = false;
@@ -165,9 +183,10 @@ public:
 
 	virtual ~DeviceMemoryPool();
 
-	bool init(const Rc<Allocator> &);
+	bool init(const Rc<Allocator> &, bool persistentMapping = false);
 
 	Rc<DeviceBuffer> spawn(AllocationUsage type, const gl::BufferInfo &);
+	Rc<Buffer> spawnPersistent(AllocationUsage, const gl::BufferInfo &);
 
 	Device *getDevice() const;
 	const Rc<Allocator> &getAllocator() const { return _allocator; }
@@ -179,6 +198,7 @@ protected:
 	void free(Allocator::MemBlock &&);
 	void clear(MemData *);
 
+	bool _persistentMapping = false;
 	Rc<Allocator> _allocator;
 	Map<int64_t, MemData> _heaps;
 	Vector<Rc<DeviceBuffer>> _buffers;

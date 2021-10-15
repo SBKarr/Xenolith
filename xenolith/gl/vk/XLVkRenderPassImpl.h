@@ -37,6 +37,8 @@ public:
 		VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
 		Vector<VkDescriptorSetLayout> layouts;
 		Vector<VkDescriptorSet> sets;
+
+		bool cleanup(Device &dev);
 	};
 
 	virtual bool init(Device &dev, gl::RenderPassData &);
@@ -46,8 +48,16 @@ public:
 	const Vector<VkDescriptorSet> &getDescriptorSets() const { return _data->sets; }
 
 	VkDescriptorSet getDescriptorSet(uint32_t) const;
+	bool supportsUpdateAfterBind() const;
 
 protected:
+	bool initGraphicsPass(Device &dev, gl::RenderPassData &);
+	bool initComputePass(Device &dev, gl::RenderPassData &);
+	bool initTransferPass(Device &dev, gl::RenderPassData &);
+	bool initGenericPass(Device &dev, gl::RenderPassData &);
+
+	bool initDescriptors(Device &dev, gl::RenderPassData &, PassData &);
+
 	Vector<VkAttachmentDescription> _attachmentDescriptions;
 	Vector<VkAttachmentReference> _attachmentReferences;
 	Vector<uint32_t> _preservedAttachments;

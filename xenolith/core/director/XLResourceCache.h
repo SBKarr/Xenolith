@@ -28,17 +28,6 @@
 
 namespace stappler::xenolith {
 
-class ResourceCache final : public Ref {
-public:
-	bool init(Director *);
-	bool request(const Rc<gl::Resource> &);
-	bool revoke(StringView requestName);
-
-protected:
-	Director *_director = nullptr;
-	Map<String, Rc<gl::Resource>> _resources;
-};
-
 }
 
 #endif /* XENOLITH_CORE_DIRECTOR_XLRESOURCECACHE_H_ */

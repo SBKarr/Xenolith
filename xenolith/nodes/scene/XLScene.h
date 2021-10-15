@@ -20,28 +20,50 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **/
 
-#ifndef COMPONENTS_XENOLITH_NODES_XLSCENE_H_
-#define COMPONENTS_XENOLITH_NODES_XLSCENE_H_
+#ifndef COMPONENTS_XENOLITH_CORE_SCENE_XLSCENE_H_
+#define COMPONENTS_XENOLITH_CORE_SCENE_XLSCENE_H_
 
 #include "XLNode.h"
+#include "XLGlResource.h"
+#include "XLGlRenderQueue.h"
 
 namespace stappler::xenolith {
 
 class Scene : public Node {
 public:
-	virtual ~Scene() { }
+	virtual ~Scene();
 
-	virtual bool init(const Rc<Director> &);
-	virtual bool init(const Rc<Director> &, Size size);
+	virtual bool init(gl::RenderQueue::Builder &&);
+	virtual bool init(gl::RenderQueue::Builder &&, Size);
 
 	virtual void render(RenderFrameInfo &info);
 
 	virtual void onContentSizeDirty() override;
 
+	const Rc<gl::RenderQueue> &getRenderQueue() const { return _queue; }
+
+	bool requestResource(const Rc<gl::Resource> &);
+	bool revokeResource(StringView requestName);
+
+	virtual void onPresented(Director *);
+	virtual void onFinished(Director *);
+
+	virtual void onFrameStarted(gl::FrameHandle &); // called on GL thread;
+	virtual void onFrameEnded(gl::FrameHandle &); // called on GL thread;
+	virtual void onFrameInput(gl::FrameHandle &, const Rc<gl::AttachmentHandle> &); // called on GL thread;
+
+	virtual void onQueueEnabled(const gl::Swapchain *);
+	virtual void onQueueDisabled();
+
 protected:
-	Rc<Director> _director;
+	virtual Rc<gl::RenderQueue> makeQueue(gl::RenderQueue::Builder &&);
+
+	uint32_t _refId = 0;
+	Director *_director = nullptr;
+	Rc<gl::RenderQueue> _queue;
+	Map<String, Rc<gl::Resource>> _resources;
 };
 
 }
 
-#endif /* COMPONENTS_XENOLITH_NODES_XLSCENE_H_ */
+#endif /* COMPONENTS_XENOLITH_CORE_SCENE_XLSCENE_H_ */

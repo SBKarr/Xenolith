@@ -77,6 +77,8 @@ public:
 	const Rc<DeviceBuffer> &getVertexes() const { return _vertexes; }
 	const Rc<DeviceBuffer> &getIndexes() const { return _indexes; }
 
+	virtual void writeVertexes(gl::FrameHandle &fhandle);
+
 protected:
 	virtual bool loadVertexes(gl::FrameHandle &, const Rc<gl::VertexData> &);
 
@@ -90,6 +92,8 @@ protected:
 
 	Rc<DeviceBuffer> _indexesStaging;
 	Rc<DeviceBuffer> _indexes;
+
+	Rc<gl::VertexData> _data;
 };
 
 }

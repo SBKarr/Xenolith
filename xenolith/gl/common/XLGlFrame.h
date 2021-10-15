@@ -30,9 +30,12 @@ namespace stappler::xenolith::gl {
 
 class FrameHandle : public Ref {
 public:
+	static uint32_t GetActiveFramesCount();
+
 	virtual ~FrameHandle();
 
-	bool init(Loop &, RenderQueue &, uint64_t order, uint32_t gen, bool readyForSubmit = false);
+	bool init(Loop &, Swapchain &, RenderQueue &, uint64_t order, uint32_t gen, bool readyForSubmit = false);
+	bool init(Loop &, RenderQueue &, uint64_t order, uint32_t gen);
 
 	void update(bool init = false);
 
@@ -40,17 +43,22 @@ public:
 	uint64_t getGen() const { return _gen; }
 	Loop *getLoop() const { return _loop; }
 	Device *getDevice() const { return _device; }
+	Swapchain *getSwapchain() const { return _swapchain; }
 	const Rc<RenderQueue> &getQueue() const { return _queue; }
 
 	// spinners within frame should not spin directly on loop to preserve FrameHandle object
 	virtual void schedule(Function<bool(FrameHandle &, Loop::Context &)> &&);
 
 	// thread tasks within frame should not be performed directly on loop's queue to preserve FrameHandle object
-	virtual void performInQueue(Function<void(FrameHandle &)> &&, Ref * = nullptr);
-	virtual void performInQueue(Function<bool(FrameHandle &)> &&, Function<void(FrameHandle &, bool)> &&, Ref * = nullptr);
+	virtual void performInQueue(Function<void(FrameHandle &)> &&, Ref * = nullptr, StringView tag = StringView());
+	virtual void performInQueue(Function<bool(FrameHandle &)> &&, Function<void(FrameHandle &, bool)> &&, Ref * = nullptr, StringView tag = StringView());
 
 	// thread tasks within frame should not be performed directly on loop's queue to preserve FrameHandle object
-	virtual void performOnGlThread(Function<void(FrameHandle &)> &&, Ref * = nullptr, bool immediate = true);
+	virtual void performOnGlThread(Function<void(FrameHandle &)> &&, Ref * = nullptr, bool immediate = true, StringView tag = StringView());
+
+	// required tasks should be completed before onComplete call
+	virtual void performRequiredTask(Function<void(FrameHandle &)> &&, Ref * = nullptr, StringView tag = StringView());
+	virtual void performRequiredTask(Function<bool(FrameHandle &)> &&, Function<void(FrameHandle &, bool)> &&, Ref * = nullptr, StringView tag = StringView());
 
 	virtual bool isSubmitted() const { return _submitted; }
 	virtual bool isInputRequired() const;
@@ -60,7 +68,9 @@ public:
 	virtual bool isInputSubmitted() const { return _inputSubmitted == _inputAttachments.size(); }
 
 	virtual const Vector<Rc<AttachmentHandle>> &getInputAttachments() const { return _inputAttachments; }
+	virtual const Vector<Rc<AttachmentHandle>> &getOutputAttachments() const { return _outputAttachments; }
 	virtual bool submitInput(const Rc<AttachmentHandle> &, Rc<AttachmentInputData> &&);
+	virtual bool submitInput(const Attachment *, Rc<AttachmentInputData> &&);
 
 	virtual void setAttachmentReady(const Rc<AttachmentHandle> &); // should be called from GL thread
 	virtual void setInputSubmitted(const Rc<AttachmentHandle> &); // should be called from GL thread
@@ -74,31 +84,46 @@ public:
 
 	virtual void invalidate();
 
+	virtual void setCompleteCallback(Function<void(FrameHandle &)> &&);
+
 protected:
+	virtual bool setup();
 	virtual void releaseResources();
 	virtual void releaseRenderPassResources(const Rc<RenderPass> &, const Rc<SwapchainAttachment> &);
+	virtual void setRenderPassComplete(const Rc<RenderPass> &);
+	virtual void onRequiredTaskCompleted(StringView tag);
+	virtual void onComplete();
 
 	Loop *_loop = nullptr; // loop can not die until frames are performed
 	Device *_device = nullptr;// device can not die until frames are performed
+	Swapchain *_swapchain = nullptr; // swapchain can not die until frames are performed
 	Rc<RenderQueue> _queue; // hard reference to render queue, it should not be released until at least one frame uses it
 
 	uint64_t _order = 0;
 	uint32_t _gen = 0;
-	uint32_t _inputs = 0;
 	uint32_t _inputSubmitted = 0;
+	std::atomic<uint32_t> _tasksRequired = 0;
+	uint32_t _tasksCompleted = 0;
+	uint32_t _renderPassInProgress = 0;
+	uint32_t _renderPassRequired = 0;
+	uint32_t _renderPassCompleted = 0;
 	bool _readyForSubmit = false;
 	bool _submitted = false;
+	bool _completed = false;
 	bool _valid = true;
 	Vector<Rc<AttachmentHandle>> _availableAttachments;
 	Vector<Rc<AttachmentHandle>> _requiredAttachments;
 	Vector<Rc<AttachmentHandle>> _inputAttachments;
 	Vector<Rc<AttachmentHandle>> _readyAttachments;
+	Vector<Rc<AttachmentHandle>> _outputAttachments;
 
 	Vector<Rc<RenderPassHandle>> _requiredRenderPasses;
 	Vector<Rc<RenderPassHandle>> _preparedRenderPasses;
 	Vector<Rc<RenderPassHandle>> _submittedRenderPasses;
 
 	Map<Rc<RenderPassHandle>, Rc<SwapchainAttachment>> _swapchainAttachments;
+
+	Function<void(FrameHandle &)> _complete;
 };
 
 /*struct FrameData : public Ref {

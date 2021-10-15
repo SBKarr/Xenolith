@@ -7,7 +7,7 @@ struct Vertex {
 	vec2 tex;
 };
 
-layout(set = 0, binding = 0) readonly buffer Vertices {
+layout(std430, set = 0, binding = 0) readonly buffer Vertices {
 	Vertex vertices[];
 };
 
@@ -32,5 +32,5 @@ void main() {
 	fragColor = vertices[gl_VertexIndex].color;
 	//gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
 	//fragColor = colors[gl_VertexIndex];
-	//gl_PointSize = 4.0;
+	gl_PointSize = 4.0;
 }

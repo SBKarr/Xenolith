@@ -20,31 +20,47 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **/
 
-#ifndef COMPONENTS_XENOLITH_NODES_XLRESOURCECOMPONENT_H_
-#define COMPONENTS_XENOLITH_NODES_XLRESOURCECOMPONENT_H_
-
-#include "XLComponent.h"
-#include "XLGlResource.h"
+#include "XLDirector.h"
+#include "XLResourceComponent.h"
+#include "XLScene.h"
 
 namespace stappler::xenolith {
 
-class ResourceComponent : public Component {
-public:
-	virtual ~ResourceComponent() { }
-
-	bool init(Rc<gl::Resource>);
-
-	void setResource(Rc<gl::Resource>);
-	Rc<gl::Resource> getResource() const;
-
-	virtual void onEnter();
-	virtual void onExit();
-
-protected:
-	ResourceCache *_cache = nullptr;
-	Rc<gl::Resource> _resource;
-};
-
+bool ResourceComponent::init(Rc<gl::Resource> req) {
+	_resource = req;
+	return true;
 }
 
-#endif /* COMPONENTS_XENOLITH_NODES_XLRESOURCECOMPONENT_H_ */
+void ResourceComponent::setResource(Rc<gl::Resource> req) {
+	if (_running && _owner) {
+		if (_resource) {
+			//_owner->getScene()->revokeResource(_resource->getName());
+		}
+		_resource = req;
+		if (_resource) {
+			//_owner->getScene()->requestResource(_resource);
+		}
+	} else {
+		_resource = req;
+	}
+}
+
+Rc<gl::Resource> ResourceComponent::getResource() const {
+	return _resource;
+}
+
+void ResourceComponent::onEnter() {
+	Component::onEnter();
+	if (_resource && _owner) {
+		//_owner->getScene()->requestResource(_resource);
+	}
+}
+
+void ResourceComponent::onExit() {
+	if (_resource) {
+		//_owner->getScene()->revokeResource(_resource->getName());
+	}
+	Component::onExit();
+}
+
+}

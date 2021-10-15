@@ -21,6 +21,7 @@
  **/
 
 #include "XLGlView.h"
+#include "XLScene.h"
 
 namespace stappler::xenolith::gl {
 
@@ -29,15 +30,59 @@ XL_DECLARE_EVENT_CLASS(View, onBackground);
 XL_DECLARE_EVENT_CLASS(View, onFocus);
 XL_DECLARE_EVENT_CLASS(View, onScreenSize);
 
-View::View() { }
+View::View() {
+}
 
 View::~View() { }
 
-bool View::init(Instance *impl, Device *dev) {
-	_glInstance = impl;
-	_glDevice = dev;
+bool View::init(const Rc<EventLoop> &ev, const Rc<gl::Loop> &loop) {
+	_glLoop = loop;
+	_eventLoop = ev;
 
 	return true;
+}
+
+bool View::begin(const Rc<Director> &dir, Function<void()> &&cb) {
+	_director = dir;
+	_onEnded = move(cb);
+	_eventLoop->addView(this);
+	_director->begin(this);
+
+	if (auto &scene = _director->getScene()) {
+		_swapchain = makeSwapchain(scene->getRenderQueue());
+		if (_swapchain) {
+			_glLoop->pushEvent(Loop::EventName::Update, _swapchain);
+			return true;
+		}
+	}
+	return true;
+}
+
+void View::end() {
+	_swapchain->invalidate(*_glLoop->getDevice());
+	_swapchain = nullptr;
+
+	if (_onEnded) {
+		_onEnded();
+		_onEnded = nullptr;
+	}
+	_director->end();
+	_director = nullptr;
+	_eventLoop->removeView(this);
+}
+
+void View::reset(SwapchanCreationMode mode) {
+	if (_swapchain) {
+		_swapchain->recreateSwapchain(*_glLoop->getDevice(), mode);
+	}
+
+	_glLoop->pushEvent(Loop::EventName::SwapChainRecreated, _swapchain);
+}
+
+void View::update() {
+	if (_director) {
+		_director->update();
+	}
 }
 
 int View::getDpi() const {
@@ -88,15 +133,12 @@ bool View::isInBackground() const {
 	return _inBackground;
 }
 
-void View::pushEvent(ViewEvent::Value events) {
+void View::pushEvent(AppEvent::Value events) const {
 	_events |= events;
 }
 
-ViewEvent::Value View::popEvents() {
-	return _events.exchange(ViewEvent::None);
+AppEvent::Value View::popEvents() const {
+	return _events.exchange(AppEvent::None);
 }
-
-const Rc<Device> &View::getDevice() const { return _glDevice; }
-const Rc<Loop> &View::getLoop() const { return _loop ; }
 
 }

@@ -28,6 +28,8 @@ THE SOFTWARE.
 
 #include "XLDirector.cc"
 
-#include "XLResourceCache.cc"
 #include "XLVertexArray.cc"
+
+#include "XLScene.cc"
+
 //#include "XLStaticResource.cc"

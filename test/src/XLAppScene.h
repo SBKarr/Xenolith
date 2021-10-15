@@ -32,7 +32,7 @@ class AppScene : public Scene {
 public:
 	virtual ~AppScene() { }
 
-	virtual bool init(const Rc<Director> &) override;
+	virtual bool init(Extent2 extent);
 
 	virtual void onEnter() override;
 	virtual void onExit() override;

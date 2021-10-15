@@ -52,4 +52,38 @@ Object::~Object() {
 	invalidate();
 }
 
+ImageViewInfo ImageObject::getViewInfo(const ImageViewInfo &info) const {
+	ImageViewInfo ret(info);
+	if (ret.format == ImageFormat::Undefined) {
+		ret.format = _info.format;
+	}
+	if (ret.layerCount.get() == maxOf<uint32_t>()) {
+		ret.layerCount = ArrayLayers(_info.arrayLayers.get() - ret.baseArrayLayer.get());
+	}
+	return ret;
+}
+
+static std::atomic<uint64_t> s_ImagerViewCurrentIndex = 1;
+
+bool ImageView::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr) {
+	if (Object::init(dev, cb, type, ptr)) {
+		_index = s_ImagerViewCurrentIndex.fetch_add(1);
+		return true;
+	}
+	return false;
+}
+
+void TextureSet::write(const MaterialLayout &set) {
+	_layoutIndexes.clear();
+	for (uint32_t i = 0; i < set.usedSlots; ++ i) {
+		if (set.slots[i].image) {
+			_layoutIndexes.emplace_back(set.slots[i].image->getIndex());
+		} else {
+			_layoutIndexes.emplace_back(0);
+		}
+	}
+
+	_layoutIndexes.resize(_count, 0);
+}
+
 }

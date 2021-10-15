@@ -26,16 +26,17 @@
 namespace stappler::xenolith::app {
 
 bool AppSceneResource::init() {
-	gl::Resource::Builder builder("AppSceneRequisite");
-	/*builder.addProgramByRef("AppSceneRequisite_VertexListVert", gl::ProgramStage::Vertex, app::shaders::AppVert);
+	/*gl::Resource::Builder builder("AppSceneRequisite");
+	builder.addProgramByRef("AppSceneRequisite_VertexListVert", gl::ProgramStage::Vertex, app::shaders::AppVert);
 	builder.addProgramByRef("AppSceneRequisite_VertexListFrag", gl::ProgramStage::Fragment, app::shaders::AppFrag);
 
 	builder.addPipeline("AppSceneRequisite_VertexList", Vector<StringView>({
 		"AppSceneRequisite_VertexListVert",
 		"AppSceneRequisite_VertexListFrag"
-	}), LayoutFormat::Vertexes, VertexFormat::V4F_C4F_T2F);*/
+	}), LayoutFormat::Vertexes, VertexFormat::V4F_C4F_T2F);
 
-	return ResourceComponent::init(Rc<gl::Resource>::create(move(builder)));
+	return ResourceComponent::init(Rc<gl::Resource>::create(move(builder)));*/
+	return false;
 }
 
 }

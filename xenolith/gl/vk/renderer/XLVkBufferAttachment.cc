@@ -57,7 +57,16 @@ VertexBufferAttachmentHandle::~VertexBufferAttachmentHandle() {
 
 bool VertexBufferAttachmentHandle::submitInput(gl::FrameHandle &handle, Rc<gl::AttachmentInputData> &&data) {
 	if (auto d = data.cast<gl::VertexData>()) {
-		handle.performOnGlThread([this, d = move(d)] (gl::FrameHandle &handle) {
+		handle.performInQueue([this, d = move(d)] (gl::FrameHandle &handle) {
+			return loadVertexes(handle, d);
+		}, [this] (gl::FrameHandle &handle, bool success) {
+			if (success) {
+				handle.setInputSubmitted(this);
+			} else {
+				handle.invalidate();
+			}
+		}, this);
+		/*handle.performOnGlThread([this, d = move(d)] (gl::FrameHandle &handle) {
 			_device = (Device *)handle.getDevice();
 			_device->acquireQueue(QueueOperations::Graphics, handle, [this, d] (gl::FrameHandle &frame, const Rc<DeviceQueue> &queue) {
 				_transferQueue = queue;
@@ -83,7 +92,7 @@ bool VertexBufferAttachmentHandle::submitInput(gl::FrameHandle &handle, Rc<gl::A
 			}, [this] (gl::FrameHandle &frame) {
 				frame.invalidate();
 			}, this);
-		});
+		});*/
 		return true;
 	}
 	return false;
@@ -102,23 +111,49 @@ bool VertexBufferAttachmentHandle::writeDescriptor(const RenderPassHandle &, con
 	return true;
 }
 
+void VertexBufferAttachmentHandle::writeVertexes(gl::FrameHandle &fhandle) {
+	auto handle = dynamic_cast<FrameHandle *>(&fhandle);
+	if (!handle) {
+		return;
+	}
+
+	/*_vertexes = handle->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
+			gl::BufferInfo(gl::BufferUsage::StorageBuffer, _data->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
+	_vertexes->setData(BytesView((uint8_t *)_data->data.data(), _data->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
+
+
+	_indexes = handle->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
+			gl::BufferInfo(gl::ForceBufferUsage(gl::BufferUsage::IndexBuffer), _data->indexes.size() * sizeof(uint32_t)));
+	_indexes->setData(BytesView((uint8_t *)_data->indexes.data(), _data->indexes.size() * sizeof(uint32_t)));*/
+}
+
 bool VertexBufferAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, const Rc<gl::VertexData> &vertexes) {
 	auto handle = dynamic_cast<FrameHandle *>(&fhandle);
 	if (!handle) {
 		return false;
 	}
 
+	_data = vertexes;
+
+	auto &memPool = handle->getMemPool();
+
+	_vertexes = memPool->spawn(AllocationUsage::DeviceLocalHostVisible,
+			gl::BufferInfo(gl::BufferUsage::StorageBuffer, vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
+	_vertexes->setData(BytesView((uint8_t *)vertexes->data.data(), vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
+
+
+	_indexes = memPool->spawn(AllocationUsage::DeviceLocalHostVisible,
+			gl::BufferInfo(gl::BufferUsage::IndexBuffer, vertexes->indexes.size() * sizeof(uint32_t)));
+	_indexes->setData(BytesView((uint8_t *)vertexes->indexes.data(), vertexes->indexes.size() * sizeof(uint32_t)));
+
+
 	// index buffer
-	_indexesStaging = handle->getMemPool()->spawn(AllocationUsage::HostTransitionSource,
+	/*_indexesStaging = handle->getMemPool()->spawn(AllocationUsage::HostTransitionSource,
 			gl::BufferInfo(gl::BufferUsage::TransferSrc, vertexes->indexes.size() * sizeof(uint32_t)));
 	_indexesStaging->setData(BytesView((uint8_t *)vertexes->indexes.data(), vertexes->indexes.size() * sizeof(uint32_t)));
 
 	_indexes = handle->getMemPool()->spawn(AllocationUsage::DeviceLocal,
 			gl::BufferInfo(gl::BufferUsage::IndexBuffer, vertexes->indexes.size() * sizeof(uint32_t)));
-
-	_vertexes = handle->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(gl::BufferUsage::StorageBuffer, vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
-	_vertexes->setData(BytesView((uint8_t *)vertexes->data.data(), vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
 
 	auto buf = _pool->allocBuffer(*_device);
 	auto table = _device->getTable();
@@ -158,7 +193,7 @@ bool VertexBufferAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, const 
 
 	if (table->vkQueueSubmit(_transferQueue->getQueue(), 1, &submitInfo, _fence->getFence()) != VK_SUCCESS) {
 		return false;
-	}
+	}*/
 
 	return true;
 }

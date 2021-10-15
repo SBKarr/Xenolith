@@ -28,6 +28,7 @@ THE SOFTWARE.
 namespace stappler::xenolith {
 
 class Component;
+class Scene;
 
 class Node : public Ref {
 public:
@@ -120,7 +121,8 @@ public:
 	virtual ssize_t getChildrenCount() const { return _children.size(); }
 
 	virtual void setParent(Node *parent);
-	virtual Node* getParent() const { return _parent; }
+	virtual Node *getParent() const { return _parent; }
+	virtual Scene *getScene() const { return _scene; }
 
 	virtual void removeFromParent(bool cleanup = true);
 	virtual void removeChild(Node *child, bool cleanup = true);
@@ -258,7 +260,8 @@ protected:
 	Mat4 _modelViewTransform = Mat4::IDENTITY;
 
 	Vector<Rc<Node>> _children;
-	Node *_parent = nullptr; // weak
+	Node *_parent = nullptr;
+	Scene *_scene = nullptr;
 
 	Function<void()> _onEnterCallback;
 	Function<void()> _onExitCallback;

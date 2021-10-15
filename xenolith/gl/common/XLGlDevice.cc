@@ -37,88 +37,34 @@ Device::~Device() {
 	invalidateObjects();
 }
 
-bool Device::init(const Rc<Instance> &instance) {
+bool Device::init(const Instance *instance) {
 	_glInstance = instance;
+	_samplersInfo.emplace_back(SamplerInfo());
+
 	return true;
 }
 
-void Device::begin(Application *, thread::TaskQueue &) {
-
+void Device::begin(const Application *, thread::TaskQueue &) {
+	_started = true;
 }
 
 void Device::end(thread::TaskQueue &) {
-
-}
-
-void Device::reset(thread::TaskQueue &) {
-
+	_started = false;
 }
 
 void Device::waitIdle() {
 
 }
 
-Rc<gl::FrameHandle> Device::beginFrame(gl::Loop &loop, gl::RenderQueue &queue) {
-	if (!canStartFrame()) {
-		scheduleNextFrame();
-		return nullptr;
-	}
-
-	_nextFrameScheduled = false;
-	auto frame = makeFrame(loop, queue, _frames.empty());
-	if (frame && frame->isValidFlag()) {
-		_frames.push_back(frame);
-		return frame;
-	}
-	return nullptr;
-}
-
-void Device::setFrameSubmitted(Rc<gl::FrameHandle> frame) {
-	auto it = _frames.begin();
-	while (it != _frames.end()) {
-		if ((*it) == frame) {
-			it = _frames.erase(it);
-		} else {
-			++ it;
-		}
-	}
-
-	for (auto &it : _frames) {
-		if (!it->isReadyForSubmit()) {
-			it->setReadyForSubmit(true);
-			break;
-		}
-	}
-
-	if (_nextFrameScheduled) {
-		frame->getLoop()->pushEvent(Loop::Event::FrameTimeoutPassed);
+void Device::defineSamplers(Vector<SamplerInfo> &&info) {
+	if (isSamplersCompiled()) {
+		log::text("Gl-Device", "Fail to define sampler list - samplers already compiled");
+	} else {
+		_samplersInfo = move(info);
 	}
 }
 
-void Device::invalidateFrame(gl::FrameHandle &handle) {
-	auto it = std::find(_frames.begin(), _frames.end(), &handle);
-	if (it != _frames.end()) {
-		_frames.erase(it);
-	}
-}
-
-bool Device::isFrameValid(const gl::FrameHandle &handle) {
-	if (handle.getGen() == _gen && std::find(_frames.begin(), _frames.end(), &handle) != _frames.end()) {
-		return true;
-	}
-	return false;
-}
-
-void Device::incrementGeneration() {
-	++ _gen;
-	if (!_frames.empty()) {
-		auto f = move(_frames);
-		_frames.clear();
-		for (auto &it : f) {
-			it->invalidate();
-		}
-	}
-}
+void Device::invalidateFrame(FrameHandle &frame) { }
 
 Rc<Shader> Device::getProgram(StringView name) {
 	std::unique_lock<Mutex> lock(_mutex);
@@ -140,148 +86,42 @@ Rc<Shader> Device::addProgram(Rc<Shader> program) {
 	}
 }
 
-struct CompilationProcess : public Ref {
-	virtual ~CompilationProcess() { }
-	CompilationProcess(const Rc<Device> &dev, const Rc<RenderQueue> &req)
-	 : draw(dev), req(req) { }
-
-	void runShaders(thread::TaskQueue &);
-	void runPipelines(thread::TaskQueue &);
-	void complete();
-
-	std::atomic<size_t> programsInQueue = 0;
-	std::atomic<size_t> pipelinesInQueue = 0;
-
-	Rc<Device> draw;
-	Rc<RenderQueue> req;
-	Vector<Rc<RenderPassImpl>> passes;
-};
-
-void CompilationProcess::runShaders(thread::TaskQueue &queue) {
-	retain(); // release in complete;
-
-	size_t tasksCount = 0;
-	Vector<ProgramData *> programs;
-
-	programsInQueue += req->getPasses().size();
-	tasksCount += req->getPasses().size();
-	for (auto &it : req->getPrograms()) {
-		if (auto p = draw->getProgram(it->key)) {
-			it->program = p;
-		} else {
-			++ tasksCount;
-			++ programsInQueue;
-			programs.emplace_back(it);
-		}
-	}
-
-	for (auto &it : programs) {
-		queue.perform(Rc<Task>::create([this, req = it, queue = Rc<thread::TaskQueue>(&queue)] (const thread::Task &) -> bool {
-			auto ret = draw->makeShader(*req);
-			if (!ret) {
-				log::vtext("Gl-Device", "Fail to compile shader program ", req->key);
-				return false;
-			} else {
-				req->program = draw->addProgram(ret);
-				if (programsInQueue.fetch_sub(1) == 1) {
-					runPipelines(*queue);
-				}
-			}
-			return true;
-		}));
-	}
-
-	req->prepare();
-
-	for (auto &it : req->getPasses()) {
-		queue.perform(Rc<Task>::create([this, req = it, queue = Rc<thread::TaskQueue>(&queue)] (const thread::Task &) -> bool {
-			auto ret = draw->makeRenderPass(*req);
-			if (!ret) {
-				log::vtext("Gl-Device", "Fail to compile render pass ", req->key);
-				return false;
-			} else {
-				req->impl = ret;
-				if (programsInQueue.fetch_sub(1) == 1) {
-					runPipelines(*queue);
-				}
-			}
-			return true;
-		}));
-	}
-
-	if (tasksCount == 0) {
-		runPipelines(queue);
-	}
-}
-
-void CompilationProcess::runPipelines(thread::TaskQueue &queue) {
-	size_t tasksCount = 0;
-	for (auto &pit : req->getPasses()) {
-		pipelinesInQueue += pit->pipelines.size();
-		tasksCount += pit->pipelines.size();
-	}
-
-	for (auto &pit : req->getPasses()) {
-		for (auto &it : pit->pipelines) {
-			queue.perform(Rc<Task>::create([this, pass = pit, pipeline = it] (const thread::Task &) -> bool {
-				auto ret = draw->makePipeline(*req, *pass, *pipeline);
-				if (!ret) {
-					log::vtext("Gl-Device", "Fail to compile pipeline ", pipeline->key);
-					return false;
-				} else {
-					pipeline->pipeline = ret;
-					if (pipelinesInQueue.fetch_sub(1) == 1) {
-						complete();
-					}
-				}
-				return true;
-			}));
-		}
-	}
-
-	if (tasksCount == 0) {
-		complete();
-	}
-}
-
-void CompilationProcess::complete() {
-	Application::getInstance()->performOnMainThread([req = req] {
-		if (req) {
-			req->setCompiled(true);
-		}
-	});
-	release(); // release in complete;
-}
-
-
-void Device::compileResource(thread::TaskQueue &queue, const Rc<Resource> &req) {
+void Device::compileResource(thread::TaskQueue &q, const Rc<Resource> &req, Function<void(bool)> &&complete) {
 	/**/
 }
 
-void Device::compileRenderQueue(thread::TaskQueue &queue, const Rc<RenderQueue> &req) {
-	auto p = Rc<CompilationProcess>::alloc(this, req);
-
-	queue.perform(Rc<Task>::create([p, queue = Rc<thread::TaskQueue>(&queue)] (const thread::Task &) -> bool {
-		p->runShaders(*queue);
-		return true;
-	}));
-
+void Device::compileRenderQueue(gl::Loop &loop, const Rc<RenderQueue> &queue, Function<void(bool)> &&complete) {
+	if (!_started && !isSamplersCompiled() && queue->usesSamplers()) {
+		compileSamplers(*loop.getQueue());
+	}
+	/*if (queue) {
+		auto p = Rc<CompilationProcess>::alloc(this, queue, [this, queue, complete = move(complete)] (bool success) {
+			if (complete) {
+				complete(success);
+			}
+		});
+		q.perform(Rc<Task>::create([p, queue = Rc<thread::TaskQueue>(&q)] (const thread::Task &) -> bool {
+			p->runShaders(*queue);
+			return true;
+		}));
+		if (auto res = queue->getInternalResource()) {
+			compileResource(q, res, [p] (bool success) {
+				if (success) {
+					if (p->pipelinesInQueue.fetch_sub(1) == 1) {
+						p->complete();
+					}
+				} else {
+					p->fail();
+				}
+			});
+		}
+	} else if (complete) {
+		complete(false);
+	}*/
 }
 
-Rc<RenderQueue> Device::createDefaultRenderQueue(const Rc<gl::Loop> &loop, thread::TaskQueue &queue, const gl::ImageInfo &info) {
-	auto app = loop->getApplication();
+void Device::compileMaterials(gl::Loop &loop, Rc<MaterialInputData> &&) {
 
-	if (auto ret = app->onDefaultRenderQueue(info)) {
-		for (auto &it : ret->getResources()) {
-			compileResource(queue, it);
-		}
-
-		compileRenderQueue(queue, ret);
-		queue.waitForAll();
-		return ret;
-	}
-
-	return nullptr;
 }
 
 void Device::addObject(ObjectInterface *obj) {
@@ -290,30 +130,6 @@ void Device::addObject(ObjectInterface *obj) {
 
 void Device::removeObject(ObjectInterface *obj) {
 	_objects.erase(obj);
-}
-
-const Rc<gl::RenderQueue> Device::getDefaultRenderQueue() const {
-	return nullptr;
-}
-
-bool Device::canStartFrame() const {
-	if (_frames.size() >= 2) {
-		return false;
-	}
-
-	for (auto &it : _frames) {
-		if (!it->isSubmitted()) {
-			return false;
-		}
-	}
-
-	return true;
-}
-
-bool Device::scheduleNextFrame() {
-	auto prev = _nextFrameScheduled;
-	_nextFrameScheduled = true;
-	return prev;
 }
 
 void Device::clearShaders() {

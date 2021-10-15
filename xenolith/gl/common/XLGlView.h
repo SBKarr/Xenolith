@@ -25,22 +25,18 @@
 
 #include "XLGl.h"
 
+namespace stappler::xenolith {
+
+class EventLoop;
+
+}
+
 namespace stappler::xenolith::gl {
 
 class Device;
 class Loop;
 class Instance;
-
-namespace ViewEvent {
-	using Value = uint32_t;
-
-	constexpr uint32_t None = 0;
-	constexpr uint32_t Terminate = 1;
-	constexpr uint32_t SwapchainRecreation = 2;
-	constexpr uint32_t SwapchainRecreationBest = 4;
-	constexpr uint32_t Update = 8;
-	constexpr uint32_t Thread = 16;
-}
+class Swapchain;
 
 class View : public Ref {
 public:
@@ -52,13 +48,17 @@ public:
 	View();
 	virtual ~View();
 
-	virtual bool init(Instance *, Device *);
+	virtual bool init(const Rc<EventLoop> &, const Rc<gl::Loop> &);
 
-	virtual void end() = 0;
+	virtual bool begin(const Rc<Director> &, Function<void()> &&completeCallback);
+	virtual void end();
 
 	virtual void setIMEKeyboardState(bool open) = 0;
 
-	virtual bool run(Application *, Rc<Director>, const Callback<bool(uint64_t)> &) = 0;
+	virtual void reset(SwapchanCreationMode mode);
+	virtual void update();
+	virtual bool poll() = 0; // poll for input
+	virtual void close() = 0;
 
 	virtual void setCursorVisible(bool isVisible) { }
 
@@ -86,13 +86,12 @@ public:
 	virtual bool isInBackground() const;
 
 	// Push view event to process in in View's primary thread
-	virtual void pushEvent(ViewEvent::Value);
-	virtual ViewEvent::Value popEvents();
-
-	const Rc<Device> &getDevice() const;
-	const Rc<Loop> &getLoop() const;
+	virtual void pushEvent(AppEvent::Value) const;
+	virtual AppEvent::Value popEvents() const;
 
 protected:
+	virtual Rc<gl::Swapchain> makeSwapchain(const Rc<gl::RenderQueue> &) const = 0;
+
 	Size _screenSize;
 
 	int _dpi = 96;
@@ -104,10 +103,13 @@ protected:
 	bool _inBackground = false;
 	bool _hasFocus = true;
 
-	std::atomic<ViewEvent::Value> _events = ViewEvent::None;
-	Rc<Instance> _glInstance;
-	Rc<Device> _glDevice; // logical presentation device
-	Rc<Loop> _loop;
+	mutable std::atomic<AppEvent::Value> _events = AppEvent::None;
+
+	Function<void()> _onEnded;
+	Rc<Director> _director;
+	Rc<gl::Loop> _glLoop;
+	Rc<EventLoop> _eventLoop;
+	Rc<Swapchain> _swapchain;
 };
 
 }

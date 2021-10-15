@@ -33,6 +33,9 @@ static constexpr size_t NodePreallocateChilds = 4;
 /* Presentation Scheduler interval, used for non-blocking vkWaitForFence */
 static constexpr uint64_t PresentationSchedulerInterval = 500; // 500 ms or 1/32 of 60fps frame
 
+/* Max sampled image descriptors per material texture set (can be actually lower due maxPerStageDescriptorSampledImages) */
+static constexpr uint32_t MaxTextureSetImages = 1024;
+
 }
 
 #endif /* COMPONENTS_XENOLITH_CORE_XLCONFIG_H_ */

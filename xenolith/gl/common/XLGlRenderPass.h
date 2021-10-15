@@ -29,6 +29,7 @@
 namespace stappler::xenolith::gl {
 
 class RenderPassHandle;
+struct RenderPassData;
 
 /** RenderOrdering defines order of execution for render passes between interdependent passes
  * if render passes is not interdependent, RenderOrdering can be used as an advice, or not used at all
@@ -42,12 +43,13 @@ class RenderPass : public NamedRef {
 public:
 	virtual ~RenderPass();
 
-	virtual bool init(StringView, RenderOrdering, size_t subpassCount = 1);
+	virtual bool init(StringView, RenderPassType, RenderOrdering, size_t subpassCount = 1);
 	virtual void invalidate();
 
 	virtual StringView getName() const override { return _name; }
 	virtual RenderOrdering getOrdering() const { return _ordering; }
 	virtual size_t getSubpassCount() const { return _subpassCount; }
+	virtual RenderPassType getType() const { return _type; }
 
 	virtual Rc<RenderPassHandle> makeFrameHandle(RenderPassData *, const FrameHandle &);
 
@@ -55,13 +57,22 @@ public:
 	bool acquireForFrame(gl::FrameHandle &);
 	bool releaseForFrame(gl::FrameHandle &);
 
+	const RenderPassData *getData() const { return _data; }
+
 protected:
+	friend class RenderQueue;
+
+	// called before compilation
+	virtual void prepare(Device &);
+
 	size_t _subpassCount = 1;
 	String _name;
+	RenderPassType _type = RenderPassType::Graphics;
 	RenderOrdering _ordering = RenderOrderingLowest;
 
 	Rc<gl::FrameHandle> _owner;
 	Rc<gl::FrameHandle> _next;
+	const RenderPassData *_data = nullptr;
 };
 
 class RenderPassHandle : public NamedRef {

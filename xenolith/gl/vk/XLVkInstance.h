@@ -37,9 +37,13 @@ VKAPI_ATTR VkBool32 VKAPI_CALL s_debugCallback(VkDebugUtilsMessageSeverityFlagBi
 
 class Instance : public gl::Instance {
 public:
+	using PresentSupportCallback = Function<bool(const Instance *, VkPhysicalDevice device, uint32_t familyIdx)>;
+
 	Instance(VkInstance, const PFN_vkGetInstanceProcAddr getInstanceProcAddr, uint32_t targetVersion,
-			Vector<StringView> &&optionals, Function<void()> &&);
+			Vector<StringView> &&optionals, TerminateCallback &&terminate, PresentSupportCallback &&);
 	virtual ~Instance();
+
+	virtual Rc<gl::Device> makeDevice(uint32_t deviceIndex = maxOf<uint32_t>()) const override;
 
 	/* Get options for physical device list for surface
 	 *
@@ -57,13 +61,16 @@ public:
 
 	VkInstance getInstance() const;
 
-	void printDevicesInfo(VkSurfaceKHR surface = VK_NULL_HANDLE) const;
+	void printDevicesInfo(std::ostream &stream) const;
 
 	uint32_t getVersion() const { return _version; }
 
 private:
 	void getDeviceFeatures(const VkPhysicalDevice &device, DeviceInfo::Features &, ExtensionFlags, uint32_t) const;
 	void getDeviceProperties(const VkPhysicalDevice &device, DeviceInfo::Properties &, ExtensionFlags, uint32_t) const;
+
+	bool isDeviceSupportsPresent(VkPhysicalDevice device, uint32_t familyIdx) const;
+	DeviceInfo getDeviceInfo(VkPhysicalDevice device) const;
 
 	friend class VirtualDevice;
 	friend class DrawDevice;
@@ -76,9 +83,11 @@ private:
 	VkDebugUtilsMessengerEXT debugMessenger;
 #endif
 
-	VkInstance instance;
+	VkInstance _instance;
 	uint32_t _version = 0;
 	Vector<StringView> _optionals;
+	Vector<DeviceInfo> _devices;
+	PresentSupportCallback _checkPresentSupport;
 
 public:
 	const PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;

@@ -32,21 +32,21 @@ EventHandler::~EventHandler() {
 }
 
 void EventHandler::addHandlerNode(EventHandlerNode *handler) {
-	handler->retain();
+	auto linkId = handler->retain();
 	_handlers.insert(handler);
-	Application::getInstance()->performOnMainThread([handler] {
+	Application::getInstance()->performOnMainThread([handler, linkId] {
 		Application::getInstance()->addEventListener(handler);
 
-		handler->release();
+		handler->release(linkId);
 	});
 }
 void EventHandler::removeHandlerNode(EventHandlerNode *handler) {
-	handler->retain();
+	auto linkId = handler->retain();
 	_handlers.erase(handler);
 	handler->setSupport(nullptr);
-	Application::getInstance()->performOnMainThread([handler] {
+	Application::getInstance()->performOnMainThread([handler, linkId] {
 		Application::getInstance()->removeEventListner(handler);
-		handler->release();
+		handler->release(linkId);
 	});
 }
 

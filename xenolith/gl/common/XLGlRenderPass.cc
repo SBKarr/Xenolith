@@ -27,8 +27,9 @@ namespace stappler::xenolith::gl {
 
 RenderPass::~RenderPass() { }
 
-bool RenderPass::init(StringView name, RenderOrdering order, size_t subpassCount) {
+bool RenderPass::init(StringView name, RenderPassType type, RenderOrdering order, size_t subpassCount) {
 	_name = name.str();
+	_type = type;
 	_ordering = order;
 	_subpassCount = subpassCount;
 	return true;
@@ -60,7 +61,7 @@ bool RenderPass::releaseForFrame(gl::FrameHandle &frame) {
 		if (_next) {
 			_owner = move(_next);
 			_next = nullptr;
-			_owner->getLoop()->pushEvent(gl::Loop::Event::FrameUpdate, _owner);
+			_owner->getLoop()->pushEvent(Loop::EventName::FrameUpdate, _owner);
 		} else {
 			_owner = nullptr;
 		}
@@ -70,6 +71,10 @@ bool RenderPass::releaseForFrame(gl::FrameHandle &frame) {
 		return true;
 	}
 	return false;
+}
+
+void RenderPass::prepare(Device &) {
+
 }
 
 RenderPassHandle::~RenderPassHandle() { }

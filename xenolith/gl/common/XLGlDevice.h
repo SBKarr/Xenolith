@@ -24,6 +24,7 @@
 #define XENOLITH_GL_COMMON_XLGLDEVICE_H_
 
 #include "XLGlRenderQueue.h"
+#include "XLGlMaterial.h"
 #include "XLEventHeader.h"
 #include <deque>
 
@@ -42,62 +43,54 @@ public:
 	Device();
 	virtual ~Device();
 
-	virtual bool init(const Rc<Instance> &instance);
+	virtual bool init(const Instance *instance);
 
-	virtual void begin(Application *, thread::TaskQueue &);
+	virtual void begin(const Application *, thread::TaskQueue &);
 	virtual void end(thread::TaskQueue &);
-	virtual void reset(thread::TaskQueue &);
 	virtual void waitIdle();
 
-	virtual Rc<gl::FrameHandle> beginFrame(gl::Loop &, gl::RenderQueue &);
-	virtual void setFrameSubmitted(Rc<gl::FrameHandle>);
-	virtual void invalidateFrame(gl::FrameHandle &);
-	virtual bool isFrameValid(const gl::FrameHandle &handle);
+	virtual void defineSamplers(Vector<SamplerInfo> &&);
 
-	// invalidate all frames in process before that
-	virtual void incrementGeneration();
-
-	virtual Rc<Shader> makeShader(const ProgramData &) = 0;
-	virtual Rc<Pipeline> makePipeline(const gl::RenderQueue &, const RenderPassData &, const PipelineData &) = 0;
-	virtual Rc<RenderPassImpl> makeRenderPass(RenderPassData &) = 0;
+	// release any external resources
+	virtual void invalidateFrame(FrameHandle &);
 
 	Rc<Shader> getProgram(StringView);
 	Rc<Shader> addProgram(Rc<Shader>);
 
-	virtual void compileResource(thread::TaskQueue &queue, const Rc<Resource> &req);
-	virtual void compileRenderQueue(thread::TaskQueue &queue, const Rc<RenderQueue> &req);
-
-	uint64_t getOrder() const { return _order; }
-
-	virtual Rc<RenderQueue> createDefaultRenderQueue(const Rc<gl::Loop> &, thread::TaskQueue &, const gl::ImageInfo &);
-
 	void addObject(ObjectInterface *);
 	void removeObject(ObjectInterface *);
 
-	virtual const Rc<gl::RenderQueue> getDefaultRenderQueue() const;
+	uint32_t getSamplersCount() const { return _samplersCount; }
+	bool isSamplersCompiled() const { return _samplersCompiled; }
 
-	virtual bool isBestPresentMode() const { return true; }
-
-	size_t getFramesActive() const { return _frames.size(); }
+	uint32_t getTextureLayoutImagesCount() const { return _textureLayoutImagesCount; }
 
 protected:
-	virtual Rc<FrameHandle> makeFrame(gl::Loop &, gl::RenderQueue &, bool readyForSubmit) = 0;
-	virtual bool canStartFrame() const;
-	virtual bool scheduleNextFrame();
+	friend class Loop;
+
+	virtual void compileResource(thread::TaskQueue &queue, const Rc<Resource> &req, Function<void(bool)> && = nullptr);
+	virtual void compileRenderQueue(gl::Loop &loop, const Rc<RenderQueue> &req, Function<void(bool)> &&);
+
+	virtual void compileMaterials(gl::Loop &loop, Rc<MaterialInputData> &&);
+
+	virtual void compileSamplers(thread::TaskQueue &q, bool force = true) = 0;
 
 	void clearShaders();
 	void invalidateObjects();
 
-	uint64_t _order = 0;
-	uint32_t _gen = 0;
-	Rc<Instance> _glInstance;
+	bool _started = false;
+	const Instance *_glInstance = nullptr;
 	Mutex _mutex;
 
 	Map<String, Rc<Shader>> _shaders;
 
 	std::unordered_set<ObjectInterface *> _objects;
-	std::deque<Rc<FrameHandle>> _frames;
-	bool _nextFrameScheduled = false;
+
+	Vector<SamplerInfo> _samplersInfo;
+
+	uint32_t _samplersCount = 0;
+	bool _samplersCompiled = false;
+	uint32_t _textureLayoutImagesCount = 0;
 };
 
 }

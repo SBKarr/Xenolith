@@ -27,14 +27,18 @@
 
 namespace stappler::xenolith::app {
 
-class AppDelegate : private Application {
+class AppDelegate : public Application {
 public:
     AppDelegate();
     virtual ~AppDelegate();
 
     virtual bool onFinishLaunching() override;
+	virtual bool onMainLoop() override;
 
-    bool runScene();
+protected:
+	void runMainView(Rc<Scene> &&scene);
+
+	Rc<gl::Loop> _glLoop;
 };
 
 }

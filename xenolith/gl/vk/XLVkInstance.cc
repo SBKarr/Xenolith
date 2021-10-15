@@ -22,6 +22,7 @@ THE SOFTWARE.
 
 #include "XLVkInstance.h"
 #include "XLPlatform.h"
+#include "XLVkDevice.h"
 
 namespace stappler::xenolith::vk {
 
@@ -67,10 +68,11 @@ VKAPI_ATTR VkBool32 VKAPI_CALL s_debugCallback(VkDebugUtilsMessageSeverityFlagBi
 #endif
 
 Instance::Instance(VkInstance inst, const PFN_vkGetInstanceProcAddr getInstanceProcAddr, uint32_t targetVersion,
-		Vector<StringView> &&optionals, Function<void()> &&terminate)
-: gl::Instance(move(terminate)), instance(inst)
+		Vector<StringView> &&optionals, TerminateCallback &&terminate, PresentSupportCallback &&present)
+: gl::Instance(move(terminate)), _instance(inst)
 , _version(targetVersion)
 , _optionals(move(optionals))
+, _checkPresentSupport(move(present))
 , vkGetInstanceProcAddr(getInstanceProcAddr)
 #if defined(VK_VERSION_1_0)
 , vkCreateDevice((PFN_vkCreateDevice)vkGetInstanceProcAddr(inst, "vkCreateDevice"))
@@ -263,27 +265,65 @@ Instance::Instance(VkInstance inst, const PFN_vkGetInstanceProcAddr getInstanceP
 #if DEBUG
 		debugCreateInfo.pfnUserCallback = s_debugCallback;
 
-		if (s_createDebugUtilsMessengerEXT(instance, vkGetInstanceProcAddr, &debugCreateInfo, nullptr, &debugMessenger) != VK_SUCCESS) {
+		if (s_createDebugUtilsMessengerEXT(_instance, vkGetInstanceProcAddr, &debugCreateInfo, nullptr, &debugMessenger) != VK_SUCCESS) {
 			log::text("Vk", "failed to set up debug messenger!");
 		}
 #endif
 	}
 
 	uint32_t deviceCount = 0;
-	vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+	vkEnumeratePhysicalDevices(_instance, &deviceCount, nullptr);
 
 	if (deviceCount) {
-		_hasDevices = true;
+		Vector<VkPhysicalDevice> devices(deviceCount);
+		vkEnumeratePhysicalDevices(_instance, &deviceCount, devices.data());
+
+		for (auto &device : devices) {
+			auto &it = _devices.emplace_back(getDeviceInfo(device));
+			if (it.isUsable()) {
+				_hasDevices = true;
+			}
+		}
 	}
 }
 
 Instance::~Instance() {
 	if constexpr (s_enableValidationLayers) {
 #if DEBUG
-		s_destroyDebugUtilsMessengerEXT(instance, vkGetInstanceProcAddr, debugMessenger, nullptr);
+		s_destroyDebugUtilsMessengerEXT(_instance, vkGetInstanceProcAddr, debugMessenger, nullptr);
 #endif
 	}
-	vkDestroyInstance(instance, nullptr);
+	vkDestroyInstance(_instance, nullptr);
+}
+
+Rc<gl::Device> Instance::makeDevice(uint32_t deviceIndex) const {
+	if (deviceIndex == maxOf<uint32_t>()) {
+		for (auto &it : _devices) {
+			if (it.isUsable()) {
+				auto requiredFeatures = DeviceInfo::Features::getOptional();
+				requiredFeatures.enableFromFeatures(DeviceInfo::Features::getRequired());
+				requiredFeatures.disableFromFeatures(it.features);
+				requiredFeatures.flags = it.features.flags;
+
+				if (it.features.canEnable(requiredFeatures, it.properties.device10.properties.apiVersion)) {
+					return Rc<vk::Device>::create(this, DeviceInfo(it), requiredFeatures);
+				}
+			}
+		}
+	} else if (deviceIndex < _devices.size()) {
+		if (_devices[deviceIndex].isUsable()) {
+
+			auto requiredFeatures = DeviceInfo::Features::getOptional();
+			requiredFeatures.enableFromFeatures(DeviceInfo::Features::getRequired());
+			requiredFeatures.disableFromFeatures(_devices[deviceIndex].features);
+			requiredFeatures.flags = _devices[deviceIndex].features.flags;
+
+			if (_devices[deviceIndex].features.canEnable(requiredFeatures, _devices[deviceIndex].properties.device10.properties.apiVersion)) {
+				return Rc<vk::Device>::create(this, DeviceInfo(_devices[deviceIndex]), requiredFeatures);
+			}
+		}
+	}
+	return nullptr;
 }
 
 Vector<DeviceInfo> Instance::getDeviceInfo(VkSurfaceKHR surface, const Vector<Pair<VkPhysicalDevice, uint32_t>> &devs) const {
@@ -306,7 +346,9 @@ Vector<DeviceInfo> Instance::getDeviceInfo(VkSurfaceKHR surface, const Vector<Pa
 		int i = 0;
 		for (const VkQueueFamilyProperties &queueFamily : queueFamilies) {
 			VkBool32 presentSupport = false;
-			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+			if (surface) {
+				vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+			}
 
 			queueInfo[i].index = i;
 			queueInfo[i].ops = getQueueOperations(queueFamily.queueFlags, presentSupport);
@@ -429,26 +471,18 @@ Vector<DeviceInfo> Instance::getDeviceInfo(VkSurfaceKHR surface, const Vector<Pa
 					extensionName, availableExtensions, enabledOptionals, promotedOptionals, extensionFlags);
 		}
 
-		uint32_t formatCount = 0;
-		vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
+		DeviceInfo::Features features;
+		getDeviceFeatures(device, features, extensionFlags, deviceProperties.device10.properties.apiVersion);
 
-		uint32_t presentModeCount = 0;
-		vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
+		auto req = DeviceInfo::Features::getRequired();
+		if (features.canEnable(req, deviceProperties.device10.properties.apiVersion)) {
+			ret.emplace_back(device,
+					queueInfo[graphicsFamily], queueInfo[presentFamily], queueInfo[transferFamily], queueInfo[computeFamily],
+					move(enabledOptionals), move(promotedOptionals));
 
-		if (formatCount > 0 && presentModeCount > 0) {
-			DeviceInfo::Features features;
-			getDeviceFeatures(device, features, extensionFlags, deviceProperties.device10.properties.apiVersion);
-
-			auto req = DeviceInfo::Features::getRequired();
-			if (features.canEnable(req, deviceProperties.device10.properties.apiVersion)) {
-				ret.emplace_back(device,
-						queueInfo[graphicsFamily], queueInfo[presentFamily], queueInfo[transferFamily], queueInfo[computeFamily],
-						move(enabledOptionals), move(promotedOptionals));
-
-				getDeviceProperties(device, ret.back().properties, extensionFlags, deviceProperties.device10.properties.apiVersion);
-				getDeviceFeatures(device, ret.back().features, extensionFlags, deviceProperties.device10.properties.apiVersion);
-			}
-        }
+			getDeviceProperties(device, ret.back().properties, extensionFlags, deviceProperties.device10.properties.apiVersion);
+			getDeviceFeatures(device, ret.back().features, extensionFlags, deviceProperties.device10.properties.apiVersion);
+		}
 	};
 
 	for (auto &device : devs) {
@@ -473,10 +507,10 @@ SurfaceInfo Instance::getSurfaceOptions(VkSurfaceKHR surface, VkPhysicalDevice d
 
 	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &ret.capabilities);
 
-	uint32_t formatCount;
+	uint32_t formatCount = 0;
 	vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
 
-	uint32_t presentModeCount;
+	uint32_t presentModeCount = 0;
 	vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
 
 	if (formatCount != 0) {
@@ -499,305 +533,76 @@ SurfaceInfo Instance::getSurfaceOptions(VkSurfaceKHR surface, VkPhysicalDevice d
 		});
 	}
 
+	ret.surface = surface;
 	return ret;
 }
-
-/*Vector<Instance::PresentationOptions> Instance::getPresentationOptions(VkSurfaceKHR surface, const VkPhysicalDeviceProperties *ptr,
-		const Vector<Pair<VkPhysicalDevice, uint32_t>> &devs) const {
-	Vector<Instance::PresentationOptions> ret;
-
-	auto isMatch = [&] (const Properties &val, const VkPhysicalDeviceProperties *ptr) {
-		if (val.device10.properties.apiVersion == ptr->apiVersion && val.device10.properties.driverVersion == ptr->driverVersion
-				&& val.device10.properties.vendorID == ptr->vendorID && val.device10.properties.deviceType == ptr->deviceType
-				&& strcmp(val.device10.properties.deviceName, ptr->deviceName) == 0) {
-			return true;
-		}
-		return false;
-	};
-
-	uint32_t deviceCount = 0;
-	vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
-
-	if (deviceCount == 0) {
-		log::text("Vk", "failed to find GPUs with Vulkan support!");
-		return Vector<Instance::PresentationOptions>();
-	}
-
-	Vector<VkPhysicalDevice> devices(deviceCount);
-	vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
-
-	auto processDevice = [&] (const VkPhysicalDevice &device, uint32_t availableQueues) {
-		uint32_t graphicsFamily = maxOf<uint32_t>();
-		uint32_t presentFamily = maxOf<uint32_t>();
-		uint32_t transferFamily = maxOf<uint32_t>();
-		uint32_t computeFamily = maxOf<uint32_t>();
-
-		uint32_t queueFamilyCount = 0;
-		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-
-		Vector<QueueFamilyInfo> queueInfo(queueFamilyCount);
-		Vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
-
-		int i = 0;
-		for (const VkQueueFamilyProperties &queueFamily : queueFamilies) {
-			VkBool32 presentSupport = false;
-			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
-
-			queueInfo[i].index = i;
-			queueInfo[i].ops = getQueueOperations(queueFamily.queueFlags, presentSupport);
-			queueInfo[i].count = queueFamily.queueCount;
-			queueInfo[i].used = 0;
-			queueInfo[i].minImageTransferGranularity = queueFamily.minImageTransferGranularity;
-
-			if ((queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) && graphicsFamily == maxOf<uint32_t>()) {
-				graphicsFamily = i;
-			}
-
-			if ((queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT) && transferFamily == maxOf<uint32_t>()) {
-				transferFamily = i;
-			}
-
-			if ((queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT) && computeFamily == maxOf<uint32_t>()) {
-				computeFamily = i;
-			}
-
-			if (availableQueues) {
-				if (((1 << i) & availableQueues) != 0) {
-					if (presentSupport && presentFamily == maxOf<uint32_t>()) {
-						presentFamily = i;
-					}
-				}
-			} else {
-				if (presentSupport && presentFamily == maxOf<uint32_t>()) {
-					presentFamily = i;
-				}
-			}
-
-			i++;
-		}
-
-		// try to select different families for transfer and compute (for more concurrency)
-		if (computeFamily == graphicsFamily) {
-			for (auto &it : queueInfo) {
-				if (it.index != graphicsFamily && ((it.ops & QueueOperations::Compute) != QueueOperations::None)) {
-					computeFamily = it.index;
-				}
-			}
-		}
-
-		if (transferFamily == computeFamily || transferFamily == graphicsFamily) {
-			for (auto &it : queueInfo) {
-				if (it.index != graphicsFamily && it.index != computeFamily && ((it.ops & QueueOperations::Transfer) != QueueOperations::None)) {
-					transferFamily = it.index;
-				}
-			}
-		}
-
-		if (presentFamily == maxOf<uint32_t>() || graphicsFamily == maxOf<uint32_t>()) {
-			return;
-		}
-
-		// fallback
-		if (transferFamily == maxOf<uint32_t>()) {
-			transferFamily = graphicsFamily;
-		}
-
-		if (computeFamily == maxOf<uint32_t>()) {
-			computeFamily = graphicsFamily;
-		}
-
-		uint32_t extensionCount;
-		vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
-
-		Vector<VkExtensionProperties> availableExtensions(extensionCount);
-		vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
-
-		Properties deviceProperties;
-		if (vkGetPhysicalDeviceProperties2) {
-			vkGetPhysicalDeviceProperties2(device, &deviceProperties.device10);
-		} else if (vkGetPhysicalDeviceProperties2KHR) {
-			vkGetPhysicalDeviceProperties2KHR(device, &deviceProperties.device10);
-		} else {
-			vkGetPhysicalDeviceProperties(device, &deviceProperties.device10.properties);
-		}
-
-		bool notFound = false;
-		for (auto &extensionName : s_requiredDeviceExtensions) {
-			if (!extensionName) {
-				break;
-			}
-
-			if (isPromotedExtension(deviceProperties.device10.properties.apiVersion, extensionName)) {
-				continue;
-			}
-
-			bool found = false;
-			for (auto &extension : availableExtensions) {
-				if (strcmp(extensionName, extension.extensionName) == 0) {
-					found = true;
-					break;
-				}
-			}
-
-			if (!found) {
-				if constexpr (s_printVkInfo) {
-					log::format("Vk-Info", "Required device extension not found: %s", extensionName);
-				}
-				notFound = true;
-				break;
-			}
-		}
-
-		if (notFound) {
-			return;
-		}
-
-		ExtensionFlags extensionFlags = ExtensionFlags::None;
-		Vector<StringView> enabledOptionals;
-		Vector<StringView> promotedOptionals;
-		for (auto &extensionName : s_optionalDeviceExtensions) {
-			if (!extensionName) {
-				break;
-			}
-
-			checkIfExtensionAvailable(deviceProperties.device10.properties.apiVersion,
-					extensionName, availableExtensions, enabledOptionals, promotedOptionals, extensionFlags);
-		}
-
-		VkSurfaceCapabilitiesKHR capabilities;
-		Vector<VkSurfaceFormatKHR> formats;
-		Vector<VkPresentModeKHR> presentModes;
-
-		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &capabilities);
-
-		uint32_t formatCount;
-		vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
-
-		if (formatCount != 0) {
-			formats.resize(formatCount);
-			vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, formats.data());
-		}
-
-		uint32_t presentModeCount;
-		vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
-
-		if (presentModeCount != 0) {
-			presentModes.resize(presentModeCount);
-			vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, presentModes.data());
-		}
-
-		if (!formats.empty() && !presentModes.empty()) {
-			if (!ptr || isMatch(deviceProperties, ptr)) {
-				Features features;
-				getDeviceFeatures(device, features, extensionFlags, deviceProperties.device10.properties.apiVersion);
-
-				auto req = Features::getRequired();
-				if (features.canEnable(req, deviceProperties.device10.properties.apiVersion)) {
-					ret.emplace_back(Instance::PresentationOptions(device,
-							queueInfo[graphicsFamily], queueInfo[presentFamily], queueInfo[transferFamily], queueInfo[computeFamily],
-							capabilities, move(formats), move(presentModes), move(enabledOptionals), move(promotedOptionals)));
-
-					getDeviceProperties(device, ret.back().properties, extensionFlags, deviceProperties.device10.properties.apiVersion);
-					getDeviceFeatures(device, ret.back().features, extensionFlags, deviceProperties.device10.properties.apiVersion);
-				}
-			}
-        }
-	};
-
-	if (!devs.empty()) {
-		for (auto &device : devs) {
-			processDevice(device.first, device.second);
-		}
-	} else {
-		for (auto &device : devices) {
-			processDevice(device, 0);
-		}
-	}
-
-	return ret;
-}*/
 
 VkInstance Instance::getInstance() const {
-	return instance;
+	return _instance;
 }
 
-void Instance::printDevicesInfo(VkSurfaceKHR surface) const {
-	StringStream out; out << "\n";
-	uint32_t deviceCount = 0;
-	vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+void Instance::printDevicesInfo(std::ostream &out) const {
+	out << "\n";
 
-	if (deviceCount) {
-		Vector<VkPhysicalDevice> devices(deviceCount);
-		vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
-
-		VkPhysicalDeviceProperties deviceProperties;
-
-		for (const auto &device : devices) {
-			vkGetPhysicalDeviceProperties(device, &deviceProperties);
-
-			auto getDeviceTypeString = [&] (VkPhysicalDeviceType type) -> const char * {
-				switch (type) {
-				case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: return "Integrated GPU"; break;
-				case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU: return "Discrete GPU"; break;
-				case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU: return "Virtual GPU"; break;
-				case VK_PHYSICAL_DEVICE_TYPE_CPU: return "CPU"; break;
-				default: return "Other"; break;
-				}
-				return "Other";
-			};
-
-			out << "\tDevice: " << getDeviceTypeString(deviceProperties.deviceType) << ": " << deviceProperties.deviceName
-					<< " (API: " << getVersionDescription(deviceProperties.apiVersion)
-					<< ", Driver: " << getVersionDescription(deviceProperties.driverVersion) << ")\n";
-
-	        uint32_t queueFamilyCount = 0;
-	        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-
-	        Vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-	        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
-
-	        int i = 0;
-	        for (const VkQueueFamilyProperties& queueFamily : queueFamilies) {
-				bool empty = true;
-				out << "\t\t[" << i << "] Queue family; Flags: ";
-				if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-					if (!empty) { out << ", "; } else { empty = false; }
-					out << "Graphics";
-				}
-				if (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT) {
-					if (!empty) { out << ", "; } else { empty = false; }
-					out << "Compute";
-				}
-				if (queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT) {
-					if (!empty) { out << ", "; } else { empty = false; }
-					out << "Transfer";
-				}
-				if (queueFamily.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) {
-					if (!empty) { out << ", "; } else { empty = false; }
-					out << "SparseBinding";
-				}
-				if (queueFamily.queueFlags & VK_QUEUE_PROTECTED_BIT) {
-					if (!empty) { out << ", "; } else { empty = false; }
-					out << "Protected";
-				}
-
-				if (surface) {
-					VkBool32 presentSupport = false;
-					vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
-					if (presentSupport) {
-						if (!empty) { out << ", "; } else { empty = false; }
-						out << "Present";
-					}
-				}
-
-				out << "; Count: " << queueFamily.queueCount << "\n";
-
-	            i++;
-	        }
+	auto getDeviceTypeString = [&] (VkPhysicalDeviceType type) -> const char * {
+		switch (type) {
+		case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: return "Integrated GPU"; break;
+		case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU: return "Discrete GPU"; break;
+		case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU: return "Virtual GPU"; break;
+		case VK_PHYSICAL_DEVICE_TYPE_CPU: return "CPU"; break;
+		default: return "Other"; break;
 		}
+		return "Other";
+	};
+
+	for (auto &device : _devices) {
+		out << "\tDevice: " << device.device << " " << getDeviceTypeString(device.properties.device10.properties.deviceType)
+				<< ": " << device.properties.device10.properties.deviceName
+				<< " (API: " << getVersionDescription(device.properties.device10.properties.apiVersion)
+				<< ", Driver: " << getVersionDescription(device.properties.device10.properties.driverVersion) << ")\n";
+
+		uint32_t queueFamilyCount = 0;
+		vkGetPhysicalDeviceQueueFamilyProperties(device.device, &queueFamilyCount, nullptr);
+
+		Vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+		vkGetPhysicalDeviceQueueFamilyProperties(device.device, &queueFamilyCount, queueFamilies.data());
+
+		int i = 0;
+		for (const VkQueueFamilyProperties& queueFamily : queueFamilies) {
+			bool empty = true;
+			out << "\t\t[" << i << "] Queue family; Flags: ";
+			if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+				if (!empty) { out << ", "; } else { empty = false; }
+				out << "Graphics";
+			}
+			if (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT) {
+				if (!empty) { out << ", "; } else { empty = false; }
+				out << "Compute";
+			}
+			if (queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT) {
+				if (!empty) { out << ", "; } else { empty = false; }
+				out << "Transfer";
+			}
+			if (queueFamily.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) {
+				if (!empty) { out << ", "; } else { empty = false; }
+				out << "SparseBinding";
+			}
+			if (queueFamily.queueFlags & VK_QUEUE_PROTECTED_BIT) {
+				if (!empty) { out << ", "; } else { empty = false; }
+				out << "Protected";
+			}
+
+			VkBool32 presentSupport = isDeviceSupportsPresent(device.device, i);
+			if (presentSupport) {
+				if (!empty) { out << ", "; } else { empty = false; }
+				out << "Present";
+			}
+
+			out << "; Count: " << queueFamily.queueCount << "\n";
+			i++;
+		}
+		out << device.description();
 	}
-	log::text("Vk-Info", out.str());
 }
 
 void Instance::getDeviceFeatures(const VkPhysicalDevice &device, DeviceInfo::Features &features, ExtensionFlags flags, uint32_t api) const {
@@ -874,6 +679,164 @@ void Instance::getDeviceProperties(const VkPhysicalDevice &device, DeviceInfo::P
 	} else {
 		vkGetPhysicalDeviceProperties(device, &properties.device10.properties);
 	}
+}
+
+bool Instance::isDeviceSupportsPresent(VkPhysicalDevice device, uint32_t familyIdx) const {
+	if (_checkPresentSupport) {
+		return _checkPresentSupport(this, device, familyIdx);
+	}
+	return false;
+}
+
+DeviceInfo Instance::getDeviceInfo(VkPhysicalDevice device) const {
+	DeviceInfo ret;
+	uint32_t graphicsFamily = maxOf<uint32_t>();
+	uint32_t presentFamily = maxOf<uint32_t>();
+	uint32_t transferFamily = maxOf<uint32_t>();
+	uint32_t computeFamily = maxOf<uint32_t>();
+
+	uint32_t queueFamilyCount = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+
+	Vector<DeviceInfo::QueueFamilyInfo> queueInfo(queueFamilyCount);
+	Vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+	int i = 0;
+	for (const VkQueueFamilyProperties &queueFamily : queueFamilies) {
+		auto presentSupport = isDeviceSupportsPresent(device, i);
+
+		queueInfo[i].index = i;
+		queueInfo[i].ops = getQueueOperations(queueFamily.queueFlags, presentSupport);
+		queueInfo[i].count = queueFamily.queueCount;
+		queueInfo[i].used = 0;
+		queueInfo[i].minImageTransferGranularity = queueFamily.minImageTransferGranularity;
+
+		if ((queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) && graphicsFamily == maxOf<uint32_t>()) {
+			graphicsFamily = i;
+		}
+
+		if ((queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT) && transferFamily == maxOf<uint32_t>()) {
+			transferFamily = i;
+		}
+
+		if ((queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT) && computeFamily == maxOf<uint32_t>()) {
+			computeFamily = i;
+		}
+
+		if (presentSupport && presentFamily == maxOf<uint32_t>()) {
+			presentFamily = i;
+		}
+
+		i ++;
+	}
+
+	// try to select different families for transfer and compute (for more concurrency)
+	if (computeFamily == graphicsFamily) {
+		for (auto &it : queueInfo) {
+			if (it.index != graphicsFamily && ((it.ops & QueueOperations::Compute) != QueueOperations::None)) {
+				computeFamily = it.index;
+			}
+		}
+	}
+
+	if (transferFamily == computeFamily || transferFamily == graphicsFamily) {
+		for (auto &it : queueInfo) {
+			if (it.index != graphicsFamily && it.index != computeFamily && ((it.ops & QueueOperations::Transfer) != QueueOperations::None)) {
+				transferFamily = it.index;
+			}
+		}
+	}
+
+	// try to map present with graphics
+	if (presentFamily != graphicsFamily) {
+		if ((queueInfo[graphicsFamily].ops & QueueOperations::Present) != QueueOperations::None) {
+			presentFamily = graphicsFamily;
+		}
+	}
+
+	// fallback when Transfer or Compute is not defined
+	if (transferFamily == maxOf<uint32_t>()) {
+		transferFamily = graphicsFamily;
+	}
+
+	if (computeFamily == maxOf<uint32_t>()) {
+		computeFamily = graphicsFamily;
+	}
+
+	uint32_t extensionCount;
+	vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+
+	Vector<VkExtensionProperties> availableExtensions(extensionCount);
+	vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+
+	// we need only API version for now
+	VkPhysicalDeviceProperties deviceProperties;
+	vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+	// find required device extensions
+	bool notFound = false;
+	for (auto &extensionName : s_requiredDeviceExtensions) {
+		if (!extensionName) {
+			break;
+		}
+
+		if (isPromotedExtension(deviceProperties.apiVersion, extensionName)) {
+			continue;
+		}
+
+		bool found = false;
+		for (auto &extension : availableExtensions) {
+			if (strcmp(extensionName, extension.extensionName) == 0) {
+				found = true;
+				break;
+			}
+		}
+
+		if (!found) {
+			if constexpr (s_printVkInfo) {
+				log::format("Vk-Info", "Required device extension not found: %s", extensionName);
+			}
+			notFound = true;
+			break;
+		}
+	}
+
+	if (notFound) {
+		ret.requiredExtensionsExists = false;
+	}
+
+	ret.requiredExtensionsExists = true;
+
+	// check for optionals
+	ExtensionFlags extensionFlags = ExtensionFlags::None;
+	Vector<StringView> enabledOptionals;
+	Vector<StringView> promotedOptionals;
+	for (auto &extensionName : s_optionalDeviceExtensions) {
+		if (!extensionName) {
+			break;
+		}
+
+		checkIfExtensionAvailable(deviceProperties.apiVersion,
+				extensionName, availableExtensions, enabledOptionals, promotedOptionals, extensionFlags);
+	}
+
+	ret.device = device;
+	ret.graphicsFamily = queueInfo[graphicsFamily];
+	ret.presentFamily = (presentFamily == maxOf<uint32_t>()) ? DeviceInfo::QueueFamilyInfo() : queueInfo[presentFamily];
+	ret.transferFamily = queueInfo[transferFamily];
+	ret.computeFamily = queueInfo[computeFamily];
+	ret.optionalExtensions = move(enabledOptionals);
+	ret.promotedExtensions = move(promotedOptionals);
+
+	getDeviceProperties(device, ret.properties, extensionFlags, deviceProperties.apiVersion);
+	getDeviceFeatures(device, ret.features, extensionFlags, deviceProperties.apiVersion);
+
+	auto requiredFeatures = DeviceInfo::Features::getRequired();
+	ret.requiredFeaturesExists = ret.features.canEnable(requiredFeatures, deviceProperties.apiVersion);
+
+	return ret;
 }
 
 }

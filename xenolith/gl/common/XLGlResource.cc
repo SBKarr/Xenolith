@@ -21,6 +21,7 @@
  **/
 
 #include "XLGlResource.h"
+#include "SPBitmap.h"
 
 namespace stappler::xenolith::gl {
 
@@ -28,14 +29,27 @@ struct Resource::ResourceData : memory::AllocPool {
 	HashTable<BufferData *> buffers;
 	HashTable<ImageData *> images;
 
-	StringView name;
+	const RenderQueue *owner = nullptr;
+	bool compiled = false;
+	StringView key;
 	memory::pool_t *pool = nullptr;
+
+	void clear() {
+		compiled = false;
+		for (auto &it : buffers) {
+			it->buffer = nullptr;
+		}
+		for (auto &it : images) {
+			it->image = nullptr;
+		}
+	}
 };
 
 Resource::Resource() { }
 
 Resource::~Resource() {
 	if (_data) {
+		_data->clear();
 		auto p = _data->pool;
 		memory::pool::destroy(p);
 		_data = nullptr;
@@ -46,6 +60,26 @@ bool Resource::init(Builder && buf) {
 	_data = buf._data;
 	buf._data = nullptr;
 	return true;
+}
+
+void Resource::clear() {
+	_data->clear();
+}
+
+bool Resource::isCompiled() const {
+	return _data->compiled;
+}
+
+void Resource::setCompiled(bool value) {
+	_data->compiled = value;
+}
+
+const RenderQueue *Resource::getOwner() const {
+	return _data->owner;
+}
+
+void Resource::setOwner(const RenderQueue *q) {
+	_data->owner = q;
 }
 
 const HashTable<BufferData *> &Resource::getBuffers() const {
@@ -64,16 +98,8 @@ const ImageData *Resource::getImage(StringView key) const {
 	return _data->images.get(key);
 }
 
-void Resource::setInUse(bool v) {
-	_inUse = v;
-}
-
-void Resource::setActive(bool v) {
-	_active = v;
-}
-
 StringView Resource::getName() const {
-	return _data->name;
+	return _data->key;
 }
 
 memory::pool_t *Resource::getPool() const {
@@ -96,10 +122,22 @@ static T * Resource_conditionalInsert(HashTable<T *> &vec, StringView key, const
 	return nullptr;
 }
 
-static void Resource_loadFileData(FilePath path, const BufferData::DataCallback &dcb) {
+template <typename T>
+static T * Resource_conditionalInsert(memory::vector<T *> &vec, StringView key, const Callback<T *()> &cb, memory::pool_t *pool) {
+	T *obj = nullptr;
+	perform([&] {
+		obj = cb();
+	}, pool);
+	if (obj) {
+		return vec.emplace_back(obj);
+	}
+	return nullptr;
+}
+
+static void Resource_loadFileData(StringView path, const BufferData::DataCallback &dcb) {
 	auto p = memory::pool::create(memory::pool::acquire());
 	memory::pool::push(p);
-	auto f = filesystem::openForReading(path.get());
+	auto f = filesystem::openForReading(path);
 	if (f) {
 		auto fsize = f.size();
 		auto mem = (uint8_t *)memory::pool::palloc(p, fsize);
@@ -115,12 +153,65 @@ static void Resource_loadFileData(FilePath path, const BufferData::DataCallback 
 	memory::pool::destroy(p);
 };
 
+static void Resource_loadImageFileData(StringView path, ImageFormat fmt, const BufferData::DataCallback &dcb) {
+	auto p = memory::pool::create(memory::pool::acquire());
+	memory::pool::push(p);
+	auto f = filesystem::openForReading(path);
+	if (f) {
+		auto fsize = f.size();
+		auto mem = (uint8_t *)memory::pool::palloc(p, fsize);
+		f.seek(0, io::Seek::Set);
+		f.read(mem, fsize);
+		f.close();
+
+		Bitmap bmp(mem, fsize);
+
+		bool availableFormat = true;
+		switch (fmt) {
+		case ImageFormat::R8G8B8A8_SRGB:
+		case ImageFormat::R8G8B8A8_UNORM:
+		case ImageFormat::R8G8B8A8_UINT:
+			bmp.convert(Bitmap::PixelFormat::RGBA8888);
+			break;
+		case ImageFormat::R8G8B8_SRGB:
+		case ImageFormat::R8G8B8_UNORM:
+		case ImageFormat::R8G8B8_UINT:
+			bmp.convert(Bitmap::PixelFormat::RGB888);
+			break;
+		case ImageFormat::R8G8_SRGB:
+		case ImageFormat::R8G8_UNORM:
+		case ImageFormat::R8G8_UINT:
+			bmp.convert(Bitmap::PixelFormat::IA88);
+			break;
+		case ImageFormat::R8_SRGB:
+		case ImageFormat::R8_UNORM:
+		case ImageFormat::R8_UINT:
+			bmp.convert(Bitmap::PixelFormat::A8);
+			break;
+		default:
+			availableFormat = false;
+			log::vtext("Resource", "Invalid image format: ", getImageFormatName(fmt));
+			break;
+		}
+
+		if (availableFormat) {
+			dcb(BytesView(bmp.dataPtr(), bmp.data().size()));
+		} else {
+			dcb(BytesView());
+		}
+	} else {
+		dcb(BytesView());
+	}
+	memory::pool::pop();
+	memory::pool::destroy(p);
+};
+
 Resource::Builder::Builder(StringView name) {
 	auto p = memory::pool::create((memory::pool_t *)nullptr);
 	memory::pool::push(p);
 	_data = new (p) ResourceData;
 	_data->pool = p;
-	_data->name = name.pdup(p);
+	_data->key = name.pdup(p);
 	memory::pool::pop();
 }
 
@@ -132,74 +223,89 @@ Resource::Builder::~Builder() {
 	}
 }
 
-BufferData *Resource::Builder::doAddBuffer(StringView key, BytesView data) {
+const BufferData *Resource::Builder::addBufferByRef(StringView key, RenderPass *pass, BufferInfo &&info, BytesView data) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add buffer: ", key, ", not initialized");
 		return nullptr;
 	}
 
 	auto p = Resource_conditionalInsert<BufferData>(_data->buffers, key, [&] () -> BufferData * {
-		auto buf = new (_data->pool) BufferData;
+		auto buf = new (_data->pool) BufferData();
+		static_cast<BufferInfo &>(*buf) = move(info);
 		buf->key = key.pdup(_data->pool);
-		buf->data = data.pdup(_data->pool);
+		buf->data = data;
 		buf->size = data.size();
+		buf->renderPass = pass;
 		return buf;
 	}, _data->pool);
 	if (!p) {
-		log::vtext("Resource", _data->name, ": Buffer already added: ", key);
+		log::vtext("Resource", _data->key, ": Buffer already added: ", key);
 		return nullptr;
 	}
 	return p;
 }
-
-BufferData *Resource::Builder::doAddBuffer(StringView key, FilePath path) {
+const BufferData *Resource::Builder::addBuffer(StringView key, RenderPass *pass, BufferInfo &&info, FilePath path) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add buffer: ", key, ", not initialized");
 		return nullptr;
 	}
 
-	if (!filesystem::exists(path.get())) {
+	String npath;
+	if (filesystem::exists(path.get())) {
+		npath = path.get().str();
+	} else if (!filepath::isAbsolute(path.get())) {
+		npath = filesystem::currentDir(path.get());
+		if (!filesystem::exists(npath)) {
+			npath.clear();
+		}
+	}
+
+	if (npath.empty()) {
 		log::vtext("Resource", "Fail to add buffer: ", key, ", file not found: ", path.get());
 		return nullptr;
 	}
 
 	auto p = Resource_conditionalInsert<BufferData>(_data->buffers, key, [&] () -> BufferData * {
-		auto fpath = FilePath(path.get().pdup(_data->pool));
+		auto fpath = StringView(npath).pdup(_data->pool);
 		auto buf = new (_data->pool) BufferData;
-		buf->key = key.pdup(_data->pool);
-		buf->callback = [&] (const BufferData::DataCallback &dcb) {
+		static_cast<BufferInfo &>(*buf) = move(info);
+		buf->key = StringView(npath).pdup(_data->pool);
+		buf->callback = [fpath] (const BufferData::DataCallback &dcb) {
 			Resource_loadFileData(fpath, dcb);
 		};
 		buf->size = filesystem::size(path.get());
+		buf->renderPass = pass;
 		return buf;
 	}, _data->pool);
 	if (!p) {
-		log::vtext("Resource", _data->name, ": Buffer already added: ", key);
+		log::vtext("Resource", _data->key, ": Buffer already added: ", key);
 		return nullptr;
 	}
 	return p;
 }
-BufferData *Resource::Builder::doAddBufferByRef(StringView key, BytesView data) {
+const BufferData *Resource::Builder::addBuffer(StringView key, RenderPass *pass, BufferInfo &&info, BytesView data) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add buffer: ", key, ", not initialized");
 		return nullptr;
 	}
 
 	auto p = Resource_conditionalInsert<BufferData>(_data->buffers, key, [&] () -> BufferData * {
-		auto buf = new (_data->pool) BufferData;
+		auto buf = new (_data->pool) BufferData();
+		static_cast<BufferInfo &>(*buf) = move(info);
 		buf->key = key.pdup(_data->pool);
-		buf->data = data;
+		buf->data = data.pdup(_data->pool);
 		buf->size = data.size();
+		buf->renderPass = pass;
 		return buf;
 	}, _data->pool);
 	if (!p) {
-		log::vtext("Resource", _data->name, ": Buffer already added: ", key);
+		log::vtext("Resource", _data->key, ": Buffer already added: ", key);
 		return nullptr;
 	}
 	return p;
 }
-
-BufferData *Resource::Builder::doAddBuffer(StringView key, size_t size, const memory::function<void(const BufferData::DataCallback &)> &cb) {
+const BufferData *Resource::Builder::addBuffer(StringView key, RenderPass *pass, BufferInfo &&info, size_t size,
+		const memory::function<void(const BufferData::DataCallback &)> &cb) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add buffer: ", key, ", not initialized");
 		return nullptr;
@@ -207,19 +313,21 @@ BufferData *Resource::Builder::doAddBuffer(StringView key, size_t size, const me
 
 	auto p = Resource_conditionalInsert<BufferData>(_data->buffers, key, [&] () -> BufferData * {
 		auto buf = new (_data->pool) BufferData;
+		static_cast<BufferInfo &>(*buf) = move(info);
+		buf->size = size;
 		buf->key = key.pdup(_data->pool);
 		buf->callback = cb;
-		buf->size = size;
+		buf->renderPass = pass;
 		return buf;
 	}, _data->pool);
 	if (!p) {
-		log::vtext("Resource", _data->name, ": Buffer already added: ", key);
+		log::vtext("Resource", _data->key, ": Buffer already added: ", key);
 		return nullptr;
 	}
 	return p;
 }
 
-ImageData *Resource::Builder::doAddImage(StringView key, BytesView data, ImageInfo &&img) {
+const ImageData *Resource::Builder::addImage(StringView key, RenderPass *pass, ImageInfo &&img, BytesView data) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add image: ", key, ", not initialized");
 		return nullptr;
@@ -227,47 +335,63 @@ ImageData *Resource::Builder::doAddImage(StringView key, BytesView data, ImageIn
 
 	auto p = Resource_conditionalInsert<ImageData>(_data->images, key, [&] () -> ImageData * {
 		auto buf = new (_data->pool) ImageData;
+		static_cast<ImageInfo &>(*buf) = move(img);
 		buf->key = key.pdup(_data->pool);
 		buf->data = data.pdup(_data->pool);
-		static_cast<ImageInfo &>(*buf) = move(img);
+		buf->renderPass = pass;
 		return buf;
 	}, _data->pool);
 	if (!p) {
-		log::vtext("Resource", _data->name, ": Image already added: ", key);
+		log::vtext("Resource", _data->key, ": Image already added: ", key);
 		return nullptr;
 	}
 	return p;
 }
-
-ImageData *Resource::Builder::doAddImage(StringView key, FilePath path, ImageInfo &&img) {
+const ImageData *Resource::Builder::addImage(StringView key, RenderPass *pass, ImageInfo &&img, FilePath path) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add image: ", key, ", not initialized");
 		return nullptr;
 	}
 
-	if (!filesystem::exists(path.get())) {
+	String npath;
+	if (filesystem::exists(path.get())) {
+		npath = path.get().str();
+	} else if (!filepath::isAbsolute(path.get())) {
+		npath = filesystem::currentDir(path.get());
+		if (!filesystem::exists(npath)) {
+			npath.clear();
+		}
+	}
+
+	if (npath.empty()) {
 		log::vtext("Resource", "Fail to add image: ", key, ", file not found: ", path.get());
 		return nullptr;
 	}
 
+	size_t width, height, depth = 1;
+	if (!Bitmap::getImageSize(StringView(npath), width, height)) {
+		return nullptr;
+	}
+
 	auto p = Resource_conditionalInsert<ImageData>(_data->images, key, [&] () -> ImageData * {
-		auto fpath = FilePath(path.get().pdup(_data->pool));
+		auto fpath = StringView(npath).pdup(_data->pool);
 		auto buf = new (_data->pool) ImageData;
-		buf->key = key.pdup(_data->pool);
-		buf->callback = [&] (const ImageData::DataCallback &dcb) {
-			Resource_loadFileData(fpath, dcb);
+		buf->key = StringView(npath).pdup(_data->pool);
+		buf->callback = [fpath, format = img.format] (const ImageData::DataCallback &dcb) {
+			Resource_loadImageFileData(fpath, format, dcb);
 		};
+		buf->renderPass = pass;
 		static_cast<ImageInfo &>(*buf) = move(img);
+		buf->extent = Extent3(width, height, depth);
 		return buf;
 	}, _data->pool);
 	if (!p) {
-		log::vtext("Resource", _data->name, ": Image already added: ", key);
+		log::vtext("Resource", _data->key, ": Image already added: ", key);
 		return nullptr;
 	}
 	return p;
 }
-
-ImageData *Resource::Builder::doAddImageByRef(StringView key, BytesView data, ImageInfo &&img) {
+const ImageData *Resource::Builder::addImageByRef(StringView key, RenderPass *pass, ImageInfo &&img, BytesView data) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add image: ", key, ", not initialized");
 		return nullptr;
@@ -277,17 +401,18 @@ ImageData *Resource::Builder::doAddImageByRef(StringView key, BytesView data, Im
 		auto buf = new (_data->pool) ImageData;
 		buf->key = key.pdup(_data->pool);
 		buf->data = data;
+		buf->renderPass = pass;
 		static_cast<ImageInfo &>(*buf) = move(img);
 		return buf;
 	}, _data->pool);
 	if (!p) {
-		log::vtext("Resource", _data->name, ": Image already added: ", key);
+		log::vtext("Resource", _data->key, ": Image already added: ", key);
 		return nullptr;
 	}
 	return p;
 }
-
-ImageData *Resource::Builder::doAddImage(StringView key, const memory::function<void(const BufferData::DataCallback &)> &cb, ImageInfo &&img) {
+const ImageData *Resource::Builder::addImage(StringView key, RenderPass *pass, ImageInfo &&img,
+		const memory::function<void(const ImageData::DataCallback &)> &cb) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add image: ", key, ", not initialized");
 		return nullptr;
@@ -297,24 +422,15 @@ ImageData *Resource::Builder::doAddImage(StringView key, const memory::function<
 		auto buf = new (_data->pool) ImageData;
 		buf->key = key.pdup(_data->pool);
 		buf->callback = cb;
+		buf->renderPass = pass;
 		static_cast<ImageInfo &>(*buf) = move(img);
 		return buf;
 	}, _data->pool);
 	if (!p) {
-		log::vtext("Resource", _data->name, ": Image already added: ", key);
+		log::vtext("Resource", _data->key, ": Image already added: ", key);
 		return nullptr;
 	}
 	return p;
-}
-
-void Resource::Builder::setBufferOption(BufferData &b, BufferFlags flags) {
-	b.flags |= flags;
-}
-void Resource::Builder::setBufferOption(BufferData &b, BufferUsage usage) {
-	b.usage |= usage;
-}
-void Resource::Builder::setBufferOption(BufferData &b, uint64_t size) {
-	b.size = std::max(size, b.size);
 }
 
 }

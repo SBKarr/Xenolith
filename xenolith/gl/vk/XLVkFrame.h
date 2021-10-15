@@ -32,11 +32,16 @@ class FrameHandle : public gl::FrameHandle {
 public:
 	virtual ~FrameHandle() { }
 
-	bool init(gl::Loop &, gl::RenderQueue &, uint64_t order, uint32_t gen, bool readyForSubmit = false);
+	bool init(gl::Loop &, gl::Swapchain &swapchain, gl::RenderQueue &, uint64_t order, uint32_t gen, bool readyForSubmit = false);
+	bool init(gl::Loop &, gl::RenderQueue &, uint64_t order, uint32_t gen);
 
 	const Rc<DeviceMemoryPool> &getMemPool() const { return _memPool; }
 
+	Rc<SwapchainSync> acquireSwapchainSync();
+	void invalidateSwapchain();
+
 protected:
+	Rc<SwapchainSync> _swapchainSync;
 	Rc<DeviceMemoryPool> _memPool;
 };
 

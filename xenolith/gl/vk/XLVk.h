@@ -25,6 +25,12 @@ THE SOFTWARE.
 
 #include "XLDefine.h"
 #include "XLGl.h"
+
+#if LINUX
+#define VK_USE_PLATFORM_XCB_KHR 1
+#define VK_USE_PLATFORM_WAYLAND_KHR 1
+#endif
+
 #include <vulkan/vulkan.h>
 
 #if LINUX
@@ -58,22 +64,6 @@ enum class PresentationEvent {
 	UpdateFrameInterval, // view wants us to update frame interval
 	CompileResource, // new GL resource requested
 	Exit,
-};
-
-struct DescriptorCount {
-	static DescriptorCount Common;
-
-	uint32_t samplers;
-	uint32_t sampledImages;
-	uint32_t storageBuffers;
-	uint32_t uniformBuffers;
-	uint32_t vertexBuffers;
-
-	// default initializers not available: clang/gcc bug
-	// (clang: https://bugs.llvm.org/show_bug.cgi?id=36684)
-	DescriptorCount() : samplers(0), sampledImages(0), storageBuffers(0), uniformBuffers(0), vertexBuffers(0) { }
-	DescriptorCount(uint32_t Sm, uint32_t I, uint32_t St, uint32_t U)
-	: samplers(Sm), sampledImages(I), storageBuffers(St), uniformBuffers(U), vertexBuffers(0) { }
 };
 
 #if DEBUG
@@ -194,8 +184,6 @@ static const char * const s_promotedVk12Extensions[] = {
 	VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME,
 	nullptr
 };
-
-static constexpr VkDeviceSize ALIGN_SIZE(VkDeviceSize size, VkDeviceSize boundary) { return (((size) + ((boundary) - 1)) & ~((boundary) - 1)); }
 
 static constexpr bool s_printVkInfo = true;
 
@@ -694,7 +682,7 @@ bool isPromotedExtension(uint32_t apiVersion, StringView name);
 
 size_t getFormatBlockSize(VkFormat);
 
-void loadDeviceTable(Instance *_instance, VkDevice device, DeviceCallTable *);
+void loadDeviceTable(const Instance *_instance, VkDevice device, DeviceCallTable *);
 
 }
 

@@ -29,17 +29,23 @@ namespace stappler::xenolith::vk {
 
 class DeviceBuffer : public Ref {
 public:
+	struct MappedRegion {
+		uint8_t *ptr;
+		VkDeviceSize offset = 0;
+		VkDeviceSize size = maxOf<VkDeviceSize>();
+	};
+
 	virtual ~DeviceBuffer();
 
 	bool init(DeviceMemoryPool *, VkBuffer, Allocator::MemBlock &&, AllocationUsage usage, const gl::BufferInfo &);
 
 	void invalidate(Device &dev);
 
-	void setPersistentMapping(bool);
-	bool isPersistentMapping() const;
-
 	bool setData(BytesView, VkDeviceSize offset = 0);
 	Bytes getData(VkDeviceSize size = maxOf<VkDeviceSize>(), VkDeviceSize offset = 0);
+
+	MappedRegion map(VkDeviceSize offset = 0, VkDeviceSize size = maxOf<VkDeviceSize>(), bool invalidate = true);
+	void unmap(const MappedRegion &, bool flush = true);
 
 	VkBuffer getBuffer() const { return _buffer; }
 	VkDeviceSize getSize() const { return _info.size; }
@@ -51,9 +57,6 @@ protected:
 	Allocator::MemBlock _memory;
 	DeviceMemoryPool *_pool = nullptr;
 	VkBuffer _buffer;
-
-	void *_mapped = nullptr;
-	bool _persistentMapping = false;
 	bool _needInvalidate = false;
 };
 

@@ -436,31 +436,53 @@ DeviceInfo::DeviceInfo(VkPhysicalDevice dev, QueueFamilyInfo gr, QueueFamilyInfo
 : device(dev), graphicsFamily(gr), presentFamily(pres), transferFamily(tr), computeFamily(comp)
 , optionalExtensions(move(optionals)), promotedExtensions(move(promoted)) { }
 
+bool DeviceInfo::isUsable() const {
+	if ((graphicsFamily.ops & QueueOperations::Graphics) != QueueOperations::None
+			&& (presentFamily.ops & QueueOperations::Present) != QueueOperations::None
+			&& (transferFamily.ops & QueueOperations::Transfer) != QueueOperations::None
+			&& (computeFamily.ops & QueueOperations::Compute) != QueueOperations::None
+			&& requiredFeaturesExists && requiredExtensionsExists) {
+		return true;
+	}
+	return false;
+}
+
 String DeviceInfo::description() const {
 	StringStream stream;
-	stream << "\nDeviceInfo for device: (";
+	stream << "\t\t[Queue] ";
 
-	switch (properties.device10.properties.deviceType) {
-	case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: stream << "Integrated GPU"; break;
-	case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU: stream << "Discrete GPU"; break;
-	case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU: stream << "Virtual GPU"; break;
-	case VK_PHYSICAL_DEVICE_TYPE_CPU: stream << "CPU"; break;
-	default: stream << "Other"; break;
+	if ((graphicsFamily.ops & QueueOperations::Graphics) != QueueOperations::None) {
+		stream << "Graphics: [" << graphicsFamily.index << "]; ";
+	} else {
+		stream << "Graphics: [Not available]; ";
 	}
-	stream << ") " << properties.device10.properties.deviceName
-			<< " (API: " << Instance::getVersionDescription(properties.device10.properties.apiVersion)
-			<< ", Driver: " << Instance::getVersionDescription(properties.device10.properties.driverVersion) << ")\n";
-	stream << "\t[Queue] Graphics: [" << graphicsFamily.index << "]; Presentation: [" << presentFamily.index
-			<< "]; Transfer: [" << transferFamily.index << "]; Compute: [" << computeFamily.index << "];\n";
 
-	stream << "\t[Limits: Samplers]"
+	if ((presentFamily.ops & QueueOperations::Present) != QueueOperations::None) {
+		stream << "Presentation: [" << presentFamily.index << "]; ";
+	} else {
+		stream << "Presentation: [Not available]; ";
+	}
+
+	if ((transferFamily.ops & QueueOperations::Transfer) != QueueOperations::None) {
+		stream << "Transfer: [" << transferFamily.index << "]; ";
+	} else {
+		stream << "Transfer: [Not available]; ";
+	}
+
+	if ((computeFamily.ops & QueueOperations::Compute) != QueueOperations::None) {
+		stream << "Compute: [" << computeFamily.index << "];\n";
+	} else {
+		stream << "Compute: [Not available];\n";
+	}
+
+	stream << "\t\t[Limits: Samplers]"
 			" PerSet: " << properties.device10.properties.limits.maxDescriptorSetSamplers
 			<< " (updatable: " << properties.deviceDescriptorIndexing.maxDescriptorSetUpdateAfterBindSamplers << ");"
 			" PerStage: " << properties.device10.properties.limits.maxPerStageDescriptorSamplers
 			<< " (updatable: " << properties.deviceDescriptorIndexing.maxPerStageDescriptorUpdateAfterBindSamplers << ");"
 			"\n";
 
-	stream << "\t[Limits: UniformBuffers]"
+	stream << "\t\t[Limits: UniformBuffers]"
 			" PerSet: " << properties.device10.properties.limits.maxDescriptorSetUniformBuffers
 			<< " dyn: " << properties.device10.properties.limits.maxDescriptorSetUniformBuffersDynamic
 			<< " (updatable: " << properties.deviceDescriptorIndexing.maxDescriptorSetUpdateAfterBindUniformBuffers
@@ -470,7 +492,7 @@ String DeviceInfo::description() const {
 			<< (properties.deviceDescriptorIndexing.shaderUniformBufferArrayNonUniformIndexingNative ? StringView(" NonUniformIndexingNative;") : StringView())
 			<< "\n";
 
-	stream << "\t[Limits: StorageBuffers]"
+	stream << "\t\t[Limits: StorageBuffers]"
 			" PerSet: " << properties.device10.properties.limits.maxDescriptorSetStorageBuffers
 			<< " dyn: " << properties.device10.properties.limits.maxDescriptorSetStorageBuffersDynamic
 			<< " (updatable: " << properties.deviceDescriptorIndexing.maxDescriptorSetUpdateAfterBindStorageBuffers
@@ -480,7 +502,7 @@ String DeviceInfo::description() const {
 			<< (properties.deviceDescriptorIndexing.shaderStorageBufferArrayNonUniformIndexingNative ? StringView(" NonUniformIndexingNative;") : StringView())
 			<< "\n";
 
-	stream << "\t[Limits: SampledImages]"
+	stream << "\t\t[Limits: SampledImages]"
 			" PerSet: " << properties.device10.properties.limits.maxDescriptorSetSampledImages
 			<< " (updatable: " << properties.deviceDescriptorIndexing.maxDescriptorSetUpdateAfterBindSampledImages << ");"
 			" PerStage: " << properties.device10.properties.limits.maxPerStageDescriptorSampledImages
@@ -488,7 +510,7 @@ String DeviceInfo::description() const {
 			<< (properties.deviceDescriptorIndexing.shaderSampledImageArrayNonUniformIndexingNative ? StringView(" NonUniformIndexingNative;") : StringView())
 			<< "\n";
 
-	stream << "\t[Limits: StorageImages]"
+	stream << "\t\t[Limits: StorageImages]"
 			" PerSet: " << properties.device10.properties.limits.maxDescriptorSetStorageImages
 			<< " (updatable: " << properties.deviceDescriptorIndexing.maxDescriptorSetUpdateAfterBindStorageImages << ");"
 			" PerStage: " << properties.device10.properties.limits.maxPerStageDescriptorStorageImages
@@ -496,7 +518,7 @@ String DeviceInfo::description() const {
 			<< (properties.deviceDescriptorIndexing.shaderStorageImageArrayNonUniformIndexingNative ? StringView(" NonUniformIndexingNative;") : StringView())
 			<< "\n";
 
-	stream << "\t[Limits: InputAttachments]"
+	stream << "\t\t[Limits: InputAttachments]"
 			" PerSet: " << properties.device10.properties.limits.maxDescriptorSetInputAttachments
 			<< " (updatable: " << properties.deviceDescriptorIndexing.maxDescriptorSetUpdateAfterBindInputAttachments << ");"
 			" PerStage: " << properties.device10.properties.limits.maxPerStageDescriptorInputAttachments
@@ -504,15 +526,15 @@ String DeviceInfo::description() const {
 			<< (properties.deviceDescriptorIndexing.shaderInputAttachmentArrayNonUniformIndexingNative ? StringView(" NonUniformIndexingNative;") : StringView())
 			<< "\n";
 
-	stream << "\t[Limits: Resources]"
+	stream << "\t\t[Limits: Resources]"
 			" PerStage: " << properties.device10.properties.limits.maxPerStageDescriptorInputAttachments
 			<< " (updatable: " << properties.deviceDescriptorIndexing.maxPerStageUpdateAfterBindResources << ");"
 			"\n";
-	stream << "\t[Limits: Allocations] " << properties.device10.properties.limits.maxMemoryAllocationCount << " blocks, "
+	stream << "\t\t[Limits: Allocations] " << properties.device10.properties.limits.maxMemoryAllocationCount << " blocks, "
 			<< properties.device10.properties.limits.maxSamplerAllocationCount << " samplers;\n";
-	stream << "\t[Limits: Ranges] Uniform: " << properties.device10.properties.limits.maxUniformBufferRange << ", Storage: "
+	stream << "\t\t[Limits: Ranges] Uniform: " << properties.device10.properties.limits.maxUniformBufferRange << ", Storage: "
 			<< properties.device10.properties.limits.maxStorageBufferRange << ";\n";
-	stream << "\t[Limits: DrawIndirectCount] " << properties.device10.properties.limits.maxDrawIndirectCount << ";\n";
+	stream << "\t\t[Limits: DrawIndirectCount] " << properties.device10.properties.limits.maxDrawIndirectCount << ";\n";
 
 	/*uint32_t extensionCount;
 	instance->vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);

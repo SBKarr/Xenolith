@@ -26,10 +26,19 @@ THE SOFTWARE.
 #include "XLDefine.h"
 #include "SPCommonPlatform.h"
 
+
+namespace stappler::xenolith {
+
+class EventLoop;
+class Application;
+
+}
+
 namespace stappler::xenolith::gl {
 
 class Instance;
 class View;
+class Loop;
 
 }
 
@@ -47,24 +56,12 @@ namespace network {
 }
 
 namespace device {
-	bool _isTablet();
-
 	String _userAgent();
 	String _deviceIdentifier();
-	String _bundleName();
 
-	String _userLanguage();
-	String _applicationName();
-	String _applicationVersion();
+	uint64_t _clock();
 
-	Pair<uint64_t, uint64_t> _diskSpace(); // <total, free>
-
-	void _onDirectorStarted();
-
-	uint64_t _minFrameTime(); // microseconds;
-	uint64_t _clock(); // microseconds;
-
-	void _sleep(uint64_t microseconds);
+	Rc<EventLoop> createEventLoop(Application *);
 }
 
 namespace interaction {
@@ -91,26 +88,14 @@ namespace statusbar {
 namespace graphic {
 	Rc<gl::Instance> createInstance(Application *);
 
-	Rc<gl::View> createView(const Rc<gl::Instance> &instance, StringView viewName, URect rect);
-	Rc<gl::View> createView(const Rc<gl::Instance> &instance, StringView viewName);
+	Rc<gl::View> createView(const Rc<EventLoop> &event, const Rc<gl::Loop> &, StringView viewName, URect rect);
+	Rc<gl::View> createView(const Rc<EventLoop> &event, const Rc<gl::Loop> &, StringView viewName);
+
+	// should be commonly supported format,
+	// R8G8B8A8_UNORM on Android, B8G8R8A8_UNORM on others
+	gl::ImageFormat getCommonFormat();
 }
 
 }
-
-#if (MSYS || CYGWIN || LINUX || MACOS)
-
-namespace stappler::xenolith::platform::desktop {
-	void setScreenSize(const Size &size);
-	Size getScreenSize();
-	bool isTablet();
-	bool isFixed();
-	String getPackageName();
-	float getDensity();
-	String getUserLanguage();
-	String getAppVersion();
-}
-
-#endif
-
 
 #endif

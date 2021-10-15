@@ -283,6 +283,11 @@ void Node::setParent(Node *parent) {
 		return;
 	}
 	_parent = parent;
+	if (parent) {
+		_scene = parent->getScene();
+	} else {
+		_scene = nullptr;
+	}
 	_transformInverseDirty = _transformCacheDirty = _transformDirty = true;
 }
 

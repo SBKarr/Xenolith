@@ -64,7 +64,7 @@ bool Shader::init(Device &dev, const gl::ProgramData &data) {
 	return false;
 }
 
-bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::RenderPassData &pass, const gl::RenderQueue &queue) {
+bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::RenderSubpassData &pass, const gl::RenderQueue &queue) {
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	vertexInputInfo.pNext = nullptr;
@@ -77,7 +77,6 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
 	inputAssembly.pNext = nullptr;
 	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-	//inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
 	inputAssembly.primitiveRestartEnable = VK_FALSE;
 
 	VkViewport viewport{};
@@ -192,11 +191,11 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 	pipelineInfo.pDepthStencilState = nullptr; // Optional
 	pipelineInfo.pColorBlendState = &colorBlending;
 	pipelineInfo.pDynamicState = (dynamicStates.size() > 0) ? &dynamicState : nullptr; // Optional
-	pipelineInfo.layout = pass.impl.cast<RenderPassImpl>()->getPipelineLayout();
-	pipelineInfo.renderPass = pass.impl.cast<RenderPassImpl>()->getRenderPass();
-	pipelineInfo.subpass = 0;
-	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
-	pipelineInfo.basePipelineIndex = -1; // Optional
+	pipelineInfo.layout = pass.renderPass->impl.cast<RenderPassImpl>()->getPipelineLayout();
+	pipelineInfo.renderPass = pass.renderPass->impl.cast<RenderPassImpl>()->getRenderPass();
+	pipelineInfo.subpass = pass.index; // FIXME: bind pipelines to subpass instead of pass
+	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+	pipelineInfo.basePipelineIndex = -1;
 
 	if (dev.getTable()->vkCreateGraphicsPipelines(dev.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_pipeline) == VK_SUCCESS) {
 		_name = params.key.str();

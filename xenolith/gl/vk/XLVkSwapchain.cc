@@ -28,25 +28,118 @@
 
 namespace stappler::xenolith::vk {
 
-Swapchain::~Swapchain() {
-	_defaultRenderQueue = nullptr;
+SwapchainSync::~SwapchainSync() { }
+
+bool SwapchainSync::init(Device &dev, uint32_t idx) {
+	_index = idx;
+	_imageReady = Rc<Semaphore>::create(dev);
+	_renderFinished = Rc<Semaphore>::create(dev);
+	return true;
 }
 
-bool Swapchain::init(Device &device) {
-	_info = device.getInstance()->getSurfaceOptions(device.getSurface(), device.getPhysicalDevice());
+void SwapchainSync::reset() {
+	_swapchainValid = true;
+	_imageReady->reset();
+	_renderFinished->reset();
+}
+
+void SwapchainSync::invalidate() {
+	_imageReady->invalidate();
+	_imageReady = nullptr;
+	_renderFinished->invalidate();
+	_renderFinished = nullptr;
+}
+
+void SwapchainSync::lock() {
+	_mutex.lock();
+}
+
+void SwapchainSync::unlock() {
+	_mutex.unlock();
+}
+
+VkResult SwapchainSync::acquireImage(Device &dev, Swapchain &swapchain, uint32_t *pImageIndex) {
+	VkResult result = VK_ERROR_UNKNOWN;
+	_mutex.lock();
+	if (_swapchainValid) {
+		result = dev.getTable()->vkAcquireNextImageKHR(dev.getDevice(), swapchain.getSwapchain(),
+				0, _imageReady->getUnsignalled(), VK_NULL_HANDLE, pImageIndex);
+	}
+	_mutex.unlock();
+	switch (result) {
+	case VK_SUCCESS:
+	case VK_SUBOPTIMAL_KHR:
+		_imageReady->setSignaled(true);
+		break;
+	default:
+		break;
+	}
+	return result;
+}
+
+Swapchain::~Swapchain() {
+	for (auto &it : _sems) {
+		for (auto &iit : it) {
+			iit->invalidate();
+		}
+	}
+	_sems.clear();
+
+	_renderQueue = nullptr;
+	_nextRenderQueue = nullptr;
+}
+
+bool Swapchain::init(const gl::View *view, Device &device, VkSurfaceKHR surface, const Rc<gl::RenderQueue> &queue) {
+	if (!queue->isPresentable()) {
+		return false;
+	}
+
+	_surface = surface;
+	_info = device.getInstance()->getSurfaceOptions(surface, device.getPhysicalDevice());
+	_sems.resize(2);
 
 	if (_info.presentModes.empty() || _info.formats.empty()) {
 		log::vtext("Vk-Error", "Presentation is not supported for :", _info.description());
 		return false;
 	}
 
+	auto swapchainImageInfo = queue->getSwapchainImageInfo();
+
 	_format = _info.formats.front();
 
+	bool formatFound = false;
 	for (const auto& availableFormat : _info.formats) {
-		if (availableFormat.format == VK_FORMAT_B8G8R8A8_UNORM && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+		/*std::cout << gl::getImageFormatName(gl::ImageFormat(availableFormat.format)) << " - ";
+		switch (availableFormat.colorSpace) {
+		case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR: std::cout << "VK_COLOR_SPACE_SRGB_NONLINEAR_KHR"; break;
+		case VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT: std::cout << "VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT"; break;
+		case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT: std::cout << "VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT"; break;
+		case VK_COLOR_SPACE_DISPLAY_P3_LINEAR_EXT: std::cout << "VK_COLOR_SPACE_DISPLAY_P3_LINEAR_EXT"; break;
+		case VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT: std::cout << "VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT"; break;
+		case VK_COLOR_SPACE_BT709_LINEAR_EXT: std::cout << "VK_COLOR_SPACE_BT709_LINEAR_EXT"; break;
+		case VK_COLOR_SPACE_BT709_NONLINEAR_EXT: std::cout << "VK_COLOR_SPACE_BT709_NONLINEAR_EXT"; break;
+		case VK_COLOR_SPACE_BT2020_LINEAR_EXT: std::cout << "VK_COLOR_SPACE_BT2020_LINEAR_EXT"; break;
+		case VK_COLOR_SPACE_HDR10_ST2084_EXT: std::cout << "VK_COLOR_SPACE_HDR10_ST2084_EXT"; break;
+		case VK_COLOR_SPACE_DOLBYVISION_EXT: std::cout << "VK_COLOR_SPACE_DOLBYVISION_EXT"; break;
+		case VK_COLOR_SPACE_HDR10_HLG_EXT: std::cout << "VK_COLOR_SPACE_HDR10_HLG_EXT"; break;
+		case VK_COLOR_SPACE_ADOBERGB_LINEAR_EXT: std::cout << "VK_COLOR_SPACE_ADOBERGB_LINEAR_EXT"; break;
+		case VK_COLOR_SPACE_ADOBERGB_NONLINEAR_EXT: std::cout << "VK_COLOR_SPACE_ADOBERGB_NONLINEAR_EXT"; break;
+		case VK_COLOR_SPACE_PASS_THROUGH_EXT: std::cout << "VK_COLOR_SPACE_PASS_THROUGH_EXT"; break;
+		case VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT: std::cout << "VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT"; break;
+		case VK_COLOR_SPACE_DISPLAY_NATIVE_AMD: std::cout << "VK_COLOR_SPACE_DISPLAY_NATIVE_AMD"; break;
+		default: break;
+		}
+		std::cout << "\n";*/
+		if (availableFormat.format == VkFormat(swapchainImageInfo->format) &&
+				availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
 			_format = availableFormat;
+			formatFound = true;
 			break;
 		}
+	}
+
+	if (!formatFound) {
+		return false;
 	}
 
 	auto modes = getPresentModes(_info);
@@ -61,13 +154,24 @@ bool Swapchain::init(Device &device) {
 		}, nullptr, this);
 	}
 
-	return true;
+	if (gl::Swapchain::init(view, queue)) {
+		return createSwapchain(device, _bestPresentMode);
+	}
+	return false;
 }
 
-bool Swapchain::recreateSwapChain(Device &device, const Rc<gl::Loop> &loop, thread::TaskQueue &queue, bool resize) {
-	XL_VK_LOG("RecreateSwapChain: ", resize ? "Fast": "Best");
+void Swapchain::invalidateFrame(gl::FrameHandle &handle) {
+	auto &h = static_cast<FrameHandle &>(handle);
+	h.invalidateSwapchain();
+	gl::Swapchain::invalidateFrame(handle);
+}
 
-	auto info = device.getInstance()->getSurfaceOptions(device.getSurface(), device.getPhysicalDevice());
+bool Swapchain::recreateSwapchain(gl::Device &idevice, gl::SwapchanCreationMode mode) {
+	auto &device = dynamic_cast<Device &>(idevice);
+
+	XL_VK_LOG("RecreateSwapChain: ", (mode == gl::SwapchanCreationMode::Best) ? "Best" : "Fast");
+
+	auto info = device.getInstance()->getSurfaceOptions(_info.surface, device.getPhysicalDevice());
 
 	bool found = false;
 	for (const auto& availableFormat : info.formats) {
@@ -86,18 +190,24 @@ bool Swapchain::recreateSwapChain(Device &device, const Rc<gl::Loop> &loop, thre
 		return false;
 	}
 
-	if (_swapChain) {
-		cleanupSwapChain(device);
+	if (_swapchain) {
+		cleanupSwapchain(device);
+		if (_nextRenderQueue) {
+			_renderQueue = move(_nextRenderQueue);
+			_nextRenderQueue = nullptr;
+		}
 	} else {
 		device.getTable()->vkDeviceWaitIdle(device.getDevice());
 	}
 
 	auto modes = getPresentModes(info);
 
-	if (resize) {
-		return createSwapChain(device, loop, queue, move(info), modes.second);
+	_info = move(info);
+
+	if (mode == gl::SwapchanCreationMode::Best) {
+		return createSwapchain(device, modes.first);
 	} else {
-		return createSwapChain(device, loop, queue, move(info), modes.first);
+		return createSwapchain(device, modes.second);
 	}
 }
 
@@ -112,28 +222,18 @@ static VkPresentModeKHR getVkPresentMode(gl::PresentMode presentMode) {
 	return VkPresentModeKHR(0);
 }
 
-bool Swapchain::createSwapChain(Device &device, const Rc<gl::Loop> &loop, thread::TaskQueue &queue, SurfaceInfo &&info, gl::PresentMode presentMode) {
+bool Swapchain::createSwapchain(Device &device, gl::PresentMode presentMode) {
 	auto table = device.getTable();
 
-	VkExtent2D extent = info.capabilities.currentExtent;
-	gl::ImageInfo swapchainImageInfo;
-	swapchainImageInfo.format = gl::ImageFormat(_format.format);
-	swapchainImageInfo.flags = gl::ImageFlags::None;
-	swapchainImageInfo.imageType = gl::ImageType::Image2D;
-	swapchainImageInfo.extent = Extent3(extent.width, extent.height, 1);
-	swapchainImageInfo.arrayLayers = gl::ArrayLayers(info.capabilities.maxImageArrayLayers);
-	swapchainImageInfo.usage = gl::ImageUsage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+	auto swapchainImageInfo = getSwapchainImageInfo();
 
 	gl::RenderPassData *swapchainPass = nullptr;
 	gl::Attachment *swapchainOut = nullptr;
-	if (!_defaultRenderQueue || !_defaultRenderQueue->isCompatible(swapchainImageInfo)) {
-		auto q = device.createDefaultRenderQueue(loop, queue, swapchainImageInfo);
-		if (!q->isCompatible(swapchainImageInfo)) {
-			log::vtext("Vk-Error", "Invalid default render queue");
-			return false;
-		}
-
-		auto out = q->getOutput(gl::AttachmentType::SwapchainImage);
+	if (!_renderQueue || !_renderQueue->isCompatible(swapchainImageInfo)) {
+		log::vtext("Vk-Error", "Invalid default render queue");
+		return false;
+	} else {
+		auto out = _renderQueue->getOutput(gl::AttachmentType::SwapchainImage);
 		if (out.size() == 1) {
 			swapchainOut = out.front().get();
 			if (auto pass = swapchainOut->getDescriptors().back()->getRenderPass()) {
@@ -146,35 +246,22 @@ bool Swapchain::createSwapChain(Device &device, const Rc<gl::Loop> &loop, thread
 			log::vtext("Vk-Error", "Invalid default render queue");
 			return false;
 		}
-		_defaultRenderQueue = q;
-	} else {
-		_defaultRenderQueue->updateSwapchainInfo(swapchainImageInfo);
+
+		_renderQueue->updateSwapchainInfo(swapchainImageInfo);
 	}
 
-	if (swapchainImageInfo.format != gl::ImageFormat(_format.format)
-			|| swapchainImageInfo.flags != gl::ImageFlags::None
-			|| swapchainImageInfo.imageType != gl::ImageType::Image2D
-			|| swapchainImageInfo.extent != Extent3(extent.width, extent.height, 1)
-			|| swapchainImageInfo.arrayLayers < gl::ArrayLayers(1)
-			|| swapchainImageInfo.arrayLayers > gl::ArrayLayers(info.capabilities.maxImageArrayLayers)
-			|| swapchainImageInfo.samples != gl::SampleCount::X1
-			|| swapchainImageInfo.tiling != gl::ImageTiling::Optimal) {
-		log::vtext("Vk-Error", "Invalid swapchain image info:", swapchainImageInfo.description());
-		return false;
-	}
-
-	uint32_t imageCount = info.capabilities.minImageCount + 1;
-	if (info.capabilities.maxImageCount > 0 && imageCount > info.capabilities.maxImageCount) {
-		imageCount = info.capabilities.maxImageCount;
+	uint32_t imageCount = _info.capabilities.minImageCount + 1;
+	if (_info.capabilities.maxImageCount > 0 && imageCount > _info.capabilities.maxImageCount) {
+		imageCount = _info.capabilities.maxImageCount;
 	}
 
 	VkSwapchainCreateInfoKHR swapChainCreateInfo = { };
 	swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-	swapChainCreateInfo.surface = device.getSurface();
+	swapChainCreateInfo.surface = _info.surface;
 	swapChainCreateInfo.minImageCount = imageCount;
 	swapChainCreateInfo.imageFormat = VkFormat(swapchainImageInfo.format);
 	swapChainCreateInfo.imageColorSpace = _format.colorSpace;
-	swapChainCreateInfo.imageExtent = extent;
+	swapChainCreateInfo.imageExtent = VkExtent2D({swapchainImageInfo.extent.width, swapchainImageInfo.extent.height});
 	swapChainCreateInfo.imageArrayLayers = swapchainImageInfo.arrayLayers.get();
 	swapChainCreateInfo.imageUsage = VkImageUsageFlags(swapchainImageInfo.usage);
 
@@ -190,75 +277,123 @@ bool Swapchain::createSwapChain(Device &device, const Rc<gl::Loop> &loop, thread
 		swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	}
 
-	swapChainCreateInfo.preTransform = info.capabilities.currentTransform;
+	swapChainCreateInfo.preTransform = _info.capabilities.currentTransform;
 	swapChainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 	swapChainCreateInfo.presentMode = getVkPresentMode(presentMode);
 	swapChainCreateInfo.clipped = VK_TRUE;
 
-	if (_oldSwapChain) {
-		swapChainCreateInfo.oldSwapchain = _oldSwapChain;
+	if (_oldSwapchain) {
+		swapChainCreateInfo.oldSwapchain = _oldSwapchain;
 	} else {
 		swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
 	}
 
-	if (table->vkCreateSwapchainKHR(device.getDevice(), &swapChainCreateInfo, nullptr, &_swapChain) != VK_SUCCESS) {
+	if (table->vkCreateSwapchainKHR(device.getDevice(), &swapChainCreateInfo, nullptr, &_swapchain) != VK_SUCCESS) {
 		return false;
 	}
 
-	if (_oldSwapChain) {
-		table->vkDestroySwapchainKHR(device.getDevice(), _oldSwapChain, nullptr);
-		_oldSwapChain = VK_NULL_HANDLE;
+	if (_oldSwapchain) {
+		table->vkDestroySwapchainKHR(device.getDevice(), _oldSwapchain, nullptr);
+		_oldSwapchain = VK_NULL_HANDLE;
 	}
 
 	Vector<VkImage> swapchainImages;
 
-	table->vkGetSwapchainImagesKHR(device.getDevice(), _swapChain, &imageCount, nullptr);
+	table->vkGetSwapchainImagesKHR(device.getDevice(), _swapchain, &imageCount, nullptr);
 	swapchainImages.resize(imageCount);
-	table->vkGetSwapchainImagesKHR(device.getDevice(), _swapChain, &imageCount, swapchainImages.data());
+	table->vkGetSwapchainImagesKHR(device.getDevice(), _swapchain, &imageCount, swapchainImages.data());
 
-	buildAttachments(device, _defaultRenderQueue.get(), swapchainPass, move(swapchainImages));
+	buildAttachments(device, _renderQueue.get(), swapchainPass, move(swapchainImages));
 
 	_presentMode = presentMode;
-	_info = move(info);
-
+	_valid = true;
 	return true;
 }
 
-void Swapchain::cleanupSwapChain(Device &device) {
+void Swapchain::cleanupSwapchain(Device &device) {
 	device.getTable()->vkDeviceWaitIdle(device.getDevice());
 
-	for (auto &pass : _defaultRenderQueue->getPasses()) {
-		for (auto &desc : pass->descriptors) {
-			if (desc->getAttachment()->getType() == gl::AttachmentType::SwapchainImage) {
-				pass->framebuffers.clear();
-				desc->clear();
+	if (_renderQueue) {
+		for (auto &pass : _renderQueue->getPasses()) {
+			for (auto &desc : pass->descriptors) {
+				if (desc->getAttachment()->getType() == gl::AttachmentType::SwapchainImage) {
+					pass->framebuffers.clear();
+					desc->clear();
+				}
+			}
+		}
+
+		for (auto &attachment : _renderQueue->getAttachments()) {
+			if (attachment->getType() == gl::AttachmentType::SwapchainImage) {
+				attachment->clear();
 			}
 		}
 	}
 
-	for (auto &attachment : _defaultRenderQueue->getAttachments()) {
-		if (attachment->getType() == gl::AttachmentType::SwapchainImage) {
-			attachment->clear();
-		}
-	}
-
-	if (_swapChain) {
-		_oldSwapChain = _swapChain;
-		_swapChain = VK_NULL_HANDLE;
+	if (_swapchain) {
+		_oldSwapchain = _swapchain;
+		_swapchain = VK_NULL_HANDLE;
 	}
 }
 
-void Swapchain::invalidate(Device &device) {
-	cleanupSwapChain(device);
+void Swapchain::invalidate(gl::Device &idevice) {
+	auto &device = dynamic_cast<Device &>(idevice);
 
-	if (_oldSwapChain) {
-		device.getTable()->vkDestroySwapchainKHR(device.getDevice(), _oldSwapChain, nullptr);
-		_oldSwapChain = VK_NULL_HANDLE;
+	incrementGeneration(0); // wait idle
+
+	if (_swapchain) {
+		cleanupSwapchain(device);
 	}
+
+	if (_oldSwapchain) {
+		device.getTable()->vkDestroySwapchainKHR(device.getDevice(), _oldSwapchain, nullptr);
+		_oldSwapchain = VK_NULL_HANDLE;
+	}
+
+	if (_surface) {
+		auto i = device.getInstance();
+		i->vkDestroySurfaceKHR(i->getInstance(), _surface, nullptr);
+		device.getTable()->vkDeviceWaitIdle(device.getDevice());
+		_surface = VK_NULL_HANDLE;
+	}
+}
+
+gl::ImageInfo Swapchain::getSwapchainImageInfo() const {
+	VkExtent2D extent = _info.capabilities.currentExtent;
+	gl::ImageInfo swapchainImageInfo;
+	swapchainImageInfo.format = gl::ImageFormat(_format.format);
+	swapchainImageInfo.flags = gl::ImageFlags::None;
+	swapchainImageInfo.imageType = gl::ImageType::Image2D;
+	swapchainImageInfo.extent = Extent3(extent.width, extent.height, 1);
+	swapchainImageInfo.arrayLayers = gl::ArrayLayers(_info.capabilities.maxImageArrayLayers);
+	swapchainImageInfo.usage = gl::ImageUsage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+	return swapchainImageInfo;
 }
 
 bool Swapchain::isBestPresentMode() const {
 	return _presentMode == _bestPresentMode;
+}
+
+Rc<SwapchainSync> Swapchain::acquireSwapchainSync(Device &dev, uint64_t idx) {
+	idx = idx % FramesInFlight;
+	auto &v = _sems.at(idx);
+	if (!v.empty()) {
+		auto ret = v.back();
+		v.pop_back();
+		ret->reset();
+		return ret;
+	}
+	return Rc<SwapchainSync>::create(dev, idx);
+}
+
+void Swapchain::releaseSwapchainSync(Rc<SwapchainSync> &&ref) {
+	if (!_sems.empty()) {
+		_sems.at(ref->getIndex() % FramesInFlight).emplace_back(move(ref));
+	}
+}
+
+Rc<gl::FrameHandle> Swapchain::makeFrame(gl::Loop &loop, bool readyForSubmit) {
+	return Rc<FrameHandle>::create(loop, *this, *_renderQueue, _order ++, _gen, readyForSubmit);
 }
 
 void Swapchain::buildAttachments(Device &device, gl::RenderQueue *queue, gl::RenderPassData *pass, const Vector<VkImage> &swapchainImages) {
@@ -371,6 +506,7 @@ void Swapchain::updateFramebuffer(Device &device, gl::RenderPassData *pass) {
 		for (auto &desc : pass->descriptors) {
 			switch (desc->getAttachment()->getType()) {
 			case gl::AttachmentType::Buffer:
+			case gl::AttachmentType::Generic:
 				break;
 			case gl::AttachmentType::Image:
 				imageViews.emplace_back(((ImageAttachmentDescriptor *)desc)->getImageView().cast<ImageView>()->getImageView());
@@ -400,7 +536,6 @@ Pair<gl::PresentMode, gl::PresentMode> Swapchain::getPresentModes(const SurfaceI
 	}
 
 	return pair(best, fast);
-	//return pair(fast, fast);
 }
 
 }

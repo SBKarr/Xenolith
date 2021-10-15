@@ -24,12 +24,7 @@
 #include "XLGlView.h"
 #include "XLGlDevice.h"
 #include "XLScene.h"
-#include "XLDefaultShaders.h"
 #include "XLVertexArray.h"
-
-#include "XLVkImageAttachment.h"
-#include "XLVkBufferAttachment.h"
-#include "XLVkRenderPass.h"
 
 namespace stappler::xenolith {
 
@@ -38,48 +33,24 @@ XL_DECLARE_EVENT_CLASS(Director, onAfterUpdate);
 XL_DECLARE_EVENT_CLASS(Director, onAfterVisit);
 XL_DECLARE_EVENT_CLASS(Director, onAfterDraw);
 
-Rc<Director> Director::getInstance() {
-	return Application::getInstance()->getDirector();
-}
-
 Director::Director() { }
 
 Director::~Director() { }
 
-bool Director::init() {
-	_resourceCache = Rc<ResourceCache>::create(this);
+bool Director::init(Application *app, Rc<Scene> &&scene) {
+	_application = app;
+	_nextScene = move(scene);
 	return true;
 }
 
-void Director::setView(gl::View *view) {
-	if (view != _view) {
-		_view = view;
+void Director::update() {
+	uint64_t dt = 0;
+	auto t = _application->getClock();
 
-		if (_sizeChangedEvent) {
-			removeHandlerNode(_sizeChangedEvent);
-			_sizeChangedEvent = nullptr;
-		}
-
-		_sizeChangedEvent = onEventWithObject(gl::View::onScreenSize, view, [&] (const Event &) {
-			if (_scene) {
-				auto &size = _view->getScreenSize();
-				auto d = _view->getDensity();
-
-				_scene->setContentSize(size / d);
-
-				updateGeneralTransform();
-			}
-		});
-
-		updateGeneralTransform();
+	if (_lastTime) {
+		dt = t - _lastTime;
 	}
-}
 
-void Director::update(uint64_t) {
-
-}
-
-bool Director::mainLoop(uint64_t t) {
 	if (_nextScene) {
 		if (_scene) {
 			_scene->onExit();
@@ -94,31 +65,24 @@ bool Director::mainLoop(uint64_t t) {
 		_nextScene = nullptr;
 	}
 
-	update(t);
-
-	return true;
+	_lastTime = t;
 }
 
-void Director::render(const Rc<gl::FrameHandle> &frame) {
-	for (auto &it : frame->getInputAttachments()) {
-		if (it->getAttachment()->getName() == "VertexInput") {
-			VertexArray array;
-			array.init(4, 6);
 
-			auto quad = array.addQuad();
-			quad.setGeometry(Vec4(-0.5f, -0.5f, 0, 0), Size(1.0f, 1.0f));
-			quad.setColor({
-				Color::Red_500,
-				Color::Green_500,
-				Color::Blue_500,
-				Color::White
-			});
+void Director::acquireInput(gl::FrameHandle &frame, const Rc<gl::AttachmentHandle> &a) {
+	VertexArray array;
+	array.init(4, 6);
 
-			frame->submitInput(it, Rc<gl::VertexData>(array.pop()));
-		} else {
-			log::vtext("Director", "Unknown attachment: ", it->getAttachment()->getName());
-		}
-	}
+	auto quad = array.addQuad();
+	quad.setGeometry(Vec4(-0.5f, -0.5f, 0, 0), Size(1.0f, 1.0f));
+	quad.setColor({
+		Color::Red_500,
+		Color::Green_500,
+		Color::Blue_500,
+		Color::White
+	});
+
+	frame.submitInput(a, Rc<gl::VertexData>(array.pop()));
 }
 
 Rc<gl::DrawScheme> Director::construct() {
@@ -150,11 +114,41 @@ Rc<gl::DrawScheme> Director::construct() {
 	return df;
 }
 
+void Director::begin(gl::View *view) {
+	_view = view;
+
+	if (_sizeChangedEvent) {
+		removeHandlerNode(_sizeChangedEvent);
+		_sizeChangedEvent = nullptr;
+	}
+
+	_sizeChangedEvent = onEventWithObject(gl::View::onScreenSize, view, [&] (const Event &) {
+		if (_scene) {
+			auto &size = _view->getScreenSize();
+			auto d = _view->getDensity();
+
+			_scene->setContentSize(size / d);
+
+			updateGeneralTransform();
+		}
+	});
+
+	updateGeneralTransform();
+
+	if (_nextScene) {
+		_scene = move(_nextScene);
+		_scene->onPresented(this);
+		_nextScene = nullptr;
+	}
+
+}
+
 void Director::end() {
 	if (_scene) {
 		_scene->onExit();
-		_nextScene = _scene;
+		_scene->onFinished(this);
 		_scene = nullptr;
+		_nextScene = nullptr;
 	}
 	_view = nullptr;
 }
@@ -163,48 +157,24 @@ Size Director::getScreenSize() const {
 	return _view->getScreenSize();
 }
 
-Rc<ResourceCache> Director::getResourceCache() const {
-	return _resourceCache;
-}
+void Director::runScene(Rc<Scene> &&scene) {
+	if (!scene) {
+		return;
+	}
 
-void Director::runScene(Rc<Scene> scene) {
-	_nextScene = scene;
-}
-
-Rc<gl::RenderQueue> Director::onDefaultRenderQueue(const gl::ImageInfo &info) {
-	gl::RenderQueue::Builder builder("DefaultRenderQueue", gl::RenderQueue::Continuous);
-	auto defaultFrag = builder.addProgramByRef("DefaultRenderQueue_DefaultVert", gl::ProgramStage::Vertex, shaders::DefaultVert);
-	auto defaultVert = builder.addProgramByRef("DefaultRenderQueue_DefaultFrag", gl::ProgramStage::Fragment, shaders::DefaultFrag);
-	auto vertexFrag = builder.addProgramByRef("DefaultRenderQueue_VertexVert", gl::ProgramStage::Vertex, shaders::VertexVert);
-	auto vertexVert = builder.addProgramByRef("DefaultRenderQueue_VertexFrag", gl::ProgramStage::Fragment, shaders::VertexFrag);
-
-	auto out = Rc<vk::SwapchainAttachment>::create("Swapchain", gl::ImageInfo(info),
-			gl::AttachmentLayout::Undefined, gl::AttachmentLayout::PresentSrc);
-
-	auto input = Rc<vk::VertexBufferAttachment>::create("VertexInput", gl::BufferInfo(gl::BufferUsage::StorageBuffer, gl::ProgramStage::Vertex));
-
-	auto pass = Rc<vk::VertexRenderPass>::create("SwapchainPass", gl::RenderOrderingHighest);
-	builder.addRenderPass(pass);
-	builder.addPipeline(pass, "Default", Vector<const gl::ProgramData *>({
-		defaultVert,
-		defaultFrag
-	}));
-	builder.addPipeline(pass, "Vertexes", Vector<const gl::ProgramData *>({
-		vertexVert,
-		vertexFrag
-	}));
-
-	/*builder.addSubpassDependency(pass,
-			gl::RenderSubpassDependency::External, gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::None,
-			0, gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::ColorAttachmentWrite, false);*/
-
-	builder.addPassInput(pass, 0, input);
-	builder.addPassOutput(pass, 0, out);
-
-	builder.addInput(input);
-	builder.addOutput(out);
-
-	return Rc<gl::RenderQueue>::create(move(builder));
+	/*auto linkId = retain();
+	auto &queue = scene->getRenderQueue();
+	_view->getLoop()->compileRenderQueue(queue, [this, scene, linkId] (bool success) {
+		if (success) {
+			auto linkId = retain();
+			auto &queue = scene->getRenderQueue();
+			_view->getLoop()->scheduleSwapchainRenderQueue(queue, [this, scene, linkId] {
+				_nextScene = scene;
+				release(linkId);
+			});
+		}
+		release(linkId);
+	});*/
 }
 
 void Director::invalidate() {

@@ -28,7 +28,7 @@ String Instance::getVersionDescription(uint32_t version) {
 	return toString(version >> 22, ".", (version >> 12) & 0b1111111111, ".", version & 0b111111111111);
 }
 
-Instance::Instance(Function<void()> &&terminate)
+Instance::Instance(TerminateCallback &&terminate)
 : _terminate(move(terminate)) { }
 
 Instance::~Instance() {
@@ -36,6 +36,10 @@ Instance::~Instance() {
 		_terminate();
 		_terminate = nullptr;
 	}
+}
+
+Rc<Device> Instance::makeDevice(uint32_t deviceIndex) const {
+	return nullptr;
 }
 
 }

@@ -33,11 +33,16 @@ class Device;
 class RenderPass : public gl::RenderPass {
 public:
 	virtual ~RenderPass();
+
+	virtual bool init(StringView, gl::RenderPassType, gl::RenderOrdering, size_t subpassCount = 1);
 	virtual void invalidate();
+
+	QueueOperations getQueueOps() const { return _queueOps; }
 
 	virtual Rc<gl::RenderPassHandle> makeFrameHandle(gl::RenderPassData *, const gl::FrameHandle &);
 
 protected:
+	QueueOperations _queueOps = QueueOperations::Graphics;
 };
 
 class RenderPassHandle : public gl::RenderPassHandle {
@@ -46,9 +51,11 @@ public:
 		Vector<Rc<gl::AttachmentHandle>> waitAttachment;
 		Vector<VkSemaphore> waitSem;
 		Vector<VkPipelineStageFlags> waitStages;
+		Vector<Rc<SwapchainSync>> waitSwapchainSync;
 		Vector<VkSemaphore> signalSem;
 		Vector<Rc<gl::AttachmentHandle>> signalAttachment;
-		Vector<Rc<SwapchainSync>> swapchainSync;
+		Vector<Rc<SwapchainSync>> signalSwapchainSync;
+		Set<Rc<SwapchainSync>> swapchainSync;
 	};
 
 	virtual ~RenderPassHandle();
@@ -61,6 +68,7 @@ public:
 protected:
 	virtual bool doPrepareDescriptors(gl::FrameHandle &, uint32_t index);
 	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &, uint32_t index);
+	virtual bool doSubmit(gl::FrameHandle &);
 
 	virtual bool present(gl::FrameHandle &);
 
@@ -70,6 +78,7 @@ protected:
 	bool _descriptorsReady = false;
 
 	Device *_device = nullptr;
+	Swapchain *_swapchain = nullptr;
 	Rc<Fence> _fence;
 	Rc<CommandPool> _pool;
 	Rc<DeviceQueue> _queue;
@@ -83,6 +92,8 @@ class VertexRenderPass : public RenderPass {
 public:
 	virtual ~VertexRenderPass();
 
+	virtual bool init(StringView, gl::RenderOrdering, size_t subpassCount = 1);
+
 	virtual Rc<gl::RenderPassHandle> makeFrameHandle(gl::RenderPassData *, const gl::FrameHandle &);
 };
 
@@ -95,6 +106,7 @@ public:
 protected:
 	virtual void addRequiredAttachment(const gl::Attachment *, const Rc<gl::AttachmentHandle> &);
 	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &, uint32_t index) override;
+	virtual bool doSubmit(gl::FrameHandle &) override;
 
 	VertexBufferAttachmentHandle *_mainBuffer;
 };

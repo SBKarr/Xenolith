@@ -129,9 +129,10 @@ static uint32_t Allocator_getTypeScoreInternal(const Allocator::MemHeap &heap, c
 
 Allocator::~Allocator() { }
 
-bool Allocator::init(Device &dev, VkPhysicalDevice device, const DeviceInfo::Features &features, VkDeviceSize bufferImageGranularity) {
+bool Allocator::init(Device &dev, VkPhysicalDevice device, const DeviceInfo::Features &features, const DeviceInfo::Properties &props) {
 	_device = &dev;
-	_bufferImageGranularity = bufferImageGranularity;
+	_bufferImageGranularity = props.device10.properties.limits.bufferImageGranularity;
+	_nonCoherentAtomSize = props.device10.properties.limits.nonCoherentAtomSize;
 
 	if ((features.flags & ExtensionFlags::GetMemoryRequirements2) != ExtensionFlags::None) {
 		_hasMemReq2 = true;
@@ -287,9 +288,10 @@ void Allocator::unlock() {
 	_mutex.unlock();
 }
 
-Allocator::MemNode Allocator::alloc(MemType *type, uint64_t in_size) {
+Allocator::MemNode Allocator::alloc(MemType *type, uint64_t in_size, bool persistent) {
 	std::unique_lock<Mutex> lock;
 
+	// PageSize boundary should be large enough to match all alignment requirements
 	uint64_t size = uint64_t(math::align<uint64_t>(in_size, PageSize));
 	if (size < in_size) {
 		return MemNode();
@@ -333,6 +335,12 @@ Allocator::MemNode Allocator::alloc(MemType *type, uint64_t in_size) {
 				type->current = type->max;
 			}
 
+			if (persistent) {
+				if (_device->getTable()->vkMapMemory(_device->getDevice(), node.mem, 0, node.size, 0, &node.ptr) != VK_SUCCESS) {
+					return MemNode();
+				}
+			}
+
 			return node;
 		}
 	} else if (!type->buf[0].empty()) {
@@ -357,6 +365,13 @@ Allocator::MemNode Allocator::alloc(MemType *type, uint64_t in_size) {
 			if (type->current > type->max) {
 				type->current = type->max;
 			}
+
+			if (persistent) {
+				if (_device->getTable()->vkMapMemory(_device->getDevice(), node.mem, 0, node.size, 0, &node.ptr) != VK_SUCCESS) {
+					return MemNode();
+				}
+			}
+
 			return node;
 		}
 	}
@@ -377,6 +392,13 @@ Allocator::MemNode Allocator::alloc(MemType *type, uint64_t in_size) {
 		return MemNode();
 	}
 
+	if (persistent) {
+		if (_device->getTable()->vkMapMemory(_device->getDevice(), ret.mem, 0, size, 0, &ret.ptr) != VK_SUCCESS) {
+			_device->getTable()->vkFreeMemory(_device->getDevice(), ret.mem, nullptr);
+			return MemNode();
+		}
+	}
+
 	ret.index = index;
 	ret.size = size;
 	ret.offset = 0;
@@ -384,6 +406,13 @@ Allocator::MemNode Allocator::alloc(MemType *type, uint64_t in_size) {
 }
 
 void Allocator::free(MemType *type, SpanView<MemNode> nodes) {
+	for (auto &it : nodes) {
+		if (it.ptr) {
+			_device->getTable()->vkUnmapMemory(_device->getDevice(), it.mem);
+			const_cast<MemNode &>(it).ptr = nullptr;
+		}
+	}
+
 	Vector<MemNode> freelist;
 
 	std::unique_lock<Mutex> lock(_mutex);
@@ -402,8 +431,8 @@ void Allocator::free(MemType *type, SpanView<MemNode> nodes) {
 		if (max_free_index != maxOf<uint64_t>() && index + 1 > current_free_index) {
 			freelist.emplace_back(node);
 		} else if (index < MaxIndex) {
-			/* Add the node to the appropiate 'size' bucket.  Adjust
-			 * the max_index when appropiate. */
+			/* Add the node to the appropriate 'size' bucket.  Adjust
+			 * the max_index when appropriate. */
 			if (type->buf[index].empty() && index > max_index) {
 				max_index = index;
 			}
@@ -434,7 +463,7 @@ void Allocator::free(MemType *type, SpanView<MemNode> nodes) {
 	}
 }
 
-Allocator::MemType * Allocator::findMemoryType(uint32_t typeFilter, AllocationUsage type) {
+Allocator::MemType * Allocator::findMemoryType(uint32_t typeFilter, AllocationUsage type) const {
 	// best match
 	uint32_t score = 0;
 	uint32_t idx = maxOf<uint32_t>();
@@ -467,20 +496,186 @@ Allocator::MemType * Allocator::findMemoryType(uint32_t typeFilter, AllocationUs
 	return nullptr;
 }
 
+MemoryRequirements Allocator::getMemoryRequirements(VkBuffer target) {
+	MemoryRequirements ret;
+	VkMemoryRequirements2 memRequirements = { VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2, nullptr };
+
+	if (hasMemReq2Feature() && hasDedicatedFeature()) {
+		VkMemoryDedicatedRequirements memDedicatedReqs = { VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS };
+		memRequirements.pNext = &memDedicatedReqs;
+
+		VkBufferMemoryRequirementsInfo2 info = { VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2, nullptr, target };
+		_device->getTable()->vkGetBufferMemoryRequirements2(_device->getDevice(), &info, &memRequirements);
+
+		ret.requiresDedicated = memDedicatedReqs.requiresDedicatedAllocation;
+		ret.prefersDedicated = memDedicatedReqs.prefersDedicatedAllocation;
+		ret.requirements = memRequirements.memoryRequirements;
+	} else {
+		_device->getTable()->vkGetBufferMemoryRequirements(_device->getDevice(), target, &ret.requirements);
+	}
+	return ret;
+}
+
+MemoryRequirements Allocator::getMemoryRequirements(VkImage target) {
+	MemoryRequirements ret;
+	VkMemoryRequirements2 memRequirements = { VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2, nullptr };
+
+	if (hasMemReq2Feature() && hasDedicatedFeature()) {
+		VkMemoryDedicatedRequirements memDedicatedReqs = { VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS, nullptr };
+		memRequirements.pNext = &memDedicatedReqs;
+
+		VkImageMemoryRequirementsInfo2 info = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2, nullptr, target };
+		_device->getTable()->vkGetImageMemoryRequirements2(_device->getDevice(), &info, &memRequirements);
+
+		ret.requiresDedicated = memDedicatedReqs.requiresDedicatedAllocation;
+		ret.prefersDedicated = memDedicatedReqs.prefersDedicatedAllocation;
+		ret.requirements = memRequirements.memoryRequirements;
+	} else {
+		_device->getTable()->vkGetImageMemoryRequirements(_device->getDevice(), target, &ret.requirements);
+	}
+	return ret;
+}
+
+Rc<Buffer> Allocator::spawnPersistent(AllocationUsage usage, const gl::BufferInfo &info) {
+	VkBufferCreateInfo bufferInfo { };
+	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferInfo.size = info.size;
+	bufferInfo.flags = VkBufferCreateFlags(info.flags);
+	bufferInfo.usage = VkBufferUsageFlags(info.usage);
+	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	VkBuffer target = VK_NULL_HANDLE;
+	if (_device->getTable()->vkCreateBuffer(_device->getDevice(), &bufferInfo, nullptr, &target) != VK_SUCCESS) {
+		return nullptr;
+	}
+
+	auto req = getMemoryRequirements(target);
+	auto type = findMemoryType(req.requirements.memoryTypeBits, usage);
+	if (!type) {
+		return nullptr;
+	}
+
+	VkDeviceMemory memory;
+	if (hasDedicatedFeature()) {
+		VkMemoryDedicatedAllocateInfo dedicatedInfo;
+		dedicatedInfo.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
+		dedicatedInfo.pNext = nullptr;
+		dedicatedInfo.image = VK_NULL_HANDLE;
+		dedicatedInfo.buffer = target;
+
+		VkMemoryAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.pNext = &dedicatedInfo;
+		allocInfo.allocationSize = req.requirements.size;
+		allocInfo.memoryTypeIndex = type->idx;
+
+		if (_device->getTable()->vkAllocateMemory(_device->getDevice(), &allocInfo, nullptr, &memory) != VK_SUCCESS) {
+			_device->getTable()->vkDestroyBuffer(_device->getDevice(), target, nullptr);
+			return nullptr;
+		}
+	} else {
+		VkMemoryAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.pNext = nullptr;
+		allocInfo.allocationSize = req.requirements.size;
+		allocInfo.memoryTypeIndex = type->idx;
+
+		if (_device->getTable()->vkAllocateMemory(_device->getDevice(), &allocInfo, nullptr, &memory) != VK_SUCCESS) {
+			_device->getTable()->vkDestroyBuffer(_device->getDevice(), target, nullptr);
+			return nullptr;
+		}
+	}
+
+	_device->getTable()->vkBindBufferMemory(_device->getDevice(), target, memory, 0);
+
+	auto mem = Rc<DeviceMemory>::create(*_device, memory);
+	return Rc<Buffer>::create(*_device, target, info, move(mem));
+}
+
+Rc<Image> Allocator::spawnPersistent(AllocationUsage usage, const gl::ImageInfo &info, bool preinitialized) {
+	VkImageCreateInfo imageInfo { };
+	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	imageInfo.pNext = nullptr;
+	imageInfo.flags = info.flags;
+	imageInfo.imageType = VkImageType(info.imageType);
+	imageInfo.format = VkFormat(info.format);
+	imageInfo.extent = VkExtent3D({ info.extent.width, info.extent.height, info.extent.depth });
+	imageInfo.mipLevels = info.mipLevels.get();
+	imageInfo.arrayLayers = info.arrayLayers.get();
+	imageInfo.samples = VkSampleCountFlagBits(info.samples);
+	imageInfo.tiling = VkImageTiling(info.tiling);
+	imageInfo.usage = VkImageUsageFlags(info.usage) | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	if (preinitialized) {
+		imageInfo.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+	} else {
+		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	}
+
+	VkImage target = VK_NULL_HANDLE;
+	if (_device->getTable()->vkCreateImage(_device->getDevice(), &imageInfo, nullptr, &target) != VK_SUCCESS) {
+		return nullptr;
+	}
+
+	auto req = getMemoryRequirements(target);
+	auto type = findMemoryType(req.requirements.memoryTypeBits, usage);
+	if (!type) {
+		return nullptr;
+	}
+
+	VkDeviceMemory memory;
+	if (hasDedicatedFeature()) {
+		VkMemoryDedicatedAllocateInfo dedicatedInfo;
+		dedicatedInfo.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
+		dedicatedInfo.pNext = nullptr;
+		dedicatedInfo.image = target;
+		dedicatedInfo.buffer = VK_NULL_HANDLE;
+
+		VkMemoryAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.pNext = &dedicatedInfo;
+		allocInfo.allocationSize = req.requirements.size;
+		allocInfo.memoryTypeIndex = type->idx;
+
+		if (_device->getTable()->vkAllocateMemory(_device->getDevice(), &allocInfo, nullptr, &memory) != VK_SUCCESS) {
+			_device->getTable()->vkDestroyImage(_device->getDevice(), target, nullptr);
+			return nullptr;
+		}
+	} else {
+		VkMemoryAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.pNext = nullptr;
+		allocInfo.allocationSize = req.requirements.size;
+		allocInfo.memoryTypeIndex = type->idx;
+
+		if (_device->getTable()->vkAllocateMemory(_device->getDevice(), &allocInfo, nullptr, &memory) != VK_SUCCESS) {
+			_device->getTable()->vkDestroyImage(_device->getDevice(), target, nullptr);
+			return nullptr;
+		}
+	}
+
+	_device->getTable()->vkBindImageMemory(_device->getDevice(), target, memory, 0);
+
+	auto mem = Rc<DeviceMemory>::create(*_device, memory);
+	return Rc<Image>::create(*_device, target, info, move(mem));
+}
 
 DeviceMemoryPool::~DeviceMemoryPool() {
 	if (_allocator) {
 		for (auto &it : _buffers) {
 			it->invalidate(*_allocator->getDevice());
 		}
+		_buffers.clear();
 		for (auto &it : _heaps) {
 			clear(&it.second);
 		}
 	}
 }
 
-bool DeviceMemoryPool::init(const Rc<Allocator> &alloc) {
+bool DeviceMemoryPool::init(const Rc<Allocator> &alloc, bool persistentMapping) {
 	_allocator = alloc;
+	_persistentMapping = persistentMapping;
 	return true;
 }
 
@@ -498,25 +693,12 @@ Rc<DeviceBuffer> DeviceMemoryPool::spawn(AllocationUsage type, const gl::BufferI
 		return nullptr;
 	}
 
-	bool requiresDedicated = false;
-	VkMemoryRequirements2 memRequirements = { VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2, nullptr };
+	auto requirements = _allocator->getMemoryRequirements(target);
 
-	if (_allocator->hasMemReq2Feature() && _allocator->hasDedicatedFeature()) {
-		VkMemoryDedicatedRequirements memDedicatedReqs = { VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS };
-		memRequirements.pNext = &memDedicatedReqs;
-
-		VkBufferMemoryRequirementsInfo2 info = { VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2, nullptr, target };
-		dev->getTable()->vkGetBufferMemoryRequirements2(dev->getDevice(), &info, &memRequirements);
-
-		requiresDedicated = memDedicatedReqs.requiresDedicatedAllocation || memDedicatedReqs.prefersDedicatedAllocation;
-	} else {
-		dev->getTable()->vkGetBufferMemoryRequirements(dev->getDevice(), target, &memRequirements.memoryRequirements);
-	}
-
-	if (requiresDedicated) {
+	if (requirements.requiresDedicated) {
 		// TODO: deal with dedicated allocations
 	} else {
-		auto memType = _allocator->findMemoryType(memRequirements.memoryRequirements.memoryTypeBits, type);
+		auto memType = _allocator->findMemoryType(requirements.requirements.memoryTypeBits, type);
 		if (!memType) {
 			dev->getTable()->vkDestroyBuffer(dev->getDevice(), target, nullptr);
 			return nullptr;
@@ -530,8 +712,8 @@ Rc<DeviceBuffer> DeviceMemoryPool::spawn(AllocationUsage type, const gl::BufferI
 			pool = &it->second;
 		}
 
-		if (auto mem = alloc(pool, memRequirements.memoryRequirements.size,
-				memRequirements.memoryRequirements.alignment, AllocationType::Linear)) {
+		if (auto mem = alloc(pool, requirements.requirements.size,
+				requirements.requirements.alignment, AllocationType::Linear)) {
 			if (dev->getTable()->vkBindBufferMemory(dev->getDevice(), target, mem.mem, mem.offset) == VK_SUCCESS) {
 				auto ret = Rc<DeviceBuffer>::create(this, target, move(mem), type, info);
 				_buffers.emplace_back(ret);
@@ -542,6 +724,10 @@ Rc<DeviceBuffer> DeviceMemoryPool::spawn(AllocationUsage type, const gl::BufferI
 
 	dev->getTable()->vkDestroyBuffer(dev->getDevice(), target, nullptr);
 	return nullptr;
+}
+
+Rc<Buffer> DeviceMemoryPool::spawnPersistent(AllocationUsage usage, const gl::BufferInfo &info) {
+	return _allocator->spawnPersistent(usage, info);
 }
 
 Device *DeviceMemoryPool::getDevice() const {
@@ -561,6 +747,10 @@ Allocator::MemBlock DeviceMemoryPool::alloc(MemData *mem, VkDeviceSize in_size, 
 	for (auto &it : mem->mem) {
 		alignedOffset = math::align<VkDeviceSize>(it.offset, alignment);
 
+		if (mem->type->isHostVisible() && !mem->type->isHostCoherent()) {
+			alignedOffset = math::align<VkDeviceSize>(alignedOffset, _allocator->getNonCoherentAtomSize());
+		}
+
 		if (it.lastAllocation != allocType && it.lastAllocation != AllocationType::Unknown) {
 			alignedOffset = math::align<VkDeviceSize>(alignedOffset, _allocator->getBufferImageGranularity());
 		}
@@ -573,7 +763,7 @@ Allocator::MemBlock DeviceMemoryPool::alloc(MemData *mem, VkDeviceSize in_size, 
 
 	if (!node) {
 		size_t reqSize = size;
-		auto b = _allocator->alloc(mem->type, reqSize);
+		auto b = _allocator->alloc(mem->type, reqSize, _persistentMapping);
 		mem->mem.emplace_back(b);
 		node = &mem->mem.back();
 		alignedOffset = 0;
@@ -582,7 +772,7 @@ Allocator::MemBlock DeviceMemoryPool::alloc(MemData *mem, VkDeviceSize in_size, 
 	if (node) {
 		node->offset = alignedOffset + size;
 		node->lastAllocation = allocType;
-		return Allocator::MemBlock({node->mem, alignedOffset, size, mem->type->idx});
+		return Allocator::MemBlock({node->mem, alignedOffset, size, mem->type->idx, node->ptr});
 	}
 
 	return Allocator::MemBlock();

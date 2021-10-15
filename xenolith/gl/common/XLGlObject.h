@@ -27,6 +27,8 @@
 
 namespace stappler::xenolith::gl {
 
+class TextureSet;
+
 class ObjectInterface {
 public:
 	using ClearCallback = void (*) (Device *, ObjectType, void *);
@@ -100,11 +102,13 @@ protected:
 	Vector<Rc<ImageView>> imageViews;
 };
 
-class Image : public Object {
+class ImageObject : public Object {
 public:
-	virtual ~Image() { }
+	virtual ~ImageObject() { }
 
 	const ImageInfo &getInfo() const { return _info; }
+
+	ImageViewInfo getViewInfo(const ImageViewInfo &) const;
 
 protected:
 	ImageInfo _info;
@@ -114,10 +118,77 @@ class ImageView : public Object {
 public:
 	virtual ~ImageView() { }
 
-	const Rc<Image> &getImage() const { return _image; }
+	virtual bool init(Device &, ClearCallback, ObjectType, void *ptr) override;
+
+	const Rc<ImageObject> &getImage() const { return _image; }
+	const ImageViewInfo &getInfo() const { return _info; }
+
+	void setLocation(uint32_t set, uint32_t desc) {
+		_set = set;
+		_descriptor = desc;
+	}
+
+	uint32_t getSet() const { return _set; }
+	uint32_t getDescriptor() const { return _descriptor; }
+	uint64_t getIndex() const { return _index; }
 
 protected:
-	Rc<Image> _image;
+	ImageViewInfo _info;
+	Rc<ImageObject> _image;
+
+	uint32_t _set = 0;
+	uint32_t _descriptor = 0;
+
+	// all ImageViews are atomically indexed for descriptor caching purpose
+	uint64_t _index = 1; // 0 stays as special value
+};
+
+class BufferObject : public Object {
+public:
+	virtual ~BufferObject() { }
+
+	const BufferInfo &getInfo() const { return _info; }
+	uint64_t getSize() const { return _info.size; }
+
+protected:
+	BufferInfo _info;
+};
+
+
+class Sampler : public Object {
+public:
+	virtual ~Sampler() { }
+
+	const SamplerInfo &getInfo() const { return _info; }
+
+	void setIndex(uint32_t idx) { _index = idx; }
+	uint32_t getIndex() const { return _index; }
+
+protected:
+	uint32_t _index = 0;
+	SamplerInfo _info;
+};
+
+struct MaterialImageSlot {
+	Rc<ImageView> image;
+	uint32_t refCount = 0;
+};
+
+struct MaterialLayout {
+	Vector<MaterialImageSlot> slots;
+	uint32_t usedSlots = 0;
+	Rc<TextureSet> set;
+};
+
+class TextureSet : public Object {
+public:
+	virtual ~TextureSet() { }
+
+	virtual void write(const MaterialLayout &);
+
+protected:
+	uint32_t _count = 0;
+	Vector<uint64_t> _layoutIndexes;
 };
 
 }

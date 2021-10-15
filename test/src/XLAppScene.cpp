@@ -25,16 +25,67 @@
 #include "XLAppSceneResource.cc"
 #include "XLDirector.h"
 #include "XLSprite.h"
+#include "XLPlatform.h"
 
+#include "XLGlRenderQueue.h"
+#include "XLDefaultShaders.h"
+
+#include "XLVkImageAttachment.h"
+#include "XLVkBufferAttachment.h"
+#include "XLVkRenderPass.h"
 
 namespace stappler::xenolith::app {
 
-bool AppScene::init(const Rc<Director> &dir) {
-	if (!Scene::init(dir)) {
+bool AppScene::init(Extent2 extent) {
+	gl::ImageInfo info(extent, gl::ImageUsage::ColorAttachment, platform::graphic::getCommonFormat());
+
+	gl::RenderQueue::Builder builder("Loader", gl::RenderQueue::Continuous);
+	auto defaultFrag = builder.addProgramByRef("Loader_DefaultVert", gl::ProgramStage::Vertex, stappler::xenolith::shaders::DefaultVert);
+	auto defaultVert = builder.addProgramByRef("Loader_DefaultFrag", gl::ProgramStage::Fragment, stappler::xenolith::shaders::DefaultFrag);
+	auto vertexFrag = builder.addProgramByRef("Loader_VertexVert", gl::ProgramStage::Vertex, stappler::xenolith::shaders::VertexVert);
+	auto vertexVert = builder.addProgramByRef("Loader_VertexFrag", gl::ProgramStage::Fragment, stappler::xenolith::shaders::VertexFrag);
+
+	auto out = Rc<vk::SwapchainAttachment>::create("Swapchain", move(info),
+			gl::AttachmentLayout::Undefined, gl::AttachmentLayout::PresentSrc);
+
+	auto input = Rc<vk::VertexBufferAttachment>::create("VertexInput", gl::BufferInfo(gl::BufferUsage::StorageBuffer, gl::ProgramStage::Vertex));
+
+	auto samplers = Rc<gl::SamplersAttachment>::create("Samplers");
+
+	auto pass = Rc<vk::VertexRenderPass>::create("SwapchainPass", gl::RenderOrderingHighest);
+	builder.addRenderPass(pass);
+	builder.addPipeline(pass, 0, "Default", Vector<const gl::ProgramData *>({
+		defaultVert,
+		defaultFrag
+	}));
+	builder.addPipeline(pass, 0, "Vertexes", Vector<const gl::ProgramData *>({
+		vertexVert,
+		vertexFrag
+	}));
+
+	/*gl::Resource::Builder resourceBuilder("LoaderResources");
+	resourceBuilder.addImage("Xenolith", pass,
+			gl::ImageInfo(gl::ImageFormat::R8G8B8A8_UNORM, gl::ImageUsage::Sampled, gl::ProgramStage::Fragment),
+			FilePath("resources/xenolith-1.png"));
+
+	builder.setInternalResource(Rc<gl::Resource>::create(move(resourceBuilder)));*/
+
+	/*builder.addSubpassDependency(pass,
+			gl::RenderSubpassDependency::External, gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::None,
+			0, gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::ColorAttachmentWrite, false);*/
+
+	builder.addPassInput(pass, 0, input);
+	builder.addPassInput(pass, 0, samplers);
+	builder.addPassOutput(pass, 0, out);
+
+	builder.addInput(input);
+	builder.addOutput(out);
+
+	if (!Scene::init(move(builder))) {
 		return false;
 	}
 
-	addComponent(Rc<AppSceneResource>::create());
+	// addComponent(Rc<AppSceneResource>::create());
 
 	return true;
 }

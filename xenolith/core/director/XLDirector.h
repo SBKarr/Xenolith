@@ -31,7 +31,6 @@
 
 namespace stappler::xenolith {
 
-class ResourceCache;
 class Scene;
 
 class Director : public Ref, EventHandler {
@@ -49,31 +48,28 @@ public:
 		Default = Euclid,
 	};
 
-	static Rc<Director> getInstance();
-
 	Director();
 
 	virtual ~Director();
-	virtual bool init();
+	virtual bool init(Application *, Rc<Scene> &&);
 
-	inline gl::View* getView() { return _view; }
-	void setView(gl::View *view);
+	gl::View *getView() const { return _view; }
+	Application *getApplication() const { return _application; }
+	const Rc<Scene> &getScene() const { return _scene; }
 
-	void update(uint64_t);
-	bool mainLoop(uint64_t);
+	void update();
 
-	void render(const Rc<gl::FrameHandle> &);
+	void acquireInput(gl::FrameHandle &, const Rc<gl::AttachmentHandle> &);
 
 	Rc<gl::DrawScheme> construct();
 
+	// should return valid RenderQueue from initial scene
+	void begin(gl::View *view);
 	void end();
 
 	Size getScreenSize() const;
-	Rc<ResourceCache> getResourceCache() const;
 
-	void runScene(Rc<Scene>);
-
-	virtual Rc<gl::RenderQueue> onDefaultRenderQueue(const gl::ImageInfo &);
+	void runScene(Rc<Scene> &&);
 
 protected:
 	// Vk Swaphain was invalidated, drop all dependent resources;
@@ -81,14 +77,16 @@ protected:
 
 	void updateGeneralTransform();
 
+	uint64_t _lastTime = 0;
 	bool _running = false;
 	Rc<gl::View> _view;
 
 	Mutex _mutex;
-	Rc<ResourceCache> _resourceCache;
 
+	Application *_application = nullptr;
 	Rc<Scene> _scene;
 	Rc<Scene> _nextScene;
+
 	Mat4 _generalProjection;
 	EventHandlerNode *_sizeChangedEvent = nullptr;
 };

@@ -90,6 +90,9 @@ struct DeviceInfo {
 	Properties properties;
 	Features features;
 
+	bool requiredExtensionsExists = false;
+	bool requiredFeaturesExists = false;
+
 	DeviceInfo();
 	DeviceInfo(VkPhysicalDevice, QueueFamilyInfo, QueueFamilyInfo, QueueFamilyInfo, QueueFamilyInfo,
 			Vector<StringView> &&, Vector<StringView> &&);
@@ -98,6 +101,8 @@ struct DeviceInfo {
 	DeviceInfo(DeviceInfo &&) = default;
 	DeviceInfo &operator=(DeviceInfo &&) = default;
 
+	bool isUsable() const;
+
 	String description() const;
 };
 
@@ -105,6 +110,7 @@ struct SurfaceInfo {
 	VkSurfaceCapabilitiesKHR capabilities;
 	Vector<VkSurfaceFormatKHR> formats;
 	Vector<gl::PresentMode> presentModes;
+	VkSurfaceKHR surface;
 
 	String description() const;
 };

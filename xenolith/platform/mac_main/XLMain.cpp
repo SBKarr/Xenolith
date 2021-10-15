@@ -3,25 +3,6 @@
 #include "XLPlatform.h"
 #include "XLApplication.h"
 
-namespace stappler::xenolith::platform::desktop {
-	Size _screenSize;
-	bool _isTablet = false;
-	bool _isFixed = false;
-	String _package;
-	String _userLanguage;
-	String _appVersion;
-	float _density = 1.0f;
-
-	void setScreenSize(const Size &size) { _screenSize = size; }
-	Size getScreenSize() { return _screenSize; }
-	bool isTablet() { return _isTablet; }
-	bool isFixed() { return _isFixed; }
-	String getPackageName() { return _package; }
-	float getDensity() { return _density; }
-	String getUserLanguage() { return _userLanguage; }
-	String getAppVersion() { return _appVersion; }
-}
-
 namespace stappler::xenolith {
 
 int parseOptionSwitch(stappler::data::Value &ret, char c, const char *str) {

@@ -86,6 +86,7 @@ public:
 	void invalidate(Device &dev);
 
 	QueueOperations getClass() const { return _class; }
+	uint32_t getFamilyIdx() const { return _familyIdx; }
 	VkCommandPool getCommandPool() const { return _commandPool; }
 
 	VkCommandBuffer allocBuffer(Device &dev, Level = Level::Primary);
@@ -94,28 +95,11 @@ public:
 	void reset(Device &dev, bool release = false);
 
 protected:
+	uint32_t _familyIdx = 0;
 	uint32_t _currentComplexity = 0;
 	uint32_t _bestComplexity = 0;
 	QueueOperations _class = QueueOperations::Graphics;
 	VkCommandPool _commandPool = VK_NULL_HANDLE;
-};
-
-class SwapchainSync : public Ref {
-public:
-	virtual ~SwapchainSync();
-
-	bool init(Device &dev, uint32_t idx);
-	void reset();
-	void invalidate();
-
-	uint32_t getIndex() const { return _index; }
-	const Rc<Semaphore> &getImageReady() const { return _imageReady; }
-	const Rc<Semaphore> &getRenderFinished() const { return _renderFinished; }
-
-protected:
-	uint32_t _index = 0;
-	Rc<Semaphore> _imageReady;
-	Rc<Semaphore> _renderFinished;
 };
 
 }

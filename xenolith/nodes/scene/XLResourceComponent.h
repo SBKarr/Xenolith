@@ -20,46 +20,30 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **/
 
-#include "XLDirector.h"
-#include "XLResourceComponent.h"
-#include "XLResourceCache.h"
+#ifndef COMPONENTS_XENOLITH_NODES_XLRESOURCECOMPONENT_H_
+#define COMPONENTS_XENOLITH_NODES_XLRESOURCECOMPONENT_H_
+
+#include "XLComponent.h"
+#include "XLGlResource.h"
 
 namespace stappler::xenolith {
 
-bool ResourceComponent::init(Rc<gl::Resource> req) {
-	_cache = Director::getInstance()->getResourceCache();
-	_resource = req;
-	return true;
-}
+class ResourceComponent : public Component {
+public:
+	virtual ~ResourceComponent() { }
 
-void ResourceComponent::setResource(Rc<gl::Resource> req) {
-	if (_running) {
-		if (_resource) {
-			_cache->revoke(_resource->getName());
-		}
-		_resource = req;
-		if (_resource) {
-			_cache->request(_resource);
-		}
-	} else {
-		_resource = req;
-	}
-}
+	bool init(Rc<gl::Resource>);
 
-Rc<gl::Resource> ResourceComponent::getResource() const {
-	return _resource;
-}
+	void setResource(Rc<gl::Resource>);
+	Rc<gl::Resource> getResource() const;
 
-void ResourceComponent::onEnter() {
-	if (_resource) {
-		_cache->request(_resource);
-	}
-}
+	virtual void onEnter();
+	virtual void onExit();
 
-void ResourceComponent::onExit() {
-	if (_resource) {
-		_cache->revoke(_resource->getName());
-	}
-}
+protected:
+	Rc<gl::Resource> _resource;
+};
 
 }
+
+#endif /* COMPONENTS_XENOLITH_NODES_XLRESOURCECOMPONENT_H_ */

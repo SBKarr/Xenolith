@@ -22,16 +22,41 @@
 
 #include "XLVkFrame.h"
 #include "XLVkDevice.h"
+#include "XLVkSwapchain.h"
 
 namespace stappler::xenolith::vk {
 
-bool FrameHandle::init(gl::Loop &loop, gl::RenderQueue &queue, uint64_t order, uint32_t gen, bool readyForSubmit) {
-	if (!gl::FrameHandle::init(loop, queue, order, gen, readyForSubmit)) {
+bool FrameHandle::init(gl::Loop &loop, gl::Swapchain &swapchain, gl::RenderQueue &queue, uint64_t order, uint32_t gen, bool readyForSubmit) {
+	if (!gl::FrameHandle::init(loop, swapchain, queue, order, gen, readyForSubmit)) {
 		return false;
 	}
 
-	_memPool = Rc<DeviceMemoryPool>::create(((Device *)_device)->getAllocator());
+	_memPool = Rc<DeviceMemoryPool>::create(((Device *)_device)->getAllocator(), true);
 	return true;
+}
+
+bool FrameHandle::init(gl::Loop &loop, gl::RenderQueue &queue, uint64_t order, uint32_t gen) {
+	if (!gl::FrameHandle::init(loop, queue, order, gen)) {
+		return false;
+	}
+
+	_memPool = Rc<DeviceMemoryPool>::create(((Device *)_device)->getAllocator(), true);
+	return true;
+}
+
+Rc<SwapchainSync> FrameHandle::acquireSwapchainSync() {
+	if (!_swapchainSync) {
+		_swapchainSync = ((Swapchain *)_swapchain)->acquireSwapchainSync(*((Device *)_device), _order);
+	}
+	return _swapchainSync;
+}
+
+void FrameHandle::invalidateSwapchain() {
+	if (_swapchainSync) {
+		_swapchainSync->lock();
+		_swapchainSync->setSwapchainValid(false);
+		_swapchainSync->unlock();
+	}
 }
 
 }

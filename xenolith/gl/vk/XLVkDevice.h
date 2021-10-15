@@ -31,48 +31,35 @@ namespace stappler::xenolith::vk {
 class Swapchain;
 class Fence;
 class Allocator;
+class TextureSetLayout;
+class MaterialCompilationRenderPass;
+class Sampler;
+
+class RenderQueueCompiler;
 
 class Device : public gl::Device {
 public:
 	using Features = DeviceInfo::Features;
 	using Properties = DeviceInfo::Properties;
 
-	static constexpr uint32_t FramesInFlight = 2;
-
 	Device();
 	virtual ~Device();
 
-	bool init(const Rc<Instance> &instance, VkSurfaceKHR, DeviceInfo &&, const Features &);
+	bool init(const vk::Instance *instance, DeviceInfo &&, const Features &);
 
-	Instance *getInstance() const { return _vkInstance; }
+	const Instance *getInstance() const { return _vkInstance; }
 	VkDevice getDevice() const { return _device; }
-	VkSurfaceKHR getSurface() const { return _surface; }
 	VkPhysicalDevice getPhysicalDevice() const;
-	const Rc<Swapchain> & getSwapchain() const;
 
-	bool recreateSwapChain(const Rc<gl::Loop> &, thread::TaskQueue &, bool resize);
-	bool createSwapChain(const Rc<gl::Loop> &, thread::TaskQueue &);
-	void cleanupSwapChain();
-
-	virtual Rc<gl::Shader> makeShader(const gl::ProgramData &) override;
-	virtual Rc<gl::Pipeline> makePipeline(const gl::RenderQueue &, const gl::RenderPassData &, const gl::PipelineData &) override;
-	virtual Rc<gl::RenderPassImpl> makeRenderPass(gl::RenderPassData &) override;
-
-	virtual void begin(Application *, thread::TaskQueue &) override;
+	virtual void begin(const Application *, thread::TaskQueue &) override;
 	virtual void end(thread::TaskQueue &) override;
-	virtual void reset(thread::TaskQueue &) override;
 	virtual void waitIdle() override;
-
-	virtual void incrementGeneration() override;
-	virtual void invalidateFrame(gl::FrameHandle &) override;
-
-	virtual bool isBestPresentMode() const override;
 
 	const DeviceInfo & getInfo() const { return _info; }
 	const DeviceCallTable * getTable() const { return _table; }
-	const Rc<Allocator> &getAllocator() const { return _allocator; }
+	const Rc<Allocator> & getAllocator() const { return _allocator; }
 
-	virtual const Rc<gl::RenderQueue> getDefaultRenderQueue() const;
+	const DeviceQueueFamily *getQueueFamily(QueueOperations) const;
 
 	// acquire VkQueue handle
 	// - QueueOperations - one of QueueOperations flags, defining capabilities of required queue
@@ -88,48 +75,61 @@ public:
 	// Acquired DeviceQueue must be released with releaseQueue
 	bool acquireQueue(QueueOperations, gl::FrameHandle &, Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> && acquire,
 			Function<void(gl::FrameHandle &)> && invalidate, Rc<Ref> &&);
+	Rc<DeviceQueue> getQueue(QueueOperations);
 	void releaseQueue(Rc<DeviceQueue> &&);
 
 	Rc<CommandPool> acquireCommandPool(QueueOperations, uint32_t = 0);
+	Rc<CommandPool> acquireCommandPool(uint32_t familyIndex);
 	void releaseCommandPool(Rc<CommandPool> &&);
 
 	Rc<Fence> acquireFence(uint32_t);
 	void releaseFence(Rc<Fence> &&);
 	void scheduleFence(gl::Loop &, Rc<Fence> &&);
 
-	Rc<SwapchainSync> acquireSwapchainSync(uint32_t);
-	void releaseSwapchainSync(Rc<SwapchainSync> &&);
+	const Rc<TextureSetLayout> &getTextureSetLayout() const { return _textureSetLayout; }
+
+	const Vector<VkSampler> &getImmutableSamplers() const { return _immutableSamplers; }
 
 private:
 	friend class DeviceQueue;
 
-	virtual Rc<gl::FrameHandle> makeFrame(gl::Loop &, gl::RenderQueue &, bool readyForSubmit) override;
+	virtual void compileResource(thread::TaskQueue &queue, const Rc<gl::Resource> &req, Function<void(bool)> &&) override;
+	virtual void compileRenderQueue(gl::Loop &loop, const Rc<gl::RenderQueue> &req, Function<void(bool)> &&) override;
+	virtual void compileSamplers(thread::TaskQueue &q, bool force) override;
 
-	bool setup(const Rc<Instance> &instance, VkPhysicalDevice p, const Properties &prop,
+	void runMaterialCompilationFrame(gl::Loop &loop, Rc<gl::MaterialInputData> &&req);
+	virtual void compileMaterials(gl::Loop &loop, Rc<gl::MaterialInputData> &&req) override;
+
+	bool setup(const Instance *instance, VkPhysicalDevice p, const Properties &prop,
 			const Vector<DeviceQueueFamily> &queueFamilies, Features &features, const Vector<const char *> &requiredExtension);
 
-	void pushQueue(gl::Loop &, VkQueue, uint32_t);
+	Rc<gl::RenderQueue> createTransferQueue() const;
+	Rc<gl::RenderQueue> createMaterialQueue();
 
-	Rc<vk::Instance> _vkInstance;
+	const vk::Instance *_vkInstance = nullptr;
 	const DeviceCallTable *_table = nullptr;
 	VkDevice _device = VK_NULL_HANDLE;
 
-	uint32_t _currentFrame = 0;
 	DeviceInfo _info;
 	Features _enabledFeatures;
 
-	VkSurfaceKHR _surface = VK_NULL_HANDLE;
-	Rc<Swapchain> _swapchain;
 	Rc<Allocator> _allocator;
+	Rc<TextureSetLayout> _textureSetLayout;
 
 	Vector<DeviceQueueFamily> _families;
 
-	uint64_t _presentOrder = 0;
+	uint64_t _renderQueueOrder = 0;
 	bool _finished = false;
 
 	Vector<Rc<Fence>> _fences;
 	Set<Rc<Fence>> _scheduled;
-	Vector<Vector<Rc<SwapchainSync>>> _sems;
+	Rc<RenderQueueCompiler> _renderQueueCompiler;
+	Rc<gl::RenderQueue> _transferQueue;
+	Rc<gl::RenderQueue> _materialQueue;
+	Rc<MaterialCompilationRenderPass> _materialRenderPass;
+
+	Vector<VkSampler> _immutableSamplers;
+	Vector<Rc<Sampler>> _samplers;
 };
 
 }

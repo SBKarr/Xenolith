@@ -29,15 +29,19 @@ namespace stappler::xenolith::gl {
 
 class Instance : public Ref {
 public:
+	using TerminateCallback = Function<void()>;
+
 	static String getVersionDescription(uint32_t);
 
-	Instance(Function<void()> &&);
+	Instance(TerminateCallback &&);
 	virtual ~Instance();
 
 	bool hasDevices() const { return _hasDevices; }
 
+	virtual Rc<Device> makeDevice(uint32_t deviceIndex = maxOf<uint32_t>()) const;
+
 protected:
-	Function<void()> _terminate;
+	TerminateCallback _terminate;
 	bool _hasDevices = false;
 };
 

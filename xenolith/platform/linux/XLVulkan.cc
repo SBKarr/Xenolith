@@ -55,6 +55,10 @@ static uint32_t s_InstanceVersion = 0;
 static Vector<VkLayerProperties> s_InstanceAvailableLayers;
 static Vector<VkExtensionProperties> s_InstanceAvailableExtensions;
 
+static bool isXcbAvailable() {
+	return true;
+}
+
 static bool isWaylandAvailable() {
 	return false;
 }
@@ -112,26 +116,6 @@ Rc<gl::Instance> createInstance(Application *app) {
     s_InstanceAvailableExtensions.resize(extensionCount);
     table.pfnEnumerateInstanceExtensionProperties(nullptr, &extensionCount, s_InstanceAvailableExtensions.data());
 
-	if constexpr (vk::s_printVkInfo) {
-		app->perform([&] (const Task &) {
-			StringStream out;
-			out << "\n\tLayers:\n";
-			for (const auto &layerProperties : s_InstanceAvailableLayers) {
-				out << "\t\t" << layerProperties.layerName << " ("
-						<< gl::Instance::getVersionDescription(layerProperties.specVersion) << "/"
-						<< gl::Instance::getVersionDescription(layerProperties.implementationVersion)
-						<< ")\t - " << layerProperties.description << "\n";
-			}
-
-			out << "\tExtension:\n";
-			for (const auto &extension : s_InstanceAvailableExtensions) {
-				out << "\t\t" << extension.extensionName << ": " << vk::Instance::getVersionDescription(extension.specVersion) << "\n";
-			}
-			log::text("Vk-Info", out.str());
-			return true;
-		});
-	}
-
 	if constexpr (vk::s_enableValidationLayers) {
 #if DEBUG
 		for (const char *layerName : vk::s_validationLayers) {
@@ -173,10 +157,7 @@ Rc<gl::Instance> createInstance(Application *app) {
 		if (strcmp(VK_KHR_SURFACE_EXTENSION_NAME, extension.extensionName) == 0) {
 			surfaceExt = extension.extensionName;
 			requiredExtensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
-		} else if (strcmp("VK_KHR_xlib_surface", extension.extensionName) == 0) {
-			xlibExt = extension.extensionName;
-			surfaceType = std::max(surfaceType, SurfaceType::XLib);
-		} else if (strcmp("VK_KHR_xcb_surface", extension.extensionName) == 0) {
+		} else if (strcmp("VK_KHR_xcb_surface", extension.extensionName) == 0 && isXcbAvailable()) {
 			xcbExt = extension.extensionName;
 			surfaceType = std::max(surfaceType, SurfaceType::XCB);
 		} else if (strcmp("VK_KHR_wayland_surface", extension.extensionName) == 0 && isWaylandAvailable()) {
@@ -253,8 +234,8 @@ Rc<gl::Instance> createInstance(Application *app) {
 
 	VkInstance instance;
 
-	auto name = platform::device::_bundleName();
-	auto version = platform::device::_applicationVersion();
+	auto name = app->getData().bundleName;
+	auto version = app->getData().applicationVersion;
 
 	uint32_t versionArgs[3] = { 0 };
 	size_t i = 0;
@@ -309,9 +290,48 @@ Rc<gl::Instance> createInstance(Application *app) {
 		return nullptr;
 	}
 
-	return Rc<vk::Instance>::alloc(instance, table.pfnGetInstanceProcAddr, targetVersion, move(enabledOptionals), [handle] {
+	auto vkInstance = Rc<vk::Instance>::alloc(instance, table.pfnGetInstanceProcAddr, targetVersion, move(enabledOptionals), [handle] {
 		::dlclose(handle);
+	}, [surfaceType] (const vk::Instance *instance, VkPhysicalDevice device, uint32_t queueIdx) {
+		VkBool32 supports = false;
+		switch (surfaceType) {
+		case SurfaceType::XCB: {
+			auto conn = vk::XcbConnectionCache::getActive();
+			supports = instance->vkGetPhysicalDeviceXcbPresentationSupportKHR(device, queueIdx, conn.connection, conn.screen->root_visual);
+			break;
+		}
+		case SurfaceType::Wayland:
+			break;
+		default:
+			break;
+		}
+		return supports;
 	});
+
+	if constexpr (vk::s_printVkInfo) {
+		app->perform([vkInstance] (const Task &) {
+			StringStream out;
+			out << "\n\tLayers:\n";
+			for (const auto &layerProperties : s_InstanceAvailableLayers) {
+				out << "\t\t" << layerProperties.layerName << " ("
+						<< gl::Instance::getVersionDescription(layerProperties.specVersion) << "/"
+						<< gl::Instance::getVersionDescription(layerProperties.implementationVersion)
+						<< ")\t - " << layerProperties.description << "\n";
+			}
+
+			out << "\tExtension:\n";
+			for (const auto &extension : s_InstanceAvailableExtensions) {
+				out << "\t\t" << extension.extensionName << ": " << vk::Instance::getVersionDescription(extension.specVersion) << "\n";
+			}
+
+			vkInstance->printDevicesInfo(out);
+
+			log::text("Vk-Info", out.str());
+			return true;
+		});
+	}
+
+	return vkInstance;
 }
 
 }

@@ -53,7 +53,7 @@ AttachmentDescriptor *Attachment::addDescriptor(RenderPassData *data) {
 	return nullptr;
 }
 
-void Attachment::sortDescriptors(RenderQueue &queue) {
+void Attachment::sortDescriptors(RenderQueue &queue, Device &dev) {
 	Set<uint32_t> priorities;
 
 	for (auto &it : _descriptors) {
@@ -73,7 +73,7 @@ void Attachment::sortDescriptors(RenderQueue &queue) {
 	});
 
 	for (auto &it : _descriptors) {
-		it->sortRefs(queue);
+		it->sortRefs(queue, dev);
 	}
 
 	if (_type == gl::AttachmentType::SwapchainImage) {
@@ -132,7 +132,7 @@ RenderPassData *Attachment::getPrevRenderPass(RenderPassData *pass) const {
 bool AttachmentDescriptor::init(RenderPassData *pass, Attachment *attachment) {
 	_renderPass = pass;
 	_descriptor.attachment = attachment;
-
+	_descriptor.descriptor = this;
 	return true;
 }
 
@@ -163,7 +163,7 @@ AttachmentRef *AttachmentDescriptor::addRef(uint32_t idx, AttachmentUsage usage)
 	return nullptr;
 }
 
-void AttachmentDescriptor::sortRefs(RenderQueue &queue) {
+void AttachmentDescriptor::sortRefs(RenderQueue &queue, Device &dev) {
 	std::sort(_refs.begin(), _refs.end(), [&] (const Rc<AttachmentRef> &l, const Rc<AttachmentRef> &r) {
 		return l->getSubpass() < r->getSubpass();
 	});
@@ -173,15 +173,18 @@ void AttachmentDescriptor::sortRefs(RenderQueue &queue) {
 	}
 
 	ProgramStage globalStages;
-	for (auto &pipeline : _renderPass->pipelines) {
-		for (auto &it : pipeline->shaders) {
-			if (auto sh = queue.getProgram(it)) {
-				globalStages |= sh->stage;
+	for (auto &subpass : _renderPass->subpasses) {
+		for (auto &pipeline : subpass.pipelines) {
+			for (auto &it : pipeline->shaders) {
+				if (auto sh = queue.getProgram(it)) {
+					globalStages |= sh->stage;
+				}
 			}
 		}
 	}
 
 	auto findUsageStages = [&] (Attachment *attachment) {
+		// TODO: use SPIRV-Reflect
 		return globalStages;
 	};
 
@@ -189,7 +192,8 @@ void AttachmentDescriptor::sortRefs(RenderQueue &queue) {
 		return;
 	}
 
-	if (_descriptor.attachment->getType() == AttachmentType::Buffer) {
+	auto type = _descriptor.attachment->getType();
+	if (type == AttachmentType::Buffer) {
 		auto buffer = (BufferAttachment *)_descriptor.attachment;
 		if (_descriptor.attachment->getDescriptorType() != DescriptorType::Unknown) {
 			_descriptor.type = _descriptor.attachment->getDescriptorType();
@@ -238,7 +242,7 @@ void AttachmentDescriptor::sortRefs(RenderQueue &queue) {
 				}
 			}
 		}
-	} else {
+	} else if (type == AttachmentType::Image || type == AttachmentType::SwapchainImage) {
 		bool isInputAttachment = false;
 		for (auto &usage : _refs) {
 			if ((usage->getUsage() & AttachmentUsage::Input) != AttachmentUsage::None) {
@@ -254,6 +258,10 @@ void AttachmentDescriptor::sortRefs(RenderQueue &queue) {
 			} else {
 				_descriptor.stages = findUsageStages(_descriptor.attachment);
 			}
+		}
+	} else {
+		if (_descriptor.type != DescriptorType::Unknown && _descriptor.stages == ProgramStage::None) {
+			_descriptor.stages = findUsageStages(_descriptor.attachment);
 		}
 	}
 }
@@ -551,7 +559,7 @@ bool SwapchainAttachment::releaseForFrame(gl::FrameHandle &frame) {
 		if (_next) {
 			_owner = move(_next);
 			_next = nullptr;
-			_owner->getLoop()->pushEvent(gl::Loop::Event::FrameUpdate, _owner);
+			_owner->getLoop()->pushEvent(gl::Loop::EventName::FrameUpdate, _owner);
 		} else {
 			_owner = nullptr;
 		}
@@ -567,6 +575,22 @@ Rc<AttachmentDescriptor> SwapchainAttachment::makeDescriptor(RenderPassData *pas
 	return Rc<SwapchainAttachmentDescriptor>::create(pass, this);
 }
 
+bool GenericAttachment::init(StringView name) {
+	return Attachment::init(name, AttachmentType::Generic);
+}
+
+Rc<AttachmentHandle> GenericAttachment::makeFrameHandle(const FrameHandle &h) {
+	return Rc<AttachmentHandle>::create(this, h);
+}
+
+Rc<AttachmentDescriptor> GenericAttachment::makeDescriptor(RenderPassData *data) {
+	return Rc<GenericAttachmentDescriptor>::create(data, this);
+}
+
+Rc<AttachmentRef> GenericAttachmentDescriptor::makeRef(uint32_t idx, AttachmentUsage usage) {
+	return Rc<GenericAttachmentRef>::create(this, idx, usage);
+}
+
 bool AttachmentHandle::init(const Rc<Attachment> &attachment, const FrameHandle &frame) {
 	_attachment = attachment;
 	return true;
@@ -579,6 +603,10 @@ bool AttachmentHandle::setup(FrameHandle &) {
 
 bool AttachmentHandle::isInput() const {
 	return (_attachment->getUsage() & AttachmentUsage::Input) != AttachmentUsage::None;
+}
+
+bool AttachmentHandle::isOutput() const {
+	return (_attachment->getUsage() & AttachmentUsage::Output) != AttachmentUsage::None;
 }
 
 uint32_t AttachmentHandle::getDescriptorArraySize(const RenderPassHandle &, const PipelineDescriptor &d, bool isExternal) const {

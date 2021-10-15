@@ -23,35 +23,9 @@
 #ifndef COMPONENTS_XENOLITH_GL_XLVKFRAMEBUFFER_H_
 #define COMPONENTS_XENOLITH_GL_XLVKFRAMEBUFFER_H_
 
-#include "XLVkDevice.h"
-#include "XLGlObject.h"
+#include "XLVkObject.h"
 
 namespace stappler::xenolith::vk {
-
-class Image : public gl::Image {
-public:
-	virtual ~Image() { }
-
-	bool init(Device &dev, VkImage, const gl::ImageInfo &);
-
-	VkImage getImage() const { return _image; }
-
-protected:
-	VkImage _image = VK_NULL_HANDLE;
-};
-
-class ImageView : public gl::ImageView {
-public:
-	virtual ~ImageView() { }
-
-	bool init(Device &dev, VkImage, VkFormat format);
-	bool init(Device &dev, const gl::ImageAttachmentDescriptor &desc, Image *);
-
-	VkImageView getImageView() const { return _imageView; }
-
-protected:
-	VkImageView _imageView = VK_NULL_HANDLE;
-};
 
 class Framebuffer : public gl::Framebuffer {
 public:

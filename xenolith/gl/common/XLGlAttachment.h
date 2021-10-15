@@ -75,7 +75,7 @@ public:
 
 	virtual bool isCompatible(const ImageInfo &) const { return false; }
 
-	virtual void sortDescriptors(RenderQueue &queue);
+	virtual void sortDescriptors(RenderQueue &queue, Device &dev);
 
 	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameHandle &);
 
@@ -101,6 +101,7 @@ protected:
 struct PipelineDescriptor {
 	StringView name; // for external descriptors
 	Attachment *attachment = nullptr;
+	AttachmentDescriptor *descriptor = nullptr;
 	DescriptorType type = DescriptorType::Unknown;
 	ProgramStage stages = ProgramStage::None;
 	uint32_t count = 1;
@@ -129,10 +130,11 @@ public:
 	RenderPassData *getRenderPass() const { return _renderPass; }
 	Attachment *getAttachment() const { return _descriptor.attachment; }
 	const Vector<Rc<AttachmentRef>> &getRefs() const { return _refs; }
+	bool usesTextureSet() const { return _usesTextureSet; }
 
 	virtual AttachmentRef *addRef(uint32_t idx, AttachmentUsage);
 
-	virtual void sortRefs(RenderQueue &);
+	virtual void sortRefs(RenderQueue &, Device &dev);
 
 	const PipelineDescriptor &getDescriptor() const { return _descriptor; }
 
@@ -146,6 +148,7 @@ protected:
 	AttachmentOps _ops = AttachmentOps::Undefined;
 	Vector<Rc<AttachmentRef>> _refs;
 	PipelineDescriptor _descriptor;
+	bool _usesTextureSet = false;
 };
 
 class AttachmentRef : public Ref {
@@ -192,6 +195,8 @@ protected:
 
 class BufferAttachmentDescriptor : public AttachmentDescriptor {
 public:
+	virtual ~BufferAttachmentDescriptor() { }
+
 	virtual BufferAttachmentRef *addBufferRef(uint32_t idx, AttachmentUsage);
 
 protected:
@@ -202,7 +207,6 @@ class BufferAttachmentRef : public AttachmentRef {
 public:
 protected:
 };
-
 
 class ImageAttachment : public Attachment {
 public:
@@ -318,6 +322,27 @@ public:
 protected:
 };
 
+class GenericAttachment : public Attachment {
+public:
+	virtual bool init(StringView);
+
+	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameHandle &);
+
+protected:
+	virtual Rc<AttachmentDescriptor> makeDescriptor(RenderPassData *) override;
+};
+
+class GenericAttachmentDescriptor : public AttachmentDescriptor {
+public:
+protected:
+	virtual Rc<AttachmentRef> makeRef(uint32_t idx, AttachmentUsage) override;
+};
+
+class GenericAttachmentRef : public AttachmentRef {
+public:
+protected:
+};
+
 class AttachmentHandle : public Ref {
 public:
 	virtual ~AttachmentHandle() { }
@@ -326,13 +351,14 @@ public:
 
 	virtual bool isAvailable(const FrameHandle &) const { return true; }
 
-	// returns true for immediate setup, false if seyup job was scheduled
+	// returns true for immediate setup, false if setup job was scheduled
 	virtual bool setup(FrameHandle &);
 
 	virtual bool isReady() const { return _ready; }
 	virtual void setReady(bool);
 
 	virtual bool isInput() const;
+	virtual bool isOutput() const;
 	virtual const Rc<Attachment> &getAttachment() const { return _attachment; }
 
 	virtual bool submitInput(FrameHandle &, Rc<AttachmentInputData> &&) {

@@ -24,9 +24,6 @@ THE SOFTWARE.
 
 namespace stappler::xenolith::vk {
 
-// minimum for Android devices;
-DescriptorCount DescriptorCount::Common(64, 96, 4, 4);
-
 QueueOperations getQueueOperations(VkQueueFlags flags, bool present) {
 	QueueOperations ret = QueueOperations(flags) &
 			(QueueOperations::Graphics | QueueOperations::Compute | QueueOperations::Transfer | QueueOperations::SparceBinding);
@@ -686,7 +683,7 @@ size_t getFormatBlockSize(VkFormat format) {
 	return 0;
 }
 
-void loadDeviceTable(Instance *_instance, VkDevice device, DeviceCallTable *table) {
+void loadDeviceTable(const Instance *_instance, VkDevice device, DeviceCallTable *table) {
 #if defined(VK_VERSION_1_0)
 	table->vkAllocateCommandBuffers = (PFN_vkAllocateCommandBuffers)_instance->vkGetDeviceProcAddr(device, "vkAllocateCommandBuffers");
 	table->vkAllocateDescriptorSets = (PFN_vkAllocateDescriptorSets)_instance->vkGetDeviceProcAddr(device, "vkAllocateDescriptorSets");
