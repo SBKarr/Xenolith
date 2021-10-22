@@ -68,6 +68,8 @@ public:
 	virtual void onLoopStarted(gl::Loop &);
 	virtual void onLoopEnded(gl::Loop &);
 
+	virtual bool supportsUpdateAfterBind(gl::DescriptorType) const;
+
 protected:
 	friend class Loop;
 

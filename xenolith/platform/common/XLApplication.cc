@@ -351,7 +351,6 @@ int64_t Application::getApplicationVersionCode() {
 	if (version == 0) {
 		String str(_data.applicationVersion);
 		int major = 0, middle = 0, minor = 0, state = 0;
-
 		for (char c : str) {
 			if (c == '.') {
 				state++;

@@ -48,7 +48,6 @@ public:
 	const Vector<VkDescriptorSet> &getDescriptorSets() const { return _data->sets; }
 
 	VkDescriptorSet getDescriptorSet(uint32_t) const;
-	bool supportsUpdateAfterBind() const;
 
 protected:
 	bool initGraphicsPass(Device &dev, gl::RenderPassData &);

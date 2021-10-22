@@ -21,6 +21,7 @@
  **/
 
 #include "XLVkTextureSet.h"
+#include <forward_list>
 
 namespace stappler::xenolith::vk {
 
@@ -36,13 +37,32 @@ bool TextureSetLayout::init(Device &dev, uint32_t imageLimit) {
 
 	VkDescriptorSetLayoutCreateInfo layoutInfo { };
 	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-
+	layoutInfo.pNext = nullptr;
 	layoutInfo.bindingCount = 1;
 	layoutInfo.pBindings = &b;
-	layoutInfo.flags = 0; // TODO - use variable size descriptor array
+	layoutInfo.flags = 0;
 
-	if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &_layout) != VK_SUCCESS) {
-		return false;
+	if (dev.getInfo().features.deviceDescriptorIndexing.descriptorBindingPartiallyBound) {
+		Vector<VkDescriptorBindingFlags> flags;
+		flags.emplace_back(VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT);
+
+		VkDescriptorSetLayoutBindingFlagsCreateInfoEXT bindingFlags;
+		bindingFlags.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
+		bindingFlags.pNext = nullptr;
+		bindingFlags.bindingCount = 1;
+		bindingFlags.pBindingFlags = flags.data();
+		layoutInfo.pNext = &bindingFlags;
+
+		if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &_layout) != VK_SUCCESS) {
+			return false;
+		}
+
+		_partiallyBound = true;
+
+	} else {
+		if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &_layout) != VK_SUCCESS) {
+			return false;
+		}
 	}
 
 	// create dummy image
@@ -209,7 +229,7 @@ bool TextureSet::init(Device &dev, const TextureSetLayout &layout) {
 
 	VkDescriptorSetAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	allocInfo.pNext = nullptr; // TODO - deal with VkDescriptorSetVariableDescriptorCountAllocateInfo
+	allocInfo.pNext = nullptr;
 	allocInfo.descriptorPool = _pool;
 	allocInfo.descriptorSetCount = 1;
 	allocInfo.pSetLayouts = &descriptorSetLayout;
@@ -220,6 +240,7 @@ bool TextureSet::init(Device &dev, const TextureSetLayout &layout) {
 	}
 
 	_layout = &layout;
+	_partiallyBound = layout.isPartiallyBound();
 	return gl::Object::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
 		auto d = ((Device *)dev);
 		d->getTable()->vkDestroyDescriptorPool(d->getDevice(), (VkDescriptorPool)ptr, nullptr);
@@ -230,13 +251,47 @@ void TextureSet::write(const gl::MaterialLayout &set) {
 	auto table = ((Device *)_device)->getTable();
 	auto dev = ((Device *)_device)->getDevice();
 
-	// TODO - optimize this with written image view index tracking
+	std::forward_list<Vector<VkDescriptorImageInfo>> imagesList;
+	Vector<VkWriteDescriptorSet> writes;
 
-	Vector<VkDescriptorImageInfo> images;
+	Vector<VkDescriptorImageInfo> *localImages = nullptr;
+
+	VkWriteDescriptorSet writeData({
+		VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
+		_set, // set
+		0, // descriptor
+		0, // index
+		0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr,
+		VK_NULL_HANDLE, VK_NULL_HANDLE
+	});
+
+	if (_partiallyBound) {
+		_layoutIndexes.resize(set.usedSlots, 0);
+	} else {
+		_layoutIndexes.resize(set.slots.size(), 0);
+	}
+
+	auto pushWritten = [&] {
+		writeData.descriptorCount = localImages->size();
+		writeData.pImageInfo = localImages->data();
+		writes.emplace_back(move(writeData));
+		writeData = VkWriteDescriptorSet ({
+			VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
+			_set, // set
+			0, // descriptor
+			0, // start from next index
+			0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr,
+			VK_NULL_HANDLE, VK_NULL_HANDLE
+		});
+		localImages = nullptr;
+	};
 
 	for (uint32_t i = 0; i < set.usedSlots; ++ i) {
-		if (set.slots[i].image) {
-			images.emplace_back(VkDescriptorImageInfo({
+		if (set.slots[i].image && _layoutIndexes[i] != set.slots[i].image->getIndex()) {
+			if (!localImages) {
+				localImages = &imagesList.emplace_front(Vector<VkDescriptorImageInfo>());
+			}
+			localImages->emplace_back(VkDescriptorImageInfo({
 				VK_NULL_HANDLE, ((ImageView *)set.slots[i].image.get())->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 			}));
 			auto image = (Image *)set.slots[i].image->getImage().get();
@@ -244,28 +299,53 @@ void TextureSet::write(const gl::MaterialLayout &set) {
 				_pendingBarriers.emplace_back(*b);
 				image->dropPendingBarrier();
 			}
-		} else {
-			images.emplace_back(VkDescriptorImageInfo({
+			_layoutIndexes[i] = set.slots[i].image->getIndex();
+			++ writeData.descriptorCount;
+		} else if (!_partiallyBound && !set.slots[i].image && _layoutIndexes[i] != _layout->getDefaultImageView()->getIndex()) {
+			if (!localImages) {
+				localImages = &imagesList.emplace_front(Vector<VkDescriptorImageInfo>());
+			}
+			localImages->emplace_back(VkDescriptorImageInfo({
 				VK_NULL_HANDLE, _layout->getDefaultImageView()->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 			}));
+			_layoutIndexes[i] = _layout->getDefaultImageView()->getIndex();
+			++ writeData.descriptorCount;
+		} else {
+			// no need to write, push written
+			if (writeData.descriptorCount > 0) {
+				pushWritten();
+			}
+			writeData.dstArrayElement = i + 1; // start from next index
 		}
 	}
 
-	for (uint32_t i = set.usedSlots; i < _count; ++ i) {
-		images.emplace_back(VkDescriptorImageInfo({
-			VK_NULL_HANDLE, _layout->getDefaultImageView()->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-		}));
+	if (!_partiallyBound) {
+		// write empty
+		for (uint32_t i = set.usedSlots; i < _count; ++ i) {
+			if (_layoutIndexes[i] != _layout->getDefaultImageView()->getIndex()) {
+				if (!localImages) {
+					localImages = &imagesList.emplace_front(Vector<VkDescriptorImageInfo>());
+				}
+				localImages->emplace_back(VkDescriptorImageInfo({
+					VK_NULL_HANDLE, _layout->getDefaultImageView()->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+				}));
+				_layoutIndexes[i] = _layout->getDefaultImageView()->getIndex();
+				++ writeData.descriptorCount;
+			} else {
+				// no need to write, push written
+				if (writeData.descriptorCount > 0) {
+					pushWritten();
+				}
+				writeData.dstArrayElement = i + 1; // start from next index
+			}
+		}
 	}
 
-	Vector<VkWriteDescriptorSet> writes;
-	writes.emplace_back(VkWriteDescriptorSet({
-		VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
-		_set, // set
-		0, // descriptor
-		0, // index
-		static_cast<uint32_t>(images.size()), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, images.data(),
-		VK_NULL_HANDLE, VK_NULL_HANDLE
-	}));
+	if (writeData.descriptorCount > 0) {
+		writeData.descriptorCount = localImages->size();
+		writeData.pImageInfo = localImages->data();
+		writes.emplace_back(move(writeData));
+	}
 
 	table->vkUpdateDescriptorSets(dev, writes.size(), writes.data(), 0, nullptr);
 }

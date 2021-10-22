@@ -263,6 +263,12 @@ public:
 		}
 	}
 
+	~HashTable() {
+		if (count) {
+			clear();
+		}
+	}
+
 	template <typename ... Args>
 	Pair<iterator, bool> assign(Args && ... args) {
 		iterator iter;

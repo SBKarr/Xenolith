@@ -66,7 +66,9 @@ public:
 	virtual void submit(gl::FrameHandle &, Function<void(const Rc<gl::RenderPass> &)> &&) override;
 
 protected:
-	virtual bool doPrepareDescriptors(gl::FrameHandle &, uint32_t index);
+	// if async is true - update descriptors with updateAfterBind flag
+	// 			   false - without updateAfterBindFlag
+	virtual bool doPrepareDescriptors(gl::FrameHandle &, uint32_t index, bool async);
 	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &, uint32_t index);
 	virtual bool doSubmit(gl::FrameHandle &);
 

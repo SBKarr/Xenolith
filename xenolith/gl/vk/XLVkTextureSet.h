@@ -47,9 +47,12 @@ public:
 
 	void initDefault(Device &dev, gl::Loop &);
 
+	bool isPartiallyBound() const { return _partiallyBound; }
+
 protected:
 	void writeDefaults(Device &dev, VkCommandBuffer buf);
 
+	bool _partiallyBound = false;
 	uint32_t _imageCount = 0;
 	VkDescriptorSetLayout _layout = VK_NULL_HANDLE;
 
@@ -74,6 +77,7 @@ public:
 	void dropPendingBarriers();
 
 protected:
+	bool _partiallyBound = false;
 	const TextureSetLayout *_layout = nullptr;
 	uint32_t _count = 0;
 	VkDescriptorSet _set = VK_NULL_HANDLE;

@@ -73,7 +73,7 @@ bool RenderPass::releaseForFrame(gl::FrameHandle &frame) {
 	return false;
 }
 
-void RenderPass::prepare(Device &) {
+void RenderPass::prepare(Device &device) {
 
 }
 

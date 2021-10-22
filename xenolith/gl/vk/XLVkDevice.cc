@@ -469,6 +469,39 @@ BytesView Device::emplaceConstant(gl::PredefinedConstant c, Bytes &data) const {
 	return BytesView();
 }
 
+bool Device::supportsUpdateAfterBind(gl::DescriptorType type) const {
+	switch (type) {
+	case gl::DescriptorType::Sampler:
+		return true; // Samplers are immutable engine-wide
+		break;
+	case gl::DescriptorType::CombinedImageSampler:
+		return _info.features.deviceDescriptorIndexing.descriptorBindingSampledImageUpdateAfterBind;
+		break;
+	case gl::DescriptorType::SampledImage:
+		return _info.features.deviceDescriptorIndexing.descriptorBindingSampledImageUpdateAfterBind;
+		break;
+	case gl::DescriptorType::StorageImage:
+		return _info.features.deviceDescriptorIndexing.descriptorBindingStorageImageUpdateAfterBind;
+		break;
+	case gl::DescriptorType::UniformTexelBuffer:
+		return _info.features.deviceDescriptorIndexing.descriptorBindingUniformTexelBufferUpdateAfterBind;
+		break;
+	case gl::DescriptorType::StorageTexelBuffer:
+		return _info.features.deviceDescriptorIndexing.descriptorBindingStorageTexelBufferUpdateAfterBind;
+		break;
+	case gl::DescriptorType::UniformBuffer:
+		return _info.features.deviceDescriptorIndexing.descriptorBindingUniformBufferUpdateAfterBind;
+		break;
+	case gl::DescriptorType::StorageBuffer:
+		return _info.features.deviceDescriptorIndexing.descriptorBindingStorageBufferUpdateAfterBind;
+		break;
+	default:
+		return false;
+		break;
+	}
+	return false;
+}
+
 void Device::compileResource(thread::TaskQueue &queue, const Rc<gl::Resource> &req, Function<void(bool)> &&complete) {
 	/*if (_started) {
 		auto t = Rc<TransferResource>::alloc(move(complete));

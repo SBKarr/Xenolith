@@ -51,10 +51,12 @@ DeviceInfo::Features DeviceInfo::Features::getOptional() {
 	ret.deviceDescriptorIndexing.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
 	ret.deviceDescriptorIndexing.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE;
 	ret.deviceDescriptorIndexing.shaderStorageImageArrayNonUniformIndexing = VK_TRUE;
-	// ret.deviceDescriptorIndexing.descriptorBindingUniformBufferUpdateAfterBind = VK_TRUE;
+	ret.deviceDescriptorIndexing.descriptorBindingUniformBufferUpdateAfterBind = VK_TRUE;
 	ret.deviceDescriptorIndexing.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
 	ret.deviceDescriptorIndexing.descriptorBindingStorageImageUpdateAfterBind = VK_TRUE;
 	ret.deviceDescriptorIndexing.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
+	ret.deviceDescriptorIndexing.descriptorBindingUniformTexelBufferUpdateAfterBind = VK_TRUE;
+	ret.deviceDescriptorIndexing.descriptorBindingStorageTexelBufferUpdateAfterBind = VK_TRUE;
 	ret.deviceDescriptorIndexing.descriptorBindingUpdateUnusedWhilePending = VK_TRUE;
 	ret.deviceDescriptorIndexing.descriptorBindingPartiallyBound = VK_TRUE;
 	ret.deviceDescriptorIndexing.descriptorBindingVariableDescriptorCount = VK_TRUE;

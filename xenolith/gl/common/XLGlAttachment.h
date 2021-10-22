@@ -107,6 +107,7 @@ struct PipelineDescriptor {
 	ProgramStage stages = ProgramStage::None;
 	uint32_t count = 1;
 	uint32_t maxCount = 1;
+	bool updateAfterBind = false;
 };
 
 class AttachmentDescriptor : public NamedRef {

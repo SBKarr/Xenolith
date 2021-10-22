@@ -93,6 +93,8 @@ struct RenderPassData : NamedMem {
 
 	RenderOrdering ordering = RenderOrderingLowest;
 	bool isPresentable = false;
+	bool usesSamplers = false;
+	bool hasUpdateAfterBind = false;
 
 	Rc<RenderPass> renderPass;
 	Rc<RenderPassImpl> impl;

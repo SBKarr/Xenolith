@@ -362,12 +362,19 @@ static void RenderQueue_buildLoadStore(RenderQueue::QueueData *data) {
 	}
 }
 
-static void RenderQueue_buildDescriptors(RenderQueue::QueueData *data) {
+static void RenderQueue_buildDescriptors(RenderQueue::QueueData *data, Device &dev) {
 	for (auto &pass : data->passes) {
 		for (auto &attachment : pass->descriptors) {
 			auto &desc = attachment->getDescriptor();
 			if (desc.type != DescriptorType::Unknown) {
+				if (dev.supportsUpdateAfterBind(desc.type)) {
+					const_cast<PipelineDescriptor &>(desc).updateAfterBind = true;
+					pass->hasUpdateAfterBind = true;
+				}
 				pass->queueDescriptors.emplace_back(&desc);
+				if (desc.type == DescriptorType::Sampler) {
+					pass->usesSamplers = true;
+				}
 			}
 		}
 	}
@@ -379,6 +386,7 @@ RenderQueue::~RenderQueue() {
 	if (_data) {
 		_data->clear();
 		auto p = _data->pool;
+		_data->~QueueData();
 		memory::pool::destroy(p);
 		_data = nullptr;
 	}
@@ -512,7 +520,7 @@ bool RenderQueue::prepare(Device &dev) {
 	}
 
 	RenderQueue_buildLoadStore(_data);
-	RenderQueue_buildDescriptors(_data);
+	RenderQueue_buildDescriptors(_data, dev);
 
 	for (auto &it : _data->passes) {
 		it->renderPass->prepare(dev);
@@ -552,7 +560,12 @@ void RenderQueue::disable() {
 }
 
 bool RenderQueue::usesSamplers() const {
-	return true; // TODO - implement check
+	for (auto &it : _data->passes) {
+		if (it->usesSamplers) {
+			return true;
+		}
+	}
+	return false;
 }
 
 RenderQueue::Builder::Builder(StringView name, Mode mode) {

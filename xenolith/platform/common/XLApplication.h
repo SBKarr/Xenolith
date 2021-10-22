@@ -171,8 +171,7 @@ public:
 	/* Device notification token on APNS or GCM */
 	StringView getDeviceToken() const { return _deviceToken; }
 
-	/* Returns applcation version, encoded in integer N*XXXYYY, where N+ - major verion,
-	XXX - middle version, YYY - minor version, 1.15.1 = 1 015 001 */
+	/* Uses XL_MAKE_API_VERSION */
 	int64_t getApplicationVersionCode();
 
 	/* Device token for APNS/GCM */

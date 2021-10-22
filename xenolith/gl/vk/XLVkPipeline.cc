@@ -222,7 +222,7 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 	pipelineInfo.pDynamicState = (dynamicStates.size() > 0) ? &dynamicState : nullptr; // Optional
 	pipelineInfo.layout = pass.renderPass->impl.cast<RenderPassImpl>()->getPipelineLayout();
 	pipelineInfo.renderPass = pass.renderPass->impl.cast<RenderPassImpl>()->getRenderPass();
-	pipelineInfo.subpass = pass.index; // FIXME: bind pipelines to subpass instead of pass
+	pipelineInfo.subpass = pass.index;
 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 	pipelineInfo.basePipelineIndex = -1;
 

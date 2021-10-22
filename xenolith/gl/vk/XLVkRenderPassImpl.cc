@@ -71,10 +71,6 @@ VkDescriptorSet RenderPassImpl::getDescriptorSet(uint32_t idx) const {
 	return _data->sets[idx];
 }
 
-bool RenderPassImpl::supportsUpdateAfterBind() const {
-	return false; // TODO - implement updateAfterBind feature
-}
-
 bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
 	PassData pass;
 
@@ -291,14 +287,25 @@ bool RenderPassImpl::initDescriptors(Device &dev, gl::RenderPassData &data, Pass
 		}
 	};
 
+	bool updateAfterBind = false;
+
 	uint32_t maxSets = 0;
 	if (!data.queueDescriptors.empty()) {
 		++ maxSets;
 
+		bool hasFlags = false;
+		Vector<VkDescriptorBindingFlags> flags;
 		VkDescriptorSetLayout setLayout = VK_NULL_HANDLE;
 		Vector<VkDescriptorSetLayoutBinding> bindings; bindings.reserve(data.queueDescriptors.size());
 		size_t bindingIdx = 0;
 		for (auto &binding : data.queueDescriptors) {
+			if (binding->updateAfterBind) {
+				flags.emplace_back(VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT);
+				hasFlags = true;
+				updateAfterBind = true;
+			} else {
+				flags.emplace_back(0);
+			}
 
 			binding->descriptor->setIndex(bindingIdx);
 
@@ -318,25 +325,52 @@ bool RenderPassImpl::initDescriptors(Device &dev, gl::RenderPassData &data, Pass
 		}
 		VkDescriptorSetLayoutCreateInfo layoutInfo { };
 		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-
+		layoutInfo.pNext = nullptr;
 		layoutInfo.bindingCount = bindings.size();
 		layoutInfo.pBindings = bindings.data();
 		layoutInfo.flags = 0;
 
-		if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &setLayout) == VK_SUCCESS) {
-			pass.layouts.emplace_back(setLayout);
+		if (hasFlags) {
+			layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT;
+
+			VkDescriptorSetLayoutBindingFlagsCreateInfoEXT bindingFlags;
+			bindingFlags.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
+			bindingFlags.pNext = nullptr;
+			bindingFlags.bindingCount = flags.size();
+			bindingFlags.pBindingFlags = flags.data();
+			layoutInfo.pNext = &bindingFlags;
+
+			if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &setLayout) == VK_SUCCESS) {
+				pass.layouts.emplace_back(setLayout);
+			} else {
+				return pass.cleanup(dev);
+			}
 		} else {
-			return pass.cleanup(dev);
+			if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &setLayout) == VK_SUCCESS) {
+				pass.layouts.emplace_back(setLayout);
+			} else {
+				return pass.cleanup(dev);
+			}
 		}
 	}
 
 	if (!data.extraDescriptors.empty()) {
 		++ maxSets;
 
+		bool hasFlags = false;
+		Vector<VkDescriptorBindingFlags> flags;
 		VkDescriptorSetLayout setLayout = VK_NULL_HANDLE;
 		Vector<VkDescriptorSetLayoutBinding> bindings; bindings.reserve(data.extraDescriptors.size());
 		size_t bindingIdx = 0;
 		for (auto &binding : data.extraDescriptors) {
+			if (binding.updateAfterBind) {
+				flags.emplace_back(VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT);
+				hasFlags = true;
+				updateAfterBind = true;
+			} else {
+				flags.emplace_back(0);
+			}
+
 			VkDescriptorSetLayoutBinding b;
 			b.binding = bindingIdx;
 			b.descriptorCount = binding.count;
@@ -358,17 +392,38 @@ bool RenderPassImpl::initDescriptors(Device &dev, gl::RenderPassData &data, Pass
 		layoutInfo.pBindings = bindings.data();
 		layoutInfo.flags = 0;
 
-		if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &setLayout) == VK_SUCCESS) {
-			pass.layouts.emplace_back(setLayout);
+		if (hasFlags) {
+			layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT;
+
+			VkDescriptorSetLayoutBindingFlagsCreateInfoEXT bindingFlags;
+			bindingFlags.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
+			bindingFlags.pNext = nullptr;
+			bindingFlags.bindingCount = flags.size();
+			bindingFlags.pBindingFlags = flags.data();
+			layoutInfo.pNext = &bindingFlags;
+
+			if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &setLayout) == VK_SUCCESS) {
+				pass.layouts.emplace_back(setLayout);
+			} else {
+				return pass.cleanup(dev);
+			}
 		} else {
-			return pass.cleanup(dev);
+			if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &setLayout) == VK_SUCCESS) {
+				pass.layouts.emplace_back(setLayout);
+			} else {
+				return pass.cleanup(dev);
+			}
 		}
 	}
 
 	VkDescriptorPoolCreateInfo poolInfo{};
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.pNext = nullptr;
-	poolInfo.flags = 0;
+	if (updateAfterBind) {
+		poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT;
+	} else {
+		poolInfo.flags = 0;
+	}
 	poolInfo.poolSizeCount = sizes.size();
 	poolInfo.pPoolSizes = sizes.data();
 	poolInfo.maxSets = maxSets;

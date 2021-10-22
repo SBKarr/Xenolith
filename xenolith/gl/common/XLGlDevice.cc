@@ -140,6 +140,10 @@ void Device::onLoopEnded(gl::Loop &) {
 
 }
 
+bool Device::supportsUpdateAfterBind(gl::DescriptorType) const {
+	return false;
+}
+
 void Device::clearShaders() {
 	_shaders.clear();
 }

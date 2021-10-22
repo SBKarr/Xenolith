@@ -96,6 +96,8 @@ public:
 
 	BytesView emplaceConstant(gl::PredefinedConstant, Bytes &) const;
 
+	virtual bool supportsUpdateAfterBind(gl::DescriptorType) const override;
+
 private:
 	friend class DeviceQueue;
 

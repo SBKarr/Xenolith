@@ -110,12 +110,9 @@ bool RenderPassHandle::prepare(gl::FrameHandle &frame) {
 	// - we can use separate thread to update them
 	// (ordering of bind|update is not defined in this case)
 
-	auto pass = (RenderPassImpl *)_data->impl.get();
-	bool updateAfterBind = pass->supportsUpdateAfterBind();
-
-	if (updateAfterBind) {
+	if (_data->hasUpdateAfterBind) {
 		frame.performInQueue([this, index] (gl::FrameHandle &frame) {
-			return doPrepareDescriptors(frame, index);
+			return doPrepareDescriptors(frame, index, true);
 		}, [this] (gl::FrameHandle &frame, bool success) {
 			if (success) {
 				_descriptorsReady = true;
@@ -127,13 +124,13 @@ bool RenderPassHandle::prepare(gl::FrameHandle &frame) {
 				frame.invalidate();
 			}
 		}, this, "RenderPass::doPrepareDescriptors");
+	} else {
+		_descriptorsReady = true;
 	}
 
-	frame.performInQueue([this, index, updateAfterBind] (gl::FrameHandle &frame) {
-		if (!updateAfterBind) {
-			if (!doPrepareDescriptors(frame, index)) {
-				return false;
-			}
+	frame.performInQueue([this, index] (gl::FrameHandle &frame) {
+		if (!doPrepareDescriptors(frame, index, false)) {
+			return false;
 		}
 
 		auto ret = doPrepareCommands(frame, index);
@@ -142,12 +139,9 @@ bool RenderPassHandle::prepare(gl::FrameHandle &frame) {
 			return true;
 		}
 		return false;
-	}, [this, updateAfterBind] (gl::FrameHandle &frame, bool success) {
+	}, [this] (gl::FrameHandle &frame, bool success) {
 		if (success) {
 			_commandsReady = true;
-			if (!updateAfterBind) {
-				_descriptorsReady = true;
-			}
 			if (_commandsReady && _descriptorsReady) {
 				frame.setRenderPassPrepared(this);
 			}
@@ -244,7 +238,7 @@ void RenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl:
 	}, this);
 }
 
-bool RenderPassHandle::doPrepareDescriptors(gl::FrameHandle &frame, uint32_t index) {
+bool RenderPassHandle::doPrepareDescriptors(gl::FrameHandle &frame, uint32_t index, bool async) {
 	auto table = _device->getTable();
 	auto pass = (RenderPassImpl *)_data->impl.get();
 
@@ -383,6 +377,9 @@ bool RenderPassHandle::doPrepareDescriptors(gl::FrameHandle &frame, uint32_t ind
 		auto set = pass->getDescriptorSet(currentSet);
 		uint32_t currentDescriptor = 0;
 		for (auto &it : _data->queueDescriptors) {
+			if (it->updateAfterBind != async) {
+				continue;
+			}
 			if (!writeDescriptor(set, *it, currentDescriptor, false)) {
 				return false;
 			}
@@ -395,6 +392,9 @@ bool RenderPassHandle::doPrepareDescriptors(gl::FrameHandle &frame, uint32_t ind
 		auto set = pass->getDescriptorSet(currentSet);
 		uint32_t currentDescriptor = 0;
 		for (auto &it : _data->extraDescriptors) {
+			if (it.updateAfterBind != async) {
+				continue;
+			}
 			if (!writeDescriptor(set, it, currentDescriptor, true)) {
 				return false;
 			}
