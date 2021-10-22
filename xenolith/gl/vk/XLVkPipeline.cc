@@ -30,37 +30,31 @@ bool Shader::init(Device &dev, const gl::ProgramData &data) {
 	_name = data.key.str();
 
 	if (!data.data.empty()) {
-		VkShaderModuleCreateInfo createInfo = {};
-		createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-		createInfo.codeSize = data.data.size() * sizeof(uint32_t);
-		createInfo.flags = 0;
-		createInfo.pCode = data.data.data();
-
-		if (dev.getTable()->vkCreateShaderModule(dev.getDevice(), &createInfo, nullptr, &_shaderModule) == VK_SUCCESS) {
-			return gl::Shader::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
-				auto d = ((Device *)dev);
-				d->getTable()->vkDestroyShaderModule(d->getDevice(), (VkShaderModule)ptr, nullptr);
-			}, gl::ObjectType::ShaderModule, _shaderModule);
-		}
+		return setup(dev, data, data.data);
 	} else if (data.callback) {
 		bool ret = false;
-		data.callback([&] (SpanView<uint32_t> data) {
-			VkShaderModuleCreateInfo createInfo = {};
-			createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-			createInfo.codeSize = data.size() * sizeof(uint32_t);
-			createInfo.flags = 0;
-			createInfo.pCode = data.data();
-
-			if (dev.getTable()->vkCreateShaderModule(dev.getDevice(), &createInfo, nullptr, &_shaderModule) == VK_SUCCESS) {
-				ret = gl::Shader::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
-					auto d = ((Device *)dev);
-					d->getTable()->vkDestroyShaderModule(d->getDevice(), (VkShaderModule)ptr, nullptr);
-				}, gl::ObjectType::ShaderModule, _shaderModule);
-			}
+		data.callback([&] (SpanView<uint32_t> shaderData) {
+			ret = setup(dev, data, shaderData);
 		});
 		return ret;
 	}
 
+	return false;
+}
+
+bool Shader::setup(Device &dev, const gl::ProgramData &programData, SpanView<uint32_t> data) {
+	VkShaderModuleCreateInfo createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+	createInfo.codeSize = data.size() * sizeof(uint32_t);
+	createInfo.flags = 0;
+	createInfo.pCode = data.data();
+
+	if (dev.getTable()->vkCreateShaderModule(dev.getDevice(), &createInfo, nullptr, &_shaderModule) == VK_SUCCESS) {
+		return gl::Shader::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+			auto d = ((Device *)dev);
+			d->getTable()->vkDestroyShaderModule(d->getDevice(), (VkShaderModule)ptr, nullptr);
+		}, gl::ObjectType::ShaderModule, _shaderModule);
+	}
 	return false;
 }
 
@@ -165,18 +159,53 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 
 	Vector<VkPipelineShaderStageCreateInfo> shaderStages; shaderStages.reserve(params.shaders.size());
 
-	for (auto &it : params.shaders) {
-		if (auto shader = queue.getProgram(it)) {
-			VkPipelineShaderStageCreateInfo info;
-			info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			info.pNext = nullptr;
-			info.flags = 0;
-			info.stage = VkShaderStageFlagBits(shader->stage);
-			info.module = shader->program.cast<Shader>()->getModule();
-			info.pName = "main";
-			info.pSpecializationInfo = nullptr;
-			shaderStages.emplace_back(info);
+	struct SpecInfo {
+		VkSpecializationInfo specInfo;
+		Vector<VkSpecializationMapEntry> entries;
+		Bytes data;
+	};
+
+	Vector<SpecInfo> specs;
+	size_t constants = 0;
+	for (auto &shader : params.shaders) {
+		if (!shader.constants.empty()) {
+			++ constants;
 		}
+	}
+	specs.reserve(constants);
+
+	for (auto &shader : params.shaders) {
+		VkPipelineShaderStageCreateInfo info;
+		info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		info.pNext = nullptr;
+		info.flags = 0;
+		info.stage = VkShaderStageFlagBits(shader.data->stage);
+		info.module = shader.data->program.cast<Shader>()->getModule();
+		info.pName = "main";
+
+		if (!shader.constants.empty()) {
+			auto &spec = specs.emplace_back();
+			spec.entries.reserve(shader.constants.size());
+			spec.data.reserve(sizeof(uint32_t) * shader.constants.size());
+			uint32_t idx = 0;
+			for (auto &it : shader.constants) {
+				VkSpecializationMapEntry &entry = spec.entries.emplace_back();
+				entry.constantID = idx;
+				entry.offset = spec.data.size();
+				auto data = dev.emplaceConstant(it, spec.data);
+				entry.size = data.size();
+				++ idx;
+			}
+
+			spec.specInfo.mapEntryCount = spec.entries.size();
+			spec.specInfo.pMapEntries = spec.entries.data();
+			spec.specInfo.dataSize = spec.data.size();
+			spec.specInfo.pData = spec.data.data();
+			info.pSpecializationInfo = &spec.specInfo;
+		} else {
+			info.pSpecializationInfo = nullptr;
+		}
+		shaderStages.emplace_back(info);
 	}
 
 	VkGraphicsPipelineCreateInfo pipelineInfo{};

@@ -55,6 +55,7 @@ public:
 	Vector<DeviceInfo> getDeviceInfo(VkSurfaceKHR surface, const Vector<Pair<VkPhysicalDevice, uint32_t>> &devs) const;
 
 	SurfaceInfo getSurfaceOptions(VkSurfaceKHR, VkPhysicalDevice) const;
+	VkExtent2D getSurfaceExtent(VkSurfaceKHR, VkPhysicalDevice) const;
 
 	//Vector<DeviceOptions> getDevices(VkSurfaceKHR, const VkPhysicalDeviceProperties *ptr = nullptr,
 	//		const Vector<Pair<VkPhysicalDevice, uint32_t>> & = Vector<Pair<VkPhysicalDevice, uint32_t>>()) const;

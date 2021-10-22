@@ -50,12 +50,6 @@ struct Loop::Internal : memory::AllocPool {
 struct PresentationData {
 	PresentationData() { }
 
-	uint64_t incrementTime() {
-		auto tmp = now;
-		now = platform::device::_clock();
-		return now - tmp;
-	}
-
 	uint64_t getLastUpdateInterval() {
 		auto tmp = lastUpdate;
 		lastUpdate = platform::device::_clock();
@@ -65,7 +59,6 @@ struct PresentationData {
 	uint64_t now = platform::device::_clock();
 	uint64_t last = 0;
 	uint64_t updateInterval = config::PresentationSchedulerInterval;
-	uint64_t timer = 0;
 	uint64_t lastUpdate = 0;
 	bool exit = false;
 };
@@ -104,7 +97,6 @@ bool Loop::worker() {
 
 	auto invalidateSwapchain = [&] (Swapchain *swapchain, AppEvent::Value event) {
 		if (swapchain->isValid()) {
-			data.timer += data.incrementTime();
 			swapchain->incrementGeneration(event);
 		}
 	};
@@ -118,6 +110,8 @@ bool Loop::worker() {
 
 	_pendingEvents.clear();
 	_mutex.unlock();
+
+	_device->onLoopStarted(*this);
 
 	auto pool = memory::pool::create(_pool);
 
@@ -140,9 +134,10 @@ bool Loop::worker() {
 			uint64_t now = 0;
 			if (timerPassed) {
 				now = platform::device::_clock();
-				runTimers(now - data.last, context);
+				auto dt = now - data.last;
+				runTimers(dt, context);
 				data.last = now;
-				data.timer = 0;
+				// log::vtext("Dt", data.updateInterval, " - ", dt);
 			}
 
 			auto &events = *context.events;
@@ -248,6 +243,7 @@ bool Loop::worker() {
 
 	memory::pool::clear(pool);
 
+	_device->onLoopEnded(*this);
 	_device->waitIdle();
 
 	_running.store(false);
@@ -378,17 +374,20 @@ void Loop::autorelease(Ref *ref) {
 
 bool Loop::pollEvents(std::unique_lock<std::mutex> &lock, PresentationData &data, Context &context) {
 	bool timerPassed = false;
-	data.timer += data.incrementTime();
+	data.now = platform::device::_clock();
 	auto counter = _queue->getOutputCounter();
 	if (!context.events->empty() || counter > 0) {
-		data.timer += data.incrementTime();
-		if (data.timer > data.updateInterval) {
+		// there are pending events, check if timeout already passed
+		if (data.now - data.last > data.updateInterval) {
 			timerPassed = true;
 		}
 	} else {
-		if (data.timer < data.updateInterval) {
+		if (data.now - data.last > data.updateInterval) {
+			timerPassed = true;
+		} else {
 			if (_internal->timers->empty()) {
-				auto t = std::min(data.updateInterval, uint64_t(1000000 / 60));
+				// no timers - just wait for events with 60FPS wakeups
+				auto t = std::max(data.updateInterval, uint64_t(1000000 / 60));
 				_cond.wait_for(lock, std::chrono::microseconds(t), [&] {
 					return !_internal->events->empty() || _queue->getOutputCounter() > 0;
 				});
@@ -396,7 +395,7 @@ bool Loop::pollEvents(std::unique_lock<std::mutex> &lock, PresentationData &data
 				_internal->events = _internal->eventsSwap;
 				_internal->eventsSwap = context.events;
 			} else {
-				if (!_cond.wait_for(lock, std::chrono::microseconds(data.updateInterval - data.timer), [&] {
+				if (!_cond.wait_for(lock, std::chrono::microseconds(data.updateInterval - (data.now - data.last)), [&] {
 					return !_internal->events->empty();
 				})) {
 					timerPassed = true;
@@ -406,8 +405,6 @@ bool Loop::pollEvents(std::unique_lock<std::mutex> &lock, PresentationData &data
 					_internal->eventsSwap = context.events;
 				}
 			}
-		} else {
-			timerPassed = true;
 		}
 	}
 	lock.unlock();

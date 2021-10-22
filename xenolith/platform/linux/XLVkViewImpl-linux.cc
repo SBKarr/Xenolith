@@ -75,10 +75,6 @@ bool ViewImpl::begin(const Rc<Director> &director, Function<void()> &&cb) {
 	return View::begin(director, move(cb));
 }
 
-void ViewImpl::end() {
-	View::end();
-}
-
 bool ViewImpl::isAvailableOnDevice(VkSurfaceKHR surface) const {
 	VkBool32 ret = VK_FALSE;
 	if (_vkDevice->getInstance()->vkGetPhysicalDeviceSurfaceSupportKHR(_vkDevice->getPhysicalDevice(),

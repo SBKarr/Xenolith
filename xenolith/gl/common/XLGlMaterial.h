@@ -38,10 +38,10 @@ struct MaterialInputData : gl::AttachmentInputData {
 };
 
 struct MaterialImage {
-	Rc<ImageObject> image;
-	Rc<Sampler> sampler;
+	const ImageData *image;
 	ImageViewInfo info;
 	Rc<ImageView> view;
+	uint32_t sampler = 0;
 	uint32_t set;
 	uint32_t descriptor;
 
@@ -61,6 +61,8 @@ public:
 	bool encode(uint8_t *, const Material *);
 
 	virtual Vector<Material *> updateMaterials(const Rc<MaterialInputData> &,
+			const Callback<Rc<ImageView>(const MaterialImage &)> &);
+	virtual Vector<Material *> updateMaterials(const Vector<Rc<Material>> &materials,
 			const Callback<Rc<ImageView>(const MaterialImage &)> &);
 
 	const BufferInfo &getInfo() const { return _info; }
@@ -101,10 +103,11 @@ public:
 	virtual ~Material();
 
 	// view for image must be empty
-	bool init(uint32_t, const Rc<Pipeline> &, Vector<MaterialImage> &&, Bytes && = Bytes());
+	bool init(uint32_t, const PipelineData *, Vector<MaterialImage> &&, Bytes && = Bytes());
+	bool init(uint32_t, const PipelineData *, const ImageData *, Bytes && = Bytes());
 
 	uint32_t getId() const { return _id; }
-	Rc<gl::Pipeline> getPipeline() const { return _pipeline; }
+	const PipelineData * getPipeline() const { return _pipeline; }
 	const Vector<MaterialImage> &getImages() const { return _images; }
 	BytesView getData() const { return _data; }
 
@@ -117,7 +120,7 @@ protected:
 	bool _dirty = true;
 	uint32_t _id = 0;
 	uint32_t _layoutIndex = 0; // set after compilation
-	Rc<Pipeline> _pipeline;
+	const PipelineData *_pipeline;
 	Vector<MaterialImage> _images;
 	Bytes _data;
 };
@@ -127,10 +130,13 @@ class MaterialAttachment : public BufferAttachment {
 public:
 	virtual ~MaterialAttachment();
 
-	virtual bool init(StringView, const BufferInfo &, MaterialSet::EncodeCallback &&, uint32_t materialObjectSize);
+	virtual bool init(StringView, const BufferInfo &,
+			MaterialSet::EncodeCallback &&, uint32_t materialObjectSize, Vector<Rc<Material>> &&);
 
 	const Rc<gl::MaterialSet> &getMaterials() const;
 	void setMaterials(const Rc<gl::MaterialSet> &);
+
+	const Vector<Rc<Material>> &getInitialMaterials() const { return _initialMaterials; }
 
 	virtual Rc<gl::MaterialSet> allocateSet(const Device &) const;
 	virtual Rc<gl::MaterialSet> cloneSet(const Rc<MaterialSet> &) const;
@@ -143,6 +149,7 @@ protected:
 	uint32_t _materialObjectSize = 0;
 	MaterialSet::EncodeCallback _encodeCallback;
 	Rc<gl::MaterialSet> _data;
+	Vector<Rc<Material>> _initialMaterials;
 };
 
 class MaterialAttachmentDescriptor : public BufferAttachmentDescriptor {

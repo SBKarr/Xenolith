@@ -88,7 +88,8 @@ public:
 	bool initialize();
 	bool compile();
 
-	bool prepareCommands(uint32_t idx, VkCommandBuffer buf);
+	bool prepareCommands(uint32_t idx, VkCommandBuffer buf,
+			Vector<VkImageMemoryBarrier> &outputImageBarriers, Vector<VkBufferMemoryBarrier> &outputBufferBarriers);
 	bool transfer(const Rc<DeviceQueue> &, const Rc<CommandPool> &, const Rc<Fence> &);
 
 	bool isValid() const { return _alloc != nullptr; }

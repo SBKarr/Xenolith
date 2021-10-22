@@ -193,15 +193,14 @@ void RenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl:
 		}
 
 		frame.performInQueue([this] (gl::FrameHandle &frame) {
-			bool isValid = true;
 			for (auto &it : _sync.swapchainSync) {
 				it->lock();
 				if (!it->isSwapchainValid()) {
-					isValid = false;
+					_isSyncValid = false;
 				}
 			}
 
-			if (!isValid || !doSubmit(frame)) {
+			if (!_isSyncValid || !doSubmit(frame)) {
 				for (auto &it : _sync.swapchainSync) {
 					it->unlock();
 				}
@@ -221,21 +220,19 @@ void RenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl:
 			}
 			return true;
 		}, [this] (gl::FrameHandle &frame, bool success) {
+			if (_queue) {
+				_device->releaseQueue(move(_queue));
+				_queue = nullptr;
+			}
 			if (success) {
-				if (_queue) {
-					_device->releaseQueue(move(_queue));
-					_queue = nullptr;
-				}
 				_device->scheduleFence(*frame.getLoop(), move(_fence));
 				_fence = nullptr;
 				frame.setRenderPassSubmitted(this);
 				invalidate();
 			} else {
-				if (_queue) {
-					_device->releaseQueue(move(_queue));
-					_queue = nullptr;
+				if (_isSyncValid) {
+					log::vtext("VK-Error", "Fail to vkQueueSubmit");
 				}
-				log::vtext("VK-Error", "Fail to vkQueueSubmit");
 				_device->releaseFence(move(_fence));
 				_fence = nullptr;
 				invalidate();
@@ -430,6 +427,8 @@ Vector<VkCommandBuffer> RenderPassHandle::doPrepareCommands(gl::FrameHandle &fra
 		return Vector<VkCommandBuffer>();
 	}
 
+
+
 	VkRenderPassBeginInfo renderPassInfo { };
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 	renderPassInfo.renderPass = _data->impl.cast<RenderPassImpl>()->getRenderPass();
@@ -462,7 +461,7 @@ bool RenderPassHandle::doSubmit(gl::FrameHandle &) {
 	auto table = _device->getTable();
 	VkSubmitInfo submitInfo{};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-
+	submitInfo.pNext = nullptr;
 	submitInfo.waitSemaphoreCount = _sync.waitSem.size();
 	submitInfo.pWaitSemaphores = _sync.waitSem.data();
 	submitInfo.pWaitDstStageMask = _sync.waitStages.data();

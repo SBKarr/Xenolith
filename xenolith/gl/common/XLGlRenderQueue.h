@@ -183,13 +183,14 @@ public:
 	bool addOutput(const Rc<Attachment> &, AttachmentOps ops = AttachmentOps::ReadColor | AttachmentOps::ReadStencil);
 
 	// add program, copy all data
-	const ProgramData * addProgram(StringView key, ProgramStage, SpanView<uint32_t>);
+	const ProgramData * addProgram(StringView key, SpanView<uint32_t>, const ProgramInfo * = nullptr);
 
 	// add program, take shader data by ref, data should exists for all resource lifetime
-	const ProgramData * addProgramByRef(StringView key, ProgramStage, SpanView<uint32_t>);
+	const ProgramData * addProgramByRef(StringView key, SpanView<uint32_t>, const ProgramInfo * = nullptr);
 
 	// add program, data will be acquired with callback when needed
-	const ProgramData * addProgram(StringView key, ProgramStage, const memory::function<void(const ProgramData::DataCallback &)> &);
+	const ProgramData * addProgram(StringView key, const memory::function<void(const ProgramData::DataCallback &)> &,
+			const ProgramInfo * = nullptr);
 
 	template <typename ... Args>
 	const PipelineData * addPipeline(const Rc<RenderPass> &pass, uint32_t subpass, StringView key, Args && ...args) {
@@ -220,7 +221,7 @@ protected:
 	void erasePipeline(const Rc<RenderPass> &, uint32_t, PipelineData *);
 
 	bool setPipelineOption(PipelineData &f, DynamicState);
-	bool setPipelineOption(PipelineData &f, const Vector<const ProgramData *> &);
+	bool setPipelineOption(PipelineData &f, const Vector<SpecializationInfo> &);
 
 	template <typename T>
 	bool setPipelineOptions(PipelineData &f, T && t) {

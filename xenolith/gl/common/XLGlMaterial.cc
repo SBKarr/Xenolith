@@ -61,8 +61,13 @@ bool MaterialSet::encode(uint8_t *buf, const Material *material) {
 
 Vector<Material *> MaterialSet::updateMaterials(const Rc<MaterialInputData> &data,
 		const Callback<Rc<ImageView>(const MaterialImage &)> &cb) {
-	Vector<Material *> ret; ret.reserve(data->materials.size());
-	for (auto &material : data->materials) {
+	return updateMaterials(data->materials, cb);
+}
+
+Vector<Material *> MaterialSet::updateMaterials(const Vector<Rc<Material>> &materials,
+		const Callback<Rc<ImageView>(const MaterialImage &)> &cb) {
+	Vector<Material *> ret; ret.reserve(materials.size());
+	for (auto &material : materials) {
 		auto mIt = _materials.find(material->getId());
 		if (mIt != _materials.end()) {
 			emplaceMaterialImages(mIt->second, material.get(), cb);
@@ -83,7 +88,7 @@ void MaterialSet::setBuffer(Rc<BufferObject> &&buffer) {
 }
 
 const MaterialLayout *MaterialSet::getLayout(uint32_t idx) const {
-	if (_layouts.size() < idx) {
+	if (idx < _layouts.size()) {
 		return &_layouts[idx];
 	}
 	return nullptr;
@@ -206,7 +211,7 @@ void MaterialSet::emplaceMaterialImages(Material *oldMaterial, Material *newMate
 			uint32_t location = 0;
 			for (auto &it : set.slots) {
 				// check if image can alias with existed
-				if (it.image && it.image->getImage() == uit.first->image && it.image->getInfo() == uit.first->info) {
+				if (it.image && it.image->getImage() == uit.first->image->image && it.image->getInfo() == uit.first->info) {
 					if (positions[imageIdx] == maxOf<uint32_t>()) {
 						++ emplaced; // mark as emplaced only if not emplaced already
 					}
@@ -256,7 +261,7 @@ void MaterialSet::emplaceMaterialImages(Material *oldMaterial, Material *newMate
 	}
 
 	// no available set, create new one;
-	auto nIt = _layouts.emplace_back(MaterialLayout());
+	auto &nIt = _layouts.emplace_back(MaterialLayout());
 	nIt.slots.resize(_imagesInSet);
 
 	Vector<uint32_t> locations;
@@ -269,10 +274,22 @@ bool MaterialImage::canAlias(const MaterialImage &other) const {
 
 Material::~Material() { }
 
-bool Material::init(uint32_t id, const Rc<Pipeline> &pipeline, Vector<MaterialImage> &&images, Bytes &&data) {
+bool Material::init(uint32_t id, const PipelineData *pipeline, Vector<MaterialImage> &&images, Bytes &&data) {
 	_id = id;
 	_pipeline = pipeline;
 	_images = move(images);
+	_data = move(data);
+	return true;
+}
+
+bool Material::init(uint32_t id, const PipelineData *pipeline, const ImageData *image, Bytes &&data) {
+	_id = id;
+	_pipeline = pipeline;
+	_images = Vector<MaterialImage>({
+		MaterialImage({
+			image
+		})
+	});
 	_data = move(data);
 	return true;
 }
@@ -283,10 +300,12 @@ void Material::setLayoutIndex(uint32_t idx) {
 
 MaterialAttachment::~MaterialAttachment() { }
 
-bool MaterialAttachment::init(StringView name, const BufferInfo &info, MaterialSet::EncodeCallback &&cb, uint32_t size) {
+bool MaterialAttachment::init(StringView name, const BufferInfo &info,
+		MaterialSet::EncodeCallback &&cb, uint32_t size, Vector<Rc<Material>> &&initials) {
 	if (BufferAttachment::init(name, info)) {
 		_materialObjectSize = size;
 		_encodeCallback = move(cb);
+		_initialMaterials = move(initials);
 		return true;
 	}
 	return false;

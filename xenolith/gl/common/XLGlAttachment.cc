@@ -85,6 +85,14 @@ Rc<AttachmentHandle> Attachment::makeFrameHandle(const FrameHandle &) {
 	return nullptr;
 }
 
+Vector<RenderPassData *> Attachment::getRenderPasses() const {
+	Vector<RenderPassData *> ret;
+	for (auto &it : _descriptors) {
+		ret.emplace_back(it->getRenderPass());
+	}
+	return ret;
+}
+
 RenderPassData *Attachment::getFirstRenderPass() const {
 	if (_descriptors.empty()) {
 		return nullptr;
@@ -144,6 +152,28 @@ void AttachmentDescriptor::reset() {
 
 }
 
+void AttachmentDescriptor::setIndex(uint32_t idx) {
+	_index = idx;
+
+	if (_descriptor.type == DescriptorType::Unknown) {
+		return;
+	}
+
+	for (auto &subpass : _renderPass->subpasses) {
+		for (auto &pipeline : subpass.pipelines) {
+			for (auto &it : pipeline->shaders) {
+				for (auto &binding : it.data->bindings) {
+					if (binding.set == 0 && binding.descriptor == _index) {
+						_descriptor.stages |= it.data->stage;
+					}
+				}
+			}
+		}
+	}
+
+	std::cout << "[" << getName() << ":" << _index << "] usage:" << getProgramStageDescription(_descriptor.stages) << "\n";
+}
+
 AttachmentRef *AttachmentDescriptor::addRef(uint32_t idx, AttachmentUsage usage) {
 	for (auto &it : _refs) {
 		if (it->getSubpass() == idx) {
@@ -172,22 +202,6 @@ void AttachmentDescriptor::sortRefs(RenderQueue &queue, Device &dev) {
 		it->updateLayout();
 	}
 
-	ProgramStage globalStages;
-	for (auto &subpass : _renderPass->subpasses) {
-		for (auto &pipeline : subpass.pipelines) {
-			for (auto &it : pipeline->shaders) {
-				if (auto sh = queue.getProgram(it)) {
-					globalStages |= sh->stage;
-				}
-			}
-		}
-	}
-
-	auto findUsageStages = [&] (Attachment *attachment) {
-		// TODO: use SPIRV-Reflect
-		return globalStages;
-	};
-
 	if (_descriptor.type != DescriptorType::Unknown) {
 		return;
 	}
@@ -197,11 +211,6 @@ void AttachmentDescriptor::sortRefs(RenderQueue &queue, Device &dev) {
 		auto buffer = (BufferAttachment *)_descriptor.attachment;
 		if (_descriptor.attachment->getDescriptorType() != DescriptorType::Unknown) {
 			_descriptor.type = _descriptor.attachment->getDescriptorType();
-			if (buffer->getInfo().stages != ProgramStage::None) {
-				_descriptor.stages = buffer->getInfo().stages;
-			} else {
-				_descriptor.stages = findUsageStages(_descriptor.attachment);
-			}
 		} else {
 			DescriptorType descriptor = DescriptorType::Unknown;
 			if ((buffer->getInfo().usage & BufferUsage::UniformTexelBuffer) != BufferUsage::None) {
@@ -235,11 +244,6 @@ void AttachmentDescriptor::sortRefs(RenderQueue &queue, Device &dev) {
 
 			if (descriptor != DescriptorType::Unknown) {
 				_descriptor.type = descriptor;
-				if (buffer->getInfo().stages != ProgramStage::None) {
-					_descriptor.stages = buffer->getInfo().stages;
-				} else {
-					_descriptor.stages = findUsageStages(_descriptor.attachment);
-				}
 			}
 		}
 	} else if (type == AttachmentType::Image || type == AttachmentType::SwapchainImage) {
@@ -251,17 +255,7 @@ void AttachmentDescriptor::sortRefs(RenderQueue &queue, Device &dev) {
 			}
 		}
 		if (isInputAttachment) {
-			auto image = (ImageAttachment *)_descriptor.attachment;
 			_descriptor.type = DescriptorType::InputAttachment;
-			if (image->getInfo().stages != ProgramStage::None) {
-				_descriptor.stages = image->getInfo().stages;
-			} else {
-				_descriptor.stages = findUsageStages(_descriptor.attachment);
-			}
-		}
-	} else {
-		if (_descriptor.type != DescriptorType::Unknown && _descriptor.stages == ProgramStage::None) {
-			_descriptor.stages = findUsageStages(_descriptor.attachment);
 		}
 	}
 }

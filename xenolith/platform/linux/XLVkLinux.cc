@@ -58,7 +58,6 @@ public:
     bool init(const Rc<EventLoop> &, const Rc<gl::Loop> &loop, StringView viewName, URect rect);
 
     virtual bool begin(const Rc<Director> &, Function<void()> &&) override;
-	virtual void end() override;
 
 	virtual bool isAvailableOnDevice(VkSurfaceKHR) const;
 	virtual void setIMEKeyboardState(bool open) override;

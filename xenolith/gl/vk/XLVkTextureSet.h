@@ -38,21 +38,21 @@ public:
 	bool init(Device &dev, uint32_t);
 	void invalidate(Device &dev);
 
-	uint32_t getImageCount() const { return _imageCount; }
+	const uint32_t &getImageCount() const { return _imageCount; }
 	VkDescriptorSetLayout getLayout() const { return _layout; }
 	const Rc<ImageView> &getDefaultImageView() const { return _defaultImageView; }
 
 	Rc<TextureSet> acquireSet(Device &dev);
 	void releaseSet(Rc<TextureSet> &&);
 
-	bool isDefaultInit() const { return _defaultInit; }
-	VkImageMemoryBarrier writeDefaults(Device &dev, VkCommandBuffer);
+	void initDefault(Device &dev, gl::Loop &);
 
 protected:
+	void writeDefaults(Device &dev, VkCommandBuffer buf);
+
 	uint32_t _imageCount = 0;
 	VkDescriptorSetLayout _layout = VK_NULL_HANDLE;
 
-	bool _defaultInit = false;
 	Rc<Image> _defaultImage;
 	Rc<ImageView> _defaultImageView;
 
@@ -70,11 +70,15 @@ public:
 
 	virtual void write(const gl::MaterialLayout &) override;
 
+	const Vector<VkImageMemoryBarrier> &getPendingBarriers() const { return _pendingBarriers; }
+	void dropPendingBarriers();
+
 protected:
 	const TextureSetLayout *_layout = nullptr;
 	uint32_t _count = 0;
 	VkDescriptorSet _set = VK_NULL_HANDLE;
 	VkDescriptorPool _pool = VK_NULL_HANDLE;
+	Vector<VkImageMemoryBarrier> _pendingBarriers;
 };
 
 }

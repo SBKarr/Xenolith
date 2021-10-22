@@ -379,6 +379,24 @@ StringView getComponentMappingName(ComponentMapping mapping) {
 	return StringView("Unknown");
 }
 
+StringView getDescriptorTypeName(DescriptorType type) {
+	switch (type) {
+	case DescriptorType::Sampler: return StringView("Sampler"); break;
+	case DescriptorType::CombinedImageSampler: return StringView("CombinedImageSampler"); break;
+	case DescriptorType::SampledImage: return StringView("SampledImage"); break;
+	case DescriptorType::StorageImage: return StringView("StorageImage"); break;
+	case DescriptorType::UniformTexelBuffer: return StringView("UniformTexelBuffer"); break;
+	case DescriptorType::StorageTexelBuffer: return StringView("StorageTexelBuffer"); break;
+	case DescriptorType::UniformBuffer: return StringView("UniformBuffer"); break;
+	case DescriptorType::StorageBuffer: return StringView("StorageBuffer"); break;
+	case DescriptorType::UniformBufferDynamic: return StringView("UniformBufferDynamic"); break;
+	case DescriptorType::StorageBufferDynamic: return StringView("StorageBufferDynamic"); break;
+	case DescriptorType::InputAttachment: return StringView("InputAttachment"); break;
+	default: break;
+	}
+	return StringView("Unknown");
+}
+
 String getImageUsageDescription(ImageUsage fmt) {
 	StringStream stream;
 	if ((fmt & ImageUsage::TransferSrc) != ImageUsage::None) { stream << " TransferSrc"; }
@@ -412,6 +430,47 @@ String getProgramStageDescription(ProgramStage fmt) {
 	return stream.str();
 }
 
+void ProgramData::inspect(SpanView<uint32_t> data) {
+	SpvReflectShaderModule shader;
+
+	spvReflectCreateShaderModule(data.size() * sizeof(uint32_t), data.data(), &shader);
+
+	switch (shader.spirv_execution_model) {
+	case SpvExecutionModelVertex: stage = ProgramStage::Vertex; break;
+	case SpvExecutionModelTessellationControl: stage = ProgramStage::TesselationControl; break;
+	case SpvExecutionModelTessellationEvaluation: stage = ProgramStage::TesselationEvaluation; break;
+	case SpvExecutionModelGeometry: stage = ProgramStage::Geometry; break;
+	case SpvExecutionModelFragment: stage = ProgramStage::Fragment; break;
+	case SpvExecutionModelGLCompute: stage = ProgramStage::Compute; break;
+	case SpvExecutionModelKernel: stage = ProgramStage::Compute; break;
+	case SpvExecutionModelTaskNV: stage = ProgramStage::Task; break;
+	case SpvExecutionModelMeshNV: stage = ProgramStage::Mesh; break;
+	case SpvExecutionModelRayGenerationKHR: stage = ProgramStage::RayGen; break;
+	case SpvExecutionModelIntersectionKHR: stage = ProgramStage::Intersection; break;
+	case SpvExecutionModelAnyHitKHR: stage = ProgramStage::AnyHit; break;
+	case SpvExecutionModelClosestHitKHR: stage = ProgramStage::ClosestHit; break;
+	case SpvExecutionModelMissKHR: stage = ProgramStage::MissHit; break;
+	case SpvExecutionModelCallableKHR: stage = ProgramStage::Callable; break;
+	default: break;
+	}
+
+	bindings.reserve(shader.descriptor_binding_count);
+	for (auto &it : makeSpanView(shader.descriptor_bindings, shader.descriptor_binding_count)) {
+		bindings.emplace_back(ProgramDescriptorBinding({it.set, it.binding, DescriptorType(it.descriptor_type)}));
+	}
+
+	constants.reserve(shader.push_constant_block_count);
+	for (auto &it : makeSpanView(shader.push_constant_blocks, shader.push_constant_block_count)) {
+		constants.emplace_back(ProgramPushConstantBlock({it.absolute_offset, it.padded_size}));
+	}
+
+	spvReflectDestroyShaderModule(&shader);
+}
+
+SpecializationInfo::SpecializationInfo(const ProgramData *data) : data(data) { }
+
+SpecializationInfo::SpecializationInfo(const ProgramData *data, Vector<PredefinedConstant> &&c) : data(data), constants(move(c)) { }
+
 String BufferInfo::description() const {
 	StringStream stream;
 
@@ -440,6 +499,17 @@ bool ImageInfo::isCompatible(const ImageInfo &img) const {
 		return true;
 	}
 	return true;
+}
+
+ImageViewInfo ImageInfo::getViewInfo(const ImageViewInfo &info) const {
+	ImageViewInfo ret(info);
+	if (ret.format == ImageFormat::Undefined) {
+		ret.format = format;
+	}
+	if (ret.layerCount.get() == maxOf<uint32_t>()) {
+		ret.layerCount = ArrayLayers(arrayLayers.get() - ret.baseArrayLayer.get());
+	}
+	return ret;
 }
 
 String ImageInfo::description() const {

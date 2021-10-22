@@ -612,13 +612,10 @@ static bool subpass_attachment_exists(memory::vector<ImageAttachmentRef *> &vec,
 template <typename T>
 inline T * emplaceAttachment(RenderPassData *pass, T *val) {
 	T *ret = nullptr;
-	auto lb = std::lower_bound(pass->descriptors.begin(), pass->descriptors.end(), val);
+
+	auto lb = std::find(pass->descriptors.begin(), pass->descriptors.end(), val);
 	if (lb == pass->descriptors.end()) {
-		pass->descriptors.emplace_back(std::move(val));
-		ret = val;
-	} else if (*lb != val) {
-		(*pass->descriptors.emplace(lb, std::move(val)));
-		ret = val;
+		ret = (T *)pass->descriptors.emplace_back(std::move(val));
 	} else {
 		ret = (T *)(*lb);
 	}
@@ -935,7 +932,7 @@ bool RenderQueue::Builder::addOutput(const Rc<Attachment> &data, AttachmentOps o
 	return false;
 }
 
-const ProgramData * RenderQueue::Builder::addProgram(StringView key, ProgramStage stage, SpanView<uint32_t> data) {
+const ProgramData * RenderQueue::Builder::addProgram(StringView key, SpanView<uint32_t> data, const ProgramInfo *info) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add shader: ", key, ", not initialized");
 		return nullptr;
@@ -945,7 +942,13 @@ const ProgramData * RenderQueue::Builder::addProgram(StringView key, ProgramStag
 		auto program = new (_data->pool) ProgramData;
 		program->key = key.pdup(_data->pool);
 		program->data = data.pdup(_data->pool);
-		program->stage = stage;
+		if (info) {
+			program->stage = info->stage;
+			program->bindings = info->bindings;
+			program->constants = info->constants;
+		} else {
+			program->inspect(data);
+		}
 		return program;
 	}, _data->pool)) {
 		return r;
@@ -955,7 +958,7 @@ const ProgramData * RenderQueue::Builder::addProgram(StringView key, ProgramStag
 	return nullptr;
 }
 
-const ProgramData * RenderQueue::Builder::addProgramByRef(StringView key, ProgramStage stage, SpanView<uint32_t> data) {
+const ProgramData * RenderQueue::Builder::addProgramByRef(StringView key, SpanView<uint32_t> data, const ProgramInfo *info) {
 	if (!_data) {
 		log::vtext("Resource", "Fail tom add shader: ", key, ", not initialized");
 		return nullptr;
@@ -965,7 +968,13 @@ const ProgramData * RenderQueue::Builder::addProgramByRef(StringView key, Progra
 		auto program = new (_data->pool) ProgramData;
 		program->key = key.pdup(_data->pool);
 		program->data = data;
-		program->stage = stage;
+		if (info) {
+			program->stage = info->stage;
+			program->bindings = info->bindings;
+			program->constants = info->constants;
+		} else {
+			program->inspect(data);
+		}
 		return program;
 	}, _data->pool)) {
 		return r;
@@ -975,7 +984,8 @@ const ProgramData * RenderQueue::Builder::addProgramByRef(StringView key, Progra
 	return nullptr;
 }
 
-const ProgramData * RenderQueue::Builder::addProgram(StringView key, ProgramStage stage, const memory::function<void(const ProgramData::DataCallback &)> &cb) {
+const ProgramData * RenderQueue::Builder::addProgram(StringView key, const memory::function<void(const ProgramData::DataCallback &)> &cb,
+		const ProgramInfo *info) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add shader: ", key, ", not initialized");
 		return nullptr;
@@ -985,7 +995,15 @@ const ProgramData * RenderQueue::Builder::addProgram(StringView key, ProgramStag
 		auto program = new (_data->pool) ProgramData;
 		program->key = key.pdup(_data->pool);
 		program->callback = cb;
-		program->stage = stage;
+		if (info) {
+			program->stage = info->stage;
+			program->bindings = info->bindings;
+			program->constants = info->constants;
+		} else {
+			cb([&] (SpanView<uint32_t> data) {
+				program->inspect(data);
+			});
+		}
 		return program;
 	}, _data->pool)) {
 		return r;
@@ -1097,18 +1115,18 @@ bool RenderQueue::Builder::setPipelineOption(PipelineData &f, DynamicState state
 	return true;
 }
 
-bool RenderQueue::Builder::setPipelineOption(PipelineData &f, const Vector<const ProgramData *> &programs) {
+bool RenderQueue::Builder::setPipelineOption(PipelineData &f, const Vector<SpecializationInfo> &programs) {
 	for (auto &it : programs) {
-		auto p = _data->programs.get(it->key);
+		auto p = _data->programs.get(it.data->key);
 		if (!p) {
-			log::vtext("PipelineRequest", _data->key, ": Shader not found in request: ", it->key);
+			log::vtext("PipelineRequest", _data->key, ": Shader not found in request: ", it.data->key);
 			return false;
 		}
 	}
 
 	f.shaders.reserve(programs.size());
 	for (auto &it : programs) {
-		f.shaders.emplace_back(it->key.pdup(_data->pool));
+		f.shaders.emplace_back(move(it));
 	}
 	return true;
 }

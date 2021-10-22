@@ -81,7 +81,6 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
 	size_t attachmentReferences = 0;
 	for (auto &it : data.descriptors) {
 		attachmentReferences += it->getRefs().size();
-		it->setIndex(maxOf<uint32_t>());
 		if (!gl::isImageAttachmentType(it->getAttachment()->getType())) {
 			continue;
 		}
@@ -300,6 +299,9 @@ bool RenderPassImpl::initDescriptors(Device &dev, gl::RenderPassData &data, Pass
 		Vector<VkDescriptorSetLayoutBinding> bindings; bindings.reserve(data.queueDescriptors.size());
 		size_t bindingIdx = 0;
 		for (auto &binding : data.queueDescriptors) {
+
+			binding->descriptor->setIndex(bindingIdx);
+
 			VkDescriptorSetLayoutBinding b;
 			b.binding = bindingIdx;
 			b.descriptorCount = binding->count;

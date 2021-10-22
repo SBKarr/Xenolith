@@ -84,9 +84,6 @@ Swapchain::~Swapchain() {
 		}
 	}
 	_sems.clear();
-
-	_renderQueue = nullptr;
-	_nextRenderQueue = nullptr;
 }
 
 bool Swapchain::init(const gl::View *view, Device &device, VkSurfaceKHR surface, const Rc<gl::RenderQueue> &queue) {
@@ -246,8 +243,6 @@ bool Swapchain::createSwapchain(Device &device, gl::PresentMode presentMode) {
 			log::vtext("Vk-Error", "Invalid default render queue");
 			return false;
 		}
-
-		_renderQueue->updateSwapchainInfo(swapchainImageInfo);
 	}
 
 	uint32_t imageCount = _info.capabilities.minImageCount + 1;
@@ -288,9 +283,15 @@ bool Swapchain::createSwapchain(Device &device, gl::PresentMode presentMode) {
 		swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
 	}
 
+	swapChainCreateInfo.imageExtent = device.getInstance()->getSurfaceExtent(_surface, device.getPhysicalDevice());
+
 	if (table->vkCreateSwapchainKHR(device.getDevice(), &swapChainCreateInfo, nullptr, &_swapchain) != VK_SUCCESS) {
 		return false;
 	}
+
+	swapchainImageInfo.extent = Extent3(swapChainCreateInfo.imageExtent.width, swapChainCreateInfo.imageExtent.height, 1);
+
+	_renderQueue->updateSwapchainInfo(swapchainImageInfo);
 
 	if (_oldSwapchain) {
 		table->vkDestroySwapchainKHR(device.getDevice(), _oldSwapchain, nullptr);

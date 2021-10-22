@@ -56,7 +56,8 @@ XENOLITH_SRCS_DIRS += \
 # extra sources: platrom deps and shaders
 XENOLITH_SRCS_OBJS += \
 	$(XENOLITH_MAKEFILE_DIR)/platform/XLPlatform.scu.cpp \
-	$(XENOLITH_MAKEFILE_DIR)/shaders/XLDefaultShaders.cpp
+	$(XENOLITH_MAKEFILE_DIR)/shaders/XLDefaultShaders.cpp \
+	$(XENOLITH_MAKEFILE_DIR)/thirdparty/thirdparty.c
 
 # recursive includes
 XENOLITH_INCLUDES_DIRS += \

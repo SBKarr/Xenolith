@@ -31,6 +31,8 @@ extern SpanView<uint32_t> DefaultFrag;
 extern SpanView<uint32_t> DefaultVert;
 extern SpanView<uint32_t> VertexFrag;
 extern SpanView<uint32_t> VertexVert;
+extern SpanView<uint32_t> MaterialFrag;
+extern SpanView<uint32_t> MaterialVert;
 
 }
 

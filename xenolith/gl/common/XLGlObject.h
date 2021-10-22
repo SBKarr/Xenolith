@@ -72,12 +72,16 @@ protected:
 
 class Shader : public NamedObject {
 public:
+	static void inspectShader(SpanView<uint32_t>);
+
 	virtual ~Shader() { }
 
 	virtual StringView getName() const override { return _name; }
 	virtual ProgramStage getStage() const { return _stage; }
 
 protected:
+	virtual void inspect(SpanView<uint32_t>);
+
 	String _name;
 	ProgramStage _stage = ProgramStage::None;
 };

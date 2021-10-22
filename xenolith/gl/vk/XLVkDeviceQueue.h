@@ -36,13 +36,22 @@ class Semaphore;
 
 struct DeviceQueueFamily {
 	struct Waiter {
-		Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> acquire;
-		Function<void(gl::FrameHandle &)> release;
+		Function<void(gl::Loop &, const Rc<DeviceQueue> &)> acquireForLoop;
+		Function<void(gl::Loop &)> releaseForLoop;
+		Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> acquireForFrame;
+		Function<void(gl::FrameHandle &)> releaseForFrame;
+
 		Rc<gl::FrameHandle> handle;
+		Rc<gl::Loop> loop;
 		Rc<Ref> ref;
 
-		Waiter(Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> &&a, Function<void(gl::FrameHandle &)> &&r, gl::FrameHandle *h, Rc<Ref> &&ref)
-		: acquire(move(a)), release(move(r)), handle(h), ref(move(ref)) { }
+		Waiter(Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> &&a, Function<void(gl::FrameHandle &)> &&r,
+				gl::FrameHandle *h, Rc<Ref> &&ref)
+		: acquireForFrame(move(a)), releaseForFrame(move(r)), handle(h), ref(move(ref)) { }
+
+		Waiter(Function<void(gl::Loop &, const Rc<DeviceQueue> &)> &&a, Function<void(gl::Loop &)> &&r,
+				gl::Loop *h, Rc<Ref> &&ref)
+		: acquireForLoop(move(a)), releaseForLoop(move(r)), loop(h), ref(move(ref)) { }
 	};
 
 	uint32_t index;

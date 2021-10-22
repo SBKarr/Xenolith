@@ -505,8 +505,6 @@ static gl::PresentMode getGlPresentMode(VkPresentModeKHR presentMode) {
 SurfaceInfo Instance::getSurfaceOptions(VkSurfaceKHR surface, VkPhysicalDevice device) const {
 	SurfaceInfo ret;
 
-	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &ret.capabilities);
-
 	uint32_t formatCount = 0;
 	vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
 
@@ -533,8 +531,16 @@ SurfaceInfo Instance::getSurfaceOptions(VkSurfaceKHR surface, VkPhysicalDevice d
 		});
 	}
 
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &ret.capabilities);
+
 	ret.surface = surface;
 	return ret;
+}
+
+VkExtent2D Instance::getSurfaceExtent(VkSurfaceKHR surface, VkPhysicalDevice device) const {
+	VkSurfaceCapabilitiesKHR capabilities;
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &capabilities);
+	return capabilities.currentExtent;
 }
 
 VkInstance Instance::getInstance() const {

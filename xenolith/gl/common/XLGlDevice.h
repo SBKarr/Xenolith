@@ -65,6 +65,9 @@ public:
 
 	uint32_t getTextureLayoutImagesCount() const { return _textureLayoutImagesCount; }
 
+	virtual void onLoopStarted(gl::Loop &);
+	virtual void onLoopEnded(gl::Loop &);
+
 protected:
 	friend class Loop;
 

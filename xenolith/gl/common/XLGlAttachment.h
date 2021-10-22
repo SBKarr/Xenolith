@@ -79,6 +79,7 @@ public:
 
 	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameHandle &);
 
+	virtual Vector<RenderPassData *> getRenderPasses() const;
 	virtual RenderPassData *getFirstRenderPass() const;
 	virtual RenderPassData *getLastRenderPass() const;
 	virtual RenderPassData *getNextRenderPass(RenderPassData *) const;
@@ -118,7 +119,7 @@ public:
 	virtual void reset();
 
 	uint32_t getIndex() const { return _index; }
-	void setIndex(uint32_t idx) { _index = idx; }
+	void setIndex(uint32_t idx);
 
 	AttachmentOps getOps() const { return _ops; }
 	void setOps(AttachmentOps ops) { _ops = ops; }

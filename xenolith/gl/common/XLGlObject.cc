@@ -23,6 +23,8 @@
 #include "XLGlObject.h"
 #include "XLGlDevice.h"
 
+#include "spirv_reflect.h"
+
 namespace stappler::xenolith::gl {
 
 bool ObjectInterface::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr) {
@@ -53,14 +55,7 @@ Object::~Object() {
 }
 
 ImageViewInfo ImageObject::getViewInfo(const ImageViewInfo &info) const {
-	ImageViewInfo ret(info);
-	if (ret.format == ImageFormat::Undefined) {
-		ret.format = _info.format;
-	}
-	if (ret.layerCount.get() == maxOf<uint32_t>()) {
-		ret.layerCount = ArrayLayers(_info.arrayLayers.get() - ret.baseArrayLayer.get());
-	}
-	return ret;
+	return _info.getViewInfo(info);
 }
 
 static std::atomic<uint64_t> s_ImagerViewCurrentIndex = 1;
@@ -84,6 +79,61 @@ void TextureSet::write(const MaterialLayout &set) {
 	}
 
 	_layoutIndexes.resize(_count, 0);
+}
+
+void Shader::inspectShader(SpanView<uint32_t> data) {
+	SpvReflectShaderModule shader;
+
+	spvReflectCreateShaderModule(data.size() * sizeof(uint32_t), data.data(), &shader);
+
+	ProgramStage stage = ProgramStage::None;
+	switch (shader.spirv_execution_model) {
+	case SpvExecutionModelVertex: stage = ProgramStage::Vertex; break;
+	case SpvExecutionModelTessellationControl: stage = ProgramStage::TesselationControl; break;
+	case SpvExecutionModelTessellationEvaluation: stage = ProgramStage::TesselationEvaluation; break;
+	case SpvExecutionModelGeometry: stage = ProgramStage::Geometry; break;
+	case SpvExecutionModelFragment: stage = ProgramStage::Fragment; break;
+	case SpvExecutionModelGLCompute: stage = ProgramStage::Compute; break;
+	case SpvExecutionModelKernel: stage = ProgramStage::Compute; break;
+	case SpvExecutionModelTaskNV: stage = ProgramStage::Task; break;
+	case SpvExecutionModelMeshNV: stage = ProgramStage::Mesh; break;
+	case SpvExecutionModelRayGenerationKHR: stage = ProgramStage::RayGen; break;
+	case SpvExecutionModelIntersectionKHR: stage = ProgramStage::Intersection; break;
+	case SpvExecutionModelAnyHitKHR: stage = ProgramStage::AnyHit; break;
+	case SpvExecutionModelClosestHitKHR: stage = ProgramStage::ClosestHit; break;
+	case SpvExecutionModelMissKHR: stage = ProgramStage::MissHit; break;
+	case SpvExecutionModelCallableKHR: stage = ProgramStage::Callable; break;
+	default: break;
+	}
+
+	std::cout << "[" << getProgramStageDescription(stage) << "]\n";
+
+	for (auto &it : makeSpanView(shader.descriptor_bindings, shader.descriptor_binding_count)) {
+		std::cout << "Binging: [" << it.set << ":" << it.binding << "] " << getDescriptorTypeName(DescriptorType(it.descriptor_type)) << "\n";
+	}
+
+	for (auto &it : makeSpanView(shader.push_constant_blocks, shader.push_constant_block_count)) {
+		std::cout << "PushConstant: [" << it.absolute_offset << " - " << it.padded_size << "]\n";
+	}
+
+	spvReflectDestroyShaderModule(&shader);
+}
+
+void Shader::inspect(SpanView<uint32_t> data) {
+	SpvReflectShaderModule shader;
+
+	spvReflectCreateShaderModule(data.size() * sizeof(uint32_t), data.data(), &shader);
+
+	uint32_t count = 0;
+	SpvReflectDescriptorBinding *bindings = nullptr;
+
+	spvReflectEnumerateDescriptorBindings(&shader, &count, &bindings);
+
+	for (auto &it : makeSpanView(shader.descriptor_bindings, shader.descriptor_binding_count)) {
+		std::cout << "[" << it.set << ":" << it.binding << "] " << getDescriptorTypeName(DescriptorType(it.descriptor_type)) << "\n";
+	}
+
+	spvReflectDestroyShaderModule(&shader);
 }
 
 }

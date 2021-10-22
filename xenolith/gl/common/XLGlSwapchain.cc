@@ -52,25 +52,30 @@ void Swapchain::invalidate(Device &) {
 
 Rc<gl::FrameHandle> Swapchain::beginFrame(gl::Loop &loop, bool force) {
 	if (force) {
-		_valid = true;
 		_frame = 0;
 	}
 
 	if (!canStartFrame()) {
 		scheduleNextFrame();
+		if (force) {
+			log::text("gl::Swapchain", "Forced frame failed");
+		}
 		return nullptr;
 	}
 
 	_nextFrameScheduled = false;
 	auto frame = makeFrame(loop, _frames.empty());
 	if (frame && frame->isValidFlag()) {
+		_view->pushEvent(AppEvent::Update);
 		frame->update(true);
 		if (frame->isValidFlag()) {
 			_frames.push_back(frame);
 			_frame = platform::device::_clock();
-			_view->pushEvent(AppEvent::Update);
 			return frame;
 		}
+	}
+	if (force) {
+		log::text("gl::Swapchain", "Forced frame failed");
 	}
 	return nullptr;
 }
@@ -91,6 +96,8 @@ void Swapchain::setFrameSubmitted(Rc<gl::FrameHandle> frame) {
 			break;
 		}
 	}
+
+	++ _submitted;
 
 	if (_nextFrameScheduled) {
 		frame->getLoop()->pushEvent(Loop::EventName::FrameTimeoutPassed, this);
@@ -114,6 +121,9 @@ bool Swapchain::isFrameValid(const gl::FrameHandle &handle) {
 
 void Swapchain::incrementGeneration(AppEvent::Value event) {
 	_valid = false;
+	if (_submitted == 0) {
+		log::text("gl::Swapchain", "Increment generation without submitted frames");
+	}
 	++ _gen;
 	if (!_frames.empty()) {
 		auto f = move(_frames);
@@ -126,6 +136,7 @@ void Swapchain::incrementGeneration(AppEvent::Value event) {
 	if (event) {
 		_view->pushEvent(event);
 	}
+	_submitted = 0;
 }
 
 bool Swapchain::isResetRequired() {

@@ -20,36 +20,4 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_GL_VK_XLVKPIPELINE_H_
-#define XENOLITH_GL_VK_XLVKPIPELINE_H_
-
-#include "XLVk.h"
-#include "XLVkDevice.h"
-
-namespace stappler::xenolith::vk {
-
-class Shader : public gl::Shader {
-public:
-	bool init(Device &dev, const gl::ProgramData &);
-
-	VkShaderModule getModule() const { return _shaderModule; }
-
-protected:
-	bool setup(Device &dev, const gl::ProgramData &, SpanView<uint32_t>);
-
-	VkShaderModule _shaderModule = VK_NULL_HANDLE;
-};
-
-class Pipeline : public gl::Pipeline {
-public:
-	bool init(Device &dev, const gl::PipelineData &params, const gl::RenderSubpassData &, const gl::RenderQueue &);
-
-	VkPipeline getPipeline() const { return _pipeline; }
-
-protected:
-	VkPipeline _pipeline = VK_NULL_HANDLE;
-};
-
-}
-
-#endif /* XENOLITH_GL_VK_XLVKPIPELINE_H_ */
+#include "SPIRV-Reflect/spirv_reflect.cc"

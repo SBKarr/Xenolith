@@ -649,6 +649,12 @@ enum class SwapchanCreationMode {
 	Fast
 };
 
+// engine-defined specialization constants for shaders
+enum class PredefinedConstant {
+	SamplersArraySize,
+	TexturesArraySize,
+};
+
 }
 
 #endif /* XENOLITH_GL_COMMON_XLGLENUM_H_ */

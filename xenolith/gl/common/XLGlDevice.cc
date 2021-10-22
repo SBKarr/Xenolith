@@ -132,6 +132,14 @@ void Device::removeObject(ObjectInterface *obj) {
 	_objects.erase(obj);
 }
 
+void Device::onLoopStarted(gl::Loop &) {
+
+}
+
+void Device::onLoopEnded(gl::Loop &) {
+
+}
+
 void Device::clearShaders() {
 	_shaders.clear();
 }

@@ -64,6 +64,7 @@ protected:
 	virtual bool scheduleNextFrame();
 
 	uint64_t _order = 0;
+	uint64_t _submitted = 0;
 	uint64_t _gen = 0;
 
 	bool _valid = false;

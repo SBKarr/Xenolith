@@ -233,6 +233,15 @@ void Device::waitIdle() {
 	_table->vkDeviceWaitIdle(_device);
 }
 
+void Device::onLoopStarted(gl::Loop &loop) {
+	gl::Device::onLoopStarted(loop);
+	_textureSetLayout->initDefault(*this, loop);
+}
+
+void Device::onLoopEnded(gl::Loop &loop) {
+	gl::Device::onLoopEnded(loop);
+}
+
 const DeviceQueueFamily *Device::getQueueFamily(QueueOperations ops) const {
 	for (auto &it : _families) {
 		if (it.preferred == ops) {
@@ -274,7 +283,9 @@ bool Device::acquireQueue(QueueOperations ops, gl::FrameHandle &handle, Function
 	return true;
 }
 
-Rc<DeviceQueue> Device::getQueue(QueueOperations ops) {
+bool Device::acquireQueue(QueueOperations ops, gl::Loop &loop, Function<void(gl::Loop &, const Rc<DeviceQueue> &)> && acquire,
+		Function<void(gl::Loop &)> && invalidate, Rc<Ref> &&ref) {
+
 	auto selectFamily = [&] () -> DeviceQueueFamily * {
 		auto ret = getQueueFamily(ops);
 		return (DeviceQueueFamily *)ret;
@@ -282,24 +293,24 @@ Rc<DeviceQueue> Device::getQueue(QueueOperations ops) {
 
 	auto family = selectFamily();
 	if (!family) {
-		return nullptr;
+		return false;
 	}
 
+	Rc<DeviceQueue> queue;
 	if (!family->queues.empty()) {
-		Rc<DeviceQueue> queue;
 		queue = Rc<DeviceQueue>::create(*this, family->queues.back(), family->index, family->ops);
 		family->queues.pop_back();
-		return queue;
+	} else {
+		family->waiters.emplace_back(DeviceQueueFamily::Waiter(move(acquire), move(invalidate), &loop, move(ref)));
 	}
-	return nullptr;
+
+	if (queue) {
+		acquire(loop, queue);
+	}
+	return true;
 }
 
 void Device::releaseQueue(Rc<DeviceQueue> &&queue) {
-	Rc<gl::FrameHandle> handle;
-	Rc<Ref> ref;
-	Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> cb;
-	Function<void(gl::FrameHandle &)> invalidate;
-
 	DeviceQueueFamily *family = nullptr;
 	for (auto &it : _families) {
 		if (it.index == queue->getIndex()) {
@@ -312,28 +323,55 @@ void Device::releaseQueue(Rc<DeviceQueue> &&queue) {
 		return;
 	}
 
-	if (family) {
-		if (family->waiters.empty()) {
-			family->queues.emplace_back(queue->getQueue());
-		} else {
-			cb = move(family->waiters.front().acquire);
-			invalidate = move(family->waiters.front().release);
+	if (family->waiters.empty()) {
+		family->queues.emplace_back(queue->getQueue());
+	} else {
+		if (family->waiters.front().handle) {
+			Rc<gl::FrameHandle> handle;
+			Rc<Ref> ref;
+			Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> cb;
+			Function<void(gl::FrameHandle &)> invalidate;
+
+			cb = move(family->waiters.front().acquireForFrame);
+			invalidate = move(family->waiters.front().releaseForFrame);
 			ref = move(family->waiters.front().ref);
 			handle = move(family->waiters.front().handle);
 			family->waiters.erase(family->waiters.begin());
-		}
-	}
 
-	if (handle && handle->isValid()) {
-		if (cb) {
-			cb(*handle, queue);
+			if (handle && handle->isValid()) {
+				if (cb) {
+					cb(*handle, queue);
+				}
+			} else if (invalidate) {
+				invalidate(*handle);
+			}
+
+			handle = nullptr;
+		} else if (family->waiters.front().loop) {
+			Rc<gl::Loop> loop;
+			Rc<Ref> ref;
+			Function<void(gl::Loop &, const Rc<DeviceQueue> &)> cb;
+			Function<void(gl::Loop &)> invalidate;
+
+			cb = move(family->waiters.front().acquireForLoop);
+			invalidate = move(family->waiters.front().releaseForLoop);
+			ref = move(family->waiters.front().ref);
+			loop = move(family->waiters.front().loop);
+			family->waiters.erase(family->waiters.begin());
+
+			if (loop && loop->isRunning()) {
+				if (cb) {
+					cb(*loop, queue);
+				}
+			} else if (invalidate) {
+				invalidate(*loop);
+			}
+
+			loop = nullptr;
 		}
-	} else if (invalidate) {
-		invalidate(*handle);
 	}
 
 	queue = nullptr;
-	handle = nullptr;
 }
 
 Rc<CommandPool> Device::acquireCommandPool(QueueOperations c, uint32_t) {
@@ -413,9 +451,27 @@ void Device::scheduleFence(gl::Loop &loop, Rc<Fence> &&fence) {
 	});
 }
 
+static BytesView Device_emplaceConstant(Bytes &data, BytesView constant) {
+	data.resize(data.size() + constant.size());
+	memcpy(data.data() + data.size() - constant.size(), constant.data(), constant.size());
+	return BytesView(data.data() + data.size() - constant.size(), constant.size());
+}
+
+BytesView Device::emplaceConstant(gl::PredefinedConstant c, Bytes &data) const {
+	switch (c) {
+	case gl::PredefinedConstant::SamplersArraySize:
+		return Device_emplaceConstant(data, BytesView((const uint8_t *)&_samplersCount, sizeof(uint32_t)));
+		break;
+	case gl::PredefinedConstant::TexturesArraySize:
+		return Device_emplaceConstant(data, BytesView((const uint8_t *)&_textureSetLayout->getImageCount(), sizeof(uint32_t)));
+		break;
+	}
+	return BytesView();
+}
+
 void Device::compileResource(thread::TaskQueue &queue, const Rc<gl::Resource> &req, Function<void(bool)> &&complete) {
-	if (_started) {
-		/*auto t = Rc<TransferResource>::alloc(move(complete));
+	/*if (_started) {
+		auto t = Rc<TransferResource>::alloc(move(complete));
 		queue.perform(Rc<Task>::create([this, req, t] (const thread::Task &) {
 			if (!t->init(_allocator, req) || !t->allocate() || !t->upload()) {
 				return false;
@@ -431,7 +487,7 @@ void Device::compileResource(thread::TaskQueue &queue, const Rc<gl::Resource> &r
 			if (!t->isStagingRequired()) {
 				return;
 			}
-		}, this));*/
+		}, this));
 	} else {
 		// single-threaded mode
 		auto t = Rc<TransferResource>::create(_allocator, req, move(complete));
@@ -456,7 +512,7 @@ void Device::compileResource(thread::TaskQueue &queue, const Rc<gl::Resource> &r
 				}
 			}
 		}
-	}
+	}*/
 }
 
 void Device::compileRenderQueue(gl::Loop &loop, const Rc<gl::RenderQueue> &req, Function<void(bool)> &&cb) {

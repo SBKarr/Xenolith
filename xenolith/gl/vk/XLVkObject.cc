@@ -203,6 +203,7 @@ bool ImageView::init(Device &dev, const gl::ImageAttachmentDescriptor &desc, Ima
 	_info.layerCount = gl::ArrayLayers(createInfo.subresourceRange.layerCount);
 
 	if (dev.getTable()->vkCreateImageView(dev.getDevice(), &createInfo, nullptr, &_imageView) == VK_SUCCESS) {
+		_image = image;
 		return gl::Object::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
 			auto d = ((Device *)dev);
 			d->getTable()->vkDestroyImageView(d->getDevice(), (VkImageView)ptr, nullptr);
@@ -319,6 +320,7 @@ bool ImageView::init(Device &dev, Image *image, const gl::ImageViewInfo &info) {
 
 	if (dev.getTable()->vkCreateImageView(dev.getDevice(), &createInfo, nullptr, &_imageView) == VK_SUCCESS) {
 		_info = info;
+		_image = image;
 		return gl::Object::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
 			auto d = ((Device *)dev);
 			d->getTable()->vkDestroyImageView(d->getDevice(), (VkImageView)ptr, nullptr);

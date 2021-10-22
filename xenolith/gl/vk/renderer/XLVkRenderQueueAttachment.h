@@ -106,6 +106,9 @@ public:
 protected:
 	virtual void addRequiredAttachment(const gl::Attachment *a, const Rc<gl::AttachmentHandle> &h) override;
 
+	virtual bool prepareMaterials(gl::FrameHandle &frame, VkCommandBuffer buf,
+			const Rc<gl::MaterialAttachment> &attachment, Vector<VkBufferMemoryBarrier> &outputBufferBarriers);
+
 	Rc<TransferResource> _resource;
 	Rc<gl::RenderQueue> _queue;
 	RenderQueueAttachmentHandle *_attachment;

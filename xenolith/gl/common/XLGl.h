@@ -92,8 +92,21 @@ struct SamplerInfo {
 	float maxLod = 0.0;
 };
 
+struct ProgramDescriptorBinding {
+	uint32_t set = 0;
+	uint32_t descriptor = 0;
+	DescriptorType type = DescriptorType::Unknown;
+};
+
+struct ProgramPushConstantBlock {
+	uint32_t offset = 0;
+	uint32_t size = 0;
+};
+
 struct ProgramInfo : NamedMem {
 	ProgramStage stage;
+	memory::vector<ProgramDescriptorBinding> bindings;
+	memory::vector<ProgramPushConstantBlock> constants;
 };
 
 struct ProgramData : ProgramInfo {
@@ -102,11 +115,21 @@ struct ProgramData : ProgramInfo {
 	SpanView<uint32_t> data;
 	memory::function<void(const DataCallback &)> callback = nullptr;
 	Rc<Shader> program; // GL implementation-dependent object
+
+	void inspect(SpanView<uint32_t>);
+};
+
+struct SpecializationInfo {
+	const ProgramData *data = nullptr;
+	Vector<PredefinedConstant> constants;
+
+	SpecializationInfo(const ProgramData *);
+	SpecializationInfo(const ProgramData *, Vector<PredefinedConstant> &&);
 };
 
 struct PipelineInfo : NamedMem {
 	DynamicState dynamicState = DynamicState::Default;
-	memory::vector<StringView> shaders;
+	memory::vector<SpecializationInfo> shaders;
 };
 
 struct PipelineData : PipelineInfo {
@@ -121,7 +144,7 @@ using BufferPersistent = ValueWrapper<bool, class BufferPersistentFlag>;
 struct BufferInfo : NamedMem {
 	BufferFlags flags = BufferFlags::None;
 	BufferUsage usage = BufferUsage::TransferDst;
-	ProgramStage stages = ProgramStage::None; // shader stages, on which this buffer can be used
+	// ProgramStage stages = ProgramStage::None; // shader stages, on which this buffer can be used
 	uint64_t size = 0;
 	bool persistent = true;
 
@@ -138,7 +161,7 @@ struct BufferInfo : NamedMem {
 	void setup(ForceBufferUsage value) { usage = value.get(); }
 	void setup(uint64_t value) { size = value; }
 	void setup(BufferPersistent value) { persistent = value.get(); }
-	void setup(ProgramStage value) { stages = value; }
+	// void setup(ProgramStage value) { stages = value; }
 
 	template <typename T>
 	void define(T && t) {
@@ -167,6 +190,8 @@ struct BufferData : BufferInfo {
 using ForceImageFlags = ValueWrapper<ImageFlags, class ForceImageFlagsFlag>;
 using ForceImageUsage = ValueWrapper<ImageUsage, class ForceImageUsageFlag>;
 
+struct ImageViewInfo;
+
 struct ImageInfo : NamedMem {
 	ImageFormat format = ImageFormat::Undefined;
 	ImageFlags flags = ImageFlags::None;
@@ -177,7 +202,7 @@ struct ImageInfo : NamedMem {
 	SampleCount samples = SampleCount::X1;
 	ImageTiling tiling = ImageTiling::Optimal;
 	ImageUsage usage = ImageUsage::TransferDst;
-	ProgramStage stages = ProgramStage::None; // shader stages, on which this image can be used
+	// ProgramStage stages = ProgramStage::None; // shader stages, on which this image can be used
 
 	ImageInfo() = default;
 
@@ -199,7 +224,7 @@ struct ImageInfo : NamedMem {
 	void setup(ImageUsage value) { usage |= value; }
 	void setup(ForceImageUsage value) { usage = value.get(); }
 	void setup(ImageFormat value) { format = value; }
-	void setup(ProgramStage value) { stages = value; }
+	// void setup(ProgramStage value) { stages = value; }
 
 	template <typename T>
 	void define(T && t) {
@@ -213,6 +238,9 @@ struct ImageInfo : NamedMem {
 	}
 
 	bool isCompatible(const ImageInfo &) const;
+
+	ImageViewInfo getViewInfo(const ImageViewInfo &info) const;
+
 	String description() const;
 };
 
@@ -323,6 +351,7 @@ StringView getImageViewTypeName(ImageViewType type);
 StringView getImageFormatName(ImageFormat fmt);
 StringView getImageTilingName(ImageTiling type);
 StringView getComponentMappingName(ComponentMapping);
+StringView getDescriptorTypeName(DescriptorType);
 String getImageUsageDescription(ImageUsage fmt);
 String getProgramStageDescription(ProgramStage fmt);
 size_t getFormatBlockSize(ImageFormat format);

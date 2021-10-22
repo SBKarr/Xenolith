@@ -74,15 +74,20 @@ void Director::acquireInput(gl::FrameHandle &frame, const Rc<gl::AttachmentHandl
 	array.init(4, 6);
 
 	auto quad = array.addQuad();
-	quad.setGeometry(Vec4(-0.5f, -0.5f, 0, 0), Size(1.0f, 1.0f));
+	quad.setGeometry(Vec4(-1.0f, -1.0f, 0, 0), Size(2.0f, 2.0f));
 	quad.setColor({
 		Color::Red_500,
 		Color::Green_500,
 		Color::Blue_500,
 		Color::White
 	});
+	quad.setTextureRect(Rect(0.0f, 0.0f, 1.0f, 1.0f), 1.0f, 1.0f, false, true);
 
-	frame.submitInput(a, Rc<gl::VertexData>(array.pop()));
+	auto input = Rc<gl::VertexData>(array.pop());
+
+	input->spans.emplace_back(gl::VertexData::VertexSpan{0, 6, 1, 0});
+
+	frame.submitInput(a, move(input));
 }
 
 Rc<gl::DrawScheme> Director::construct() {

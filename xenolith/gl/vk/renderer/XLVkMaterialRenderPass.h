@@ -33,7 +33,7 @@ class MaterialVertexAttachment : public gl::MaterialAttachment {
 public:
 	virtual ~MaterialVertexAttachment();
 
-	virtual bool init(StringView, const gl::BufferInfo &);
+	virtual bool init(StringView, const gl::BufferInfo &, Vector<Rc<gl::Material>> && = Vector<Rc<gl::Material>>());
 
 	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameHandle &) override;
 };
@@ -110,7 +110,10 @@ public:
 protected:
 	virtual void addRequiredAttachment(const gl::Attachment *a, const Rc<gl::AttachmentHandle> &h) override;
 	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &, uint32_t index) override;
-	virtual void prepareMaterialCommands(gl::FrameHandle &, VkCommandBuffer &);
+	virtual void prepareMaterialCommands(gl::MaterialSet * materials, gl::FrameHandle &, VkCommandBuffer &);
+
+	virtual void doFinalizeTransfer(gl::MaterialSet * materials, VkCommandBuffer,
+			Vector<VkImageMemoryBarrier> &outputImageBarriers, Vector<VkBufferMemoryBarrier> &outputBufferBarriers);
 
 	VertexMaterialAttachmentHandle *_vertexBuffer = nullptr;
 	MaterialVertexAttachmentHandle *_materialBuffer = nullptr;

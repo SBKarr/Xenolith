@@ -55,6 +55,9 @@ public:
 	virtual void end(thread::TaskQueue &) override;
 	virtual void waitIdle() override;
 
+	virtual void onLoopStarted(gl::Loop &) override;
+	virtual void onLoopEnded(gl::Loop &) override;
+
 	const DeviceInfo & getInfo() const { return _info; }
 	const DeviceCallTable * getTable() const { return _table; }
 	const Rc<Allocator> & getAllocator() const { return _allocator; }
@@ -75,7 +78,8 @@ public:
 	// Acquired DeviceQueue must be released with releaseQueue
 	bool acquireQueue(QueueOperations, gl::FrameHandle &, Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> && acquire,
 			Function<void(gl::FrameHandle &)> && invalidate, Rc<Ref> &&);
-	Rc<DeviceQueue> getQueue(QueueOperations);
+	bool acquireQueue(QueueOperations, gl::Loop &, Function<void(gl::Loop &, const Rc<DeviceQueue> &)> && acquire,
+			Function<void(gl::Loop &)> && invalidate, Rc<Ref> &&);
 	void releaseQueue(Rc<DeviceQueue> &&);
 
 	Rc<CommandPool> acquireCommandPool(QueueOperations, uint32_t = 0);
@@ -89,6 +93,8 @@ public:
 	const Rc<TextureSetLayout> &getTextureSetLayout() const { return _textureSetLayout; }
 
 	const Vector<VkSampler> &getImmutableSamplers() const { return _immutableSamplers; }
+
+	BytesView emplaceConstant(gl::PredefinedConstant, Bytes &) const;
 
 private:
 	friend class DeviceQueue;

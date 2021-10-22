@@ -46,6 +46,10 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<sourceEntries>
+						<entry excluding="xenolith/thirdparty/SPIRV-Reflect/include|xenolith/core/thirdparty/SPIRV-Reflect/include|thirdparty/SPIRV-Reflect/include|include" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="xenolith/thirdparty/SPIRV-Reflect/include"/>
+					</sourceEntries>
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
@@ -95,6 +99,10 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<sourceEntries>
+						<entry excluding="xenolith/thirdparty/SPIRV-Reflect/include|xenolith/core/thirdparty/SPIRV-Reflect/include|thirdparty/SPIRV-Reflect/include|include" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="xenolith/thirdparty/SPIRV-Reflect/include"/>
+					</sourceEntries>
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings">
@@ -148,6 +156,10 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<sourceEntries>
+						<entry excluding="xenolith/thirdparty/SPIRV-Reflect/include|xenolith/core/thirdparty/SPIRV-Reflect/include|thirdparty/SPIRV-Reflect/include|include" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="xenolith/thirdparty/SPIRV-Reflect/include"/>
+					</sourceEntries>
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>

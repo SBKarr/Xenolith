@@ -290,7 +290,9 @@ void FrameHandle::setRenderPassSubmitted(const Rc<RenderPassHandle> &handle) {
 		// set next frame ready for submit
 		auto linkId = retain();
 		releaseResources();
-		_swapchain->setFrameSubmitted(this);
+		if (_swapchain) {
+			_swapchain->setFrameSubmitted(this);
+		}
 		XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] frame submitted");
 		release(linkId);
 	}
@@ -300,7 +302,9 @@ void FrameHandle::submitRenderPass(const Rc<RenderPassHandle> &pass) {
 	if (pass->getData()->isPresentable) {
 		XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] pre-submit '", pass->getRenderPass()->getName(), "'");
 		_submitted = true;
-		_loop->pushContextEvent(gl::Loop::EventName::FrameSubmitted, _swapchain);
+		if (_swapchain) {
+			_loop->pushContextEvent(gl::Loop::EventName::FrameSubmitted, _swapchain);
+		}
 	}
 
 	Rc<SwapchainAttachment> a;

@@ -32,60 +32,65 @@
 
 #include "XLVkImageAttachment.h"
 #include "XLVkBufferAttachment.h"
-#include "XLVkRenderPass.h"
+#include "XLVkMaterialRenderPass.h"
 
 namespace stappler::xenolith::app {
 
 bool AppScene::init(Extent2 extent) {
 	gl::ImageInfo info(extent, gl::ImageUsage::ColorAttachment, platform::graphic::getCommonFormat());
-
 	gl::RenderQueue::Builder builder("Loader", gl::RenderQueue::Continuous);
-	auto defaultFrag = builder.addProgramByRef("Loader_DefaultVert", gl::ProgramStage::Vertex, stappler::xenolith::shaders::DefaultVert);
-	auto defaultVert = builder.addProgramByRef("Loader_DefaultFrag", gl::ProgramStage::Fragment, stappler::xenolith::shaders::DefaultFrag);
-	auto vertexFrag = builder.addProgramByRef("Loader_VertexVert", gl::ProgramStage::Vertex, stappler::xenolith::shaders::VertexVert);
-	auto vertexVert = builder.addProgramByRef("Loader_VertexFrag", gl::ProgramStage::Fragment, stappler::xenolith::shaders::VertexFrag);
+	auto materialFrag = builder.addProgramByRef("Loader_MaterialVert", xenolith::shaders::MaterialVert);
+	auto materialVert = builder.addProgramByRef("Loader_MaterialFrag", xenolith::shaders::MaterialFrag);
+	// auto vertexFrag = builder.addProgramByRef("Loader_VertexVert", gl::ProgramStage::Vertex, xenolith::shaders::VertexVert);
+	// auto vertexVert = builder.addProgramByRef("Loader_VertexFrag", gl::ProgramStage::Fragment, xenolith::shaders::VertexFrag);
+
+	auto pass = Rc<vk::MaterialRenderPass>::create("SwapchainPass", gl::RenderOrderingHighest);
+	builder.addRenderPass(pass);
+
+	/*builder.addPipeline(pass, 0, "Vertexes", Vector<gl::SpecializationInfo>({
+		vertexVert,
+		vertexFrag
+	}));*/
+	auto materialPipeline = builder.addPipeline(pass, 0, "Materials", Vector<gl::SpecializationInfo>({
+		materialVert,
+		gl::SpecializationInfo(materialFrag, { gl::PredefinedConstant::SamplersArraySize, gl::PredefinedConstant::TexturesArraySize })
+	}));
+
+	gl::Resource::Builder resourceBuilder("LoaderResources");
+	auto initImage = resourceBuilder.addImage("Xenolith", pass,
+			gl::ImageInfo(gl::ImageFormat::R8G8B8A8_UNORM, gl::ImageUsage::Sampled),
+			FilePath("resources/xenolith-1.png"));
+
+	builder.setInternalResource(Rc<gl::Resource>::create(move(resourceBuilder)));
 
 	auto out = Rc<vk::SwapchainAttachment>::create("Swapchain", move(info),
 			gl::AttachmentLayout::Undefined, gl::AttachmentLayout::PresentSrc);
 
-	auto input = Rc<vk::VertexBufferAttachment>::create("VertexInput", gl::BufferInfo(gl::BufferUsage::StorageBuffer, gl::ProgramStage::Vertex));
-
 	auto samplers = Rc<gl::SamplersAttachment>::create("Samplers");
 
-	auto pass = Rc<vk::VertexRenderPass>::create("SwapchainPass", gl::RenderOrderingHighest);
-	builder.addRenderPass(pass);
-	builder.addPipeline(pass, 0, "Default", Vector<const gl::ProgramData *>({
-		defaultVert,
-		defaultFrag
-	}));
-	builder.addPipeline(pass, 0, "Vertexes", Vector<const gl::ProgramData *>({
-		vertexVert,
-		vertexFrag
+	auto vertexInput = Rc<vk::VertexMaterialAttachment>::create("VertexInput",
+			gl::BufferInfo(gl::BufferUsage::StorageBuffer));
+
+	auto materialInput = Rc<vk::MaterialVertexAttachment>::create("MaterialInput",
+			gl::BufferInfo(gl::BufferUsage::StorageBuffer),
+			Vector<Rc<gl::Material>>({
+				Rc<gl::Material>::create(0, materialPipeline, initImage)
 	}));
 
-	/*gl::Resource::Builder resourceBuilder("LoaderResources");
-	resourceBuilder.addImage("Xenolith", pass,
-			gl::ImageInfo(gl::ImageFormat::R8G8B8A8_UNORM, gl::ImageUsage::Sampled, gl::ProgramStage::Fragment),
-			FilePath("resources/xenolith-1.png"));
+	builder.addPassInput(pass, 0, samplers); // 0
+	builder.addPassInput(pass, 0, vertexInput); // 1
+	builder.addPassInput(pass, 0, materialInput); // 2
+	builder.addPassOutput(pass, 0, out);
 
-	builder.setInternalResource(Rc<gl::Resource>::create(move(resourceBuilder)));*/
+	builder.addInput(vertexInput);
+	builder.addOutput(out);
 
 	/*builder.addSubpassDependency(pass,
 			gl::RenderSubpassDependency::External, gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::None,
 			0, gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::ColorAttachmentWrite, false);*/
-
-	builder.addPassInput(pass, 0, input);
-	builder.addPassInput(pass, 0, samplers);
-	builder.addPassOutput(pass, 0, out);
-
-	builder.addInput(input);
-	builder.addOutput(out);
-
 	if (!Scene::init(move(builder))) {
 		return false;
 	}
-
-	// addComponent(Rc<AppSceneResource>::create());
 
 	return true;
 }

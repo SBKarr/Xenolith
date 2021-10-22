@@ -189,9 +189,9 @@ void EventLoopLinux::addView(gl::View *view) {
 
 	auto socketFd = v->getSocketFd();
 	if (socketFd >= 0) {
-		auto it = _fds.emplace(eventFd, ViewFdData({view, false})).first;
+		auto it = _fds.emplace(socketFd, ViewFdData({view, false})).first;
 
-		it->second.event.data.fd = eventFd;
+		it->second.event.data.fd = socketFd;
 		it->second.event.events = EPOLLIN;
 
 		auto err = ::epoll_ctl(_epollFd, EPOLL_CTL_ADD, socketFd, &it->second.event);

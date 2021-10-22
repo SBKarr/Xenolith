@@ -74,6 +74,7 @@ protected:
 
 	virtual Sync makeSyncInfo();
 
+	bool _isSyncValid = true;
 	bool _commandsReady = false;
 	bool _descriptorsReady = false;
 

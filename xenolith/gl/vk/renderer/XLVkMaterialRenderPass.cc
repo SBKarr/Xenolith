@@ -33,10 +33,10 @@ namespace stappler::xenolith::vk {
 
 MaterialVertexAttachment::~MaterialVertexAttachment() { }
 
-bool MaterialVertexAttachment::init(StringView str, const gl::BufferInfo &info) {
+bool MaterialVertexAttachment::init(StringView str, const gl::BufferInfo &info, Vector<Rc<gl::Material>> &&initial) {
 	return MaterialAttachment::init(str, info, [] (uint8_t *, const gl::Material *) {
 		return false;
-	}, sizeof(uint32_t) * 4);
+	}, sizeof(uint32_t) * 4, move(initial));
 }
 
 Rc<gl::AttachmentHandle> MaterialVertexAttachment::makeFrameHandle(const gl::FrameHandle &handle) {
@@ -123,7 +123,7 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 }
 
 bool MaterialRenderPass::init(StringView name, gl::RenderOrdering ord, size_t subpassCount) {
-	return RenderPass::init(name, gl::RenderPassType::Generic, ord, subpassCount);
+	return RenderPass::init(name, gl::RenderPassType::Graphics, ord, subpassCount);
 }
 
 Rc<gl::RenderPassHandle> MaterialRenderPass::makeFrameHandle(gl::RenderPassData *data, const gl::FrameHandle &handle) {
@@ -142,12 +142,10 @@ void MaterialRenderPass::prepare(gl::Device &) {
 
 void MaterialRenderPassHandle::addRequiredAttachment(const gl::Attachment *a, const Rc<gl::AttachmentHandle> &h) {
 	RenderPassHandle::addRequiredAttachment(a, h);
-	if (h->isInput()) {
-		if (h->getAttachment() == ((MaterialRenderPass *)_renderPass.get())->getMaterials()) {
-			_materialBuffer = (MaterialVertexAttachmentHandle *)h.get();
-		} else if (h->getAttachment() == ((MaterialRenderPass *)_renderPass.get())->getVertexes()) {
-			_vertexBuffer = (VertexMaterialAttachmentHandle *)h.get();
-		}
+	if (h->getAttachment() == ((MaterialRenderPass *)_renderPass.get())->getMaterials()) {
+		_materialBuffer = (MaterialVertexAttachmentHandle *)h.get();
+	} else if (h->getAttachment() == ((MaterialRenderPass *)_renderPass.get())->getVertexes()) {
+		_vertexBuffer = (VertexMaterialAttachmentHandle *)h.get();
 	}
 }
 
@@ -158,6 +156,8 @@ Vector<VkCommandBuffer> MaterialRenderPassHandle::doPrepareCommands(gl::FrameHan
 	auto targetFb = _data->framebuffers[index].cast<Framebuffer>();
 	auto currentExtent = targetFb->getExtent();
 
+	auto materials = _materialBuffer->getMaterials().get();
+
 	VkCommandBufferBeginInfo beginInfo { };
 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -165,6 +165,19 @@ Vector<VkCommandBuffer> MaterialRenderPassHandle::doPrepareCommands(gl::FrameHan
 
 	if (table->vkBeginCommandBuffer(buf, &beginInfo) != VK_SUCCESS) {
 		return Vector<VkCommandBuffer>();
+	}
+
+	Vector<VkImageMemoryBarrier> outputImageBarriers;
+	Vector<VkBufferMemoryBarrier> outputBufferBarriers;
+
+	doFinalizeTransfer(materials, buf, outputImageBarriers, outputBufferBarriers);
+
+	if (!outputBufferBarriers.empty() && !outputImageBarriers.empty()) {
+		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+			0, nullptr,
+			outputBufferBarriers.size(), outputBufferBarriers.data(),
+			outputImageBarriers.size(), outputImageBarriers.data());
 	}
 
 	VkRenderPassBeginInfo renderPassInfo { };
@@ -184,7 +197,7 @@ Vector<VkCommandBuffer> MaterialRenderPassHandle::doPrepareCommands(gl::FrameHan
 	VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
 	table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
 
-	prepareMaterialCommands(handle, buf);
+	prepareMaterialCommands(materials, handle, buf);
 
 	table->vkCmdEndRenderPass(buf);
 	if (table->vkEndCommandBuffer(buf) == VK_SUCCESS) {
@@ -193,7 +206,7 @@ Vector<VkCommandBuffer> MaterialRenderPassHandle::doPrepareCommands(gl::FrameHan
 	return Vector<VkCommandBuffer>();
 }
 
-void MaterialRenderPassHandle::prepareMaterialCommands(gl::FrameHandle &handle, VkCommandBuffer &buf) {
+void MaterialRenderPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, gl::FrameHandle &handle, VkCommandBuffer &buf) {
 	auto table = _device->getTable();
 
 	auto pass = (RenderPassImpl *)_data->impl.get();
@@ -213,15 +226,13 @@ void MaterialRenderPassHandle::prepareMaterialCommands(gl::FrameHandle &handle, 
 	uint32_t boundTextureSetIndex = maxOf<uint32_t>();
 	gl::Pipeline *boundPipeline = nullptr;
 
-	auto &materials = _materialBuffer->getMaterials();
-
 	for (auto &materialVertexSpan : _vertexBuffer->getVertexData()) {
 		auto material = materials->getMaterial(materialVertexSpan.material);
 		if (!material) {
 			continue;
 		}
 
-		auto pipeline = material->getPipeline();
+		auto pipeline = material->getPipeline()->pipeline;
 		auto textureSetIndex =  material->getLayoutIndex();
 
 		if (pipeline != boundPipeline) {
@@ -230,15 +241,20 @@ void MaterialRenderPassHandle::prepareMaterialCommands(gl::FrameHandle &handle, 
 		}
 
 		if (textureSetIndex != boundTextureSetIndex) {
-			auto l = (TextureSet *)materials->getLayout(textureSetIndex)->set.get();
-			auto set = l->getSet();
-			// rebind texture set at last index
-			table->vkCmdBindDescriptorSets(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, pass->getPipelineLayout(),
-				pass->getDescriptorSets().size() - 1,
-				1, &set, // sets
-				0, nullptr // dynamic offsets
-			);
-			boundTextureSetIndex = textureSetIndex;
+			if (auto l = materials->getLayout(textureSetIndex)) {
+				auto s = (TextureSet *)l->set.get();
+				auto set = s->getSet();
+				// rebind texture set at last index
+				table->vkCmdBindDescriptorSets(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, pass->getPipelineLayout(),
+					1,
+					1, &set, // sets
+					0, nullptr // dynamic offsets
+				);
+				boundTextureSetIndex = textureSetIndex;
+			} else {
+				stappler::log::vtext("MaterialRenderPassHandle", "Invalid textureSetlayout: ", textureSetIndex);
+				return;
+			}
 		}
 
 		table->vkCmdDrawIndexed(buf,
@@ -248,6 +264,23 @@ void MaterialRenderPassHandle::prepareMaterialCommands(gl::FrameHandle &handle, 
 				0, // int32_t   vertexOffset
 				0  // uint32_t  firstInstance
 		);
+	}
+}
+
+void MaterialRenderPassHandle::doFinalizeTransfer(gl::MaterialSet * materials, VkCommandBuffer buf,
+		Vector<VkImageMemoryBarrier> &outputImageBarriers, Vector<VkBufferMemoryBarrier> &outputBufferBarriers) {
+	auto b = (Buffer *)materials->getBuffer().get();
+	if (auto barrier = b->getPendingBarrier()) {
+		outputBufferBarriers.emplace_back(*barrier);
+		b->dropPendingBarrier();
+	}
+
+	for (auto &it : materials->getLayouts()) {
+		auto &pending = ((TextureSet *)it.set.get())->getPendingBarriers();
+		for (auto &barrier : pending) {
+			outputImageBarriers.emplace_back(barrier);
+		}
+		((TextureSet *)it.set.get())->dropPendingBarriers();
 	}
 }
 

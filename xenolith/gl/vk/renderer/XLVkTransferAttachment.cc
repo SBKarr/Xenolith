@@ -337,7 +337,7 @@ bool TransferResource::compile() {
 		_callback(true);
 		_callback = nullptr;
 	}
-	invalidate(*_alloc->getDevice());
+
 	return true;
 }
 
@@ -370,14 +370,10 @@ static VkImageAspectFlagBits getFormatAspectFlags(VkFormat fmt, bool separateDep
 	}
 }
 
-bool TransferResource::prepareCommands(uint32_t idx, VkCommandBuffer buf) {
+bool TransferResource::prepareCommands(uint32_t idx, VkCommandBuffer buf,
+		Vector<VkImageMemoryBarrier> &outputImageBarriers, Vector<VkBufferMemoryBarrier> &outputBufferBarriers) {
 	auto dev = _alloc->getDevice();
 	auto table = _alloc->getDevice()->getTable();
-
-	VkCommandBufferBeginInfo beginInfo{};
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	table->vkBeginCommandBuffer(buf, &beginInfo);
 
 	Vector<VkImageMemoryBarrier> inputImageBarriers;
 	for (auto &it : _stagingBuffer.copyData) {
@@ -423,8 +419,6 @@ bool TransferResource::prepareCommands(uint32_t idx, VkCommandBuffer buf) {
 		}
 	}
 
-	Vector<VkImageMemoryBarrier> outputImageBarriers;
-	Vector<VkBufferMemoryBarrier> outputBufferBarriers;
 	for (auto &it : _stagingBuffer.copyData) {
 		if (it.targetImage) {
 			auto pass = (RenderPass *)it.targetImage->data->renderPass.get();
@@ -479,15 +473,6 @@ bool TransferResource::prepareCommands(uint32_t idx, VkCommandBuffer buf) {
 		}
 	}
 
-	table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-			VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
-			0, nullptr,
-			outputBufferBarriers.size(), outputBufferBarriers.data(),
-			outputImageBarriers.size(), outputImageBarriers.data());
-
-	if (table->vkEndCommandBuffer(buf) != VK_SUCCESS) {
-		return false;
-	}
 	return true;
 }
 
@@ -496,7 +481,25 @@ bool TransferResource::transfer(const Rc<DeviceQueue> &queue, const Rc<CommandPo
 	auto table = _alloc->getDevice()->getTable();
 	auto buf = pool->allocBuffer(*dev);
 
-	if (!prepareCommands(queue->getIndex(), buf)) {
+	VkCommandBufferBeginInfo beginInfo{};
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	table->vkBeginCommandBuffer(buf, &beginInfo);
+
+	Vector<VkImageMemoryBarrier> outputImageBarriers;
+	Vector<VkBufferMemoryBarrier> outputBufferBarriers;
+
+	if (!prepareCommands(queue->getIndex(), buf, outputImageBarriers, outputBufferBarriers)) {
+		return false;
+	}
+
+	table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
+		VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+		0, nullptr,
+		outputBufferBarriers.size(), outputBufferBarriers.data(),
+		outputImageBarriers.size(), outputImageBarriers.data());
+
+	if (table->vkEndCommandBuffer(buf) != VK_SUCCESS) {
 		return false;
 	}
 
@@ -871,7 +874,27 @@ Vector<VkCommandBuffer> TransferRenderPassHandle::doPrepareCommands(gl::FrameHan
 	}
 
 	auto buf = _pool->allocBuffer(*_device);
-	if (!transfer->getResource()->prepareCommands(_pool->getFamilyIdx(), buf)) {
+	auto table = _device->getTable();
+
+	VkCommandBufferBeginInfo beginInfo{};
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	table->vkBeginCommandBuffer(buf, &beginInfo);
+
+	Vector<VkImageMemoryBarrier> outputImageBarriers;
+	Vector<VkBufferMemoryBarrier> outputBufferBarriers;
+
+	if (!transfer->getResource()->prepareCommands(_pool->getFamilyIdx(), buf, outputImageBarriers, outputBufferBarriers)) {
+		return Vector<VkCommandBuffer>();
+	}
+
+	table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
+		VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+		0, nullptr,
+		outputBufferBarriers.size(), outputBufferBarriers.data(),
+		outputImageBarriers.size(), outputImageBarriers.data());
+
+	if (table->vkEndCommandBuffer(buf) != VK_SUCCESS) {
 		return Vector<VkCommandBuffer>();
 	}
 

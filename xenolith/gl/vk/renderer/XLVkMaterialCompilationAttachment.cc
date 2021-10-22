@@ -165,7 +165,7 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(g
 
 	// update list of materials in set
 	auto dirty = data->updateMaterials(inputData, [&] (const gl::MaterialImage &image) -> Rc<gl::ImageView> {
-		return Rc<ImageView>::create(*_device, (Image *)image.image.get(), image.info);
+		return Rc<ImageView>::create(*_device, (Image *)image.image->image.get(), image.info);
 	});
 
 	for (auto &it : data->getLayouts()) {
@@ -181,7 +181,7 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(g
 	Set<Image *> images;
 	for (auto &it : dirty) {
 		for (auto &img : it->getImages()) {
-			images.emplace((Image *)img.image.get());
+			images.emplace((Image *)img.image->image.get());
 		}
 	}
 
@@ -222,9 +222,6 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(g
 	indexesCopy.size = stagingBuffer->getSize();
 
 	Vector<VkImageMemoryBarrier> outputImageBarriers;
-	if (!layout->isDefaultInit()) {
-		outputImageBarriers.emplace_back(layout->writeDefaults(*_device, buf));
-	}
 
 	table->vkCmdCopyBuffer(buf, stagingBuffer->getBuffer(), targetBuffer->getBuffer(), 1, &indexesCopy);
 

@@ -79,9 +79,66 @@ void TextureSetLayout::releaseSet(Rc<TextureSet> &&set) {
 	_sets.emplace_back(move(set));
 }
 
-VkImageMemoryBarrier TextureSetLayout::writeDefaults(Device &dev, VkCommandBuffer buf) {
-	_defaultInit = true;
+void TextureSetLayout::initDefault(Device &dev, gl::Loop &loop) {
+	dev.acquireQueue(QueueOperations::Graphics, loop, [this] (gl::Loop &loop, const Rc<DeviceQueue> &queue) {
+		auto device = (Device *)loop.getDevice().get();
+		auto fence = device->acquireFence(0);
+		auto pool = device->acquireCommandPool(QueueOperations::Graphics);
 
+		fence->addRelease([dev = device, pool] {
+			dev->releaseCommandPool(Rc<CommandPool>(pool));
+		});
+
+		loop.getQueue()->perform(Rc<thread::Task>::create([this, loop = Rc<gl::Loop>(&loop), pool, queue, fence] (const thread::Task &) -> bool {
+			auto device = (Device *)loop->getDevice().get();
+			auto table = device->getTable();
+			auto buf = pool->allocBuffer(*device);
+
+			VkCommandBufferBeginInfo beginInfo { };
+			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+			beginInfo.pInheritanceInfo = nullptr;
+
+			if (table->vkBeginCommandBuffer(buf, &beginInfo) != VK_SUCCESS) {
+				return false;
+			}
+
+			writeDefaults(*device, buf);
+
+			if (table->vkEndCommandBuffer(buf) != VK_SUCCESS) {
+				return false;
+			}
+
+			VkSubmitInfo submitInfo{};
+			submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+			submitInfo.pNext = nullptr;
+			submitInfo.waitSemaphoreCount = 0;
+			submitInfo.pWaitSemaphores = nullptr;
+			submitInfo.pWaitDstStageMask = nullptr;
+			submitInfo.commandBufferCount = 1;
+			submitInfo.pCommandBuffers = &buf;
+			submitInfo.signalSemaphoreCount = 0;
+			submitInfo.pSignalSemaphores = nullptr;
+
+			if (table->vkQueueSubmit(queue->getQueue(), 1, &submitInfo, fence->getFence()) == VK_SUCCESS) {
+				return true;
+			}
+			return false;
+		}, [this, loop = Rc<gl::Loop>(&loop), fence, queue] (const thread::Task &, bool success) {
+			auto device = (Device *)loop->getDevice().get();
+			if (queue) {
+				device->releaseQueue(Rc<DeviceQueue>(queue));
+			}
+			if (success) {
+				device->scheduleFence(*loop, Rc<Fence>(fence));
+			} else {
+				device->releaseFence(Rc<Fence>(fence));
+			}
+		}, this));
+	}, [this] (gl::Loop &) { }, this);
+}
+
+void TextureSetLayout::writeDefaults(Device &dev, VkCommandBuffer buf) {
 	// define clear range
 	VkImageSubresourceRange range;
 	range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -115,13 +172,18 @@ VkImageMemoryBarrier TextureSetLayout::writeDefaults(Device &dev, VkCommandBuffe
 	dev.getTable()->vkCmdClearColorImage(buf, _defaultImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			&clearColor, 1, &range);
 
-	return VkImageMemoryBarrier({
+	VkImageMemoryBarrier outImageBarrier({
 		VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
 		VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 		_defaultImage->getImage(), range
 	});
+
+	dev.getTable()->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+			0, nullptr, // memory
+			0, nullptr, // buffers
+			1, &outImageBarrier);
 }
 
 bool TextureSet::init(Device &dev, const TextureSetLayout &layout) {
@@ -177,6 +239,11 @@ void TextureSet::write(const gl::MaterialLayout &set) {
 			images.emplace_back(VkDescriptorImageInfo({
 				VK_NULL_HANDLE, ((ImageView *)set.slots[i].image.get())->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 			}));
+			auto image = (Image *)set.slots[i].image->getImage().get();
+			if (auto b = image->getPendingBarrier()) {
+				_pendingBarriers.emplace_back(*b);
+				image->dropPendingBarrier();
+			}
 		} else {
 			images.emplace_back(VkDescriptorImageInfo({
 				VK_NULL_HANDLE, _layout->getDefaultImageView()->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
@@ -193,7 +260,7 @@ void TextureSet::write(const gl::MaterialLayout &set) {
 	Vector<VkWriteDescriptorSet> writes;
 	writes.emplace_back(VkWriteDescriptorSet({
 		VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
-		0, // set
+		_set, // set
 		0, // descriptor
 		0, // index
 		static_cast<uint32_t>(images.size()), VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, images.data(),
@@ -201,6 +268,10 @@ void TextureSet::write(const gl::MaterialLayout &set) {
 	}));
 
 	table->vkUpdateDescriptorSets(dev, writes.size(), writes.data(), 0, nullptr);
+}
+
+void TextureSet::dropPendingBarriers() {
+	_pendingBarriers.clear();
 }
 
 }

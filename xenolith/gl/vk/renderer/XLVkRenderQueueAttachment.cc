@@ -219,7 +219,9 @@ void RenderQueueRenderPass::prepare(gl::Device &) {
 	}
 }
 
-RenderQueueRenderPassHandle::~RenderQueueRenderPassHandle() { }
+RenderQueueRenderPassHandle::~RenderQueueRenderPassHandle() {
+	_resource->invalidate(*_device);
+}
 
 bool RenderQueueRenderPassHandle::prepare(gl::FrameHandle &frame) {
 	_device = (Device *)frame.getDevice();
@@ -235,7 +237,37 @@ bool RenderQueueRenderPassHandle::prepare(gl::FrameHandle &frame) {
 
 		frame.performInQueue([this] (gl::FrameHandle &frame) {
 			auto buf = _pool->allocBuffer(*_device);
-			if (!_resource->prepareCommands(_pool->getFamilyIdx(), buf)) {
+			auto table = _device->getTable();
+
+			VkCommandBufferBeginInfo beginInfo{};
+			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+			table->vkBeginCommandBuffer(buf, &beginInfo);
+
+			Vector<VkImageMemoryBarrier> outputImageBarriers;
+			Vector<VkBufferMemoryBarrier> outputBufferBarriers;
+
+			if (!_resource->prepareCommands(_pool->getFamilyIdx(), buf, outputImageBarriers, outputBufferBarriers)) {
+				return false;
+			}
+
+			_resource->compile();
+
+			for (auto &it : _queue->getAttachments()) {
+				if (auto v = it.cast<gl::MaterialAttachment>()) {
+					if (!prepareMaterials(frame, buf, v, outputBufferBarriers)) {
+						return true;
+					}
+				}
+			}
+
+			table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
+				VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+				0, nullptr,
+				outputBufferBarriers.size(), outputBufferBarriers.data(),
+				outputImageBarriers.size(), outputImageBarriers.data());
+
+			if (table->vkEndCommandBuffer(buf) != VK_SUCCESS) {
 				return false;
 			}
 
@@ -273,6 +305,93 @@ void RenderQueueRenderPassHandle::addRequiredAttachment(const gl::Attachment *a,
 	if (a == ((RenderQueueRenderPass *)_renderPass.get())->getAttachment()) {
 		_attachment = (RenderQueueAttachmentHandle *)h.get();
 	}
+}
+
+bool RenderQueueRenderPassHandle::prepareMaterials(gl::FrameHandle &iframe, VkCommandBuffer buf,
+		const Rc<gl::MaterialAttachment> &attachment, Vector<VkBufferMemoryBarrier> &outputBufferBarriers) {
+	auto table = _device->getTable();
+
+	auto &layout = _device->getTextureSetLayout();
+	auto &initial = attachment->getInitialMaterials();
+	if (initial.empty()) {
+		return true;
+	}
+
+	auto data = attachment->allocateSet(*_device);
+
+	// update list of materials in set
+	auto dirty = data->updateMaterials(initial, [&] (const gl::MaterialImage &image) -> Rc<gl::ImageView> {
+		return Rc<ImageView>::create(*_device, (Image *)image.image->image.get(), image.info);
+	});
+
+	for (auto &it : data->getLayouts()) {
+		iframe.performRequiredTask([layout, data, target = &it] (gl::FrameHandle &handle) {
+			auto dev = (Device *)handle.getDevice();
+
+			target->set = Rc<gl::TextureSet>(layout->acquireSet(*dev));
+			target->set->write(*target);
+		}, this);
+	}
+
+	auto &bufferInfo = data->getInfo();
+
+	auto &frame = static_cast<FrameHandle &>(iframe);
+	auto &pool = frame.getMemPool();
+
+	auto stagingBuffer = pool->spawn(AllocationUsage::HostTransitionSource,
+			gl::BufferInfo(gl::ForceBufferUsage(gl::BufferUsage::TransferSrc), bufferInfo.size));
+	auto targetBuffer = pool->spawnPersistent(AllocationUsage::DeviceLocal, bufferInfo);
+
+	auto mapped = stagingBuffer->map();
+
+	uint8_t *target = mapped.ptr;
+	for (auto &it : data->getMaterials()) {
+		data->encode(target, it.second.get());
+ 		target += data->getObjectSize();
+	}
+
+	stagingBuffer->unmap(mapped);
+
+	VkBufferCopy indexesCopy;
+	indexesCopy.srcOffset = 0;
+	indexesCopy.dstOffset = 0;
+	indexesCopy.size = stagingBuffer->getSize();
+
+	auto stagingBuf = stagingBuffer->getBuffer();
+	auto targetBuf = targetBuffer->getBuffer();
+
+	Vector<VkImageMemoryBarrier> outputImageBarriers;
+	table->vkCmdCopyBuffer(buf, stagingBuf, targetBuf, 1, &indexesCopy);
+
+	QueueOperations ops = QueueOperations::None;
+	for (auto &it : attachment->getRenderPasses()) {
+		ops |= ((RenderPass *)it->renderPass.get())->getQueueOps();
+	}
+
+	if (auto q = _device->getQueueFamily(ops)) {
+		if (q->index == _pool->getFamilyIdx()) {
+			outputBufferBarriers.emplace_back(VkBufferMemoryBarrier({
+				VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+				VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+				VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+				targetBuffer->getBuffer(), 0, VK_WHOLE_SIZE
+			}));
+		} else {
+			auto &b = outputBufferBarriers.emplace_back(VkBufferMemoryBarrier({
+				VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+				VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+				_pool->getFamilyIdx(), q->index,
+				targetBuffer->getBuffer(), 0, VK_WHOLE_SIZE
+			}));
+			targetBuffer->setPendingBarrier(b);
+		}
+
+		auto dataPtr = data.get();
+		dataPtr->setBuffer(move(targetBuffer));
+		attachment->setMaterials(data);
+		return true;
+	}
+	return false;
 }
 
 }
