@@ -655,6 +655,11 @@ enum class PredefinedConstant {
 	TexturesArraySize,
 };
 
+enum class MaterialType {
+	Basic2D,
+	Basic3D
+};
+
 }
 
 #endif /* XENOLITH_GL_COMMON_XLGLENUM_H_ */

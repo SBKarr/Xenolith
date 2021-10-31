@@ -344,10 +344,16 @@ bool RenderQueueRenderPassHandle::prepareMaterials(gl::FrameHandle &iframe, VkCo
 
 	auto mapped = stagingBuffer->map();
 
+	uint32_t idx = 0;
+	std::unordered_map<gl::MaterialId, uint32_t> ordering;
+	ordering.reserve(data->getMaterials().size());
+
 	uint8_t *target = mapped.ptr;
 	for (auto &it : data->getMaterials()) {
 		data->encode(target, it.second.get());
  		target += data->getObjectSize();
+ 		ordering.emplace(it.first, idx);
+ 		++ idx;
 	}
 
 	stagingBuffer->unmap(mapped);
@@ -387,7 +393,7 @@ bool RenderQueueRenderPassHandle::prepareMaterials(gl::FrameHandle &iframe, VkCo
 		}
 
 		auto dataPtr = data.get();
-		dataPtr->setBuffer(move(targetBuffer));
+		dataPtr->setBuffer(move(targetBuffer), move(ordering));
 		attachment->setMaterials(data);
 		return true;
 	}

@@ -70,6 +70,9 @@ public:
 
 	virtual bool supportsUpdateAfterBind(gl::DescriptorType) const;
 
+	virtual gl::ImageData getEmptyImage() const = 0;
+	virtual gl::ImageData getSolidImage() const = 0;
+
 protected:
 	friend class Loop;
 

@@ -23,8 +23,8 @@
 #ifndef COMPONENTS_XENOLITH_CORE_BASE_XLRENDERFRAMEINFO_H_
 #define COMPONENTS_XENOLITH_CORE_BASE_XLRENDERFRAMEINFO_H_
 
+#include "../../gl/common/XLGlCommandList.h"
 #include "XLDefine.h"
-#include "XLGlDrawScheme.h"
 
 namespace stappler::xenolith {
 
@@ -38,7 +38,7 @@ struct RenderFrameInfo {
 	Rc<Director> director;
 	Rc<Scene> scene;
 
-	gl::DrawScheme *scheme;
+	Rc<gl::CommandList> commands;
 };
 
 }

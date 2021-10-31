@@ -178,15 +178,9 @@ bool Application::onFinishLaunching() {
 		return false;
 	}
 
-	/*auto view = _director->getView();
-	if (!view) {
-		auto screenSize = platform::desktop::getScreenSize();
-		if (auto v = platform::graphic::createView(this, _instance, getBundleName(), URect{0, 0,
-				static_cast<uint32_t>(screenSize.width), static_cast<uint32_t>(screenSize.height)})) {
-			_director->setView(v);
-		}
-	}*/
-
+	auto device = _instance->makeDevice();
+	_glLoop = Rc<gl::Loop>::alloc(this, device);
+	_resourceCache = Rc<ResourceCache>::create(*device);
 	return true;
 }
 
@@ -237,7 +231,12 @@ int Application::run(data::Value &&data) {
 		return 1;
 	}
 
+	_glLoop->begin();
 	auto ret = onMainLoop();
+
+	_resourceCache->init(*_glLoop->getDevice());
+	_glLoop->end();
+	_glLoop = nullptr;
 
 	/*_mainView = glview;
 	glview->run(this, director, [&] (uint64_t val) -> bool {

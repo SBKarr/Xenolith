@@ -365,6 +365,7 @@ void FrameHandle::setCompleteCallback(Function<void(FrameHandle &)> &&cb) {
 }
 
 bool FrameHandle::setup() {
+	_pool = Rc<PoolRef>::alloc(nullptr);
 	_requiredRenderPasses.reserve(_queue->getPasses().size());
 	for (auto &it : _queue->getPasses()) {
 		_requiredRenderPasses.emplace_back(it->renderPass->makeFrameHandle(it, *this));

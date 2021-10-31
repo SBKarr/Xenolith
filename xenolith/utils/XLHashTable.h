@@ -446,6 +446,8 @@ public:
 		return count;
 	}
 
+	uint32_t get_seed() const { return seed; }
+
 private:
 	friend struct HashIndex<Value>;
 	friend struct ConstHashIndex<Value>;

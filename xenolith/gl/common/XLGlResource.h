@@ -69,16 +69,16 @@ public:
 	Builder(StringView);
 	~Builder();
 
-	const BufferData * addBufferByRef(StringView key, RenderPass *, BufferInfo &&, BytesView data);
-	const BufferData * addBuffer(StringView key, RenderPass *, BufferInfo &&, FilePath data);
-	const BufferData * addBuffer(StringView key, RenderPass *, BufferInfo &&, BytesView data);
-	const BufferData * addBuffer(StringView key, RenderPass *, BufferInfo &&, size_t,
+	const BufferData * addBufferByRef(StringView key, BufferInfo &&, BytesView data);
+	const BufferData * addBuffer(StringView key, BufferInfo &&, FilePath data);
+	const BufferData * addBuffer(StringView key, BufferInfo &&, BytesView data);
+	const BufferData * addBuffer(StringView key, BufferInfo &&, size_t,
 			const memory::function<void(const BufferData::DataCallback &)> &cb);
 
-	const ImageData * addImageByRef(StringView key, RenderPass *, ImageInfo &&, BytesView data);
-	const ImageData * addImage(StringView key, RenderPass *, ImageInfo &&img, FilePath data);
-	const ImageData * addImage(StringView key, RenderPass *, ImageInfo &&img, BytesView data);
-	const ImageData * addImage(StringView key, RenderPass *, ImageInfo &&img,
+	const ImageData * addImageByRef(StringView key, ImageInfo &&, BytesView data);
+	const ImageData * addImage(StringView key, ImageInfo &&img, FilePath data);
+	const ImageData * addImage(StringView key, ImageInfo &&img, BytesView data);
+	const ImageData * addImage(StringView key, ImageInfo &&img,
 			const memory::function<void(const ImageData::DataCallback &)> &cb);
 
 protected:

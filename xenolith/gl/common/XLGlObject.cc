@@ -54,15 +54,23 @@ Object::~Object() {
 	invalidate();
 }
 
+static std::atomic<uint64_t> s_ImageViewCurrentIndex = 1;
+
+bool ImageObject::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr) {
+	if (Object::init(dev, cb, type, ptr)) {
+		_index = s_ImageViewCurrentIndex.fetch_add(1);
+		return true;
+	}
+	return false;
+}
+
 ImageViewInfo ImageObject::getViewInfo(const ImageViewInfo &info) const {
 	return _info.getViewInfo(info);
 }
 
-static std::atomic<uint64_t> s_ImagerViewCurrentIndex = 1;
-
 bool ImageView::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr) {
 	if (Object::init(dev, cb, type, ptr)) {
-		_index = s_ImagerViewCurrentIndex.fetch_add(1);
+		_index = s_ImageViewCurrentIndex.fetch_add(1);
 		return true;
 	}
 	return false;

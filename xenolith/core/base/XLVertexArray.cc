@@ -127,10 +127,10 @@ VertexArray::Quad & VertexArray::Quad::setGeometry(const Vec4 &pos, const Size &
 	// (x1, y1) - (x2, y1)
 
 	 // tl bl tr br
-	data[0].pos = Vec4( x1, y2, pos.z, pos.w);
-	data[1].pos = Vec4( x1, y1, pos.z, pos.w);
-	data[2].pos = Vec4( x2, y2, pos.z, pos.w);
-	data[3].pos = Vec4( x2, y1, pos.z, pos.w);
+	data[0].pos = Vec4( x1, y2, pos.z, 1.0);
+	data[1].pos = Vec4( x1, y1, pos.z, 1.0);
+	data[2].pos = Vec4( x2, y2, pos.z, 1.0);
+	data[3].pos = Vec4( x2, y1, pos.z, 1.0);
 
 	return *this;
 }

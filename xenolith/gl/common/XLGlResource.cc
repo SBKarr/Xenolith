@@ -59,6 +59,12 @@ Resource::~Resource() {
 bool Resource::init(Builder && buf) {
 	_data = buf._data;
 	buf._data = nullptr;
+	for (auto &it : _data->images) {
+		it->resource = this;
+	}
+	for (auto &it : _data->buffers) {
+		it->resource = this;
+	}
 	return true;
 }
 
@@ -223,7 +229,7 @@ Resource::Builder::~Builder() {
 	}
 }
 
-const BufferData *Resource::Builder::addBufferByRef(StringView key, RenderPass *pass, BufferInfo &&info, BytesView data) {
+const BufferData *Resource::Builder::addBufferByRef(StringView key, BufferInfo &&info, BytesView data) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add buffer: ", key, ", not initialized");
 		return nullptr;
@@ -235,7 +241,6 @@ const BufferData *Resource::Builder::addBufferByRef(StringView key, RenderPass *
 		buf->key = key.pdup(_data->pool);
 		buf->data = data;
 		buf->size = data.size();
-		buf->renderPass = pass;
 		return buf;
 	}, _data->pool);
 	if (!p) {
@@ -244,7 +249,7 @@ const BufferData *Resource::Builder::addBufferByRef(StringView key, RenderPass *
 	}
 	return p;
 }
-const BufferData *Resource::Builder::addBuffer(StringView key, RenderPass *pass, BufferInfo &&info, FilePath path) {
+const BufferData *Resource::Builder::addBuffer(StringView key, BufferInfo &&info, FilePath path) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add buffer: ", key, ", not initialized");
 		return nullptr;
@@ -269,12 +274,11 @@ const BufferData *Resource::Builder::addBuffer(StringView key, RenderPass *pass,
 		auto fpath = StringView(npath).pdup(_data->pool);
 		auto buf = new (_data->pool) BufferData;
 		static_cast<BufferInfo &>(*buf) = move(info);
-		buf->key = StringView(npath).pdup(_data->pool);
+		buf->key = key.pdup(_data->pool);
 		buf->callback = [fpath] (const BufferData::DataCallback &dcb) {
 			Resource_loadFileData(fpath, dcb);
 		};
 		buf->size = filesystem::size(path.get());
-		buf->renderPass = pass;
 		return buf;
 	}, _data->pool);
 	if (!p) {
@@ -283,7 +287,7 @@ const BufferData *Resource::Builder::addBuffer(StringView key, RenderPass *pass,
 	}
 	return p;
 }
-const BufferData *Resource::Builder::addBuffer(StringView key, RenderPass *pass, BufferInfo &&info, BytesView data) {
+const BufferData *Resource::Builder::addBuffer(StringView key, BufferInfo &&info, BytesView data) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add buffer: ", key, ", not initialized");
 		return nullptr;
@@ -295,7 +299,6 @@ const BufferData *Resource::Builder::addBuffer(StringView key, RenderPass *pass,
 		buf->key = key.pdup(_data->pool);
 		buf->data = data.pdup(_data->pool);
 		buf->size = data.size();
-		buf->renderPass = pass;
 		return buf;
 	}, _data->pool);
 	if (!p) {
@@ -304,7 +307,7 @@ const BufferData *Resource::Builder::addBuffer(StringView key, RenderPass *pass,
 	}
 	return p;
 }
-const BufferData *Resource::Builder::addBuffer(StringView key, RenderPass *pass, BufferInfo &&info, size_t size,
+const BufferData *Resource::Builder::addBuffer(StringView key, BufferInfo &&info, size_t size,
 		const memory::function<void(const BufferData::DataCallback &)> &cb) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add buffer: ", key, ", not initialized");
@@ -317,7 +320,6 @@ const BufferData *Resource::Builder::addBuffer(StringView key, RenderPass *pass,
 		buf->size = size;
 		buf->key = key.pdup(_data->pool);
 		buf->callback = cb;
-		buf->renderPass = pass;
 		return buf;
 	}, _data->pool);
 	if (!p) {
@@ -327,7 +329,7 @@ const BufferData *Resource::Builder::addBuffer(StringView key, RenderPass *pass,
 	return p;
 }
 
-const ImageData *Resource::Builder::addImage(StringView key, RenderPass *pass, ImageInfo &&img, BytesView data) {
+const ImageData *Resource::Builder::addImage(StringView key, ImageInfo &&img, BytesView data) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add image: ", key, ", not initialized");
 		return nullptr;
@@ -338,7 +340,6 @@ const ImageData *Resource::Builder::addImage(StringView key, RenderPass *pass, I
 		static_cast<ImageInfo &>(*buf) = move(img);
 		buf->key = key.pdup(_data->pool);
 		buf->data = data.pdup(_data->pool);
-		buf->renderPass = pass;
 		return buf;
 	}, _data->pool);
 	if (!p) {
@@ -347,7 +348,7 @@ const ImageData *Resource::Builder::addImage(StringView key, RenderPass *pass, I
 	}
 	return p;
 }
-const ImageData *Resource::Builder::addImage(StringView key, RenderPass *pass, ImageInfo &&img, FilePath path) {
+const ImageData *Resource::Builder::addImage(StringView key, ImageInfo &&img, FilePath path) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add image: ", key, ", not initialized");
 		return nullptr;
@@ -376,12 +377,11 @@ const ImageData *Resource::Builder::addImage(StringView key, RenderPass *pass, I
 	auto p = Resource_conditionalInsert<ImageData>(_data->images, key, [&] () -> ImageData * {
 		auto fpath = StringView(npath).pdup(_data->pool);
 		auto buf = new (_data->pool) ImageData;
-		buf->key = StringView(npath).pdup(_data->pool);
+		static_cast<ImageInfo &>(*buf) = move(img);
+		buf->key = key.pdup(_data->pool);
 		buf->callback = [fpath, format = img.format] (const ImageData::DataCallback &dcb) {
 			Resource_loadImageFileData(fpath, format, dcb);
 		};
-		buf->renderPass = pass;
-		static_cast<ImageInfo &>(*buf) = move(img);
 		buf->extent = Extent3(width, height, depth);
 		return buf;
 	}, _data->pool);
@@ -389,9 +389,9 @@ const ImageData *Resource::Builder::addImage(StringView key, RenderPass *pass, I
 		log::vtext("Resource", _data->key, ": Image already added: ", key);
 		return nullptr;
 	}
-	return p;
+ 	return p;
 }
-const ImageData *Resource::Builder::addImageByRef(StringView key, RenderPass *pass, ImageInfo &&img, BytesView data) {
+const ImageData *Resource::Builder::addImageByRef(StringView key, ImageInfo &&img, BytesView data) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add image: ", key, ", not initialized");
 		return nullptr;
@@ -399,10 +399,9 @@ const ImageData *Resource::Builder::addImageByRef(StringView key, RenderPass *pa
 
 	auto p = Resource_conditionalInsert<ImageData>(_data->images, key, [&] () -> ImageData * {
 		auto buf = new (_data->pool) ImageData;
+		static_cast<ImageInfo &>(*buf) = move(img);
 		buf->key = key.pdup(_data->pool);
 		buf->data = data;
-		buf->renderPass = pass;
-		static_cast<ImageInfo &>(*buf) = move(img);
 		return buf;
 	}, _data->pool);
 	if (!p) {
@@ -411,7 +410,7 @@ const ImageData *Resource::Builder::addImageByRef(StringView key, RenderPass *pa
 	}
 	return p;
 }
-const ImageData *Resource::Builder::addImage(StringView key, RenderPass *pass, ImageInfo &&img,
+const ImageData *Resource::Builder::addImage(StringView key, ImageInfo &&img,
 		const memory::function<void(const ImageData::DataCallback &)> &cb) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add image: ", key, ", not initialized");
@@ -420,10 +419,9 @@ const ImageData *Resource::Builder::addImage(StringView key, RenderPass *pass, I
 
 	auto p = Resource_conditionalInsert<ImageData>(_data->images, key, [&] () -> ImageData * {
 		auto buf = new (_data->pool) ImageData;
+		static_cast<ImageInfo &>(*buf) = move(img);
 		buf->key = key.pdup(_data->pool);
 		buf->callback = cb;
-		buf->renderPass = pass;
-		static_cast<ImageInfo &>(*buf) = move(img);
 		return buf;
 	}, _data->pool);
 	if (!p) {

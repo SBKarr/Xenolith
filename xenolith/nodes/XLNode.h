@@ -122,7 +122,6 @@ public:
 
 	virtual void setParent(Node *parent);
 	virtual Node *getParent() const { return _parent; }
-	virtual Scene *getScene() const { return _scene; }
 
 	virtual void removeFromParent(bool cleanup = true);
 	virtual void removeChild(Node *child, bool cleanup = true);
@@ -250,8 +249,8 @@ protected:
 	Vec3 _rotation;
 
 	// to support HDR, we use float colors;
-	Color4F _displayedColor;
-	Color4F _realColor;
+	Color4F _displayedColor = Color4F::WHITE;
+	Color4F _realColor = Color4F::WHITE;
 
 	Quaternion _rotationQuat;
 
@@ -261,7 +260,6 @@ protected:
 
 	Vector<Rc<Node>> _children;
 	Node *_parent = nullptr;
-	Scene *_scene = nullptr;
 
 	Function<void()> _onEnterCallback;
 	Function<void()> _onExitCallback;

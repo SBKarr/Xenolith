@@ -34,19 +34,32 @@ public:
 	virtual ~Sprite() { }
 
 	virtual bool init();
+	virtual bool init(StringView);
+	virtual bool init(Rc<Texture> &&);
 
+	virtual void setTexture(StringView);
+	virtual void setTexture(Rc<Texture> &&);
+
+	virtual void visit(RenderFrameInfo &, NodeFlags parentFlags) override;
 	virtual void draw(RenderFrameInfo &, NodeFlags flags) override;
 
 protected:
+	virtual MaterialInfo getMaterialInfo() const;
 	virtual void updateColor() override;
 	virtual void updateVertexes();
 
+	Rc<Texture> _texture;
 	VertexArray _vertexes;
 
 	bool _flippedX = false;
 	bool _flippedY = false;
 	bool _rotated = false;
 	Rect _textureRect = Rect(0.0f, 0.0f, 1.0f, 1.0f);
+
+	uint64_t _materialId = 0;
+	bool _materialDirty = true;
+
+	Color4F _tmpColor;
 };
 
 }

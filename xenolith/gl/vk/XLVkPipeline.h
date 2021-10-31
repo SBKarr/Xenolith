@@ -42,6 +42,8 @@ protected:
 
 class Pipeline : public gl::Pipeline {
 public:
+	static bool comparePipelineOrdering(const gl::PipelineInfo &l, const gl::PipelineInfo &r);
+
 	bool init(Device &dev, const gl::PipelineData &params, const gl::RenderSubpassData &, const gl::RenderQueue &);
 
 	VkPipeline getPipeline() const { return _pipeline; }

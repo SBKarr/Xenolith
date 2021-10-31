@@ -32,6 +32,8 @@ THE SOFTWARE.
 
 namespace stappler::xenolith {
 
+class ResourceCache;
+
 class EventLoop : public Ref {
 public:
 	EventLoop();
@@ -208,6 +210,7 @@ public:
 
 	const Rc<thread::TaskQueue> &getQueue() const { return _queue; }
 	const gl::Instance *getGlInstance() const { return _instance; }
+	const Rc<ResourceCache> &getResourceCache() const { return _resourceCache; }
 
 protected:
 	uint64_t _clockStart = 0;
@@ -221,6 +224,7 @@ protected:
 	bool _isNetworkOnline = false;
 
 	Rc<EventLoop> _loop;
+	Rc<ResourceCache> _resourceCache;
 	Rc<thread::TaskQueue> _queue;
 	std::thread::id _threadId;
 	bool _singleThreaded = false;
@@ -228,6 +232,7 @@ protected:
 	std::unordered_map<EventHeader::EventID, std::unordered_set<const EventHandlerNode *>> _eventListeners;
 
 	Rc<gl::Instance> _instance; // api instance
+	Rc<gl::Loop> _glLoop;
 	log::CustomLog _appLog;
 };
 

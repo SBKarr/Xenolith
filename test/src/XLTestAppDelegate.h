@@ -37,8 +37,6 @@ public:
 
 protected:
 	void runMainView(Rc<Scene> &&scene);
-
-	Rc<gl::Loop> _glLoop;
 };
 
 }

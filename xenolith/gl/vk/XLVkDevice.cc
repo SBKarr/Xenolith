@@ -502,6 +502,14 @@ bool Device::supportsUpdateAfterBind(gl::DescriptorType type) const {
 	return false;
 }
 
+gl::ImageData Device::getEmptyImage() const {
+	return _textureSetLayout->getEmptyImage();
+}
+
+gl::ImageData Device::getSolidImage() const {
+	return _textureSetLayout->getSolidImage();
+}
+
 void Device::compileResource(thread::TaskQueue &queue, const Rc<gl::Resource> &req, Function<void(bool)> &&complete) {
 	/*if (_started) {
 		auto t = Rc<TransferResource>::alloc(move(complete));

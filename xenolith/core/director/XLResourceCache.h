@@ -28,6 +28,38 @@
 
 namespace stappler::xenolith {
 
+class Texture : public NamedRef {
+public:
+	bool init(const gl::ImageData *, const Rc<gl::Resource> &);
+
+	virtual StringView getName() const;
+	const gl::ImageObject *getImage() const;
+
+	uint64_t getIndex() const;
+
+protected:
+	const gl::ImageData *_data = nullptr;
+	Rc<gl::Resource> _resource;
+};
+
+class ResourceCache : public Ref {
+public:
+	static Rc<ResourceCache> getInstance();
+
+	bool init(gl::Device &);
+	void invalidate(gl::Device &);
+
+	void addResource(const Rc<gl::Resource> &);
+	void removeResource(StringView);
+
+	Rc<Texture> acquireTexture(StringView) const;
+
+protected:
+	gl::ImageData _emptyImage;
+	gl::ImageData _solidImage;
+	Map<StringView, Rc<gl::Resource>> _resources;
+};
+
 }
 
 #endif /* XENOLITH_CORE_DIRECTOR_XLRESOURCECACHE_H_ */

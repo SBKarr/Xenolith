@@ -69,6 +69,9 @@ public:
 	bool isTransient() const { return _transient; }
 	void setTransient(bool value) { _transient = value; }
 
+	uint32_t getIndex() const { return _index; }
+	void setIndex(uint32_t idx) { _index = idx; }
+
 	virtual void onSwapchainUpdate(const ImageInfo &) { }
 
 	virtual AttachmentDescriptor *addDescriptor(RenderPassData *);
@@ -90,6 +93,7 @@ protected:
 		return nullptr;
 	}
 
+	uint32_t _index = 0;
 	String _name;
 	bool _transient = false;
 	AttachmentType _type = AttachmentType::SwapchainImage;

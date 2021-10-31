@@ -98,6 +98,9 @@ public:
 
 	virtual bool supportsUpdateAfterBind(gl::DescriptorType) const override;
 
+	virtual gl::ImageData getEmptyImage() const override;
+	virtual gl::ImageData getSolidImage() const override;
+
 private:
 	friend class DeviceQueue;
 

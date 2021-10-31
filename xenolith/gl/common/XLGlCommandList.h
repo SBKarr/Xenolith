@@ -20,41 +20,50 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_GL_COMMON_XLGLDRAWSCHEME_H_
-#define XENOLITH_GL_COMMON_XLGLDRAWSCHEME_H_
+#ifndef XENOLITH_GL_COMMON_XLGLCOMMANDLIST_H_
+#define XENOLITH_GL_COMMON_XLGLCOMMANDLIST_H_
 
 #include "XLGl.h"
 
 namespace stappler::xenolith::gl {
 
-struct CommandGroup;
+enum class CommandType {
+	CommandGroup,
+	VertexArray,
+};
 
-using DrawBuffer = memory::impl::mem_large<uint8_t, 0>;
+struct CmdVertexArray {
+	Mat4 transform = Mat4::IDENTITY;
+	gl::MaterialId material = 0;
+	Rc<VertexData> vertexes;
+	SpanView<int16_t> zPath;
+};
 
-class DrawScheme : public Ref {
+struct Command {
+	static Command *create(memory::pool_t *, CommandType t);
+
+	Command *next;
+	CommandType type;
+	void *data;
+};
+
+class CommandList : public gl::AttachmentInputData {
 public:
-	static Rc<DrawScheme> create();
-	static void destroy(DrawScheme *);
+	bool init(const Rc<PoolRef> &);
 
-	void pushVertexArrayCmd(const Rc<VertexData> &, const Mat4 &, SpanView<int16_t> zPath);
+	void pushVertexArray(const Rc<VertexData> &, const Mat4 &, SpanView<int16_t> zPath, gl::MaterialId material);
 
-	void pushDrawIndexed(CommandGroup *g, SpanView<Vertex_V4F_V4F_T2F2U> vertexes, SpanView<uint16_t> indexes);
-
-	memory::pool_t *getPool() const { return pool; }
-
-	DrawScheme(memory::pool_t *);
+	const Command *getFirst() const { return _first; }
+	const Command *getLast() const { return _last; }
 
 protected:
-	memory::pool_t *pool = nullptr;
-	CommandGroup *group = nullptr;
+	void addCommand(Command *);
 
-	DrawBuffer draw; // not binded
-	DrawBuffer index; // index binding
-
-	DrawBuffer data; // uniforms[0] : draw::DrawData
-	DrawBuffer transforms; // uniforms[1] : layout::Mat4
+	Rc<PoolRef> _pool;
+	Command *_first = nullptr;
+	Command *_last = nullptr;
 };
 
 }
 
-#endif /* XENOLITH_GL_COMMON_XLGLDRAWSCHEME_H_ */
+#endif /* XENOLITH_GL_COMMON_XLGLCOMMANDLIST_H_ */

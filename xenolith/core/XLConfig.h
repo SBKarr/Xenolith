@@ -36,6 +36,9 @@ static constexpr uint64_t PresentationSchedulerInterval = 500; // 500 ms or 1/32
 /* Max sampled image descriptors per material texture set (can be actually lower due maxPerStageDescriptorSampledImages) */
 static constexpr uint32_t MaxTextureSetImages = 1024;
 
+/* Maximum images in single material */
+static constexpr size_t MaxMaterialImages = 4;
+
 }
 
 #endif /* COMPONENTS_XENOLITH_CORE_XLCONFIG_H_ */

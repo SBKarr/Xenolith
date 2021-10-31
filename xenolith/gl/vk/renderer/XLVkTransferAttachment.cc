@@ -421,9 +421,7 @@ bool TransferResource::prepareCommands(uint32_t idx, VkCommandBuffer buf,
 
 	for (auto &it : _stagingBuffer.copyData) {
 		if (it.targetImage) {
-			auto pass = (RenderPass *)it.targetImage->data->renderPass.get();
-			auto ops = pass->getQueueOps();
-			if (auto q = dev->getQueueFamily(ops)) {
+			if (auto q = dev->getQueueFamily(getQueueOperations(it.targetImage->data->type))) {
 				if (q->index != idx) {
 					auto &ref = outputImageBarriers.emplace_back(VkImageMemoryBarrier({
 						VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
@@ -450,9 +448,7 @@ bool TransferResource::prepareCommands(uint32_t idx, VkCommandBuffer buf,
 				}
 			}
 		} else if (it.targetBuffer) {
-			auto pass = (RenderPass *)it.targetBuffer->data->renderPass.get();
-			auto ops = pass->getQueueOps();
-			if (auto q = dev->getQueueFamily(ops)) {
+			if (auto q = dev->getQueueFamily(getQueueOperations(it.targetImage->data->type))) {
 				if (q->index != idx) {
 					auto &ref = outputBufferBarriers.emplace_back(VkBufferMemoryBarrier({
 						VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,

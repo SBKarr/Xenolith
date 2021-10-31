@@ -668,6 +668,7 @@ struct DeviceCallTable {
 };
 
 QueueOperations getQueueOperations(VkQueueFlags, bool present);
+QueueOperations getQueueOperations(gl::RenderPassType);
 VkShaderStageFlagBits getVkStageBits(gl::ProgramStage);
 
 StringView getVkFormatName(VkFormat fmt);

@@ -20,12 +20,19 @@
  THE SOFTWARE.
  **/
 
-#include "XLGlDrawCommand.h"
+#include "XLGlCommandList.h"
 
 namespace stappler::xenolith::gl {
 
 Command *Command::create(memory::pool_t *p, CommandType t) {
-	auto bytes = memory::pool::palloc(p, sizeof(Command));
+	auto commandSize = sizeof(Command);
+
+	switch (t) {
+	case CommandType::CommandGroup: break;
+	case CommandType::VertexArray: break;
+	}
+
+	auto bytes = memory::pool::palloc(p, commandSize);
 	auto c = new (bytes) Command;
 	c->next = nullptr;
 	c->type = t;
@@ -33,19 +40,50 @@ Command *Command::create(memory::pool_t *p, CommandType t) {
 	case CommandType::CommandGroup:
 		c->data = nullptr;
 		break;
-	case CommandType::DrawIndexedIndirect:
-		bytes = memory::pool::palloc(p, sizeof(CmdDrawIndexedIndirect));
-		c->data = new (bytes) CmdDrawIndexedIndirect;
-		break;
 	case CommandType::VertexArray:
-		bytes = memory::pool::palloc(p, sizeof(CmdVertexArray));
-		c->data = new (bytes) CmdVertexArray;
+		c->data = new ( memory::pool::palloc(p, sizeof(CmdVertexArray)) ) CmdVertexArray;
+		break;
 	}
 	return c;
 }
 
-CommandGroup *CommandGroup::create(memory::pool_t *p) {
-	return (CommandGroup *)memory::pool::palloc(p, sizeof(Command));
+bool CommandList::init(const Rc<PoolRef> &pool) {
+	_pool = pool;
+	return true;
 }
+
+void CommandList::pushVertexArray(const Rc<VertexData> &vert, const Mat4 &t, SpanView<int16_t> zPath, gl::MaterialId material) {
+	_pool->perform([&] {
+		auto cmd = Command::create(_pool->getPool(), CommandType::VertexArray);
+		auto cmdData = (CmdVertexArray *)cmd->data;
+		cmdData->vertexes = vert;
+		cmdData->transform = t;
+		cmdData->zPath = zPath.pdup(_pool->getPool());
+		cmdData->material = material;
+
+		addCommand(cmd);
+	});
+}
+
+void CommandList::addCommand(Command *cmd) {
+	if (!_last) {
+		_first = cmd;
+	} else {
+		_last->next = cmd;
+	}
+	_last = cmd;
+}
+
+/*static void appendToBuffer(memory::pool_t *p, DrawBuffer &vec, BytesView b) {
+	// dirty hack with low-level stappler memory types to bypass safety validation
+	auto origSize = vec.size();
+	auto newSize = origSize + b.size();
+	auto newmem = max(newSize, vec.capacity() * 2);
+	auto alloc = DrawBuffer::allocator(p);
+	vec.grow_alloc(alloc, newmem);
+	memcpy(vec.data() + origSize, b.data(), b.size());
+	vec.set_size(newSize);
+}*/
+
 
 }

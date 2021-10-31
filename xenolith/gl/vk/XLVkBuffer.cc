@@ -146,7 +146,8 @@ Bytes DeviceBuffer::getData(VkDeviceSize size, VkDeviceSize offset) {
 
 DeviceBuffer::MappedRegion DeviceBuffer::map(VkDeviceSize offset, VkDeviceSize size, bool invalidate) {
 	if (_memory.ptr) {
-		return MappedRegion({(uint8_t *)_memory.ptr + _memory.offset + offset, offset, size});
+		return MappedRegion({(uint8_t *)_memory.ptr + _memory.offset + offset, offset,
+			std::min(VkDeviceSize(_info.size - offset), size)});
 	} else {
 		auto t = _pool->getAllocator()->getType(_memory.type);
 		if (!t->isHostVisible()) {
@@ -158,13 +159,10 @@ DeviceBuffer::MappedRegion DeviceBuffer::map(VkDeviceSize offset, VkDeviceSize s
 		range.pNext = nullptr;
 		range.memory = _memory.mem;
 		range.offset = offset;
-		if (size == _memory.size) {
-			range.size = VK_WHOLE_SIZE;
-		} else if (!t->isHostCoherent()) {
-			range.size = math::align<VkDeviceSize>(size, _pool->getAllocator()->getNonCoherentAtomSize());
-		} else {
-			range.size = size;
+		if (!t->isHostCoherent()) {
+			size = math::align<VkDeviceSize>(size, _pool->getAllocator()->getNonCoherentAtomSize());
 		}
+		range.size = std::min(_info.size - offset, size);
 
 		void *mapped = nullptr;
 		if (_pool->getDevice()->getTable()->vkMapMemory(_pool->getDevice()->getDevice(),

@@ -40,7 +40,8 @@ public:
 
 	const uint32_t &getImageCount() const { return _imageCount; }
 	VkDescriptorSetLayout getLayout() const { return _layout; }
-	const Rc<ImageView> &getDefaultImageView() const { return _defaultImageView; }
+	const Rc<ImageView> &getEmptyImageView() const { return _emptyImageView; }
+	const Rc<ImageView> &getSolidImageView() const { return _solidImageView; }
 
 	Rc<TextureSet> acquireSet(Device &dev);
 	void releaseSet(Rc<TextureSet> &&);
@@ -49,6 +50,9 @@ public:
 
 	bool isPartiallyBound() const { return _partiallyBound; }
 
+	gl::ImageData getEmptyImage() const;
+	gl::ImageData getSolidImage() const;
+
 protected:
 	void writeDefaults(Device &dev, VkCommandBuffer buf);
 
@@ -56,8 +60,10 @@ protected:
 	uint32_t _imageCount = 0;
 	VkDescriptorSetLayout _layout = VK_NULL_HANDLE;
 
-	Rc<Image> _defaultImage;
-	Rc<ImageView> _defaultImageView;
+	Rc<Image> _emptyImage;
+	Rc<ImageView> _emptyImageView;
+	Rc<Image> _solidImage;
+	Rc<ImageView> _solidImageView;
 
 	mutable Mutex _mutex;
 	Vector<Rc<TextureSet>> _sets;
@@ -75,6 +81,8 @@ public:
 
 	const Vector<VkImageMemoryBarrier> &getPendingBarriers() const { return _pendingBarriers; }
 	void dropPendingBarriers();
+
+	Device *getDevice() const;
 
 protected:
 	bool _partiallyBound = false;

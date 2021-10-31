@@ -33,6 +33,16 @@ QueueOperations getQueueOperations(VkQueueFlags flags, bool present) {
 	return ret;
 }
 
+QueueOperations getQueueOperations(gl::RenderPassType type) {
+	switch (type) {
+	case gl::RenderPassType::Graphics: return QueueOperations::Graphics; break;
+	case gl::RenderPassType::Compute: return QueueOperations::Compute; break;
+	case gl::RenderPassType::Transfer: return QueueOperations::Transfer; break;
+	case gl::RenderPassType::Generic: return QueueOperations::None; break;
+	}
+	return QueueOperations::None;
+}
+
 VkShaderStageFlagBits getVkStageBits(gl::ProgramStage stage) {
 	return VkShaderStageFlagBits(stage);
 }

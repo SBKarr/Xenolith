@@ -35,8 +35,7 @@
 #endif
 
 #include "XLGlDevice.cc"
-#include "XLGlDrawCommand.cc"
-#include "XLGlDrawScheme.cc"
+#include "XLGlCommandList.cc"
 #include "XLGlLoop.cc"
 #include "XLGlView.cc"
 #include "XLGlObject.cc"

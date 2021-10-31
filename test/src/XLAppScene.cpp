@@ -37,57 +37,77 @@
 namespace stappler::xenolith::app {
 
 bool AppScene::init(Extent2 extent) {
+	// acquire platform-specific swapchain image format
+	// extent will be resized automatically to screen size
 	gl::ImageInfo info(extent, gl::ImageUsage::ColorAttachment, platform::graphic::getCommonFormat());
+
+	// build presentation RenderQueue
 	gl::RenderQueue::Builder builder("Loader", gl::RenderQueue::Continuous);
+
+
+	// load shaders by ref - do not copy content into engine
 	auto materialFrag = builder.addProgramByRef("Loader_MaterialVert", xenolith::shaders::MaterialVert);
 	auto materialVert = builder.addProgramByRef("Loader_MaterialFrag", xenolith::shaders::MaterialFrag);
-	// auto vertexFrag = builder.addProgramByRef("Loader_VertexVert", gl::ProgramStage::Vertex, xenolith::shaders::VertexVert);
-	// auto vertexVert = builder.addProgramByRef("Loader_VertexFrag", gl::ProgramStage::Fragment, xenolith::shaders::VertexFrag);
 
+
+	// render-to-swapchain RenderPass
 	auto pass = Rc<vk::MaterialRenderPass>::create("SwapchainPass", gl::RenderOrderingHighest);
 	builder.addRenderPass(pass);
 
-	/*builder.addPipeline(pass, 0, "Vertexes", Vector<gl::SpecializationInfo>({
-		vertexVert,
-		vertexFrag
-	}));*/
+
+	// pipeline for material-besed rendering
 	auto materialPipeline = builder.addPipeline(pass, 0, "Materials", Vector<gl::SpecializationInfo>({
+		// no specialization required for vertex shader
 		materialVert,
+		// specialization for fragment shader - use platform-dependent array sizes
 		gl::SpecializationInfo(materialFrag, { gl::PredefinedConstant::SamplersArraySize, gl::PredefinedConstant::TexturesArraySize })
 	}));
 
+
+	// define internal resources (images and buffers)
 	gl::Resource::Builder resourceBuilder("LoaderResources");
-	auto initImage = resourceBuilder.addImage("Xenolith", pass,
+	auto initImage = resourceBuilder.addImage("Xenolith.png",
 			gl::ImageInfo(gl::ImageFormat::R8G8B8A8_UNORM, gl::ImageUsage::Sampled),
 			FilePath("resources/xenolith-1.png"));
 
 	builder.setInternalResource(Rc<gl::Resource>::create(move(resourceBuilder)));
 
+	// output attachment - swapchain
 	auto out = Rc<vk::SwapchainAttachment>::create("Swapchain", move(info),
 			gl::AttachmentLayout::Undefined, gl::AttachmentLayout::PresentSrc);
 
+	// Engine-defined samplers as input attachment
 	auto samplers = Rc<gl::SamplersAttachment>::create("Samplers");
 
-	auto vertexInput = Rc<vk::VertexMaterialAttachment>::create("VertexInput",
-			gl::BufferInfo(gl::BufferUsage::StorageBuffer));
-
+	// Material input attachment - per-scene list of materials
 	auto materialInput = Rc<vk::MaterialVertexAttachment>::create("MaterialInput",
 			gl::BufferInfo(gl::BufferUsage::StorageBuffer),
+
+			// ... with predefined list of materials
 			Vector<Rc<gl::Material>>({
-				Rc<gl::Material>::create(0, materialPipeline, initImage)
+				Rc<gl::Material>::create(materialPipeline, initImage)
 	}));
 
+	// Vertex input attachment - per-frame vertex list
+	auto vertexInput = Rc<vk::VertexMaterialAttachment>::create("VertexInput",
+			gl::BufferInfo(gl::BufferUsage::StorageBuffer), materialInput);
+
+	// define pass input-output
 	builder.addPassInput(pass, 0, samplers); // 0
 	builder.addPassInput(pass, 0, vertexInput); // 1
 	builder.addPassInput(pass, 0, materialInput); // 2
 	builder.addPassOutput(pass, 0, out);
 
+	// define global input-output
+	// samplers and materialInput are persistent between frames, only vertexes should be provided before rendering started
 	builder.addInput(vertexInput);
 	builder.addOutput(out);
 
+	// optional world-to-pass subpass dependency
 	/*builder.addSubpassDependency(pass,
 			gl::RenderSubpassDependency::External, gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::None,
 			0, gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::ColorAttachmentWrite, false);*/
+
 	if (!Scene::init(move(builder))) {
 		return false;
 	}
@@ -99,9 +119,8 @@ void AppScene::onEnter() {
 	Scene::onEnter();
 	std::cout << "AppScene::onEnter\n";
 
-	//auto pipeline = _director->getResourceCache()->getPipeline(AppSceneResource::RequestName, AppSceneResource::VertexPipelineName);
-	//auto sprite = Rc<Sprite>::create(pipeline);
-	//_sprite = addChild(sprite);
+	auto sprite = Rc<Sprite>::create("Xenolith.png");
+	_sprite = addChild(sprite);
 }
 
 void AppScene::onExit() {

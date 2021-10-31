@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "XLNode.h"
 #include "XLGlResource.h"
 #include "XLGlRenderQueue.h"
+#include "XLGlMaterial.h"
 
 namespace stappler::xenolith {
 
@@ -42,9 +43,6 @@ public:
 
 	const Rc<gl::RenderQueue> &getRenderQueue() const { return _queue; }
 
-	bool requestResource(const Rc<gl::Resource> &);
-	bool revokeResource(StringView requestName);
-
 	virtual void onPresented(Director *);
 	virtual void onFinished(Director *);
 
@@ -55,13 +53,18 @@ public:
 	virtual void onQueueEnabled(const gl::Swapchain *);
 	virtual void onQueueDisabled();
 
+	virtual uint64_t getMaterial(const MaterialInfo &) const;
+
 protected:
 	virtual Rc<gl::RenderQueue> makeQueue(gl::RenderQueue::Builder &&);
+	virtual void readInitialMaterials();
+	virtual MaterialInfo getMaterialInfo(gl::MaterialType, const Rc<gl::Material> &) const;
 
 	uint32_t _refId = 0;
 	Director *_director = nullptr;
 	Rc<gl::RenderQueue> _queue;
-	Map<String, Rc<gl::Resource>> _resources;
+
+	std::unordered_map<uint64_t, Vector<Pair<MaterialInfo, uint64_t>>> _materials;
 };
 
 }

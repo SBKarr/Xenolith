@@ -67,10 +67,13 @@ bool TextureSetLayout::init(Device &dev, uint32_t imageLimit) {
 
 	// create dummy image
 
-	_defaultImage = dev.getAllocator()->spawnPersistent(AllocationUsage::DeviceLocal,
+	_emptyImage = dev.getAllocator()->spawnPersistent(AllocationUsage::DeviceLocal,
 			gl::ImageInfo(Extent2(1, 1), gl::ImageUsage::Sampled, gl::ImageFormat::R8_UNORM), false);
+	_emptyImageView = Rc<ImageView>::create(dev, _emptyImage, gl::ImageViewInfo());
 
-	_defaultImageView = Rc<ImageView>::create(dev, _defaultImage, gl::ImageViewInfo());
+	_solidImage = dev.getAllocator()->spawnPersistent(AllocationUsage::DeviceLocal,
+			gl::ImageInfo(Extent2(1, 1), gl::ImageUsage::Sampled, gl::ImageFormat::R8_UNORM), false);
+	_solidImageView = Rc<ImageView>::create(dev, _solidImage, gl::ImageViewInfo());
 
 	return true;
 }
@@ -80,6 +83,11 @@ void TextureSetLayout::invalidate(Device &dev) {
 		dev.getTable()->vkDestroyDescriptorSetLayout(dev.getDevice(), _layout, nullptr);
 		_layout = VK_NULL_HANDLE;
 	}
+
+	_emptyImage = nullptr;
+	_emptyImageView = nullptr;
+	_solidImage = nullptr;
+	_solidImageView = nullptr;
 }
 
 Rc<TextureSet> TextureSetLayout::acquireSet(Device &dev) {
@@ -158,6 +166,20 @@ void TextureSetLayout::initDefault(Device &dev, gl::Loop &loop) {
 	}, [this] (gl::Loop &) { }, this);
 }
 
+gl::ImageData TextureSetLayout::getEmptyImage() const {
+	gl::ImageData ret;
+	static_cast<gl::ImageInfo &>(ret) = _emptyImage->getInfo();
+	ret.image = _emptyImage;
+	return ret;
+}
+
+gl::ImageData TextureSetLayout::getSolidImage() const {
+	gl::ImageData ret;
+	static_cast<gl::ImageInfo &>(ret) = _solidImage->getInfo();
+	ret.image = _solidImage;
+	return ret;
+}
+
 void TextureSetLayout::writeDefaults(Device &dev, VkCommandBuffer buf) {
 	// define clear range
 	VkImageSubresourceRange range;
@@ -167,43 +189,68 @@ void TextureSetLayout::writeDefaults(Device &dev, VkCommandBuffer buf) {
 	range.baseMipLevel = 0;
 	range.levelCount = 1;
 
+
+	std::array<VkImageMemoryBarrier, 2> inImageBarriers;
 	// define input barrier/transition (Undefined -> TransferDst)
-	VkImageMemoryBarrier inImageBarrier({
+	inImageBarriers[0] = VkImageMemoryBarrier({
 		VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
 		0, VK_ACCESS_TRANSFER_WRITE_BIT,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		_defaultImage->getImage(), range
+		_emptyImage->getImage(), range
+	});
+	inImageBarriers[1] = VkImageMemoryBarrier({
+		VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
+		0, VK_ACCESS_TRANSFER_WRITE_BIT,
+		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+		_solidImage->getImage(), range
 	});
 
 	dev.getTable()->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
 			0, nullptr, // memory
 			0, nullptr, // buffers
-			1, &inImageBarrier);
+			inImageBarriers.size(), inImageBarriers.data());
 
-	// clear image
+	VkClearColorValue clearColorEmpty;
+	clearColorEmpty.float32[0] = 0.0;
+	clearColorEmpty.float32[1] = 0.0;
+	clearColorEmpty.float32[2] = 0.0;
+	clearColorEmpty.float32[3] = 0.0;
 
-	VkClearColorValue clearColor;
-	clearColor.float32[0] = 0.0;
-	clearColor.float32[1] = 0.0;
-	clearColor.float32[2] = 0.0;
-	clearColor.float32[3] = 0.0;
+	dev.getTable()->vkCmdClearColorImage(buf, _emptyImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			&clearColorEmpty, 1, &range);
 
-	dev.getTable()->vkCmdClearColorImage(buf, _defaultImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			&clearColor, 1, &range);
+	VkClearColorValue clearColorSolid;
+	clearColorSolid.float32[0] = 1.0;
+	clearColorSolid.float32[1] = 1.0;
+	clearColorSolid.float32[2] = 1.0;
+	clearColorSolid.float32[3] = 1.0;
 
-	VkImageMemoryBarrier outImageBarrier({
+	dev.getTable()->vkCmdClearColorImage(buf, _solidImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			&clearColorSolid, 1, &range);
+
+
+	std::array<VkImageMemoryBarrier, 2> outImageBarriers;
+	outImageBarriers[0] = VkImageMemoryBarrier({
 		VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
 		VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		_defaultImage->getImage(), range
+		_emptyImage->getImage(), range
+	});
+	outImageBarriers[1] = VkImageMemoryBarrier({
+		VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
+		VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+		_solidImage->getImage(), range
 	});
 
 	dev.getTable()->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
 			0, nullptr, // memory
 			0, nullptr, // buffers
-			1, &outImageBarrier);
+			outImageBarriers.size(), outImageBarriers.data());
 }
 
 bool TextureSet::init(Device &dev, const TextureSetLayout &layout) {
@@ -301,14 +348,14 @@ void TextureSet::write(const gl::MaterialLayout &set) {
 			}
 			_layoutIndexes[i] = set.slots[i].image->getIndex();
 			++ writeData.descriptorCount;
-		} else if (!_partiallyBound && !set.slots[i].image && _layoutIndexes[i] != _layout->getDefaultImageView()->getIndex()) {
+		} else if (!_partiallyBound && !set.slots[i].image && _layoutIndexes[i] != _layout->getEmptyImageView()->getIndex()) {
 			if (!localImages) {
 				localImages = &imagesList.emplace_front(Vector<VkDescriptorImageInfo>());
 			}
 			localImages->emplace_back(VkDescriptorImageInfo({
-				VK_NULL_HANDLE, _layout->getDefaultImageView()->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+				VK_NULL_HANDLE, _layout->getEmptyImageView()->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 			}));
-			_layoutIndexes[i] = _layout->getDefaultImageView()->getIndex();
+			_layoutIndexes[i] = _layout->getEmptyImageView()->getIndex();
 			++ writeData.descriptorCount;
 		} else {
 			// no need to write, push written
@@ -322,14 +369,14 @@ void TextureSet::write(const gl::MaterialLayout &set) {
 	if (!_partiallyBound) {
 		// write empty
 		for (uint32_t i = set.usedSlots; i < _count; ++ i) {
-			if (_layoutIndexes[i] != _layout->getDefaultImageView()->getIndex()) {
+			if (_layoutIndexes[i] != _layout->getEmptyImageView()->getIndex()) {
 				if (!localImages) {
 					localImages = &imagesList.emplace_front(Vector<VkDescriptorImageInfo>());
 				}
 				localImages->emplace_back(VkDescriptorImageInfo({
-					VK_NULL_HANDLE, _layout->getDefaultImageView()->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+					VK_NULL_HANDLE, _layout->getEmptyImageView()->getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 				}));
-				_layoutIndexes[i] = _layout->getDefaultImageView()->getIndex();
+				_layoutIndexes[i] = _layout->getEmptyImageView()->getIndex();
 				++ writeData.descriptorCount;
 			} else {
 				// no need to write, push written
@@ -352,6 +399,10 @@ void TextureSet::write(const gl::MaterialLayout &set) {
 
 void TextureSet::dropPendingBarriers() {
 	_pendingBarriers.clear();
+}
+
+Device *TextureSet::getDevice() const {
+	return (Device *)_device;
 }
 
 }

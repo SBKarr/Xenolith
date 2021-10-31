@@ -20,6 +20,7 @@
  THE SOFTWARE.
  **/
 
+#include "XLGlCommandList.h"
 #include "XLVkMaterialRenderPass.h"
 #include "XLVkDevice.h"
 #include "XLVkFramebuffer.h"
@@ -36,7 +37,10 @@ MaterialVertexAttachment::~MaterialVertexAttachment() { }
 bool MaterialVertexAttachment::init(StringView str, const gl::BufferInfo &info, Vector<Rc<gl::Material>> &&initial) {
 	return MaterialAttachment::init(str, info, [] (uint8_t *, const gl::Material *) {
 		return false;
-	}, sizeof(uint32_t) * 4, move(initial));
+	}, [] (Rc<gl::TextureSet> &&set) {
+		auto s = (TextureSet *)set.get();
+		s->getDevice()->getTextureSetLayout()->releaseSet(s);
+	}, sizeof(uint32_t) * 4, gl::MaterialType::Basic2D, move(initial));
 }
 
 Rc<gl::AttachmentHandle> MaterialVertexAttachment::makeFrameHandle(const gl::FrameHandle &handle) {
@@ -55,7 +59,7 @@ bool MaterialVertexAttachmentHandle::init(const Rc<gl::Attachment> &a, const gl:
 
 bool MaterialVertexAttachmentHandle::isDescriptorDirty(const gl::RenderPassHandle &, const gl::PipelineDescriptor &desc,
 		uint32_t, bool isExternal) const {
-	return _materials->getGeneration() != ((gl::MaterialAttachmentDescriptor *)desc.descriptor)->getBoundGeneration();
+	return _materials && _materials->getGeneration() != ((gl::MaterialAttachmentDescriptor *)desc.descriptor)->getBoundGeneration();
 }
 
 bool MaterialVertexAttachmentHandle::writeDescriptor(const RenderPassHandle &handle, const gl::PipelineDescriptor &descriptors,
@@ -68,14 +72,32 @@ bool MaterialVertexAttachmentHandle::writeDescriptor(const RenderPassHandle &han
 
 VertexMaterialAttachment::~VertexMaterialAttachment() { }
 
+bool VertexMaterialAttachment::init(StringView name, const gl::BufferInfo &info, const MaterialVertexAttachment *m) {
+	if (BufferAttachment::init(name, info)) {
+		_materials = m;
+		return true;
+	}
+	return false;
+}
+
 Rc<gl::AttachmentHandle> VertexMaterialAttachment::makeFrameHandle(const gl::FrameHandle &handle) {
 	return Rc<VertexMaterialAttachmentHandle>::create(this, handle);
 }
 
 VertexMaterialAttachmentHandle::~VertexMaterialAttachmentHandle() { }
 
+bool VertexMaterialAttachmentHandle::setup(gl::FrameHandle &handle) {
+	for (auto &it : handle.getRequiredAttachments()) {
+		if (it->getAttachment() == ((VertexMaterialAttachment *)_attachment.get())->getMaterials()) {
+			_materials = (const MaterialVertexAttachmentHandle *)it.get();
+			break;
+		}
+	}
+	return true;
+}
+
 bool VertexMaterialAttachmentHandle::submitInput(gl::FrameHandle &handle, Rc<gl::AttachmentInputData> &&data) {
-	if (auto d = data.cast<gl::VertexData>()) {
+	if (auto d = data.cast<gl::CommandList>()) {
 		handle.performInQueue([this, d = move(d)] (gl::FrameHandle &handle) {
 			return loadVertexes(handle, d);
 		}, [this] (gl::FrameHandle &handle, bool success) {
@@ -103,21 +125,131 @@ bool VertexMaterialAttachmentHandle::writeDescriptor(const RenderPassHandle &, c
 	return true;
 }
 
-bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, const Rc<gl::VertexData> &vertexes) {
+bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, const Rc<gl::CommandList> &commands) {
 	auto handle = dynamic_cast<FrameHandle *>(&fhandle);
 	if (!handle) {
 		return false;
 	}
 
-	_data = vertexes;
+	struct MaterialWritePlan {
+		const gl::Material *material = nullptr;
+		uint32_t vertexes = 0;
+		uint32_t indexes = 0;
+		std::forward_list<const gl::CmdVertexArray *> commands;
+	};
 
+	// fill write plan
+	MaterialWritePlan globalWritePlan;
+	std::unordered_map<gl::MaterialId, MaterialWritePlan> writePlan;
+
+	auto pushVertexData = [&] (const gl::CmdVertexArray *cmd) {
+		auto it = writePlan.find(cmd->material);
+		if (it == writePlan.end()) {
+			auto material = _materials->getMaterials()->getMaterialById(cmd->material);
+			if (material) {
+				it = writePlan.emplace(cmd->material, MaterialWritePlan()).first;
+				it->second.material = material;
+			}
+		}
+
+		if (it->second.material) {
+			globalWritePlan.vertexes += cmd->vertexes->data.size();
+			globalWritePlan.indexes += cmd->vertexes->indexes.size();
+
+			it->second.vertexes += cmd->vertexes->data.size();
+			it->second.indexes += cmd->vertexes->indexes.size();
+			it->second.commands.emplace_front(cmd);
+		}
+	};
+
+	auto cmd = commands->getFirst();
+	while (cmd) {
+		switch (cmd->type) {
+		case gl::CommandType::VertexArray:
+			pushVertexData((const gl::CmdVertexArray *)cmd->data);
+			break;
+		case gl::CommandType::CommandGroup:
+			break;
+		}
+		cmd = cmd->next;
+	}
+
+	// optimize draw order
+	Vector<const Pair<const gl::MaterialId, MaterialWritePlan> *> drawOrder;
+
+	for (auto &it : writePlan) {
+		if (drawOrder.empty()) {
+			drawOrder.emplace_back(&it);
+		} else {
+			auto lb = std::lower_bound(drawOrder.begin(), drawOrder.end(), &it,
+					[] (const Pair<const gl::MaterialId, MaterialWritePlan> *l, const Pair<const gl::MaterialId, MaterialWritePlan> *r) {
+				if (l->second.material->getPipeline() != l->second.material->getPipeline()) {
+					return Pipeline::comparePipelineOrdering(*l->second.material->getPipeline(), *r->second.material->getPipeline());
+				} else if (l->second.material->getLayoutIndex() != r->second.material->getLayoutIndex()) {
+					return l->second.material->getLayoutIndex() < r->second.material->getLayoutIndex();
+				} else {
+					return l->first < r->first;
+				}
+			});
+			if (lb == drawOrder.end()) {
+				drawOrder.emplace_back(&it);
+			} else {
+				drawOrder.emplace(lb, &it);
+			}
+		}
+	}
+
+	// create buffers
 	_vertexes = handle->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(gl::BufferUsage::StorageBuffer, vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
-	_vertexes->setData(BytesView((uint8_t *)vertexes->data.data(), vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
+			gl::BufferInfo(gl::BufferUsage::StorageBuffer, globalWritePlan.vertexes * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
 
 	_indexes = handle->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(gl::BufferUsage::IndexBuffer, vertexes->indexes.size() * sizeof(uint32_t)));
-	_indexes->setData(BytesView((uint8_t *)vertexes->indexes.data(), vertexes->indexes.size() * sizeof(uint32_t)));
+			gl::BufferInfo(gl::BufferUsage::IndexBuffer, globalWritePlan.indexes * sizeof(uint32_t)));
+
+	auto vertexesMap = _vertexes->map();
+	auto indexesMap = _indexes->map();
+
+	uint32_t vertexOffset = 0;
+	uint32_t indexOffset = 0;
+
+	for (auto &it : drawOrder) {
+		uint32_t materialVertexes = 0;
+		uint32_t materialIndexes = 0;
+
+		for (auto &cmd : it->second.commands) {
+			auto target = (gl::Vertex_V4F_V4F_T2F2U *)vertexesMap.ptr + vertexOffset;
+			memcpy(target, (uint8_t *)cmd->vertexes->data.data(),
+					cmd->vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U));
+
+			auto transform = cmd->transform;
+
+			size_t idx = 0;
+			for (auto &v : cmd->vertexes->data) {
+				target[idx].pos = transform * v.pos;
+				target[idx].material = it->first;
+				++ idx;
+			}
+
+			for (auto &it : cmd->vertexes->indexes) {
+				it += vertexOffset;
+			}
+
+			memcpy(indexesMap.ptr + indexOffset * sizeof(uint32_t),
+					(uint8_t *)cmd->vertexes->indexes.data(),
+					cmd->vertexes->indexes.size() * sizeof(uint32_t));
+
+			vertexOffset += cmd->vertexes->data.size();
+			indexOffset += cmd->vertexes->indexes.size();
+
+			materialVertexes += cmd->vertexes->data.size();
+			materialIndexes += cmd->vertexes->indexes.size();
+		}
+
+		_spans.emplace_back(gl::VertexSpan({ it->first, materialIndexes, 1, indexOffset - materialIndexes}));
+	}
+
+	_vertexes->unmap(vertexesMap, true);
+	_vertexes->unmap(indexesMap, true);
 
 	return true;
 }
@@ -227,7 +359,8 @@ void MaterialRenderPassHandle::prepareMaterialCommands(gl::MaterialSet * materia
 	gl::Pipeline *boundPipeline = nullptr;
 
 	for (auto &materialVertexSpan : _vertexBuffer->getVertexData()) {
-		auto material = materials->getMaterial(materialVertexSpan.material);
+		auto materialOrderIdx = materials->getMaterialOrder(materialVertexSpan.material);
+		auto material = materials->getMaterialById(materialVertexSpan.material);
 		if (!material) {
 			continue;
 		}
@@ -256,6 +389,9 @@ void MaterialRenderPassHandle::prepareMaterialCommands(gl::MaterialSet * materia
 				return;
 			}
 		}
+
+		table->vkCmdPushConstants(buf, pass->getPipelineLayout(),
+				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(uint32_t), &materialOrderIdx);
 
 		table->vkCmdDrawIndexed(buf,
 				materialVertexSpan.indexCount, // indexCount

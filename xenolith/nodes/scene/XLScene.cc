@@ -65,9 +65,13 @@ void Scene::onPresented(Director *dir) {
 	if (getContentSize() == Size::ZERO) {
 		setContentSize(dir->getScreenSize());
 	}
+
+	dir->getResourceCache()->addResource(_queue->getInternalResource());
+	readInitialMaterials();
 }
 
 void Scene::onFinished(Director *dir) {
+	dir->getResourceCache()->removeResource(_queue->getInternalResource()->getName());
 	if (_director == dir) {
 		_director = nullptr;
 	}
@@ -83,7 +87,18 @@ void Scene::onFrameEnded(gl::FrameHandle &) {
 
 void Scene::onFrameInput(gl::FrameHandle &frame, const Rc<gl::AttachmentHandle> &attachment) {
 	_director->getApplication()->performOnMainThread([this, frame = Rc<gl::FrameHandle>(&frame), attachment = attachment] {
-		_director->acquireInput(*frame, attachment);
+		RenderFrameInfo info;
+		info.director = _director;
+		info.scene = this;
+		info.pool = frame->getPool()->getPool();
+		info.transformStack.reserve(8);
+		info.zPath.reserve(8);
+		info.transformStack.push_back(_director->getGeneralProjection());
+		info.commands = Rc<gl::CommandList>::create(frame->getPool());
+
+		render(info);
+
+		frame->submitInput(attachment, move(info.commands));
 	}, this);
 }
 
@@ -93,6 +108,18 @@ void Scene::onQueueEnabled(const gl::Swapchain *) {
 
 void Scene::onQueueDisabled() {
 	release(_refId);
+}
+
+uint64_t Scene::getMaterial(const MaterialInfo &info) const {
+	auto it = _materials.find(info.hash());
+	if (it != _materials.end()) {
+		for (auto &m : it->second) {
+			if (m.first == info) {
+				return m.second;
+			}
+		}
+	}
+	return 0;
 }
 
 Rc<gl::RenderQueue> Scene::makeQueue(gl::RenderQueue::Builder &&builder) {
@@ -113,6 +140,40 @@ Rc<gl::RenderQueue> Scene::makeQueue(gl::RenderQueue::Builder &&builder) {
 	});
 
 	return Rc<gl::RenderQueue>::create(move(builder));
+}
+
+void Scene::readInitialMaterials() {
+	for (auto &it : _queue->getAttachments()) {
+		if (auto a = dynamic_cast<gl::MaterialAttachment *>(it.get())) {
+			for (auto &m : a->getInitialMaterials()) {
+				MaterialInfo info = getMaterialInfo(a->getType(), m);
+				auto materialHash = info.hash();
+				auto it = _materials.find(info.hash());
+				if (it != _materials.end()) {
+					it->second.emplace_back(info, m->getId());
+				} else {
+					_materials.emplace(materialHash,
+							Vector<Pair<MaterialInfo, uint64_t>>({pair(info, m->getId())}));
+				}
+			}
+		}
+	}
+}
+
+MaterialInfo Scene::getMaterialInfo(gl::MaterialType type, const Rc<gl::Material> &material) const {
+	MaterialInfo ret;
+	ret.type = type;
+
+	size_t idx = 0;
+	for (auto &it : material->getImages()) {
+		if (idx < config::MaxMaterialImages) {
+			ret.images[idx] = it.image->image->getIndex();
+			ret.samplers[idx] = it.sampler;
+		}
+		++ idx;
+	}
+
+	return ret;
 }
 
 }

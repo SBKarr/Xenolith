@@ -52,6 +52,48 @@ namespace AppEvent {
 	constexpr uint32_t Input = 32;
 }
 
+static constexpr auto EmptyTextureName = "org.xenolith.EmptyImage";
+static constexpr auto SolidTextureName = "org.xenolith.SolidImage";
+
+struct MaterialInfo {
+	std::array<uint64_t, config::MaxMaterialImages> images = { 0 };
+	std::array<uint16_t, config::MaxMaterialImages> samplers = { 0 };
+	gl::MaterialType type = gl::MaterialType::Basic2D;
+
+	uint64_t hash() const {
+		return hash::hash64((const char *)this, sizeof(MaterialInfo));
+	}
+
+	bool operator==(const MaterialInfo &info) const {
+		return memcmp(this, &info, sizeof(MaterialInfo)) == 0;
+	}
+
+	bool operator!=(const MaterialInfo &info) const {
+		return memcmp(this, &info, sizeof(MaterialInfo)) == 0;
+	}
+};
+
+class PoolRef : public Ref {
+public:
+	virtual ~PoolRef() {
+		memory::pool::destroy(_pool);
+	}
+	PoolRef(memory::pool_t *root = nullptr) {
+		_pool = memory::pool::create(root);
+	}
+
+	memory::pool_t *getPool() const { return _pool; }
+
+	template <typename Callable>
+	auto perform(const Callable &cb) {
+		memory::pool::context<memory::pool_t *> ctx(_pool);
+		return cb();
+	}
+
+protected:
+	memory::pool_t *_pool = nullptr;
+};
+
 }
 
 #endif /* COMPONENTS_XENOLITH_CORE_XLDEFINE_H_ */

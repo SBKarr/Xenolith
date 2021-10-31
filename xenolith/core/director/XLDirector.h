@@ -23,11 +23,12 @@
 #ifndef COMPONENTS_XENOLITH_CORE_DIRECTOR_XLDIRECTOR_H_
 #define COMPONENTS_XENOLITH_CORE_DIRECTOR_XLDIRECTOR_H_
 
+#include "../../gl/common/XLGlCommandList.h"
 #include "XLEventHeader.h"
 #include "XLEventHandler.h"
+#include "XLResourceCache.h"
 #include "XLGlView.h"
 #include "XLGlFrame.h"
-#include "XLGlDrawScheme.h"
 
 namespace stappler::xenolith {
 
@@ -35,19 +36,6 @@ class Scene;
 
 class Director : public Ref, EventHandler {
 public:
-	static EventHeader onProjectionChanged;
-	static EventHeader onAfterUpdate;
-	static EventHeader onAfterVisit;
-	static EventHeader onAfterDraw;
-
-	enum class Projection {
-		_2D,
-		_3D,
-		Euclid,
-		Custom,
-		Default = Euclid,
-	};
-
 	Director();
 
 	virtual ~Director();
@@ -56,12 +44,10 @@ public:
 	gl::View *getView() const { return _view; }
 	Application *getApplication() const { return _application; }
 	const Rc<Scene> &getScene() const { return _scene; }
+	const Rc<ResourceCache> &getResourceCache() const;
+	const Mat4 &getGeneralProjection() const { return _generalProjection; }
 
 	void update();
-
-	void acquireInput(gl::FrameHandle &, const Rc<gl::AttachmentHandle> &);
-
-	Rc<gl::DrawScheme> construct();
 
 	// should return valid RenderQueue from initial scene
 	void begin(gl::View *view);

@@ -110,12 +110,17 @@ class ImageObject : public Object {
 public:
 	virtual ~ImageObject() { }
 
+	virtual bool init(Device &, ClearCallback, ObjectType, void *ptr) override;
+
 	const ImageInfo &getInfo() const { return _info; }
+	uint64_t getIndex() const { return _index; }
 
 	ImageViewInfo getViewInfo(const ImageViewInfo &) const;
 
 protected:
 	ImageInfo _info;
+
+	uint64_t _index = 1; // 0 stays as special value
 };
 
 class ImageView : public Object {

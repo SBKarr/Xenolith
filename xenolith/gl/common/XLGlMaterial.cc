@@ -25,11 +25,15 @@
 
 namespace stappler::xenolith::gl {
 
-MaterialSet::~MaterialSet() { }
+MaterialSet::~MaterialSet() {
+	clear();
+}
 
-bool MaterialSet::init(const BufferInfo &info, const EncodeCallback &callback, uint32_t objectSize, uint32_t imagesInSet) {
+bool MaterialSet::init(const BufferInfo &info, const EncodeCallback &callback, const FinalizeCallback &fin,
+		uint32_t objectSize, uint32_t imagesInSet) {
 	_info = info;
 	_encodeCallback = callback;
+	_finalizeCallback = fin;
 	_objectSize = objectSize;
 	_imagesInSet = imagesInSet;
 	_info.size = 0;
@@ -39,6 +43,7 @@ bool MaterialSet::init(const BufferInfo &info, const EncodeCallback &callback, u
 bool MaterialSet::init(const Rc<MaterialSet> &other) {
 	_info = other->_info;
 	_encodeCallback = other->_encodeCallback;
+	_finalizeCallback = other->_finalizeCallback;
 	_generation = other->_generation + 1;
 	_materials = other->_materials;
 	_objectSize = other->_objectSize;
@@ -57,6 +62,14 @@ bool MaterialSet::encode(uint8_t *buf, const Material *material) {
 		return _encodeCallback(buf, material);
 	}
 	return false;
+}
+
+void MaterialSet::clear() {
+	if (_finalizeCallback && _textureSet) {
+		_finalizeCallback(move(_textureSet));
+		_textureSet = nullptr;
+		_finalizeCallback = nullptr;
+	}
 }
 
 Vector<Material *> MaterialSet::updateMaterials(const Rc<MaterialInputData> &data,
@@ -83,8 +96,9 @@ Vector<Material *> MaterialSet::updateMaterials(const Vector<Rc<Material>> &mate
 	return ret;
 }
 
-void MaterialSet::setBuffer(Rc<BufferObject> &&buffer) {
+void MaterialSet::setBuffer(Rc<BufferObject> &&buffer, std::unordered_map<MaterialId, uint32_t> &&ordering) {
 	_buffer = move(buffer);
+	_ordering = move(ordering);
 }
 
 const MaterialLayout *MaterialSet::getLayout(uint32_t idx) const {
@@ -94,12 +108,20 @@ const MaterialLayout *MaterialSet::getLayout(uint32_t idx) const {
 	return nullptr;
 }
 
-const Material * MaterialSet::getMaterial(uint32_t idx) const {
+const Material * MaterialSet::getMaterialById(MaterialId idx) const {
 	auto it = _materials.find(idx);
 	if (it != _materials.end()) {
 		return it->second.get();
 	}
 	return nullptr;
+}
+
+uint32_t MaterialSet::getMaterialOrder(MaterialId idx) const {
+	auto it = _ordering.find(idx);
+	if (it != _ordering.end()) {
+		return it->second;
+	}
+	return maxOf<uint32_t>();
 }
 
 void MaterialSet::emplaceMaterialImages(Material *oldMaterial, Material *newMaterial,
@@ -272,18 +294,20 @@ bool MaterialImage::canAlias(const MaterialImage &other) const {
 	return other.image == image && other.info == info;
 }
 
+static std::atomic<MaterialId> s_MaterialCurrentIndex = 1;
+
 Material::~Material() { }
 
-bool Material::init(uint32_t id, const PipelineData *pipeline, Vector<MaterialImage> &&images, Bytes &&data) {
-	_id = id;
+bool Material::init(const PipelineData *pipeline, Vector<MaterialImage> &&images, Bytes &&data) {
+	_id = s_MaterialCurrentIndex.fetch_add(1);
 	_pipeline = pipeline;
 	_images = move(images);
 	_data = move(data);
 	return true;
 }
 
-bool Material::init(uint32_t id, const PipelineData *pipeline, const ImageData *image, Bytes &&data) {
-	_id = id;
+bool Material::init(const PipelineData *pipeline, const ImageData *image, Bytes &&data) {
+	_id = s_MaterialCurrentIndex.fetch_add(1);
 	_pipeline = pipeline;
 	_images = Vector<MaterialImage>({
 		MaterialImage({
@@ -300,11 +324,13 @@ void Material::setLayoutIndex(uint32_t idx) {
 
 MaterialAttachment::~MaterialAttachment() { }
 
-bool MaterialAttachment::init(StringView name, const BufferInfo &info,
-		MaterialSet::EncodeCallback &&cb, uint32_t size, Vector<Rc<Material>> &&initials) {
+bool MaterialAttachment::init(StringView name, const BufferInfo &info, MaterialSet::EncodeCallback &&cb,
+		MaterialSet::FinalizeCallback &&fin, uint32_t size, MaterialType type, Vector<Rc<Material>> &&initials) {
 	if (BufferAttachment::init(name, info)) {
 		_materialObjectSize = size;
+		_type = type;
 		_encodeCallback = move(cb);
+		_finalizeCallback = move(fin);
 		_initialMaterials = move(initials);
 		return true;
 	}
@@ -316,11 +342,15 @@ const Rc<gl::MaterialSet> &MaterialAttachment::getMaterials() const {
 }
 
 void MaterialAttachment::setMaterials(const Rc<gl::MaterialSet> &data) {
+	auto tmp = _data;
 	_data = data;
+	if (tmp) {
+		tmp->clear();
+	}
 }
 
 Rc<gl::MaterialSet> MaterialAttachment::allocateSet(const Device &dev) const {
-	return Rc<gl::MaterialSet>::create(_info, _encodeCallback, _materialObjectSize, dev.getTextureLayoutImagesCount());
+	return Rc<gl::MaterialSet>::create(_info, _encodeCallback, _finalizeCallback, _materialObjectSize, dev.getTextureLayoutImagesCount());
 }
 
 Rc<gl::MaterialSet> MaterialAttachment::cloneSet(const Rc<gl::MaterialSet> &other) const {

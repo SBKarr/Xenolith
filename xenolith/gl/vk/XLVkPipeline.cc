@@ -58,6 +58,17 @@ bool Shader::setup(Device &dev, const gl::ProgramData &programData, SpanView<uin
 	return false;
 }
 
+bool Pipeline::comparePipelineOrdering(const gl::PipelineInfo &l, const gl::PipelineInfo &r) {
+	if (l.depthWriteEnabled != r.depthWriteEnabled) {
+		if (l.depthWriteEnabled) {
+			return true;
+		}
+		return false;
+	} else {
+		return &l < &r;
+	}
+}
+
 bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::RenderSubpassData &pass, const gl::RenderQueue &queue) {
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;

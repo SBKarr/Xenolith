@@ -27,32 +27,72 @@
 
 namespace stappler::xenolith {
 
-bool ResourceCache::init(Director *dir) {
-	_director = dir;
+bool Texture::init(const gl::ImageData *data, const Rc<gl::Resource> &res) {
+	_data = data;
+	if (res) {
+		_resource = res;
+	}
 	return true;
 }
 
-bool ResourceCache::request(const Rc<gl::Resource> &req) {
-	if (auto loop = _director->getView()->getLoop()) {
-		req->setInUse(true);
-		req->setActive(true);
-		auto &it = _resources.emplace(req->getName().str(), req).first->second;
-		loop->compileResource(it);
-		return true;
-	}
-	return false;
+StringView Texture::getName() const {
+	return _data->key;
 }
 
-bool ResourceCache::revoke(StringView requestName) {
-	do {
-		auto it = _resources.find(requestName);
-		if (it != _resources.end()) {
-			it->second->setActive(false);
-			_resources.erase(it);
-			return true;
+const gl::ImageObject *Texture::getImage() const {
+	if (_data->image) {
+		return _data->image.get();
+	}
+	return nullptr;
+}
+
+uint64_t Texture::getIndex() const {
+	if (_data->image) {
+		return _data->image->getIndex();
+	}
+	return 0;
+}
+
+Rc<ResourceCache> ResourceCache::getInstance() {
+	if (auto app = Application::getInstance()) {
+		return app->getResourceCache();
+	}
+	return nullptr;
+}
+
+bool ResourceCache::init(gl::Device &dev) {
+	_emptyImage = dev.getEmptyImage();
+	_solidImage = dev.getSolidImage();
+	return true;
+}
+
+void ResourceCache::invalidate(gl::Device &dev) {
+	_emptyImage.image = nullptr;
+	_solidImage.image = nullptr;
+}
+
+void ResourceCache::addResource(const Rc<gl::Resource> &req) {
+	_resources.emplace(req->getName(), req).first->second;
+}
+
+void ResourceCache::removeResource(StringView requestName) {
+	_resources.erase(requestName);
+}
+
+Rc<Texture> ResourceCache::acquireTexture(StringView str) const {
+	if (str == EmptyTextureName) {
+		return Rc<Texture>::create(&_emptyImage, nullptr);
+	} else if (str == SolidTextureName) {
+		return Rc<Texture>::create(&_solidImage, nullptr);
+	} else {
+		for (auto &it : _resources) {
+			if (auto v = it.second->getImage(str)) {
+				return Rc<Texture>::create(v, it.second);
+			}
 		}
-	} while (0);
-	return false;
+	}
+	log::vtext("ResourceCache", "Texture not found: ", str);
+	return nullptr;
 }
 
 }

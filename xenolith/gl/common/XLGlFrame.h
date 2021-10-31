@@ -45,6 +45,7 @@ public:
 	Device *getDevice() const { return _device; }
 	Swapchain *getSwapchain() const { return _swapchain; }
 	const Rc<RenderQueue> &getQueue() const { return _queue; }
+	const Rc<PoolRef> &getPool() const { return _pool; }
 
 	// spinners within frame should not spin directly on loop to preserve FrameHandle object
 	virtual void schedule(Function<bool(FrameHandle &, Loop::Context &)> &&);
@@ -67,8 +68,10 @@ public:
 	virtual bool isValidFlag() const { return _valid; }
 	virtual bool isInputSubmitted() const { return _inputSubmitted == _inputAttachments.size(); }
 
-	virtual const Vector<Rc<AttachmentHandle>> &getInputAttachments() const { return _inputAttachments; }
-	virtual const Vector<Rc<AttachmentHandle>> &getOutputAttachments() const { return _outputAttachments; }
+	const Vector<Rc<AttachmentHandle>> &getInputAttachments() const { return _inputAttachments; }
+	const Vector<Rc<AttachmentHandle>> &getOutputAttachments() const { return _outputAttachments; }
+	const Vector<Rc<AttachmentHandle>> &getRequiredAttachments() const { return _requiredAttachments; }
+
 	virtual bool submitInput(const Rc<AttachmentHandle> &, Rc<AttachmentInputData> &&);
 	virtual bool submitInput(const Attachment *, Rc<AttachmentInputData> &&);
 
@@ -98,6 +101,7 @@ protected:
 	Device *_device = nullptr;// device can not die until frames are performed
 	Swapchain *_swapchain = nullptr; // swapchain can not die until frames are performed
 	Rc<RenderQueue> _queue; // hard reference to render queue, it should not be released until at least one frame uses it
+	Rc<PoolRef> _pool;
 
 	uint64_t _order = 0;
 	uint32_t _gen = 0;

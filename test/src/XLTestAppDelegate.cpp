@@ -45,10 +45,6 @@ bool AppDelegate::onFinishLaunching() {
 }
 
 bool AppDelegate::onMainLoop() {
-	auto device = getGlInstance()->makeDevice();
-	_glLoop = Rc<gl::Loop>::alloc(this, device);
-	_glLoop->begin();
-
 	auto scene = Rc<AppScene>::create(Extent2(1024, 768));
 
 	_glLoop->compileRenderQueue(scene->getRenderQueue(), [&] (bool success) {
@@ -58,10 +54,7 @@ bool AppDelegate::onMainLoop() {
 		log::text("App", "Compiled");
 	});
 
-	auto ret = _loop->run();
-	_glLoop->end();
-	_glLoop = nullptr;
-	return ret;
+	return _loop->run();
 }
 
 void AppDelegate::runMainView(Rc<Scene> &&scene) {

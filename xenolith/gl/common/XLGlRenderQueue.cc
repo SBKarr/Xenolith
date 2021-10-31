@@ -514,10 +514,23 @@ Vector<Rc<Attachment>> RenderQueue::getOutput(AttachmentType t) const {
 bool RenderQueue::prepare(Device &dev) {
 	memory::pool::context ctx(_data->pool);
 
+	Vector<MaterialType> materialTypes;
+
 	// fill attachment descriptors
 	for (auto &attachment : _data->attachments) {
 		attachment->sortDescriptors(*this, dev);
+
+		if (auto a = dynamic_cast<gl::MaterialAttachment *>(attachment.get())) {
+			auto t = a->getType();
+			auto lb = std::lower_bound(materialTypes.begin(), materialTypes.end(), t);
+			if (lb != materialTypes.end() && *lb == t) {
+				log::vtext("RenderQueue", "Duplicate MaterialType in queue from attachment: ", attachment->getName());
+			} else {
+				materialTypes.emplace(lb, t);
+			}
+		}
 	}
+
 
 	RenderQueue_buildLoadStore(_data);
 	RenderQueue_buildDescriptors(_data, dev);
@@ -650,7 +663,11 @@ AttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p, uint3
 		return nullptr;
 	}
 
-	_data->attachments.emplace(attachment);
+	auto emplaced = _data->attachments.emplace(attachment).second;
+	if (emplaced) {
+		attachment->setIndex(_data->attachments.size() - 1);
+	}
+
 	auto desc = emplaceAttachment(pass, attachment->addBufferDescriptor(pass));
 	if (auto ref = desc->addBufferRef(subpassIdx, AttachmentUsage::Input)) {
 		pass->subpasses[subpassIdx].inputBuffers.emplace_back(ref);
@@ -675,7 +692,11 @@ AttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p, uint
 		return nullptr;
 	}
 
-	_data->attachments.emplace(attachment);
+	auto emplaced = _data->attachments.emplace(attachment).second;
+	if (emplaced) {
+		attachment->setIndex(_data->attachments.size() - 1);
+	}
+
 	auto desc = emplaceAttachment(pass, attachment->addBufferDescriptor(pass));
 	if (auto ref = desc->addBufferRef(subpassIdx, AttachmentUsage::Output)) {
 		pass->subpasses[subpassIdx].outputBuffers.emplace_back(ref);
@@ -700,7 +721,11 @@ AttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p, uint3
 		return nullptr;
 	}
 
-	_data->attachments.emplace(attachment);
+	auto emplaced = _data->attachments.emplace(attachment).second;
+	if (emplaced) {
+		attachment->setIndex(_data->attachments.size() - 1);
+	}
+
 	auto desc = emplaceAttachment(pass, attachment->addDescriptor(pass));
 	if (auto ref = desc->addRef(subpassIdx, AttachmentUsage::Input)) {
 		pass->subpasses[subpassIdx].inputGenerics.emplace_back(ref);
@@ -725,7 +750,11 @@ AttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p, uint
 		return nullptr;
 	}
 
-	_data->attachments.emplace(attachment);
+	auto emplaced = _data->attachments.emplace(attachment).second;
+	if (emplaced) {
+		attachment->setIndex(_data->attachments.size() - 1);
+	}
+
 	auto desc = emplaceAttachment(pass, attachment->addDescriptor(pass));
 	if (auto ref = desc->addRef(subpassIdx, AttachmentUsage::Output)) {
 		pass->subpasses[subpassIdx].outputGenerics.emplace_back(ref);
@@ -750,7 +779,10 @@ ImageAttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p, 
 		return nullptr;
 	}
 
-	_data->attachments.emplace(attachment);
+	auto emplaced = _data->attachments.emplace(attachment).second;
+	if (emplaced) {
+		attachment->setIndex(_data->attachments.size() - 1);
+	}
 	auto desc = emplaceAttachment(pass, attachment->addImageDescriptor(pass));
 	if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::Input, AttachmentLayout::Ignored)) {
 		pass->subpasses[subpassIdx].inputImages.emplace_back(ref);
@@ -775,7 +807,10 @@ ImageAttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p,
 		return nullptr;
 	}
 
-	_data->attachments.emplace(attachment);
+	auto emplaced = _data->attachments.emplace(attachment).second;
+	if (emplaced) {
+		attachment->setIndex(_data->attachments.size() - 1);
+	}
 	auto desc = emplaceAttachment(pass, attachment->addImageDescriptor(pass));
 	if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::Output, AttachmentLayout::Ignored)) {
 		pass->subpasses[subpassIdx].outputImages.emplace_back(ref);
@@ -816,8 +851,14 @@ Pair<ImageAttachmentRef *, ImageAttachmentRef *> RenderQueue::Builder::addPassRe
 		return pair(nullptr, nullptr);
 	}
 
-	_data->attachments.emplace(color);
-	_data->attachments.emplace(resolve);
+	auto emplacedColor = _data->attachments.emplace(color).second;
+	if (emplacedColor) {
+		color->setIndex(_data->attachments.size() - 1);
+	}
+	auto emplacedResolve = _data->attachments.emplace(resolve).second;
+	if (emplacedResolve) {
+		resolve->setIndex(_data->attachments.size() - 1);
+	}
 
 	auto colorDesc = emplaceAttachment(pass, color->addImageDescriptor(pass));
 	auto resolveDesc = emplaceAttachment(pass, resolve->addImageDescriptor(pass));
@@ -878,7 +919,10 @@ ImageAttachmentRef * RenderQueue::Builder::addPassDepthStencil(const Rc<RenderPa
 		return nullptr;
 	}
 
-	_data->attachments.emplace(attachment);
+	auto emplaced = _data->attachments.emplace(attachment).second;
+	if (emplaced) {
+		attachment->setIndex(_data->attachments.size() - 1);
+	}
 
 	auto desc = emplaceAttachment(pass, attachment->addImageDescriptor(pass));
 	if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::DepthStencil, AttachmentLayout::Ignored)) {

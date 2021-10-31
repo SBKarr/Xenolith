@@ -24,7 +24,6 @@
 #define COMPONENTS_XENOLITH_CORE_BASE_XLVERTEXARRAY_H_
 
 #include "XLDefine.h"
-#include "XLGlDrawCommand.h"
 
 namespace stappler::xenolith {
 

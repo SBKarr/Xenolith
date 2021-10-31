@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include "XLEventHandler.cc"
 
 #include "XLDirector.cc"
+#include "XLResourceCache.cc"
 
 #include "XLVertexArray.cc"
 

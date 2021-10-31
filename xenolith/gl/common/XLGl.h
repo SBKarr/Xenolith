@@ -39,6 +39,10 @@ class ImageObject;
 class ImageView;
 class BufferObject;
 class RenderPass;
+class Resource;
+class CommandList;
+
+using MaterialId = uint32_t;
 
 using MipLevels = ValueWrapper<uint32_t, class MipLevelFlag>;
 using ArrayLayers = ValueWrapper<uint32_t, class ArrayLayersFlag>;
@@ -128,8 +132,10 @@ struct SpecializationInfo {
 };
 
 struct PipelineInfo : NamedMem {
-	DynamicState dynamicState = DynamicState::Default;
 	memory::vector<SpecializationInfo> shaders;
+	DynamicState dynamicState = DynamicState::Default;
+	bool depthWriteEnabled = false;
+	bool depthTestEnabled = false;
 };
 
 struct PipelineData : PipelineInfo {
@@ -144,7 +150,9 @@ using BufferPersistent = ValueWrapper<bool, class BufferPersistentFlag>;
 struct BufferInfo : NamedMem {
 	BufferFlags flags = BufferFlags::None;
 	BufferUsage usage = BufferUsage::TransferDst;
-	// ProgramStage stages = ProgramStage::None; // shader stages, on which this buffer can be used
+
+	// on which type of RenderPass this buffer will be used (there is no universal usage, so, think carefully)
+	RenderPassType type = RenderPassType::Graphics;
 	uint64_t size = 0;
 	bool persistent = true;
 
@@ -161,7 +169,7 @@ struct BufferInfo : NamedMem {
 	void setup(ForceBufferUsage value) { usage = value.get(); }
 	void setup(uint64_t value) { size = value; }
 	void setup(BufferPersistent value) { persistent = value.get(); }
-	// void setup(ProgramStage value) { stages = value; }
+	void setup(RenderPassType value) { type = value; }
 
 	template <typename T>
 	void define(T && t) {
@@ -183,7 +191,7 @@ struct BufferData : BufferInfo {
 	BytesView data;
 	memory::function<void(const DataCallback &)> callback = nullptr;
 	Rc<BufferObject> buffer; // GL implementation-dependent object
-	Rc<RenderPass> renderPass;
+	const Resource *resource = nullptr; // owning resource;
 };
 
 
@@ -202,7 +210,9 @@ struct ImageInfo : NamedMem {
 	SampleCount samples = SampleCount::X1;
 	ImageTiling tiling = ImageTiling::Optimal;
 	ImageUsage usage = ImageUsage::TransferDst;
-	// ProgramStage stages = ProgramStage::None; // shader stages, on which this image can be used
+
+	// on which type of RenderPass this image will be used (there is no universal usage, so, think carefully)
+	RenderPassType type = RenderPassType::Graphics;
 
 	ImageInfo() = default;
 
@@ -224,7 +234,7 @@ struct ImageInfo : NamedMem {
 	void setup(ImageUsage value) { usage |= value; }
 	void setup(ForceImageUsage value) { usage = value.get(); }
 	void setup(ImageFormat value) { format = value; }
-	// void setup(ProgramStage value) { stages = value; }
+	void setup(RenderPassType value) { type = value; }
 
 	template <typename T>
 	void define(T && t) {
@@ -250,7 +260,7 @@ struct ImageData : ImageInfo {
 	BytesView data;
 	memory::function<void(const DataCallback &)> callback = nullptr;
 	Rc<ImageObject> image; // GL implementation-dependent object
-	Rc<RenderPass> renderPass;
+	const Resource *resource = nullptr; // owning resource;
 };
 
 
@@ -329,17 +339,16 @@ struct AttachmentInputData : public Ref {
 
 };
 
-struct VertexData : public AttachmentInputData {
-	struct VertexSpan {
-		uint32_t material;
-		uint32_t indexCount;
-		uint32_t instanceCount;
-		uint32_t firstIndex;
-	};
+struct VertexSpan {
+	MaterialId material;
+	uint32_t indexCount;
+	uint32_t instanceCount;
+	uint32_t firstIndex;
+};
 
+struct VertexData : public AttachmentInputData {
 	Vector<Vertex_V4F_V4F_T2F2U> data;
 	Vector<uint32_t> indexes;
-	Vector<VertexSpan> spans;
 };
 
 String getBufferFlagsDescription(BufferFlags fmt);

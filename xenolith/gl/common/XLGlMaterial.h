@@ -41,7 +41,7 @@ struct MaterialImage {
 	const ImageData *image;
 	ImageViewInfo info;
 	Rc<ImageView> view;
-	uint32_t sampler = 0;
+	uint16_t sampler = 0;
 	uint32_t set;
 	uint32_t descriptor;
 
@@ -52,43 +52,51 @@ class MaterialSet final : public Ref {
 public:
 	using ImageSlot = MaterialImageSlot;
 	using EncodeCallback = Function<bool(uint8_t *, const Material *)>;
+	using FinalizeCallback = Function<void(Rc<TextureSet> &&)>;
 
 	virtual ~MaterialSet();
 
-	bool init(const BufferInfo &, const EncodeCallback &callback, uint32_t objectSize, uint32_t imagesInSet);
+	bool init(const BufferInfo &, const EncodeCallback &callback, const FinalizeCallback &,
+			uint32_t objectSize, uint32_t imagesInSet);
 	bool init(const Rc<MaterialSet> &);
 
 	bool encode(uint8_t *, const Material *);
 
-	virtual Vector<Material *> updateMaterials(const Rc<MaterialInputData> &,
+	void clear();
+
+	Vector<Material *> updateMaterials(const Rc<MaterialInputData> &,
 			const Callback<Rc<ImageView>(const MaterialImage &)> &);
-	virtual Vector<Material *> updateMaterials(const Vector<Rc<Material>> &materials,
+	Vector<Material *> updateMaterials(const Vector<Rc<Material>> &materials,
 			const Callback<Rc<ImageView>(const MaterialImage &)> &);
 
 	const BufferInfo &getInfo() const { return _info; }
 	uint32_t getObjectSize() const { return _objectSize; }
 	uint32_t getImagesInSet() const { return _imagesInSet; }
 	uint64_t getGeneration() const { return _generation; }
-	const Map<uint32_t, Rc<Material>> &getMaterials() const { return _materials; }
+	const std::unordered_map<MaterialId, Rc<Material>> &getMaterials() const { return _materials; }
 
-	void setBuffer(Rc<BufferObject> &&);
+	void setBuffer(Rc<BufferObject> &&, std::unordered_map<MaterialId, uint32_t> &&);
 	Rc<BufferObject> getBuffer() const { return _buffer; }
+	const std::unordered_map<MaterialId, uint32_t> & getOrdering() const { return _ordering; }
 
 	Vector<MaterialLayout> &getLayouts() { return _layouts; }
 	const MaterialLayout *getLayout(uint32_t) const;
-	const Material * getMaterial(uint32_t) const;
+	const Material * getMaterialById(MaterialId) const;
+	uint32_t getMaterialOrder(MaterialId) const;
 
 protected:
-	virtual void emplaceMaterialImages(Material *oldMaterial, Material *newMaterial,
+	void emplaceMaterialImages(Material *oldMaterial, Material *newMaterial,
 			const Callback<Rc<ImageView>(const MaterialImage &)> &);
 
 	BufferInfo _info;
 	EncodeCallback _encodeCallback;
+	FinalizeCallback _finalizeCallback;
 	uint32_t _objectSize = 0;
 	uint32_t _imagesInSet = 16;
 
 	uint32_t _generation = 1;
-	Map<uint32_t, Rc<Material>> _materials;
+	std::unordered_map<MaterialId, Rc<Material>> _materials;
+	std::unordered_map<MaterialId, uint32_t> _ordering;
 
 	// describes image location in descriptor sets
 	// all images from same material must be in one set
@@ -103,10 +111,10 @@ public:
 	virtual ~Material();
 
 	// view for image must be empty
-	bool init(uint32_t, const PipelineData *, Vector<MaterialImage> &&, Bytes && = Bytes());
-	bool init(uint32_t, const PipelineData *, const ImageData *, Bytes && = Bytes());
+	bool init(const PipelineData *, Vector<MaterialImage> &&, Bytes && = Bytes());
+	bool init(const PipelineData *, const ImageData *, Bytes && = Bytes());
 
-	uint32_t getId() const { return _id; }
+	MaterialId getId() const { return _id; }
 	const PipelineData * getPipeline() const { return _pipeline; }
 	const Vector<MaterialImage> &getImages() const { return _images; }
 	BytesView getData() const { return _data; }
@@ -118,7 +126,7 @@ protected:
 	friend class MaterialSet;
 
 	bool _dirty = true;
-	uint32_t _id = 0;
+	MaterialId _id = 0;
 	uint32_t _layoutIndex = 0; // set after compilation
 	const PipelineData *_pipeline;
 	Vector<MaterialImage> _images;
@@ -130,11 +138,13 @@ class MaterialAttachment : public BufferAttachment {
 public:
 	virtual ~MaterialAttachment();
 
-	virtual bool init(StringView, const BufferInfo &,
-			MaterialSet::EncodeCallback &&, uint32_t materialObjectSize, Vector<Rc<Material>> &&);
+	virtual bool init(StringView, const BufferInfo &, MaterialSet::EncodeCallback &&, MaterialSet::FinalizeCallback &&,
+			uint32_t materialObjectSize, MaterialType type, Vector<Rc<Material>> &&);
 
 	const Rc<gl::MaterialSet> &getMaterials() const;
 	void setMaterials(const Rc<gl::MaterialSet> &);
+
+	MaterialType getType() const { return _type; }
 
 	const Vector<Rc<Material>> &getInitialMaterials() const { return _initialMaterials; }
 
@@ -147,7 +157,9 @@ protected:
 	virtual Rc<AttachmentDescriptor> makeDescriptor(RenderPassData *) override;
 
 	uint32_t _materialObjectSize = 0;
+	MaterialType _type;
 	MaterialSet::EncodeCallback _encodeCallback;
+	MaterialSet::FinalizeCallback _finalizeCallback;
 	Rc<gl::MaterialSet> _data;
 	Vector<Rc<Material>> _initialMaterials;
 };

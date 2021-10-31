@@ -61,13 +61,21 @@ class VertexMaterialAttachment : public BufferAttachment {
 public:
 	virtual ~VertexMaterialAttachment();
 
+	virtual bool init(StringView, const gl::BufferInfo &, const MaterialVertexAttachment *);
+
+	const MaterialVertexAttachment *getMaterials() const { return _materials; }
+
 protected:
 	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameHandle &) override;
+
+	const MaterialVertexAttachment *_materials = nullptr;
 };
 
 class VertexMaterialAttachmentHandle : public BufferAttachmentHandle {
 public:
 	virtual ~VertexMaterialAttachmentHandle();
+
+	virtual bool setup(gl::FrameHandle &);
 
 	virtual bool submitInput(gl::FrameHandle &, Rc<gl::AttachmentInputData> &&) override;
 
@@ -77,16 +85,18 @@ public:
 	virtual bool writeDescriptor(const RenderPassHandle &, const gl::PipelineDescriptor &,
 			uint32_t, bool, VkDescriptorBufferInfo &) override;
 
-	const Vector<gl::VertexData::VertexSpan> &getVertexData() const { return _data->spans; }
+	const Vector<gl::VertexSpan> &getVertexData() const { return _spans; }
 	const Rc<DeviceBuffer> &getVertexes() const { return _vertexes; }
 	const Rc<DeviceBuffer> &getIndexes() const { return _indexes; }
 
 protected:
-	virtual bool loadVertexes(gl::FrameHandle &, const Rc<gl::VertexData> &);
+	virtual bool loadVertexes(gl::FrameHandle &, const Rc<gl::CommandList> &);
 
 	Rc<DeviceBuffer> _indexes;
 	Rc<DeviceBuffer> _vertexes;
-	Rc<gl::VertexData> _data;
+	Vector<gl::VertexSpan> _spans;
+
+	const MaterialVertexAttachmentHandle *_materials = nullptr;
 };
 
 class MaterialRenderPass : public RenderPass {

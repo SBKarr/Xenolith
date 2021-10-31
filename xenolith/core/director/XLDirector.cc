@@ -28,11 +28,6 @@
 
 namespace stappler::xenolith {
 
-XL_DECLARE_EVENT_CLASS(Director, onProjectionChanged);
-XL_DECLARE_EVENT_CLASS(Director, onAfterUpdate);
-XL_DECLARE_EVENT_CLASS(Director, onAfterVisit);
-XL_DECLARE_EVENT_CLASS(Director, onAfterDraw);
-
 Director::Director() { }
 
 Director::~Director() { }
@@ -41,6 +36,10 @@ bool Director::init(Application *app, Rc<Scene> &&scene) {
 	_application = app;
 	_nextScene = move(scene);
 	return true;
+}
+
+const Rc<ResourceCache> &Director::getResourceCache() const {
+	return _application->getResourceCache();
 }
 
 void Director::update() {
@@ -68,57 +67,6 @@ void Director::update() {
 	_lastTime = t;
 }
 
-
-void Director::acquireInput(gl::FrameHandle &frame, const Rc<gl::AttachmentHandle> &a) {
-	VertexArray array;
-	array.init(4, 6);
-
-	auto quad = array.addQuad();
-	quad.setGeometry(Vec4(-1.0f, -1.0f, 0, 0), Size(2.0f, 2.0f));
-	quad.setColor({
-		Color::Red_500,
-		Color::Green_500,
-		Color::Blue_500,
-		Color::White
-	});
-	quad.setTextureRect(Rect(0.0f, 0.0f, 1.0f, 1.0f), 1.0f, 1.0f, false, true);
-
-	auto input = Rc<gl::VertexData>(array.pop());
-
-	input->spans.emplace_back(gl::VertexData::VertexSpan{0, 6, 1, 0});
-
-	frame.submitInput(a, move(input));
-}
-
-Rc<gl::DrawScheme> Director::construct() {
-	if (!_scene) {
-		return nullptr;
-	}
-
-	auto df = gl::DrawScheme::create();
-
-	auto p = df->getPool();
-	memory::pool::push(p);
-
-	do {
-		RenderFrameInfo info;
-		info.director = this;
-		info.scene = _scene;
-		info.pool = df->getPool();
-		info.scheme = df.get();
-		info.transformStack.reserve(8);
-		info.zPath.reserve(8);
-
-		info.transformStack.push_back(_generalProjection);
-
-		_scene->render(info);
-	} while (0);
-
-	memory::pool::pop();
-
-	return df;
-}
-
 void Director::begin(gl::View *view) {
 	_view = view;
 
@@ -141,11 +89,15 @@ void Director::begin(gl::View *view) {
 	updateGeneralTransform();
 
 	if (_nextScene) {
+		auto &size = _view->getScreenSize();
+		auto d = _view->getDensity();
+
 		_scene = move(_nextScene);
+		_scene->setContentSize(size / d);
 		_scene->onPresented(this);
+		_scene->onEnter();
 		_nextScene = nullptr;
 	}
-
 }
 
 void Director::end() {
@@ -197,24 +149,13 @@ static inline int32_t sp_gcd (int16_t a, int16_t b) {
 void Director::updateGeneralTransform() {
 	auto d = _view->getDensity();
 	auto size = _view->getScreenSize() / d;
-	// General (2D) transform
-	int32_t gcd = sp_gcd(size.width, size.height);
-	int32_t dw = (int32_t)size.width / gcd;
-	int32_t dh = (int32_t)size.height / gcd;
-	int32_t dwh = gcd * dw * dh;
-
-	float mod = 1.0f;
-	while (dwh * mod > 16384) {
-		mod /= 2.0f;
-	}
 
 	Mat4 proj;
-	proj.scale(dh * mod, dw * mod, -1.0);
-	proj.m[12] = -dwh * mod / 2.0f;
-	proj.m[13] = -dwh * mod / 2.0f;
-	proj.m[14] = dwh * mod / 2.0f - 1;
-	proj.m[15] = dwh * mod / 2.0f + 1;
-	proj.m[11] = -1.0f;
+	proj.scale(2.0f / size.width, -2.0f / size.height, -1.0);
+	proj.m[12] = -1.0;
+	proj.m[13] = 1.0;
+	proj.m[14] = 0.0f;
+	proj.m[15] = 1.0f;
 
 	_generalProjection = proj;
 }
