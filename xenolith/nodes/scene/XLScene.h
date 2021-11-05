@@ -42,13 +42,14 @@ public:
 	virtual void onContentSizeDirty() override;
 
 	const Rc<gl::RenderQueue> &getRenderQueue() const { return _queue; }
+	Director *getDirector() const { return _director; }
 
 	virtual void onPresented(Director *);
 	virtual void onFinished(Director *);
 
 	virtual void onFrameStarted(gl::FrameHandle &); // called on GL thread;
 	virtual void onFrameEnded(gl::FrameHandle &); // called on GL thread;
-	virtual void onFrameInput(gl::FrameHandle &, const Rc<gl::AttachmentHandle> &); // called on GL thread;
+	virtual void on2dVertexInput(gl::FrameHandle &, const Rc<gl::AttachmentHandle> &); // called on GL thread;
 
 	virtual void onQueueEnabled(const gl::Swapchain *);
 	virtual void onQueueDisabled();

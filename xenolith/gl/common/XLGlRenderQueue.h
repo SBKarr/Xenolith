@@ -145,8 +145,6 @@ public:
 	void beginFrame(gl::FrameHandle &);
 	void endFrame(gl::FrameHandle &);
 
-	void acquireInput(gl::FrameHandle &, const Rc<AttachmentHandle> &handle);
-
 	void enable(const Swapchain *);
 	void disable();
 
@@ -213,7 +211,6 @@ public:
 
 	void setBeginCallback(Function<void(gl::FrameHandle &)> &&);
 	void setEndCallback(Function<void(gl::FrameHandle &)> &&);
-	void setInputCallback(Function<void(gl::FrameHandle &, const Rc<AttachmentHandle> &)> &&);
 
 	void setEnableCallback(Function<void(const Swapchain *)> &&);
 	void setDisableCallback(Function<void()> &&);

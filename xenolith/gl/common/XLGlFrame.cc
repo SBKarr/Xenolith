@@ -87,7 +87,7 @@ void FrameHandle::update(bool init) {
 					XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] attachment ready after setup '", (*it)->getAttachment()->getName(), "'");
 					if ((*it)->isInput()) {
 						_inputAttachments.emplace_back((*it));
-						_queue->acquireInput(*this, (*it));
+						(*it)->getAttachment()->acquireInput(*this, (*it));
 					} else {
 						_readyAttachments.emplace_back((*it));
 						(*it)->setReady(true);
@@ -246,7 +246,7 @@ void FrameHandle::setAttachmentReady(const Rc<AttachmentHandle> &handle) {
 	XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] attachment ready '", handle->getAttachment()->getName(), "'");
 	if (handle->isInput()) {
 		_inputAttachments.emplace_back(handle);
-		_queue->acquireInput(*this, handle);
+		handle->getAttachment()->acquireInput(*this, handle);
 	} else {
 		_readyAttachments.emplace_back(handle);
 		handle->setReady(true);

@@ -22,6 +22,9 @@ THE SOFTWARE.
 
 #include "XLNode.h"
 #include "XLComponent.h"
+#include "XLScene.h"
+#include "XLDirector.h"
+#include "XLScheduler.h"
 
 namespace stappler::xenolith {
 
@@ -256,7 +259,7 @@ void Node::addChildNode(Node *child, int32_t localZOrder, uint64_t tag) {
 	child->setParent(this);
 
 	if (_running) {
-		child->onEnter();
+		child->onEnter(_scene);
 	}
 
 	if (_cascadeColorEnabled) {
@@ -370,7 +373,7 @@ bool Node::addComponentItem(Component *com) {
 	_components.push_back(com);
 	com->onAdded();
 	if (this->isRunning()) {
-		com->onEnter();
+		com->onEnter(_scene);
 	}
 
 	return true;
@@ -461,21 +464,29 @@ void Node::removeAllComponents() {
 	_components.clear();
 }
 
-void Node::onEnter() {
+void Node::onEnter(Scene *scene) {
+	_scene = scene;
+	_director = scene->getDirector();
+	_scheduler = _director->getScheduler();
+
 	if (_onEnterCallback) {
-		_onEnterCallback();
+		_onEnterCallback(scene);
 	}
 
 	for (auto &it : _components) {
-		it->onEnter();
+		it->onEnter(scene);
 	}
 
 	for (auto &child : _children) {
-		child->onEnter();
+		child->onEnter(scene);
 	}
 
-	this->resume();
+	if (_scheduled) {
+		_scheduler->scheduleUpdate(this, 0, _paused);
+	}
+
 	_running = true;
+	this->resume();
 }
 
 void Node::onExit() {
@@ -483,6 +494,11 @@ void Node::onExit() {
 
 	this->pause();
 	_running = false;
+
+	if (_scheduled) {
+		_scheduler->unschedule(this);
+	}
+
 	for (auto &child : _children) {
 		child->onExit();
 	}
@@ -494,6 +510,10 @@ void Node::onExit() {
 	if (_onExitCallback) {
 		_onExitCallback();
 	}
+
+	_scene = nullptr;
+	_director = nullptr;
+	_scheduler = nullptr;
 }
 
 void Node::onContentSizeDirty() {
@@ -540,11 +560,27 @@ Rect Node::getBoundingBox() const {
 }
 
 void Node::resume() {
+	if (_paused) {
+		_paused = false;
+		if (_running && _scheduled) {
+			_scheduler->resume(this);
+		}
+	}
 	// _actionManager->resumeTarget(this);
 }
 
 void Node::pause() {
 	// _actionManager->pauseTarget(this);
+	if (!_paused) {
+		if (_running && _scheduled) {
+			_scheduler->pause(this);
+		}
+		_paused = true;
+	}
+}
+
+void Node::update(const UpdateTime &time) {
+
 }
 
 void Node::updateChildrenTransform() {
@@ -825,6 +861,24 @@ void Node::visit(RenderFrameInfo &info, NodeFlags parentFlags) {
 
 	info.zPath.pop_back();
 	info.transformStack.pop_back();
+}
+
+void Node::scheduleUpdate() {
+	if (!_scheduled) {
+		_scheduled = true;
+		if (_running) {
+			_scheduler->scheduleUpdate(this, 0, _paused);
+		}
+	}
+}
+
+void Node::unscheduleUpdate() {
+	if (_scheduled) {
+		if (_running) {
+			_scheduler->unschedule(this);
+		}
+		_scheduled = false;
+	}
 }
 
 Mat4 Node::transform(const Mat4 &parentTransform) {

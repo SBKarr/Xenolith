@@ -29,6 +29,7 @@ namespace stappler::xenolith {
 
 class Component;
 class Scene;
+class Scheduler;
 
 class Node : public Ref {
 public:
@@ -91,8 +92,8 @@ public:
 	virtual void setVisible(bool visible);
 	virtual bool isVisible() const { return _visible; }
 
-	virtual void setRotation(float rotation);
-	virtual void setRotation(const Vec3 & rotation);
+	virtual void setRotation(float rotationInRadians);
+	virtual void setRotation(const Vec3 & rotationInRadians);
 	virtual void setRotation(const Quaternion & quat);
 
 	virtual float getRotation() const { return _rotation.z; }
@@ -164,7 +165,7 @@ public:
 
 	virtual bool isRunning() const { return _running; }
 
-	virtual void onEnter();
+	virtual void onEnter(Scene *);
 	virtual void onExit();
 
 	virtual void onContentSizeDirty();
@@ -177,6 +178,8 @@ public:
 
 	virtual void resume();
 	virtual void pause();
+
+	virtual void update(const UpdateTime &time);
 
 	virtual void updateChildrenTransform();
 	virtual const Mat4& getNodeToParentTransform() const;
@@ -214,6 +217,9 @@ public:
 	virtual void draw(RenderFrameInfo &, NodeFlags flags);
 	virtual void visit(RenderFrameInfo &, NodeFlags parentFlags);
 
+	void scheduleUpdate();
+	void unscheduleUpdate();
+
 protected:
 	virtual void updateCascadeOpacity();
 	virtual void disableCascadeOpacity();
@@ -227,6 +233,8 @@ protected:
 	bool _is3d = false;
 	bool _running = false;
 	bool _visible = true;
+	bool _scheduled = false;
+	bool _paused = false;
 
 	bool _cascadeColorEnabled = false;
 	bool _cascadeOpacityEnabled = true;
@@ -261,13 +269,17 @@ protected:
 	Vector<Rc<Node>> _children;
 	Node *_parent = nullptr;
 
-	Function<void()> _onEnterCallback;
+	Function<void(Scene *)> _onEnterCallback;
 	Function<void()> _onExitCallback;
 	Function<void()> _onContentSizeDirtyCallback;
 	Function<void()> _onTransformDirtyCallback;
 	Function<void()> _onReorderChildDirtyCallback;
 
 	Vector<Rc<Component>> _components;
+
+	Scene *_scene = nullptr;
+	Director *_director = nullptr;
+	Scheduler *_scheduler = nullptr;
 };
 
 }

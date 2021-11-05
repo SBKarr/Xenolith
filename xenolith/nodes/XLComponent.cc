@@ -36,7 +36,7 @@ bool Component::init() {
 void Component::onAdded() { }
 void Component::onRemoved() { }
 
-void Component::onEnter() {
+void Component::onEnter(Scene *) {
 	_running = true;
 }
 

@@ -37,6 +37,8 @@ bool RenderQueueCompiler::init(Device &dev) {
 	auto attachment = Rc<RenderQueueAttachment>::create("RenderQueueAttachment");
 	auto pass = Rc<RenderQueueRenderPass>::create("RenderQueueRenderPass");
 
+	attachment->setInputCallback([] (gl::FrameHandle &frame, const Rc<gl::AttachmentHandle> &a) { });
+
 	builder.addRenderPass(pass);
 	builder.addPassInput(pass, 0, attachment);
 	builder.addPassOutput(pass, 0, attachment);

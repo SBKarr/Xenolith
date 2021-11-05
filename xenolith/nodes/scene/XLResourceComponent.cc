@@ -49,8 +49,8 @@ Rc<gl::Resource> ResourceComponent::getResource() const {
 	return _resource;
 }
 
-void ResourceComponent::onEnter() {
-	Component::onEnter();
+void ResourceComponent::onEnter(Scene *scene) {
+	Component::onEnter(scene);
 	if (_resource && _owner) {
 		//_owner->getScene()->requestResource(_resource);
 	}

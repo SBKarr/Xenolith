@@ -34,7 +34,9 @@ public:
 
 	virtual bool init(Extent2 extent);
 
-	virtual void onEnter() override;
+	virtual void update(const UpdateTime &) override;
+
+	virtual void onEnter(Scene *) override;
 	virtual void onExit() override;
 	virtual void onContentSizeDirty() override;
 

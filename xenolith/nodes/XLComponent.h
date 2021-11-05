@@ -39,7 +39,7 @@ public:
 	virtual void onAdded();
 	virtual void onRemoved();
 
-	virtual void onEnter();
+	virtual void onEnter(Scene *);
 	virtual void onExit();
 
 	virtual void visit(RenderFrameInfo &, NodeFlags parentFlags);

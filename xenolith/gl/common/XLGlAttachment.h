@@ -72,6 +72,10 @@ public:
 	uint32_t getIndex() const { return _index; }
 	void setIndex(uint32_t idx) { _index = idx; }
 
+	void setInputCallback(Function<void(FrameHandle &, const Rc<AttachmentHandle> &)> &&);
+
+	void acquireInput(FrameHandle &, const Rc<AttachmentHandle> &);
+
 	virtual void onSwapchainUpdate(const ImageInfo &) { }
 
 	virtual AttachmentDescriptor *addDescriptor(RenderPassData *);
@@ -101,6 +105,8 @@ protected:
 	AttachmentOps _ops = AttachmentOps::Undefined;
 	DescriptorType _descriptorType = DescriptorType::Unknown;
 	Vector<Rc<AttachmentDescriptor>> _descriptors;
+
+	Function<void(FrameHandle &, const Rc<AttachmentHandle> &)> _inputCallback;
 };
 
 struct PipelineDescriptor {
@@ -308,7 +314,7 @@ public:
 	virtual ~SwapchainAttachment();
 
 	virtual bool init(StringView, const ImageInfo &, AttachmentLayout init = AttachmentLayout::Ignored,
-			AttachmentLayout fin = AttachmentLayout::Ignored, bool clear = false);
+			AttachmentLayout fin = AttachmentLayout::Ignored, bool clear = true);
 
 	const Rc<gl::FrameHandle> &getOwner() const { return _owner; }
 	bool acquireForFrame(gl::FrameHandle &);

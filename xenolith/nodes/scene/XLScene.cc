@@ -57,6 +57,9 @@ void Scene::render(RenderFrameInfo &info) {
 void Scene::onContentSizeDirty() {
 	Node::onContentSizeDirty();
 
+	setAnchorPoint(Anchor::Middle);
+	setPosition(Vec2(_contentSize) / 2.0f);
+
 	log::vtext("Scene", "ContentSize: ", _contentSize);
 }
 
@@ -67,7 +70,11 @@ void Scene::onPresented(Director *dir) {
 	}
 
 	dir->getResourceCache()->addResource(_queue->getInternalResource());
-	readInitialMaterials();
+	if (_materials.empty()) {
+		readInitialMaterials();
+	}
+
+	onEnter(this);
 }
 
 void Scene::onFinished(Director *dir) {
@@ -85,7 +92,7 @@ void Scene::onFrameEnded(gl::FrameHandle &) {
 
 }
 
-void Scene::onFrameInput(gl::FrameHandle &frame, const Rc<gl::AttachmentHandle> &attachment) {
+void Scene::on2dVertexInput(gl::FrameHandle &frame, const Rc<gl::AttachmentHandle> &attachment) {
 	_director->getApplication()->performOnMainThread([this, frame = Rc<gl::FrameHandle>(&frame), attachment = attachment] {
 		RenderFrameInfo info;
 		info.director = _director;
@@ -128,9 +135,6 @@ Rc<gl::RenderQueue> Scene::makeQueue(gl::RenderQueue::Builder &&builder) {
 	});
 	builder.setEndCallback([this] (gl::FrameHandle &frame) {
 		onFrameEnded(frame);
-	});
-	builder.setInputCallback([this] (gl::FrameHandle &frame, const Rc<gl::AttachmentHandle> &a) {
-		onFrameInput(frame, a);
 	});
 	builder.setEnableCallback([this] (const gl::Swapchain *swapchain) {
 		onQueueEnabled(swapchain);

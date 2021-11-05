@@ -39,6 +39,12 @@ static constexpr uint32_t MaxTextureSetImages = 1024;
 /* Maximum images in single material */
 static constexpr size_t MaxMaterialImages = 4;
 
+#if DEBUG
+static constexpr uint64_t MaxDirectorDeltaTime = 10'000'000 / 16;
+#else
+static constexpr uint64_t MaxDirectorDeltaTime = 100'000'000 / 16;
+#endif
+
 }
 
 #endif /* COMPONENTS_XENOLITH_CORE_XLCONFIG_H_ */

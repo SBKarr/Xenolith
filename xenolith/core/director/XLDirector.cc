@@ -25,6 +25,7 @@
 #include "XLGlDevice.h"
 #include "XLScene.h"
 #include "XLVertexArray.h"
+#include "XLScheduler.h"
 
 namespace stappler::xenolith {
 
@@ -34,7 +35,15 @@ Director::~Director() { }
 
 bool Director::init(Application *app, Rc<Scene> &&scene) {
 	_application = app;
+	_pool = Rc<PoolRef>::alloc();
 	_nextScene = move(scene);
+	_pool->perform([&] {
+		_scheduler = Rc<Scheduler>::create();
+	});
+	_startTime = _application->getClock();
+	_time.global = 0;
+	_time.app = 0;
+	_time.delta = 0;
 	return true;
 }
 
@@ -43,12 +52,21 @@ const Rc<ResourceCache> &Director::getResourceCache() const {
 }
 
 void Director::update() {
-	uint64_t dt = 0;
 	auto t = _application->getClock();
 
-	if (_lastTime) {
-		dt = t - _lastTime;
+	if (_time.global) {
+		_time.delta = t - _time.global;
+	} else {
+		_time.delta = 0;
 	}
+
+	_time.global = t;
+	_time.app = t - _startTime;
+
+    // If we are debugging our code, prevent big delta time
+    if (_time.delta && _time.delta > config::MaxDirectorDeltaTime) {
+    	_time.delta = config::MaxDirectorDeltaTime;
+    }
 
 	if (_nextScene) {
 		if (_scene) {
@@ -60,11 +78,11 @@ void Director::update() {
 		auto d = _view->getDensity();
 
 		_scene->setContentSize(size / d);
-		_scene->onEnter();
+		_scene->onPresented(this);
 		_nextScene = nullptr;
 	}
 
-	_lastTime = t;
+	_scheduler->update(_time);
 }
 
 void Director::begin(gl::View *view) {
@@ -95,7 +113,6 @@ void Director::begin(gl::View *view) {
 		_scene = move(_nextScene);
 		_scene->setContentSize(size / d);
 		_scene->onPresented(this);
-		_scene->onEnter();
 		_nextScene = nullptr;
 	}
 }

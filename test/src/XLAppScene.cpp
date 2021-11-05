@@ -91,6 +91,9 @@ bool AppScene::init(Extent2 extent) {
 	// Vertex input attachment - per-frame vertex list
 	auto vertexInput = Rc<vk::VertexMaterialAttachment>::create("VertexInput",
 			gl::BufferInfo(gl::BufferUsage::StorageBuffer), materialInput);
+	vertexInput->setInputCallback([this] (gl::FrameHandle &frame, const Rc<gl::AttachmentHandle> &a) {
+		on2dVertexInput(frame, a);
+	});
 
 	// define pass input-output
 	builder.addPassInput(pass, 0, samplers); // 0
@@ -112,11 +115,21 @@ bool AppScene::init(Extent2 extent) {
 		return false;
 	}
 
+	scheduleUpdate();
+
 	return true;
 }
 
-void AppScene::onEnter() {
-	Scene::onEnter();
+void AppScene::update(const UpdateTime &time) {
+	Scene::update(time);
+
+	auto t = time.app % 1_usec;
+
+	setRotation(M_PI * 2.0 * (float(t) / 1_usec));
+}
+
+void AppScene::onEnter(Scene *scene) {
+	Scene::onEnter(scene);
 	std::cout << "AppScene::onEnter\n";
 
 	auto sprite = Rc<Sprite>::create("Xenolith.png");

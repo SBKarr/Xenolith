@@ -37,8 +37,8 @@ public:
 	void setResource(Rc<gl::Resource>);
 	Rc<gl::Resource> getResource() const;
 
-	virtual void onEnter();
-	virtual void onExit();
+	virtual void onEnter(Scene *) override;
+	virtual void onExit() override;
 
 protected:
 	Rc<gl::Resource> _resource;

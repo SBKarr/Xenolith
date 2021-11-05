@@ -234,22 +234,9 @@ int Application::run(data::Value &&data) {
 	_glLoop->begin();
 	auto ret = onMainLoop();
 
-	_resourceCache->init(*_glLoop->getDevice());
+	_resourceCache->invalidate(*_glLoop->getDevice());
 	_glLoop->end();
 	_glLoop = nullptr;
-
-	/*_mainView = glview;
-	glview->run(this, director, [&] (uint64_t val) -> bool {
-		auto id = std::this_thread::get_id();
-		if (id != _threadId) {
-			thread::ThreadInfo::setMainThread();
-			_threadId = id;
-		}
-
-		director->mainLoop(val);
-		update(val);
-		return true;
-	});*/
 
 	_instance = nullptr;
     return ret ? 0 : -1;

@@ -36,7 +36,6 @@ struct RenderQueue::QueueData : NamedMem {
 	HashTable<Rc<Resource>> linked;
 	Function<void(gl::FrameHandle &)> beginCallback;
 	Function<void(gl::FrameHandle &)> endCallback;
-	Function<void(gl::FrameHandle &, const Rc<AttachmentHandle> &)> inputCallback;
 	Function<void(const Swapchain *)> enableCallback;
 	Function<void()> disableCallback;
 	Rc<Resource> resource;
@@ -551,12 +550,6 @@ void RenderQueue::beginFrame(gl::FrameHandle &frame) {
 void RenderQueue::endFrame(gl::FrameHandle &frame) {
 	if (_data->endCallback) {
 		_data->endCallback(frame);
-	}
-}
-
-void RenderQueue::acquireInput(gl::FrameHandle &frame, const Rc<AttachmentHandle> &handle) {
-	if (_data->inputCallback) {
-		_data->inputCallback(frame, handle);
 	}
 }
 
@@ -1108,10 +1101,6 @@ void RenderQueue::Builder::setBeginCallback(Function<void(gl::FrameHandle &)> &&
 
 void RenderQueue::Builder::setEndCallback(Function<void(gl::FrameHandle &)> &&cb) {
 	_data->endCallback = move(cb);
-}
-
-void RenderQueue::Builder::setInputCallback(Function<void(gl::FrameHandle &, const Rc<AttachmentHandle> &)> &&cb) {
-	_data->inputCallback = move(cb);
 }
 
 void RenderQueue::Builder::setEnableCallback(Function<void(const Swapchain *)> &&cb) {

@@ -39,6 +39,18 @@ void Attachment::addUsage(AttachmentUsage usage, AttachmentOps ops) {
 	_ops |= ops;
 }
 
+void Attachment::setInputCallback(Function<void(FrameHandle &, const Rc<AttachmentHandle> &)> &&input) {
+	_inputCallback = move(input);
+}
+
+void Attachment::acquireInput(FrameHandle &frame, const Rc<AttachmentHandle> &a) {
+	if (_inputCallback) {
+		_inputCallback(frame, a);
+	} else {
+		log::vtext("Attachment", "Input callback for attachment is not defined: ", getName());
+	}
+}
+
 AttachmentDescriptor *Attachment::addDescriptor(RenderPassData *data) {
 	for (auto &it : _descriptors) {
 		if (it->getRenderPass() == data) {

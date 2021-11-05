@@ -152,6 +152,16 @@ void Device::invalidateObjects() {
 	auto objs = std::move(_objects);
 	_objects.clear();
 	for (auto &it : objs) {
+		/*if (auto obj = dynamic_cast<ImageObject *>(it)) {
+			obj->foreachBacktrace([&] (uint64_t idx, Time, const std::vector<std::string> &bt) {
+				std::cout << "[" << idx << "] Object\n";
+				size_t i = 0;
+				for (auto &it : bt) {
+					std::cout << "\t[" << i << "] " << it << "\n";
+					++ i;
+				}
+			});
+		}*/
 		log::vtext("Gl-Device", "Object ", typeid(*it).name(), " was not destroyed before device destruction");
 		it->invalidate();
 	}

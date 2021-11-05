@@ -23,7 +23,7 @@
 #ifndef COMPONENTS_XENOLITH_CORE_DIRECTOR_XLDIRECTOR_H_
 #define COMPONENTS_XENOLITH_CORE_DIRECTOR_XLDIRECTOR_H_
 
-#include "../../gl/common/XLGlCommandList.h"
+#include "XLGlCommandList.h"
 #include "XLEventHeader.h"
 #include "XLEventHandler.h"
 #include "XLResourceCache.h"
@@ -33,6 +33,7 @@
 namespace stappler::xenolith {
 
 class Scene;
+class Scheduler;
 
 class Director : public Ref, EventHandler {
 public:
@@ -43,6 +44,8 @@ public:
 
 	gl::View *getView() const { return _view; }
 	Application *getApplication() const { return _application; }
+	Scheduler *getScheduler() const { return _scheduler; }
+
 	const Rc<Scene> &getScene() const { return _scene; }
 	const Rc<ResourceCache> &getResourceCache() const;
 	const Mat4 &getGeneralProjection() const { return _generalProjection; }
@@ -63,7 +66,8 @@ protected:
 
 	void updateGeneralTransform();
 
-	uint64_t _lastTime = 0;
+	uint64_t _startTime = 0;
+	UpdateTime _time;
 	bool _running = false;
 	Rc<gl::View> _view;
 
@@ -75,6 +79,9 @@ protected:
 
 	Mat4 _generalProjection;
 	EventHandlerNode *_sizeChangedEvent = nullptr;
+
+	Rc<PoolRef> _pool;
+	Rc<Scheduler> _scheduler;
 };
 
 }

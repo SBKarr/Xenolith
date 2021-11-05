@@ -146,18 +146,25 @@ struct HashIndex {
 	using Type = typename std::remove_cv<typename std::remove_reference<Value>::type>::type;
 
 	HashTable<Value> *ht;
+	HashEntry<Type> **_bucket;
 	HashEntry<Type> *_self;
 	HashEntry<Type> *_next;
 	uint32_t index;
 
 	HashIndex * next() {
+		if (_self) {
+			_bucket = &_self->next;
+		}
 		_self = _next;
 		while (!_self) {
 			if (index > ht->max) {
 				_self = _next = nullptr;
+				_bucket = nullptr;
 				return nullptr;
 			}
-			_self = ht->array[index++];
+			_self = ht->array[index];
+			_bucket = &ht->array[index];
+			++ index;
 		}
 		_next = _self->next;
 		return this;
@@ -178,18 +185,24 @@ struct ConstHashIndex {
 	using Type = typename std::remove_cv<typename std::remove_reference<Value>::type>::type;
 
 	const HashTable<Value> *ht;
+	const HashEntry<Type> * const*_bucket;
 	const HashEntry<Type> *_self;
 	const HashEntry<Type> *_next;
 	uint32_t index;
 
 	ConstHashIndex * next() {
+		if (_self) {
+			_bucket = &_self->next;
+		}
 		_self = _next;
 		while (!_self) {
 			if (index > ht->max) {
 				_self = _next = nullptr;
 				return nullptr;
 			}
-			_self = ht->array[index++];
+			_self = ht->array[index];
+			_bucket = &ht->array[index];
+			++ index;
 		}
 		_next = _self->next;
 		return this;
@@ -271,9 +284,10 @@ public:
 
 	template <typename ... Args>
 	Pair<iterator, bool> assign(Args && ... args) {
+		ValueType **hep = nullptr;
 		iterator iter;
-		auto ret = set_value(true, std::forward<Args>(args)...);
-
+		auto ret = set_value(true, &hep, std::forward<Args>(args)...);
+		iter._bucket = hep;
 		iter._self = ret.first;
 		iter._next = ret.first->next;
 		iter.index = (ret.first->hash & this->max);
@@ -283,8 +297,10 @@ public:
 
 	template <typename ... Args>
 	Pair<iterator, bool> emplace(Args && ... args) {
+		ValueType **hep = nullptr;
 		iterator iter;
-		auto ret = set_value(false, std::forward<Args>(args)...);
+		auto ret = set_value(false, &hep, std::forward<Args>(args)...);
+		iter._bucket = hep;
 		iter._self = ret.first;
 		iter._next = ret.first->next;
 		iter.index = (ret.first->hash & this->max);
@@ -294,7 +310,7 @@ public:
 
 	template <typename ... Args>
 	bool contains(Args && ... args) const {
-		if (auto ret = get_value(std::forward<Args>(args)...)) {
+		if (auto ret = get_value(nullptr, std::forward<Args>(args)...)) {
 			return true;
 		}
 		return false;
@@ -302,8 +318,10 @@ public:
 
 	template <typename ... Args>
 	iterator find(Args && ... args) {
-		if (auto ret = get_value(std::forward<Args>(args)...)) {
+		ValueType **hep = nullptr;
+		if (auto ret = get_value(&hep, std::forward<Args>(args)...)) {
 			iterator iter;
+			iter._bucket = hep;
 			iter._self = ret;
 			iter._next = ret->next;
 			iter.index = (ret->hash & this->max);
@@ -315,8 +333,10 @@ public:
 
 	template <typename ... Args>
 	const_iterator find(Args && ... args) const {
-		if (auto ret = get_value(std::forward<Args>(args)...)) {
+		ValueType **hep = nullptr;
+		if (auto ret = get_value(&hep, std::forward<Args>(args)...)) {
 			const_iterator iter;
+			iter._bucket = hep;
 			iter._self = ret;
 			iter._next = ret->next;
 			iter.index = (ret->hash & this->max);
@@ -328,10 +348,23 @@ public:
 
 	template <typename ... Args>
 	const typename ValueType::Type get(Args && ... args) const {
-		if (auto ret = get_value(std::forward<Args>(args)...)) {
+		if (auto ret = get_value(nullptr, std::forward<Args>(args)...)) {
 			return *ret->get();
 		}
 		return nullptr;
+	}
+
+	iterator erase(iterator it) {
+		iterator iter(it);
+		iter.next();
+
+		ValueType *old = *it._bucket;
+		*it._bucket = (*it._bucket)->next;
+		old->next = this->free;
+		this->free = old;
+		--this->count;
+
+		return iter;
 	}
 
 	template <typename ... Args>
@@ -349,6 +382,7 @@ public:
 
 		if (he) {
 			iterator iter;
+			iter._bucket = hep;
 			iter._self = he;
 			iter._next = he->next;
 			iter.index = (he->hash & this->max);
@@ -404,13 +438,31 @@ public:
 		count = 0;
 	}
 
-	iterator begin() { return begin_index(); }
-	iterator end() { return end_index(); }
+	iterator begin() {
+		HashIndex<Value> hi;
+		hi.ht = this;
+		hi.index = 0;
+		hi._bucket = nullptr;
+		hi._self = nullptr;
+		hi._next = nullptr;
+		hi.next();
+		return hi;
+	}
+	iterator end() {
+		HashIndex<Value> hi;
+		hi.ht = this;
+		hi.index = this->max + 1;
+		hi._bucket = nullptr;
+		hi._self = nullptr;
+		hi._next = nullptr;
+		return hi;
+	}
 
 	const_iterator begin() const {
 		ConstHashIndex<Value> hi;
 		hi.ht = this;
 		hi.index = 0;
+		hi._bucket = nullptr;
 		hi._self = nullptr;
 		hi._next = nullptr;
 		hi.next();
@@ -421,6 +473,7 @@ public:
 		ConstHashIndex<Value> hi;
 		hi.ht = this;
 		hi.index = this->max + 1;
+		hi._bucket = nullptr;
 		hi._self = nullptr;
 		hi._next = nullptr;
 		return hi;
@@ -452,6 +505,10 @@ private:
 	friend struct HashIndex<Value>;
 	friend struct ConstHashIndex<Value>;
 
+	ValueType *allocate_value() {
+		return (ValueType *)memory::pool::palloc(this->pool, sizeof(ValueType));
+	}
+
 	static HashEntry<Value> **alloc_array(HashTable *ht, uint32_t max) {
 		return (ValueType **)memory::pool::calloc(ht->pool, max + 1, sizeof(ValueType));
 	}
@@ -470,8 +527,8 @@ private:
 
 		new_array = alloc_array(ht, new_max);
 
-		auto end = ht->end_index();
-		auto hi = ht->begin_index();
+		auto end = ht->end();
+		auto hi = ht->begin();
 		while (hi != end) {
 			uint32_t i = hi._self->hash & new_max;
 			hi._self->next = new_array[i];
@@ -483,7 +540,7 @@ private:
 	}
 
 	template <typename ... Args>
-	ValueType * get_value(Args &&  ... args) const {
+	ValueType * get_value(ValueType ***bucket, Args &&  ... args) const {
 		ValueType **hep, *he;
 		const auto hash = ValueType::getHash(seed, std::forward<Args>(args)...);
 		const auto idx = hash & this->max;
@@ -495,11 +552,14 @@ private:
 			}
 		}
 
+		if (bucket) {
+			*bucket = hep;
+		}
 		return he;
 	}
 
 	template <typename ... Args>
-	Pair<ValueType *, bool> set_value(bool replace, Args &&  ... args) {
+	Pair<ValueType *, bool> set_value(bool replace, ValueType ***bucket, Args &&  ... args) {
 		ValueType **hep, *he;
 		const auto hash = ValueType::getHash(seed, std::forward<Args>(args)...);
 		const auto idx = hash & this->max;
@@ -516,13 +576,16 @@ private:
 				he->get()->~Value();
 				new (he->data.data()) Value(std::forward<Args>(args)...);
 			}
+			if (bucket) {
+				*bucket = hep;
+			}
 			return pair(he, false);
 		} else {
 			/* add a new entry for non-NULL values */
 			if ((he = this->free) != NULL) {
 				this->free = he->next;
 			} else {
-				he = (ValueType *)memory::pool::palloc(this->pool, sizeof(*he));
+				he = allocate_value();
 			}
 
 			this->count++;
@@ -536,27 +599,11 @@ private:
 			if (this->count > this->max) {
 				expand_array(this);
 			}
+			if (bucket) {
+				*bucket = hep;
+			}
 			return pair(he, true);
 		}
-	}
-
-	HashIndex<Value> begin_index() {
-		HashIndex<Value> hi;
-		hi.ht = this;
-		hi.index = 0;
-		hi._self = nullptr;
-		hi._next = nullptr;
-		hi.next();
-		return hi;
-	}
-
-	HashIndex<Value> end_index() {
-		HashIndex<Value> hi;
-		hi.ht = this;
-		hi.index = this->max + 1;
-		hi._self = nullptr;
-		hi._next = nullptr;
-		return hi;
 	}
 
 	Pool *pool = nullptr;

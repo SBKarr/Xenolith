@@ -30,6 +30,10 @@ namespace stappler::xenolith {
 
 static constexpr uint64_t InvalidTag = maxOf<uint64_t>();
 
+constexpr uint64_t operator"" _usec ( unsigned long long int val ) { return val * 1000'000; }
+constexpr uint64_t operator"" _umsec ( unsigned long long int val ) { return val * 1000; }
+constexpr uint64_t operator"" _umksec ( unsigned long long int val ) { return val; }
+
 enum class NodeFlags {
 	None,
 	TransformDirty = 1 << 0,
@@ -92,6 +96,17 @@ public:
 
 protected:
 	memory::pool_t *_pool = nullptr;
+};
+
+struct UpdateTime {
+	// global OS timer at the start of update in microseconds
+	uint64_t global;
+
+	// microseconds since application was started
+	uint64_t app;
+
+	// microseconds since last update
+	uint64_t delta;
 };
 
 }
