@@ -87,7 +87,7 @@ void RenderPassHandle::invalidate() {
 bool RenderPassHandle::prepare(gl::FrameHandle &frame) {
 	_device = (Device *)frame.getDevice();
 	_swapchain = (Swapchain *)frame.getSwapchain();
-	_pool = _device->acquireCommandPool(QueueOperations::Graphics);
+	_pool = _device->acquireCommandPool(((RenderPass *)_renderPass.get())->getQueueOps());
 	if (!_pool) {
 		invalidate();
 		return false;
@@ -527,6 +527,51 @@ bool RenderPassHandle::present(gl::FrameHandle &frame) {
 	}
 
 	return false;
+}
+
+RenderPassHandle::MaterialBuffers RenderPassHandle::updateMaterials(gl::FrameHandle &iframe, const Rc<gl::MaterialSet> &data,
+		const Vector<Rc<gl::Material>> &materials) {
+	MaterialBuffers ret;
+	auto &layout = _device->getTextureSetLayout();
+
+	// update list of materials in set
+	data->updateMaterials(materials, [&] (const gl::MaterialImage &image) -> Rc<gl::ImageView> {
+		return Rc<ImageView>::create(*_device, (Image *)image.image->image.get(), image.info);
+	});
+
+	for (auto &it : data->getLayouts()) {
+		iframe.performRequiredTask([layout, data, target = &it] (gl::FrameHandle &handle) {
+			auto dev = (Device *)handle.getDevice();
+
+			target->set = Rc<gl::TextureSet>(layout->acquireSet(*dev));
+			target->set->write(*target);
+		}, this);
+	}
+
+	auto &bufferInfo = data->getInfo();
+
+	auto &frame = static_cast<FrameHandle &>(iframe);
+	auto &pool = frame.getMemPool();
+
+	ret.stagingBuffer = pool->spawn(AllocationUsage::HostTransitionSource,
+			gl::BufferInfo(gl::ForceBufferUsage(gl::BufferUsage::TransferSrc), bufferInfo.size));
+	ret.targetBuffer = pool->spawnPersistent(AllocationUsage::DeviceLocal, bufferInfo);
+
+	auto mapped = ret.stagingBuffer->map();
+
+	uint32_t idx = 0;
+	ret.ordering.reserve(data->getMaterials().size());
+
+	uint8_t *target = mapped.ptr;
+	for (auto &it : data->getMaterials()) {
+		data->encode(target, it.second.get());
+ 		target += data->getObjectSize();
+ 		ret.ordering.emplace(it.first, idx);
+ 		++ idx;
+	}
+
+	ret.stagingBuffer->unmap(mapped);
+	return ret;
 }
 
 RenderPassHandle::Sync RenderPassHandle::makeSyncInfo() {

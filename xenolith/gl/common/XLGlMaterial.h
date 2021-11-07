@@ -33,7 +33,7 @@ class MaterialSet;
 class MaterialAttachment;
 
 struct MaterialInputData : gl::AttachmentInputData {
-	Rc<MaterialAttachment> attachment;
+	const MaterialAttachment * attachment;
 	Vector<Rc<Material>> materials; // new materials to update buffer
 };
 
@@ -142,7 +142,7 @@ public:
 			uint32_t materialObjectSize, MaterialType type, Vector<Rc<Material>> &&);
 
 	const Rc<gl::MaterialSet> &getMaterials() const;
-	void setMaterials(const Rc<gl::MaterialSet> &);
+	void setMaterials(const Rc<gl::MaterialSet> &) const;
 
 	MaterialType getType() const { return _type; }
 
@@ -160,7 +160,7 @@ protected:
 	MaterialType _type;
 	MaterialSet::EncodeCallback _encodeCallback;
 	MaterialSet::FinalizeCallback _finalizeCallback;
-	Rc<gl::MaterialSet> _data;
+	mutable Rc<gl::MaterialSet> _data;
 	Vector<Rc<Material>> _initialMaterials;
 };
 

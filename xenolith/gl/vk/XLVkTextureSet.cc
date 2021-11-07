@@ -170,6 +170,7 @@ gl::ImageData TextureSetLayout::getEmptyImage() const {
 	gl::ImageData ret;
 	static_cast<gl::ImageInfo &>(ret) = _emptyImage->getInfo();
 	ret.image = _emptyImage;
+	ret.key = StringView(EmptyTextureName);
 	return ret;
 }
 
@@ -177,6 +178,7 @@ gl::ImageData TextureSetLayout::getSolidImage() const {
 	gl::ImageData ret;
 	static_cast<gl::ImageInfo &>(ret) = _solidImage->getInfo();
 	ret.image = _solidImage;
+	ret.key = StringView(SolidTextureName);
 	return ret;
 }
 

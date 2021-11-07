@@ -341,7 +341,7 @@ const Rc<gl::MaterialSet> &MaterialAttachment::getMaterials() const {
 	return _data;
 }
 
-void MaterialAttachment::setMaterials(const Rc<gl::MaterialSet> &data) {
+void MaterialAttachment::setMaterials(const Rc<gl::MaterialSet> &data) const {
 	auto tmp = _data;
 	_data = data;
 	if (tmp) {

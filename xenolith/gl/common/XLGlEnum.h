@@ -601,7 +601,7 @@ enum class AttachmentUsage {
 SP_DEFINE_ENUM_AS_MASK(AttachmentUsage);
 
 // VkComponentSwizzle
-enum class ComponentMapping {
+enum class ComponentMapping : uint32_t {
 	Identity = 0,
 	Zero = 1,
 	One = 2,

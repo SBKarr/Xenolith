@@ -56,16 +56,38 @@ public:
 
 	virtual uint64_t getMaterial(const MaterialInfo &) const;
 
+	// dynamically load material
+	// this can be severe less effective then pre-initialized materials,
+	// so, it's preferred to pre-initialize all materials in release builds
+	virtual uint64_t acquireMaterial(const MaterialInfo &, const Vector<const gl::ImageData *> &images);
+
 protected:
 	virtual Rc<gl::RenderQueue> makeQueue(gl::RenderQueue::Builder &&);
 	virtual void readInitialMaterials();
 	virtual MaterialInfo getMaterialInfo(gl::MaterialType, const Rc<gl::Material> &) const;
 
+	virtual gl::ImageViewInfo getImageViewForMaterial(const MaterialInfo &, uint32_t idx, const gl::ImageData *) const;
+	virtual Bytes getDataForMaterial(const gl::MaterialAttachment *, const MaterialInfo &) const;
+
+	// Search for pipeline, compatible with material
+	// Backward-search through RenderPass/Subppass, that uses material attachment provided
+	// Can be slow on complex RenderQueue
+	virtual const gl::PipelineData *getPipelineForMaterial(const gl::MaterialAttachment *, const MaterialInfo &) const;
+	virtual bool isPipelineMatch(const gl::PipelineData *, const MaterialInfo &) const;
+
+	const gl::MaterialAttachment *getAttachmentByType(gl::MaterialType) const;
+
+	void addPendingMaterial(const gl::MaterialAttachment *, Rc<gl::Material> &&);
+	void addMaterial(const MaterialInfo &, gl::MaterialId);
+
 	uint32_t _refId = 0;
 	Director *_director = nullptr;
 	Rc<gl::RenderQueue> _queue;
 
-	std::unordered_map<uint64_t, Vector<Pair<MaterialInfo, uint64_t>>> _materials;
+	Map<gl::MaterialType, const gl::MaterialAttachment *> _attachmentsByType;
+	std::unordered_map<uint64_t, Vector<Pair<MaterialInfo, gl::MaterialId>>> _materials;
+
+	Map<const gl::MaterialAttachment *, Vector<Rc<gl::Material>>> _pendingMaterials;
 };
 
 }

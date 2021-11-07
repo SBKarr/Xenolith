@@ -222,7 +222,9 @@ void RenderQueueRenderPass::prepare(gl::Device &) {
 }
 
 RenderQueueRenderPassHandle::~RenderQueueRenderPassHandle() {
-	_resource->invalidate(*_device);
+	if (_resource) {
+		_resource->invalidate(*_device);
+	}
 }
 
 bool RenderQueueRenderPassHandle::prepare(gl::FrameHandle &frame) {
@@ -312,8 +314,6 @@ void RenderQueueRenderPassHandle::addRequiredAttachment(const gl::Attachment *a,
 bool RenderQueueRenderPassHandle::prepareMaterials(gl::FrameHandle &iframe, VkCommandBuffer buf,
 		const Rc<gl::MaterialAttachment> &attachment, Vector<VkBufferMemoryBarrier> &outputBufferBarriers) {
 	auto table = _device->getTable();
-
-	auto &layout = _device->getTextureSetLayout();
 	auto &initial = attachment->getInitialMaterials();
 	if (initial.empty()) {
 		return true;
@@ -321,52 +321,15 @@ bool RenderQueueRenderPassHandle::prepareMaterials(gl::FrameHandle &iframe, VkCo
 
 	auto data = attachment->allocateSet(*_device);
 
-	// update list of materials in set
-	auto dirty = data->updateMaterials(initial, [&] (const gl::MaterialImage &image) -> Rc<gl::ImageView> {
-		return Rc<ImageView>::create(*_device, (Image *)image.image->image.get(), image.info);
-	});
-
-	for (auto &it : data->getLayouts()) {
-		iframe.performRequiredTask([layout, data, target = &it] (gl::FrameHandle &handle) {
-			auto dev = (Device *)handle.getDevice();
-
-			target->set = Rc<gl::TextureSet>(layout->acquireSet(*dev));
-			target->set->write(*target);
-		}, this);
-	}
-
-	auto &bufferInfo = data->getInfo();
-
-	auto &frame = static_cast<FrameHandle &>(iframe);
-	auto &pool = frame.getMemPool();
-
-	auto stagingBuffer = pool->spawn(AllocationUsage::HostTransitionSource,
-			gl::BufferInfo(gl::ForceBufferUsage(gl::BufferUsage::TransferSrc), bufferInfo.size));
-	auto targetBuffer = pool->spawnPersistent(AllocationUsage::DeviceLocal, bufferInfo);
-
-	auto mapped = stagingBuffer->map();
-
-	uint32_t idx = 0;
-	std::unordered_map<gl::MaterialId, uint32_t> ordering;
-	ordering.reserve(data->getMaterials().size());
-
-	uint8_t *target = mapped.ptr;
-	for (auto &it : data->getMaterials()) {
-		data->encode(target, it.second.get());
- 		target += data->getObjectSize();
- 		ordering.emplace(it.first, idx);
- 		++ idx;
-	}
-
-	stagingBuffer->unmap(mapped);
+	auto buffers = updateMaterials(iframe, data, initial);
 
 	VkBufferCopy indexesCopy;
 	indexesCopy.srcOffset = 0;
 	indexesCopy.dstOffset = 0;
-	indexesCopy.size = stagingBuffer->getSize();
+	indexesCopy.size = buffers.stagingBuffer->getSize();
 
-	auto stagingBuf = stagingBuffer->getBuffer();
-	auto targetBuf = targetBuffer->getBuffer();
+	auto stagingBuf = buffers.stagingBuffer->getBuffer();
+	auto targetBuf = buffers.targetBuffer->getBuffer();
 
 	Vector<VkImageMemoryBarrier> outputImageBarriers;
 	table->vkCmdCopyBuffer(buf, stagingBuf, targetBuf, 1, &indexesCopy);
@@ -382,20 +345,20 @@ bool RenderQueueRenderPassHandle::prepareMaterials(gl::FrameHandle &iframe, VkCo
 				VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
 				VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
 				VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-				targetBuffer->getBuffer(), 0, VK_WHOLE_SIZE
+				buffers.targetBuffer->getBuffer(), 0, VK_WHOLE_SIZE
 			}));
 		} else {
 			auto &b = outputBufferBarriers.emplace_back(VkBufferMemoryBarrier({
 				VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
 				VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
 				_pool->getFamilyIdx(), q->index,
-				targetBuffer->getBuffer(), 0, VK_WHOLE_SIZE
+				buffers.targetBuffer->getBuffer(), 0, VK_WHOLE_SIZE
 			}));
-			targetBuffer->setPendingBarrier(b);
+			buffers.targetBuffer->setPendingBarrier(b);
 		}
 
 		auto dataPtr = data.get();
-		dataPtr->setBuffer(move(targetBuffer), move(ordering));
+		dataPtr->setBuffer(move(buffers.targetBuffer), move(buffers.ordering));
 		attachment->setMaterials(data);
 		return true;
 	}

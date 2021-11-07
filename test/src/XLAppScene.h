@@ -41,7 +41,8 @@ public:
 	virtual void onContentSizeDirty() override;
 
 protected:
-	Rc<Sprite> _sprite;
+	Sprite *_sprite = nullptr;
+	Sprite *_node1 = nullptr;
 };
 
 }

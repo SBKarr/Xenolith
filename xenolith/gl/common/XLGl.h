@@ -24,6 +24,7 @@
 #define XENOLITH_GL_COMMON_XLGL_H_
 
 #include "XLDefine.h"
+#include "SPBitmap.h"
 #include "SPThreadTaskQueue.h"
 #include "XLHashTable.h"
 
@@ -78,6 +79,17 @@ enum class ObjectType {
 	Semaphore,
 	ShaderModule,
 	DeviceMemory
+};
+
+enum class PixelFormat {
+	Unknown,
+	A, // single-channel color
+	IA, // dual-channel color
+	RGB,
+	RGBA,
+	D, // depth
+	DS, // depth-stencil
+	S // stencil
 };
 
 struct SamplerInfo {
@@ -141,6 +153,7 @@ struct PipelineInfo : NamedMem {
 struct PipelineData : PipelineInfo {
 	const RenderPass *renderPass = nullptr;
 	Rc<Pipeline> pipeline; // GL implementation-dependent object
+	uint32_t subpass = 0;
 };
 
 using ForceBufferFlags = ValueWrapper<BufferFlags, class ForceBufferFlagsFlag>;
@@ -364,6 +377,7 @@ StringView getDescriptorTypeName(DescriptorType);
 String getImageUsageDescription(ImageUsage fmt);
 String getProgramStageDescription(ProgramStage fmt);
 size_t getFormatBlockSize(ImageFormat format);
+PixelFormat getImagePixelFormat(ImageFormat format);
 
 }
 

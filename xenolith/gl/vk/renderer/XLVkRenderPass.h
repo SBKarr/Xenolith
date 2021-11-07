@@ -74,6 +74,15 @@ protected:
 
 	virtual bool present(gl::FrameHandle &);
 
+	struct MaterialBuffers {
+		Rc<DeviceBuffer> stagingBuffer;
+		Rc<Buffer> targetBuffer;
+		std::unordered_map<gl::MaterialId, uint32_t> ordering;
+	};
+
+	virtual MaterialBuffers updateMaterials(gl::FrameHandle &iframe, const Rc<gl::MaterialSet> &data,
+			const Vector<Rc<gl::Material>> &materials);
+
 	virtual Sync makeSyncInfo();
 
 	bool _isSyncValid = true;

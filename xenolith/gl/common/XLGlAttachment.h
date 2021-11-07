@@ -171,6 +171,7 @@ public:
 
 	uint32_t getSubpass() const { return _subpass; }
 	AttachmentDescriptor *getDescriptor() const { return _descriptor; }
+	Attachment *getAttachment() const { return _descriptor->getAttachment(); }
 	AttachmentUsage getUsage() const { return _usage; }
 
 	AttachmentOps getOps() const { return _ops; }

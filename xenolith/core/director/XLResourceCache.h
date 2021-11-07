@@ -34,6 +34,7 @@ public:
 
 	virtual StringView getName() const;
 	const gl::ImageObject *getImage() const;
+	const gl::ImageData *getData() const { return _data; }
 
 	uint64_t getIndex() const;
 

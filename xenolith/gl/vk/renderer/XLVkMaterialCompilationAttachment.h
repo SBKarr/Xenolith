@@ -61,13 +61,13 @@ public:
 
 	virtual bool init(StringView);
 
-	bool inProgress(gl::MaterialAttachment *) const;
-	void setInProgress(gl::MaterialAttachment *);
-	void dropInProgress(gl::MaterialAttachment *);
+	bool inProgress(const gl::MaterialAttachment *) const;
+	void setInProgress(const gl::MaterialAttachment *);
+	void dropInProgress(const gl::MaterialAttachment *);
 
-	bool hasRequest(gl::MaterialAttachment *) const;
-	void appendRequest(gl::MaterialAttachment *, Vector<Rc<gl::Material>> &&);
-	Rc<gl::MaterialInputData> popRequest(gl::MaterialAttachment *);
+	bool hasRequest(const gl::MaterialAttachment *) const;
+	void appendRequest(const gl::MaterialAttachment *, Vector<Rc<gl::Material>> &&);
+	Rc<gl::MaterialInputData> popRequest(const gl::MaterialAttachment *);
 	void clearRequests();
 
 	uint64_t incrementOrder();
@@ -82,8 +82,8 @@ protected:
 	virtual void prepare(gl::Device &) override;
 
 	uint64_t _order = 0;
-	Set<gl::MaterialAttachment *> _inProgress;
-	Map<Rc<gl::MaterialAttachment>, Map<uint32_t, Rc<gl::Material>>> _requests;
+	Set<const gl::MaterialAttachment *> _inProgress;
+	Map<const gl::MaterialAttachment *, Map<gl::MaterialId, Rc<gl::Material>>> _requests;
 	const MaterialCompilationAttachment *_materialAttachment;
 };
 

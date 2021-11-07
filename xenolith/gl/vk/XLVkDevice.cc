@@ -192,9 +192,6 @@ void Device::begin(const Application *app, thread::TaskQueue &q) {
 	gl::Device::begin(app, q);
 
 	_materialQueue = createMaterialQueue();
-	/*compileRenderQueue(q, _materialQueue, [&] (bool success) {
-		_materialQueue->setCompiled(success);
-	});*/
 }
 
 void Device::end(thread::TaskQueue &q) {
@@ -236,6 +233,10 @@ void Device::waitIdle() {
 void Device::onLoopStarted(gl::Loop &loop) {
 	gl::Device::onLoopStarted(loop);
 	_textureSetLayout->initDefault(*this, loop);
+
+	compileRenderQueue(loop, _materialQueue, [&] (bool success) {
+		_materialQueue->setCompiled(success);
+	});
 }
 
 void Device::onLoopEnded(gl::Loop &loop) {
@@ -593,8 +594,9 @@ void Device::compileSamplers(thread::TaskQueue &q, bool force) {
 }
 
 void Device::runMaterialCompilationFrame(gl::Loop &loop, Rc<gl::MaterialInputData> &&req) {
-	auto attachment = req->attachment.get();
+	auto attachment = req->attachment;
 	auto h = Rc<FrameHandle>::create(loop, *_materialQueue, _materialRenderPass->incrementOrder(), 0);
+	h->update(true);
 	h->setCompleteCallback([this, attachment] (gl::FrameHandle &handle) {
 		for (auto &it : handle.getOutputAttachments()) {
 			if (auto r = dynamic_cast<MaterialCompilationAttachmentHandle *>(it.get())) {
@@ -623,7 +625,7 @@ void Device::compileMaterials(gl::Loop &loop, Rc<gl::MaterialInputData> &&req) {
 	if (_materialRenderPass->inProgress(req->attachment)) {
 		_materialRenderPass->appendRequest(req->attachment, move(req->materials));
 	} else {
-		auto attachment = req->attachment.get();
+		auto attachment = req->attachment;
 		_materialRenderPass->setInProgress(attachment);
 		runMaterialCompilationFrame(loop, move(req));
 	}
@@ -743,6 +745,8 @@ Rc<gl::RenderQueue> Device::createMaterialQueue() {
 
 	auto attachment = Rc<MaterialCompilationAttachment>::create("MaterialAttachment");
 	auto pass = Rc<MaterialCompilationRenderPass>::create("MaterialRenderPass");
+
+	attachment->setInputCallback([] (gl::FrameHandle &frame, const Rc<gl::AttachmentHandle> &a) { });
 
 	builder.addRenderPass(pass);
 	builder.addPassInput(pass, 0, attachment);

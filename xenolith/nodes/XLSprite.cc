@@ -21,20 +21,25 @@
  **/
 
 #include "XLSprite.h"
+#include "XLApplication.h"
 
 #include "XLGlCommandList.h"
 
 namespace stappler::xenolith {
 
 bool Sprite::init() {
-	return init(Rc<Texture>(nullptr));
+	return init(SolidTextureName);
 }
 
 bool Sprite::init(StringView textureName) {
-	if (auto cache = ResourceCache::getInstance()) {
-		return init(cache->acquireTexture(textureName));
+	if (!Node::init()) {
+		return false;
 	}
-	return false;
+
+	_textureName = textureName.str();
+	_vertexes.init(4, 6);
+	updateVertexes();
+	return true;
 }
 
 bool Sprite::init(Rc<Texture> &&texture) {
@@ -51,15 +56,19 @@ bool Sprite::init(Rc<Texture> &&texture) {
 }
 
 void Sprite::setTexture(StringView textureName) {
-	if (textureName.empty()) {
-		if (_texture) {
-			_texture = nullptr;
-			_materialDirty = true;
-		}
-	} else if (!_texture || _texture->getName() != textureName) {
-		if (auto cache = ResourceCache::getInstance()) {
-			_texture = cache->acquireTexture(textureName);
-			_materialDirty = true;
+	if (!_running) {
+		_textureName = textureName.str();
+	} else {
+		if (textureName.empty()) {
+			if (_texture) {
+				_texture = nullptr;
+				_materialDirty = true;
+			}
+		} else if (!_texture || _texture->getName() != textureName) {
+			if (auto &cache = _director->getApplication()->getResourceCache()) {
+				_texture = cache->acquireTexture(textureName);
+				_materialDirty = true;
+			}
 		}
 	}
 }
@@ -91,10 +100,38 @@ void Sprite::visit(RenderFrameInfo &info, NodeFlags parentFlags) {
 void Sprite::draw(RenderFrameInfo &frame, NodeFlags flags) {
 	if (_texture) {
 		if (_materialDirty) {
-			_materialId = frame.scene->getMaterial(getMaterialInfo());
+			auto info = getMaterialInfo();
+			_materialId = frame.scene->getMaterial(info);
+			if (_materialId == 0) {
+				_materialId = frame.scene->acquireMaterial(info, getMaterialImages());
+				if (_materialId == 0) {
+					log::vtext("Sprite", "Material for sprite with texture '", _texture->getName(), "' not found");
+				}
+			}
 			_materialDirty = false;
 		}
 		frame.commands->pushVertexArray(_vertexes.pop(), frame.transformStack.back(), frame.zPath, _materialId);
+	}
+}
+
+void Sprite::onEnter(Scene *scene) {
+	Node::onEnter(scene);
+
+	if (!_textureName.empty()) {
+		if (!_texture || _texture->getName() != _textureName) {
+			if (auto &cache = _director->getApplication()->getResourceCache()) {
+				_texture = cache->acquireTexture(_textureName);
+				_materialDirty = true;
+			}
+		}
+		_textureName.clear();
+	}
+}
+
+void Sprite::setColorMode(const ColorMode &mode) {
+	if (_colorMode != mode) {
+		_colorMode = mode;
+		_materialDirty = true;
 	}
 }
 
@@ -102,6 +139,13 @@ MaterialInfo Sprite::getMaterialInfo() const {
 	MaterialInfo ret;
 	ret.type = gl::MaterialType::Basic2D;
 	ret.images[0] = _texture->getIndex();
+	ret.colorMode = _colorMode;
+	return ret;
+}
+
+Vector<const gl::ImageData *> Sprite::getMaterialImages() const {
+	Vector<const gl::ImageData *> ret;
+	ret.emplace_back(_texture->getData());
 	return ret;
 }
 

@@ -43,6 +43,7 @@ bool MaterialCompilationAttachmentHandle::submitInput(gl::FrameHandle &handle, R
 	if (auto d = data.cast<gl::MaterialInputData>()) {
 		handle.performOnGlThread([this, d = move(d)] (gl::FrameHandle &handle) {
 			_inputData = d;
+			_originalSet = _inputData->attachment->getMaterials();
 			handle.setInputSubmitted(this);
 		}, this);
 		return true;
@@ -58,13 +59,13 @@ MaterialCompilationRenderPass::~MaterialCompilationRenderPass() { }
 
 bool MaterialCompilationRenderPass::init(StringView name) {
 	if (RenderPass::init(name, gl::RenderPassType::Generic, gl::RenderOrderingHighest, 1)) {
-		_queueOps = QueueOperations::Graphics;
+		_queueOps = QueueOperations::Transfer;
 		return true;
 	}
 	return false;
 }
 
-bool MaterialCompilationRenderPass::inProgress(gl::MaterialAttachment *a) const {
+bool MaterialCompilationRenderPass::inProgress(const gl::MaterialAttachment *a) const {
 	auto it = _inProgress.find(a);
 	if (it != _inProgress.end()) {
 		return true;
@@ -72,15 +73,15 @@ bool MaterialCompilationRenderPass::inProgress(gl::MaterialAttachment *a) const 
 	return false;
 }
 
-void MaterialCompilationRenderPass::setInProgress(gl::MaterialAttachment *a) {
+void MaterialCompilationRenderPass::setInProgress(const gl::MaterialAttachment *a) {
 	_inProgress.emplace(a);
 }
 
-void MaterialCompilationRenderPass::dropInProgress(gl::MaterialAttachment *a) {
+void MaterialCompilationRenderPass::dropInProgress(const gl::MaterialAttachment *a) {
 	_inProgress.erase(a);
 }
 
-bool MaterialCompilationRenderPass::hasRequest(gl::MaterialAttachment *a) const {
+bool MaterialCompilationRenderPass::hasRequest(const gl::MaterialAttachment *a) const {
 	auto it = _requests.find(a);
 	if (it != _requests.end()) {
 		return true;
@@ -88,10 +89,10 @@ bool MaterialCompilationRenderPass::hasRequest(gl::MaterialAttachment *a) const 
 	return false;
 }
 
-void MaterialCompilationRenderPass::appendRequest(gl::MaterialAttachment *a, Vector<Rc<gl::Material>> &&req) {
+void MaterialCompilationRenderPass::appendRequest(const gl::MaterialAttachment *a, Vector<Rc<gl::Material>> &&req) {
 	auto it = _requests.find(a);
 	if (it == _requests.end()) {
-		it = _requests.emplace(a, Map<uint32_t, Rc<gl::Material>>()).first;
+		it = _requests.emplace(a, Map<gl::MaterialId, Rc<gl::Material>>()).first;
 	}
 
 	for (auto &m : req) {
@@ -104,20 +105,20 @@ void MaterialCompilationRenderPass::appendRequest(gl::MaterialAttachment *a, Vec
 	}
 }
 
-Rc<gl::MaterialInputData> MaterialCompilationRenderPass::popRequest(gl::MaterialAttachment *a) {
-	Rc<gl::MaterialInputData> ret;
-	ret->attachment = a;
-
+Rc<gl::MaterialInputData> MaterialCompilationRenderPass::popRequest(const gl::MaterialAttachment *a) {
 	auto it = _requests.find(a);
 	if (it != _requests.end()) {
+		Rc<gl::MaterialInputData> ret = Rc<gl::MaterialInputData>::alloc();
+		ret->attachment = a;
 		ret->materials.reserve(it->second.size());
 		for (auto &m : it->second) {
 			ret->materials.emplace_back(m.second);
 		}
 		_requests.erase(it);
+		return ret;
 	}
 
-	return ret;
+	return nullptr;
 }
 
 void MaterialCompilationRenderPass::clearRequests() {
@@ -144,7 +145,6 @@ void MaterialCompilationRenderPass::prepare(gl::Device &) {
 
 MaterialCompilationRenderPassHandle::~MaterialCompilationRenderPassHandle() { }
 
-
 void MaterialCompilationRenderPassHandle::addRequiredAttachment(const gl::Attachment *a, const Rc<gl::AttachmentHandle> &h) {
 	RenderPassHandle::addRequiredAttachment(a, h);
 	if (a == ((MaterialCompilationRenderPass *)_renderPass.get())->getMaterialAttachment()) {
@@ -163,54 +163,17 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(g
 	// create new material set generation
 	auto data = inputData->attachment->cloneSet(originalData);
 
-	// update list of materials in set
-	auto dirty = data->updateMaterials(inputData, [&] (const gl::MaterialImage &image) -> Rc<gl::ImageView> {
-		return Rc<ImageView>::create(*_device, (Image *)image.image->image.get(), image.info);
-	});
+	auto buffers = updateMaterials(handle, data, inputData->materials);
 
-	for (auto &it : data->getLayouts()) {
-		handle.performRequiredTask([layout, data, target = &it] (gl::FrameHandle &handle) {
-			auto dev = (Device *)handle.getDevice();
-
-			target->set = Rc<gl::TextureSet>(layout->acquireSet(*dev));
-			target->set->write(*target);
-
-		}, this);
+	QueueOperations ops = QueueOperations::None;
+	for (auto &it : inputData->attachment->getRenderPasses()) {
+		ops |= ((RenderPass *)it->renderPass.get())->getQueueOps();
 	}
 
-	Set<Image *> images;
-	for (auto &it : dirty) {
-		for (auto &img : it->getImages()) {
-			images.emplace((Image *)img.image->image.get());
-		}
+	auto q = _device->getQueueFamily(ops);
+	if (!q) {
+		return Vector<VkCommandBuffer>();
 	}
-
-	auto &bufferInfo = data->getInfo();
-
-	auto &frame = static_cast<FrameHandle &>(handle);
-
-	auto stagingBuffer = frame.getMemPool()->spawn(AllocationUsage::HostTransitionSource,
-			gl::BufferInfo(gl::ForceBufferUsage(gl::BufferUsage::TransferSrc), bufferInfo.size));
-
-	auto targetBuffer = frame.getMemPool()->spawnPersistent(AllocationUsage::DeviceLocal, bufferInfo);
-
-	auto mapped = stagingBuffer->map();
-
-	uint32_t idx = 0;
-	std::unordered_map<gl::MaterialId, uint32_t> ordering;
-	ordering.reserve(data->getMaterials().size());
-
-	uint8_t *target = mapped.ptr;
-	for (auto &it : data->getMaterials()) {
-		data->encode(target, it.second.get());
- 		target += data->getObjectSize();
- 		ordering.emplace(it.first, idx);
- 		++ idx;
-	}
-
-	stagingBuffer->unmap(mapped);
-
-	// build new descriptor sets
 
 	// transition images and build buffer
 	VkCommandBufferBeginInfo beginInfo { };
@@ -225,38 +188,42 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(g
 	VkBufferCopy indexesCopy;
 	indexesCopy.srcOffset = 0;
 	indexesCopy.dstOffset = 0;
-	indexesCopy.size = stagingBuffer->getSize();
+	indexesCopy.size = buffers.stagingBuffer->getSize();
 
-	Vector<VkImageMemoryBarrier> outputImageBarriers;
+	table->vkCmdCopyBuffer(buf, buffers.stagingBuffer->getBuffer(), buffers.targetBuffer->getBuffer(), 1, &indexesCopy);
 
-	table->vkCmdCopyBuffer(buf, stagingBuffer->getBuffer(), targetBuffer->getBuffer(), 1, &indexesCopy);
+	if (q->index == _pool->getFamilyIdx()) {
+		VkBufferMemoryBarrier bufferBarrier({
+			VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+			VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+			buffers.targetBuffer->getBuffer(), 0, VK_WHOLE_SIZE
+		});
 
-	for (auto &it : images) {
-		if (auto b = it->getPendingBarrier()) {
-			if (b->dstQueueFamilyIndex == _pool->getFamilyIdx()) {
-				outputImageBarriers.emplace_back(*b);
-				it->dropPendingBarrier();
-			} else {
-				log::vtext("Vk-Material", "Invalid queue family index in pending barrier: ", b->dstQueueFamilyIndex, " vs. ", _pool->getFamilyIdx());
-			}
-		}
+		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
+				VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+				0, nullptr,
+				1, &bufferBarrier,
+				0, nullptr);
+	} else {
+		VkBufferMemoryBarrier bufferBarrier({
+			VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+			VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+			_pool->getFamilyIdx(), q->index,
+			buffers.targetBuffer->getBuffer(), 0, VK_WHOLE_SIZE
+		});
+
+		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
+				VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+				0, nullptr,
+				1, &bufferBarrier,
+				0, nullptr);
+
+		buffers.targetBuffer->setPendingBarrier(bufferBarrier);
 	}
 
-	VkBufferMemoryBarrier bufferBarrier({
-		VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
-		VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		targetBuffer->getBuffer(), 0, VK_WHOLE_SIZE
-	});
-
-	table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-			VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
-			0, nullptr,
-			1, &bufferBarrier,
-			outputImageBarriers.size(), outputImageBarriers.data());
-
 	if (table->vkEndCommandBuffer(buf) == VK_SUCCESS) {
-		data->setBuffer(move(targetBuffer), move(ordering));
+		data->setBuffer(move(buffers.targetBuffer), move(buffers.ordering));
 		_materialAttachment->setOutput(data);
 		return Vector<VkCommandBuffer>{buf};
 	}

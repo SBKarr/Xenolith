@@ -141,46 +141,47 @@ bool Loop::worker() {
 			}
 
 			auto &events = *context.events;
-			for (auto &it : events) {
+			auto it = events.begin();
+			while (it != events.end()) {
 				memory::pool::context<memory::pool_t *> ctx(pool);
-				switch (it.event) {
+				switch (it->event) {
 				case EventName::Update:
-					if (auto s = (Swapchain *)it.data.get()) {
+					if (auto s = (Swapchain *)it->data.get()) {
 						s->beginFrame(*this);
 					} else {
 						log::text("gl::Loop", "Event::Update without swapchain");
 					}
 					break;
 				case EventName::SwapChainDeprecated:
-					if (auto s = (Swapchain *)it.data.get()) {
+					if (auto s = (Swapchain *)it->data.get()) {
 						invalidateSwapchain(s, AppEvent::SwapchainRecreation);
 					} else {
 						log::text("gl::Loop", "Event::SwapChainDeprecated without swapchain");
 					}
 					break;
 				case EventName::SwapChainRecreated:
-					if (auto s = (Swapchain *)it.data.get()) {
+					if (auto s = (Swapchain *)it->data.get()) {
 						s->beginFrame(*this, true);
 					} else {
 						log::text("gl::Loop", "Event::SwapChainRecreated without swapchain");
 					}
 					break;
 				case EventName::SwapChainForceRecreate:
-					if (auto s = (Swapchain *)it.data.get()) {
+					if (auto s = (Swapchain *)it->data.get()) {
 						invalidateSwapchain(s, AppEvent::SwapchainRecreationBest);
 					} else {
 						log::text("gl::Loop", "Event::SwapChainForceRecreate without swapchain");
 					}
 					break;
 				case EventName::FrameUpdate:
-					if (auto frame = it.data.cast<FrameHandle>()) {
+					if (auto frame = it->data.cast<FrameHandle>()) {
 						frame->update();
 					} else {
 						log::text("gl::Loop", "Event::FrameUpdate without frame");
 					}
 					break;
 				case EventName::FrameSubmitted:
-					if (auto s = (Swapchain *)it.data.get()) {
+					if (auto s = (Swapchain *)it->data.get()) {
 						if (s->isResetRequired()) {
 							pushEvent(EventName::SwapChainForceRecreate, s);
 						} else if (s->isValid()) {
@@ -195,7 +196,7 @@ bool Loop::worker() {
 								if (timeFromFrame >= frameInterval) {
 									s->beginFrame(*this);
 								} else {
-									schedule([this, s = it.data] (Context &context) {
+									schedule([this, s = it->data] (Context &context) {
 										context.events->emplace_back(EventName::FrameTimeoutPassed, s.get(), data::Value());
 										return true;
 									}, frameInterval - timeFromFrame);
@@ -207,30 +208,31 @@ bool Loop::worker() {
 					}
 					break;
 				case EventName::FrameTimeoutPassed:
-					if (auto s = (Swapchain *)it.data.get()) {
+					if (auto s = (Swapchain *)it->data.get()) {
 						s->beginFrame(*this);
 					} else {
 						log::text("gl::Loop", "Event::FrameTimeoutPassed without swapchain");
 					}
 					break;
 				case EventName::UpdateFrameInterval:
-					if (auto s = (Swapchain *)it.data.get()) {
+					if (auto s = (Swapchain *)it->data.get()) {
 					// view want us to change frame interval
-						s->setFrameInterval(it.value.getInteger());
+						s->setFrameInterval(it->value.getInteger());
 					} else {
 						log::text("gl::Loop", "Event::UpdateFrameInterval without swapchain");
 					}
 					break;
 				case EventName::CompileResource:
-					_device->compileResource(*_queue, it.data.cast<Resource>());
+					_device->compileResource(*_queue, it->data.cast<Resource>());
 					break;
 				case EventName::CompileMaterials:
-					_device->compileMaterials(*this, it.data.cast<MaterialInputData>());
+					_device->compileMaterials(*this, it->data.cast<MaterialInputData>());
 					break;
 				case EventName::Exit:
 					data.exit = true;
 					break;
 				}
+				++ it;
 			}
 
 			_currentContext = nullptr;

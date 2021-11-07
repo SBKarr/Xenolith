@@ -42,6 +42,42 @@ enum class NodeFlags {
 	DirtyMask = TransformDirty | ContentSizeDirty
 };
 
+struct ColorMode {
+	enum Mode {
+		Solid,
+		Custom
+	};
+
+	uint32_t mode : 4;
+	uint32_t r : 7;
+	uint32_t g : 7;
+	uint32_t b : 7;
+	uint32_t a : 7;
+
+	ColorMode() : mode(Solid), r(0), g(0), b(0), a(0) { }
+	ColorMode(gl::ComponentMapping r, gl::ComponentMapping g, gl::ComponentMapping b, gl::ComponentMapping a)
+	: mode(Custom), r(toInt(r)), g(toInt(g)), b(toInt(b)), a(toInt(a)) { }
+
+	ColorMode(const ColorMode &) = default;
+	ColorMode(ColorMode &&) = default;
+	ColorMode &operator=(const ColorMode &) = default;
+	ColorMode &operator=(ColorMode &&) = default;
+
+	bool operator==(const ColorMode &n) const {
+		return memcmp(this, &n, sizeof(ColorMode)) == 0;
+	}
+
+	bool operator!=(const ColorMode &n) const {
+		return memcmp(this, &n, sizeof(ColorMode)) != 0;
+	}
+
+	Mode getMode() const { return Mode(mode); }
+	gl::ComponentMapping getR() const { return gl::ComponentMapping(r); }
+	gl::ComponentMapping getG() const { return gl::ComponentMapping(g); }
+	gl::ComponentMapping getB() const { return gl::ComponentMapping(b); }
+	gl::ComponentMapping getA() const { return gl::ComponentMapping(a); }
+};
+
 SP_DEFINE_ENUM_AS_MASK(NodeFlags)
 
 namespace AppEvent {
@@ -63,6 +99,7 @@ struct MaterialInfo {
 	std::array<uint64_t, config::MaxMaterialImages> images = { 0 };
 	std::array<uint16_t, config::MaxMaterialImages> samplers = { 0 };
 	gl::MaterialType type = gl::MaterialType::Basic2D;
+	ColorMode colorMode;
 
 	uint64_t hash() const {
 		return hash::hash64((const char *)this, sizeof(MaterialInfo));

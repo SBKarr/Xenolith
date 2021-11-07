@@ -33,6 +33,7 @@ uint32_t FrameHandle::GetActiveFramesCount() {
 
 FrameHandle::~FrameHandle() {
 	XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] Destroy");
+
 	-- s_frameCount;
 	releaseResources();
 

@@ -35,7 +35,16 @@ namespace stappler::xenolith::vk {
 MaterialVertexAttachment::~MaterialVertexAttachment() { }
 
 bool MaterialVertexAttachment::init(StringView str, const gl::BufferInfo &info, Vector<Rc<gl::Material>> &&initial) {
-	return MaterialAttachment::init(str, info, [] (uint8_t *, const gl::Material *) {
+	return MaterialAttachment::init(str, info, [] (uint8_t *target, const gl::Material *material) {
+		auto &images = material->getImages();
+		if (!images.empty()) {
+			auto &image = images.front();
+			uint32_t sampler = image.sampler;
+			memcpy(target, &sampler, sizeof(uint32_t));
+			memcpy(target + sizeof(uint32_t), &image.descriptor, sizeof(uint32_t));
+			memcpy(target + sizeof(uint32_t) * 2, &image.set, sizeof(uint32_t));
+			return true;
+		}
 		return false;
 	}, [] (Rc<gl::TextureSet> &&set) {
 		auto s = (TextureSet *)set.get();
@@ -114,7 +123,7 @@ bool VertexMaterialAttachmentHandle::submitInput(gl::FrameHandle &handle, Rc<gl:
 
 bool VertexMaterialAttachmentHandle::isDescriptorDirty(const gl::RenderPassHandle &, const gl::PipelineDescriptor &,
 		uint32_t, bool isExternal) const {
-	return true;
+	return _vertexes;
 }
 
 bool VertexMaterialAttachmentHandle::writeDescriptor(const RenderPassHandle &, const gl::PipelineDescriptor &,
@@ -152,7 +161,7 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 			}
 		}
 
-		if (it->second.material) {
+		if (it != writePlan.end() && it->second.material) {
 			globalWritePlan.vertexes += cmd->vertexes->data.size();
 			globalWritePlan.indexes += cmd->vertexes->indexes.size();
 
@@ -199,6 +208,10 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 		}
 	}
 
+	if (globalWritePlan.vertexes == 0 || globalWritePlan.indexes == 0) {
+		return true;
+	}
+
 	// create buffers
 	_vertexes = handle->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
 			gl::BufferInfo(gl::BufferUsage::StorageBuffer, globalWritePlan.vertexes * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
@@ -230,13 +243,13 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 				++ idx;
 			}
 
-			for (auto &it : cmd->vertexes->indexes) {
-				it += vertexOffset;
-			}
+			auto indexTarget = (uint32_t *)indexesMap.ptr + indexOffset;
 
-			memcpy(indexesMap.ptr + indexOffset * sizeof(uint32_t),
-					(uint8_t *)cmd->vertexes->indexes.data(),
-					cmd->vertexes->indexes.size() * sizeof(uint32_t));
+			idx = 0;
+			for (auto &it : cmd->vertexes->indexes) {
+				indexTarget[idx] = it + vertexOffset;
+				++ idx;
+			}
 
 			vertexOffset += cmd->vertexes->data.size();
 			indexOffset += cmd->vertexes->indexes.size();
@@ -339,6 +352,10 @@ Vector<VkCommandBuffer> MaterialRenderPassHandle::doPrepareCommands(gl::FrameHan
 }
 
 void MaterialRenderPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, gl::FrameHandle &handle, VkCommandBuffer &buf) {
+	if (!_vertexBuffer->getIndexes() || !_vertexBuffer->getVertexes()) {
+		return;
+	}
+
 	auto table = _device->getTable();
 
 	auto pass = (RenderPassImpl *)_data->impl.get();

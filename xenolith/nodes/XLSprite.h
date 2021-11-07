@@ -43,11 +43,18 @@ public:
 	virtual void visit(RenderFrameInfo &, NodeFlags parentFlags) override;
 	virtual void draw(RenderFrameInfo &, NodeFlags flags) override;
 
+	virtual void onEnter(Scene *) override;
+
+	virtual void setColorMode(const ColorMode &mode);
+	virtual const ColorMode &getColorMode() const { return _colorMode; }
+
 protected:
 	virtual MaterialInfo getMaterialInfo() const;
+	virtual Vector<const gl::ImageData *> getMaterialImages() const;
 	virtual void updateColor() override;
 	virtual void updateVertexes();
 
+	String _textureName;
 	Rc<Texture> _texture;
 	VertexArray _vertexes;
 
@@ -60,6 +67,7 @@ protected:
 	bool _materialDirty = true;
 
 	Color4F _tmpColor;
+	ColorMode _colorMode;
 };
 
 }

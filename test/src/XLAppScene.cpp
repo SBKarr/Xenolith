@@ -36,14 +36,11 @@
 
 namespace stappler::xenolith::app {
 
-bool AppScene::init(Extent2 extent) {
+static void AppScene_makeRenderQueue(gl::RenderQueue::Builder &builder, Extent2 extent,
+		Function<void(gl::FrameHandle &, const Rc<gl::AttachmentHandle> &)> && cb) {
 	// acquire platform-specific swapchain image format
 	// extent will be resized automatically to screen size
 	gl::ImageInfo info(extent, gl::ImageUsage::ColorAttachment, platform::graphic::getCommonFormat());
-
-	// build presentation RenderQueue
-	gl::RenderQueue::Builder builder("Loader", gl::RenderQueue::Continuous);
-
 
 	// load shaders by ref - do not copy content into engine
 	auto materialFrag = builder.addProgramByRef("Loader_MaterialVert", xenolith::shaders::MaterialVert);
@@ -91,9 +88,7 @@ bool AppScene::init(Extent2 extent) {
 	// Vertex input attachment - per-frame vertex list
 	auto vertexInput = Rc<vk::VertexMaterialAttachment>::create("VertexInput",
 			gl::BufferInfo(gl::BufferUsage::StorageBuffer), materialInput);
-	vertexInput->setInputCallback([this] (gl::FrameHandle &frame, const Rc<gl::AttachmentHandle> &a) {
-		on2dVertexInput(frame, a);
-	});
+	vertexInput->setInputCallback(move(cb));
 
 	// define pass input-output
 	builder.addPassInput(pass, 0, samplers); // 0
@@ -110,10 +105,24 @@ bool AppScene::init(Extent2 extent) {
 	/*builder.addSubpassDependency(pass,
 			gl::RenderSubpassDependency::External, gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::None,
 			0, gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::ColorAttachmentWrite, false);*/
+}
+
+bool AppScene::init(Extent2 extent) {
+	// build presentation RenderQueue
+	gl::RenderQueue::Builder builder("Loader", gl::RenderQueue::Continuous);
+
+	AppScene_makeRenderQueue(builder, extent, [this] (gl::FrameHandle &frame, const Rc<gl::AttachmentHandle> &a) {
+		on2dVertexInput(frame, a);
+	});
 
 	if (!Scene::init(move(builder))) {
 		return false;
 	}
+
+	_sprite = addChild(Rc<Sprite>::create("Xenolith.png"));
+
+	_node1 = addChild(Rc<Sprite>::create());
+	_node1->setColor(Color::Teal_400);
 
 	scheduleUpdate();
 
@@ -125,15 +134,13 @@ void AppScene::update(const UpdateTime &time) {
 
 	auto t = time.app % 1_usec;
 
-	setRotation(M_PI * 2.0 * (float(t) / 1_usec));
+	_sprite->setRotation(M_PI * 2.0 * (float(t) / 1_usec));
 }
 
 void AppScene::onEnter(Scene *scene) {
 	Scene::onEnter(scene);
 	std::cout << "AppScene::onEnter\n";
 
-	auto sprite = Rc<Sprite>::create("Xenolith.png");
-	_sprite = addChild(sprite);
 }
 
 void AppScene::onExit() {
@@ -147,6 +154,10 @@ void AppScene::onContentSizeDirty() {
 	_sprite->setPosition(Vec2(_contentSize) / 2.0f);
 	_sprite->setAnchorPoint(Anchor::Middle);
 	_sprite->setContentSize(_contentSize / 2.0f);
+
+	_node1->setContentSize(Size(_contentSize.width / 2.0f, _contentSize.height / 4.0f));
+	_node1->setPosition(Vec2(_contentSize) / 2.0f - Vec2(0, _contentSize.height / 4.0f));
+	_node1->setAnchorPoint(Anchor::Middle);
 }
 
 }

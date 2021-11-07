@@ -1133,6 +1133,7 @@ PipelineData *RenderQueue::Builder::emplacePipeline(const Rc<RenderPass> &d, uin
 		auto pipeline = new (_data->pool) PipelineData;
 		pipeline->key = key.pdup(_data->pool);
 		pipeline->renderPass = d.get();
+		pipeline->subpass = subpass;
 		return pipeline;
 	}, _data->pool);
 	if (!p) {
