@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "XLGlView.h"
 #include "XLGlInstance.h"
 #include "XLGlRenderQueue.h"
+#include "XLStorageServer.h"
 #include "SPThreadTaskQueue.h"
 
 namespace stappler::xenolith {
@@ -69,13 +70,6 @@ public:
 	static EventHeader onError;
 
 	static EventHeader onRemoteNotification;
-	static EventHeader onRegenerateResources;
-	static EventHeader onRegenerateTextures;
-
-	static EventHeader onBackKey;
-	static EventHeader onRateApplication;
-	static EventHeader onScreenshot;
-
 	static EventHeader onLaunchUrl;
 
 	struct Data {
@@ -100,12 +94,36 @@ public:
 	Application();
 	virtual ~Application();
 
+	// finalize launch process:
+	// - start threads
+	// - acquire GL interface/instance
+	// - start GL loop
+	// - load resource cache
 	virtual bool onFinishLaunching();
+
+	// initialize components, that use persistent data storage
+	virtual bool onBuildStorage(storage::Server::Builder &);
+
+	// start main application loop, returns when loop is terminated and application should be closed
 	virtual bool onMainLoop();
+
+	// Process global Out-of-memory event
 	virtual void onMemoryWarning();
 
+	// Process main loop scheduled updates
+	// - update thread queue
+	// - check for network status
+	// - ckeck if DeviceIdentifier was acquired
 	virtual void update(uint64_t dt);
+
+	// Update thread queue
 	virtual void updateQueue();
+
+	// Run application with parsed command line data
+	virtual int run(data::Value &&);
+
+	// Open external URL from within application
+	virtual bool openURL(const StringView &url);
 
 public: // Threading, Events
 	using Callback = Function<void()>;
@@ -157,10 +175,6 @@ public: // Threading, Events
 	void sleep(uint64_t);
 	uint64_t getClock() const;
 
-public:
-	virtual int run(data::Value &&);
-
-	virtual bool openURL(const StringView &url);
 
 	/* device information */
 
@@ -190,7 +204,6 @@ public:
 	void goToUrl(const StringView &url, bool external = true);
 	void makePhoneCall(const StringView &number);
 	void mailTo(const StringView &address);
-	void rateApplication();
 
 	Pair<uint64_t, uint64_t> getTotalDiskSpace();
 	uint64_t getApplicationDiskSpace();
@@ -211,9 +224,12 @@ public:
 	const Rc<thread::TaskQueue> &getQueue() const { return _queue; }
 	const gl::Instance *getGlInstance() const { return _instance; }
 	const Rc<ResourceCache> &getResourceCache() const { return _resourceCache; }
+	const Rc<storage::Server> &getStorageServer() const { return _storageServer; }
+	const Rc<network::Controller> &getNetworkController() const { return _networkController; }
 
 protected:
 	uint64_t _clockStart = 0;
+	data::Value _dbParams;
 	String _userAgent;
 	String _deviceIdentifier;
 	String _deviceToken;
@@ -234,6 +250,10 @@ protected:
 	Rc<gl::Instance> _instance; // api instance
 	Rc<gl::Loop> _glLoop;
 	log::CustomLog _appLog;
+
+	Rc<storage::AssetLibrary> _assetLibrary;
+	Rc<storage::Server> _storageServer;
+	Rc<network::Controller> _networkController;
 };
 
 }

@@ -20,32 +20,22 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_XENOLITH_SRC_XLAPPSCENE_H_
-#define TEST_XENOLITH_SRC_XLAPPSCENE_H_
+#ifndef TEST_TESTS_NETWORK_XLTESTNETWORKSPRITE_H_
+#define TEST_TESTS_NETWORK_XLTESTNETWORKSPRITE_H_
 
-#include "XLScene.h"
 #include "XLSprite.h"
 
-namespace stappler::xenolith::app {
+namespace stappler::xenolith::test {
 
-class AppScene : public Scene {
+class NetworkTestSprite : public Sprite {
 public:
-	virtual ~AppScene() { }
-
-	virtual bool init(Extent2 extent);
-
-	virtual void update(const UpdateTime &) override;
+	virtual bool init() override;
 
 	virtual void onEnter(Scene *) override;
-	virtual void onExit() override;
-	virtual void onContentSizeDirty() override;
 
 protected:
-	Sprite *_sprite = nullptr;
-	Sprite *_node1 = nullptr;
-	Sprite *_node2 = nullptr;
 };
 
 }
 
-#endif /* TEST_XENOLITH_SRC_XLAPPSCENE_H_ */
+#endif /* TEST_TESTS_NETWORK_XLTESTNETWORKSPRITE_H_ */

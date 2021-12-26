@@ -34,7 +34,7 @@ XENOLITH_OUTPUT_DIR = $(abspath $(TOOLKIT_OUTPUT)/xenolith)
 XENOLITH_OUTPUT_STATIC = $(abspath $(TOOLKIT_OUTPUT)/libxenolith.a)
 
 # linker flags and extra libs (libhyphen.a and libfreetype.a from stappler)
-OSTYPE_XENOLITH_LIBS += $(OSTYPE_CLI_LIBS) -l:libhyphen.a -l:libfreetype.a -lX11 -lXrandr -lXi -lXinerama -lXcursor -lxcb
+OSTYPE_XENOLITH_LIBS += $(OSTYPE_CLI_LIBS) -l:libfreetype.a -lX11 -lXrandr -lXi -lXinerama -lXcursor -lxcb
 
 # use default stappler LDFLAGS for OS
 XENOLITH_LDFLAGS := $(OSTYPE_LDFLAGS)
@@ -49,8 +49,10 @@ XENOLITH_PRECOMPILED_HEADERS += \
 XENOLITH_SRCS_DIRS += \
 	components/common \
 	components/layout \
+	components/stellator/db \
 	$(XENOLITH_MAKEFILE_DIR)/core \
 	$(XENOLITH_MAKEFILE_DIR)/gl \
+	$(XENOLITH_MAKEFILE_DIR)/features \
 	$(XENOLITH_MAKEFILE_DIR)/nodes \
 
 # extra sources: platrom deps and shaders
@@ -63,6 +65,7 @@ XENOLITH_SRCS_OBJS += \
 XENOLITH_INCLUDES_DIRS += \
 	components/common \
 	components/layout \
+	components/stellator/db \
 	$(XENOLITH_MAKEFILE_DIR) \
 
 # non-recursive includes

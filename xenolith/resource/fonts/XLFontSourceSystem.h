@@ -1,5 +1,5 @@
 /**
-Copyright (c) 2020 Roman Katuntsev <sbkarr@stappler.org>
+Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,14 +20,28 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **/
 
+// Generated with FontGenerator (%STAPPLER_ROOT%/test/generators/FontGenerator)
+
 #include "XLDefine.h"
 
-#include "XLGestureData.cc"
+namespace stappler::xenolith {
 
-#include "XLNetworkController.cc"
-#include "XLNetworkHandle.cc"
+enum class SystemFontName {
+	DejaVuSans,
+	DejaVuSans_Bold,
+	DejaVuSans_BoldOblique,
+	DejaVuSans_ExtraLight,
+	DejaVuSans_Oblique,
+	DejaVuSansCondensed,
+	DejaVuSansCondensed_Bold,
+	DejaVuSansCondensed_BoldOblique,
+	DejaVuSansCondensed_Oblique,
+	DejaVuSansMono,
+	DejaVuSansMono_Bold,
+	DejaVuSansMono_BoldOblique,
+	DejaVuSansMono_Oblique,
+};
 
-#include "XLStorageServer.cc"
+BytesView getSystemFont(SystemFontName);
 
-#include "XLAssetLibrary.cc"
-#include "XLAsset.cc"
+}

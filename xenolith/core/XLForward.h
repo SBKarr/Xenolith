@@ -152,4 +152,21 @@ inline bool exists_ordered(memory::vector<T> &vec, const T & val) {
 
 } // stappler::xenolith
 
+
+namespace stappler::xenolith::network {
+
+class Controller;
+
+}
+
+
+namespace stappler::xenolith::storage {
+
+class Server;
+class Asset;
+class AssetLibrary;
+
+}
+
+
 #endif /* COMPONENTS_XENOLITH_CORE_XLFORWARD_H_ */

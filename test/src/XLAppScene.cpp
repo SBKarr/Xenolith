@@ -34,6 +34,8 @@
 #include "XLVkBufferAttachment.h"
 #include "XLVkMaterialRenderPass.h"
 
+#include "XLTestNetworkSprite.h"
+
 namespace stappler::xenolith::app {
 
 static void AppScene_makeRenderQueue(gl::RenderQueue::Builder &builder, Extent2 extent,
@@ -124,6 +126,8 @@ bool AppScene::init(Extent2 extent) {
 	_node1 = addChild(Rc<Sprite>::create());
 	_node1->setColor(Color::Teal_400);
 
+	_node2 = addChild(Rc<test::NetworkTestSprite>::create());
+
 	scheduleUpdate();
 
 	return true;
@@ -145,6 +149,9 @@ void AppScene::onEnter(Scene *scene) {
 
 void AppScene::onExit() {
 	std::cout << "AppScene::onExit\n";
+
+
+
 	Scene::onExit();
 }
 
@@ -158,6 +165,10 @@ void AppScene::onContentSizeDirty() {
 	_node1->setContentSize(Size(_contentSize.width / 2.0f, _contentSize.height / 4.0f));
 	_node1->setPosition(Vec2(_contentSize) / 2.0f - Vec2(0, _contentSize.height / 4.0f));
 	_node1->setAnchorPoint(Anchor::Middle);
+
+	_node2->setContentSize(Size(_contentSize.width / 2.0f, _contentSize.height / 4.0f));
+	_node2->setPosition(Vec2(_contentSize) / 2.0f + Vec2(0, _contentSize.height / 4.0f));
+	_node2->setAnchorPoint(Anchor::Middle);
 }
 
 }

@@ -25,6 +25,8 @@ THE SOFTWARE.
 #include "XLDirector.h"
 #include "XLEvent.h"
 #include "XLEventHandler.h"
+#include "XLNetworkController.h"
+#include "XLAssetLibrary.h"
 
 namespace stappler::log {
 
@@ -84,11 +86,6 @@ XL_DECLARE_EVENT_CLASS(Application, onNetwork);
 XL_DECLARE_EVENT_CLASS(Application, onUrlOpened);
 XL_DECLARE_EVENT_CLASS(Application, onError);
 XL_DECLARE_EVENT_CLASS(Application, onRemoteNotification);
-XL_DECLARE_EVENT_CLASS(Application, onRegenerateResources);
-XL_DECLARE_EVENT_CLASS(Application, onRegenerateTextures);
-XL_DECLARE_EVENT_CLASS(Application, onBackKey);
-XL_DECLARE_EVENT_CLASS(Application, onRateApplication);
-XL_DECLARE_EVENT_CLASS(Application, onScreenshot);
 XL_DECLARE_EVENT_CLASS(Application, onLaunchUrl);
 
 static Application * s_application = nullptr;
@@ -150,6 +147,8 @@ Application::Application() : _appLog(&log::__xenolith_log) {
 	});
 
 	s_application = this;
+
+	_networkController = Rc<network::Controller>::alloc(this, "Root");
 }
 
 Application::~Application() {
@@ -184,6 +183,16 @@ bool Application::onFinishLaunching() {
 	return true;
 }
 
+bool Application::onBuildStorage(storage::Server::Builder &builder) {
+	_assetLibrary = Rc<storage::AssetLibrary>::alloc(this);
+
+	if (_assetLibrary) {
+		builder.addComponent(_assetLibrary.get());
+	}
+
+	return true;
+}
+
 bool Application::onMainLoop() {
 	return false;
 }
@@ -193,6 +202,11 @@ void Application::onMemoryWarning() {
 }
 
 int Application::run(data::Value &&data) {
+	_dbParams = data::Value({
+		pair("driver", data::Value("sqlite")),
+		pair("dbname", data::Value(filesystem::cachesPath("root.sqlite"))),
+	});
+
 	for (auto &it : data.asDict()) {
 		if (it.first == "width") {
 			if (it.second.isInteger()) {
@@ -227,7 +241,17 @@ int Application::run(data::Value &&data) {
 		}
 	}
 
+	_storageServer = Rc<storage::Server>::create(this, _data.bundleName, _dbParams, [&] (storage::Server::Builder &builder) {
+		return onBuildStorage(builder);
+	});
+
+	if (!_storageServer) {
+		log::text("Application", "Fail to launch application: onBuildStorage failed");
+		return 1;
+	}
+
 	if (!onFinishLaunching()) {
+		log::text("Application", "Fail to launch application: onFinishLaunching failed");
 		return 1;
 	}
 
@@ -305,14 +329,11 @@ void Application::mailTo(const StringView &address) {
 	onUrlOpened(this, address);
 	platform::interaction::_mailTo(address);
 }
-void Application::rateApplication() {
-	onRateApplication(this);
-	platform::interaction::_rateApplication();
-}
 
 std::pair<uint64_t, uint64_t> Application::getTotalDiskSpace() {
 	return _loop->getDiskSpace();
 }
+
 uint64_t Application::getApplicationDiskSpace() {
 	auto path = filesystem::writablePath(_data.bundleName);
 	uint64_t size = 0;

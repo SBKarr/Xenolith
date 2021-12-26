@@ -20,32 +20,39 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_XENOLITH_SRC_XLAPPSCENE_H_
-#define TEST_XENOLITH_SRC_XLAPPSCENE_H_
-
+#include "XLTestNetworkSprite.h"
 #include "XLScene.h"
-#include "XLSprite.h"
+#include "XLDirector.h"
+#include "XLApplication.h"
+#include "XLNetworkHandle.h"
 
-namespace stappler::xenolith::app {
+namespace stappler::xenolith::test {
 
-class AppScene : public Scene {
-public:
-	virtual ~AppScene() { }
+bool NetworkTestSprite::init() {
+	if (!Sprite::init()) {
+		return false;
+	}
 
-	virtual bool init(Extent2 extent);
-
-	virtual void update(const UpdateTime &) override;
-
-	virtual void onEnter(Scene *) override;
-	virtual void onExit() override;
-	virtual void onContentSizeDirty() override;
-
-protected:
-	Sprite *_sprite = nullptr;
-	Sprite *_node1 = nullptr;
-	Sprite *_node2 = nullptr;
-};
-
+	setColor(Color::Orange_500);
+	return true;
 }
 
-#endif /* TEST_XENOLITH_SRC_XLAPPSCENE_H_ */
+void NetworkTestSprite::onEnter(Scene *scene) {
+	Sprite::onEnter(scene);
+
+	auto app = scene->getDirector()->getApplication();
+
+	auto h = Rc<network::DataHandle>::create("https://geobase.stappler.org/proxy/getHeaders");
+	// h->addHeader("X-Test", "123");
+	h->perform(app, [] (network::Handle &handle, data::Value &data) {
+		auto url = handle.getUrl();
+		auto code = handle.getErrorCode();
+		auto err = handle.getError();
+		auto resp = handle.getResponseCode();
+
+		log::vtext("NetworkTest", "[", resp, "] ", url, ": ", code, " - ", err);
+		std::cout << data::EncodeFormat::Pretty << data << "\n";
+	});
+}
+
+}
