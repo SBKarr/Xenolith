@@ -81,6 +81,17 @@ Vector<Material *> MaterialSet::updateMaterials(const Vector<Rc<Material>> &mate
 		const Callback<Rc<ImageView>(const MaterialImage &)> &cb) {
 	Vector<Material *> ret; ret.reserve(materials.size());
 	for (auto &material : materials) {
+		bool isImagesValid = true;
+		for (auto &it : material->getImages()) {
+			if (!it.image) {
+				isImagesValid = false;
+			}
+		}
+
+		if (!isImagesValid) {
+			continue;
+		}
+
 		auto mIt = _materials.find(material->getId());
 		if (mIt != _materials.end()) {
 			emplaceMaterialImages(mIt->second, material.get(), cb);
@@ -314,6 +325,7 @@ bool Material::init(const PipelineData *pipeline, const ImageData *image, Bytes 
 			image
 		})
 	});
+	_atlas = image->atlas;
 	_data = move(data);
 	return true;
 }

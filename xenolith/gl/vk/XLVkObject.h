@@ -44,8 +44,8 @@ class Image : public gl::ImageObject {
 public:
 	virtual ~Image() { }
 
-	bool init(Device &dev, VkImage, const gl::ImageInfo &); // non-owining image wrapping
-	bool init(Device &dev, VkImage, const gl::ImageInfo &, Rc<DeviceMemory> &&); // owning image wrapping
+	bool init(Device &dev, VkImage, const gl::ImageInfo &, Rc<gl::ImageAtlas> && = Rc<gl::ImageAtlas>()); // non-owining image wrapping
+	bool init(Device &dev, VkImage, const gl::ImageInfo &, Rc<DeviceMemory> &&, Rc<gl::ImageAtlas> && = Rc<gl::ImageAtlas>()); // owning image wrapping
 
 	VkImage getImage() const { return _image; }
 

@@ -33,18 +33,20 @@ bool DeviceMemory::init(Device &dev, VkDeviceMemory memory) {
 	}, gl::ObjectType::DeviceMemory, _memory);
 }
 
-bool Image::init(Device &dev, VkImage image, const gl::ImageInfo &info) {
+bool Image::init(Device &dev, VkImage image, const gl::ImageInfo &info, Rc<gl::ImageAtlas> &&atlas) {
 	_info = info;
 	_image = image;
+	_atlas = atlas;
 
 	return gl::ImageObject::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
 		// do nothing
 	}, gl::ObjectType::Image, _image);
 }
 
-bool Image::init(Device &dev, VkImage image, const gl::ImageInfo &info, Rc<DeviceMemory> &&mem) {
+bool Image::init(Device &dev, VkImage image, const gl::ImageInfo &info, Rc<DeviceMemory> &&mem, Rc<gl::ImageAtlas> &&atlas) {
 	_info = info;
 	_image = image;
+	_atlas = atlas;
 	_memory = move(mem);
 
 	return gl::ImageObject::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {

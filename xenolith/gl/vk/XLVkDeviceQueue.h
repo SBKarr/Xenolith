@@ -58,6 +58,7 @@ struct DeviceQueueFamily {
 	uint32_t count;
 	QueueOperations preferred = QueueOperations::None;
 	QueueOperations ops = QueueOperations::None;
+	VkExtent3D transferGranularity;
 	Vector<VkQueue> queues;
 	Vector<Rc<CommandPool>> pools;
 	Vector<Waiter> waiters;

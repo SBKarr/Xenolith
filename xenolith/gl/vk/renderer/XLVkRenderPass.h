@@ -61,9 +61,10 @@ public:
 	virtual ~RenderPassHandle();
 	virtual void invalidate();
 
-	// if submit is true - do run + submit in one call
 	virtual bool prepare(gl::FrameHandle &) override;
 	virtual void submit(gl::FrameHandle &, Function<void(const Rc<gl::RenderPass> &)> &&) override;
+
+	virtual QueueOperations getQueueOps() const;
 
 protected:
 	// if async is true - update descriptors with updateAfterBind flag

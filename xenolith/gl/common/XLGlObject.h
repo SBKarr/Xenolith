@@ -106,6 +106,20 @@ protected:
 	Vector<Rc<ImageView>> imageViews;
 };
 
+class ImageAtlas : public Ref {
+public:
+	bool init(size_t);
+
+	Vec2 getObjectByName(uint32_t) const;
+	Vec2 getObjectByOrder(uint32_t) const;
+
+	void addObject(uint32_t, Vec2);
+
+protected:
+	std::unordered_map<uint32_t, uint32_t> _names;
+	Vector<Vec2> _objects;
+};
+
 class ImageObject : public Object {
 public:
 	virtual ~ImageObject() { }
@@ -114,11 +128,13 @@ public:
 
 	const ImageInfo &getInfo() const { return _info; }
 	uint64_t getIndex() const { return _index; }
+	const Rc<ImageAtlas> &getAtlas() const { return _atlas; }
 
 	ImageViewInfo getViewInfo(const ImageViewInfo &) const;
 
 protected:
 	ImageInfo _info;
+	Rc<ImageAtlas> _atlas;
 
 	uint64_t _index = 1; // 0 stays as special value
 };

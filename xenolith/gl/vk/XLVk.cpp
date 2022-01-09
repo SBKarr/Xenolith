@@ -50,3 +50,4 @@ THE SOFTWARE.
 #include "renderer/XLVkMaterialCompilationAttachment.cc"
 #include "renderer/XLVkMaterialRenderPass.cc"
 #include "renderer/XLVkRenderQueueAttachment.cc"
+#include "renderer/XLVkRenderFontAttachment.cc"

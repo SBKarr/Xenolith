@@ -73,9 +73,13 @@ bool MaterialVertexAttachmentHandle::isDescriptorDirty(const gl::RenderPassHandl
 
 bool MaterialVertexAttachmentHandle::writeDescriptor(const RenderPassHandle &handle, const gl::PipelineDescriptor &descriptors,
 		uint32_t, bool, VkDescriptorBufferInfo &info) {
-	info.buffer = ((Buffer *)_materials->getBuffer().get())->getBuffer();
+	auto b = _materials->getBuffer();
+	if (!b) {
+		return false;
+	}
+	info.buffer = ((Buffer *)b.get())->getBuffer();
 	info.offset = 0;
-	info.range = ((Buffer *)_materials->getBuffer().get())->getSize();
+	info.range = ((Buffer *)b.get())->getSize();
 	return true;
 }
 
@@ -142,6 +146,7 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 
 	struct MaterialWritePlan {
 		const gl::Material *material = nullptr;
+		Rc<gl::ImageAtlas> atlas;
 		uint32_t vertexes = 0;
 		uint32_t indexes = 0;
 		std::forward_list<const gl::CmdVertexArray *> commands;
@@ -158,6 +163,9 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 			if (material) {
 				it = writePlan.emplace(cmd->material, MaterialWritePlan()).first;
 				it->second.material = material;
+				if (auto atlas = it->second.material->getAtlas()) {
+					it->second.atlas = atlas;
+				}
 			}
 		}
 
@@ -183,7 +191,7 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 		cmd = cmd->next;
 	}
 
-	// optimize draw order
+	// optimize draw order, minimize switching pipeline, textureSet and descriptors
 	Vector<const Pair<const gl::MaterialId, MaterialWritePlan> *> drawOrder;
 
 	for (auto &it : writePlan) {
@@ -234,21 +242,29 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 			memcpy(target, (uint8_t *)cmd->vertexes->data.data(),
 					cmd->vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U));
 
-			auto transform = cmd->transform;
+			if (!isGpuTransform()) {
+				// pre-transform vertexes
+				auto transform = cmd->transform;
 
-			size_t idx = 0;
-			for (auto &v : cmd->vertexes->data) {
-				target[idx].pos = transform * v.pos;
-				target[idx].material = it->first;
-				++ idx;
-			}
+				size_t idx = 0;
+				for (auto &v : cmd->vertexes->data) {
+					target[idx].pos = transform * v.pos;
+					target[idx].material = it->first;
 
-			auto indexTarget = (uint32_t *)indexesMap.ptr + indexOffset;
+					if (target[idx].object && it->second.atlas) {
+						target[idx].tex = it->second.atlas->getObjectByName(target[idx].object);
+					}
 
-			idx = 0;
-			for (auto &it : cmd->vertexes->indexes) {
-				indexTarget[idx] = it + vertexOffset;
-				++ idx;
+					++ idx;
+				}
+
+				auto indexTarget = (uint32_t *)indexesMap.ptr + indexOffset;
+
+				idx = 0;
+				for (auto &it : cmd->vertexes->indexes) {
+					indexTarget[idx] = it + vertexOffset;
+					++ idx;
+				}
 			}
 
 			vertexOffset += cmd->vertexes->data.size();
@@ -423,6 +439,10 @@ void MaterialRenderPassHandle::prepareMaterialCommands(gl::MaterialSet * materia
 void MaterialRenderPassHandle::doFinalizeTransfer(gl::MaterialSet * materials, VkCommandBuffer buf,
 		Vector<VkImageMemoryBarrier> &outputImageBarriers, Vector<VkBufferMemoryBarrier> &outputBufferBarriers) {
 	auto b = (Buffer *)materials->getBuffer().get();
+	if (!b) {
+		return;
+	}
+
 	if (auto barrier = b->getPendingBarrier()) {
 		outputBufferBarriers.emplace_back(*barrier);
 		b->dropPendingBarrier();

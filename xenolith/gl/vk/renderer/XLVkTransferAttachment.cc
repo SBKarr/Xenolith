@@ -304,10 +304,10 @@ bool TransferResource::compile() {
 		Rc<Image> img;
 		if (it.dedicated) {
 			auto dedicated = Rc<DeviceMemory>::create(*_alloc->getDevice(), it.dedicated);
-			img = Rc<Image>::create(*_alloc->getDevice(), it.image, *it.data, move(dedicated));
+			img = Rc<Image>::create(*_alloc->getDevice(), it.image, *it.data, move(dedicated), Rc<gl::ImageAtlas>(it.data->atlas));
 			it.dedicated = VK_NULL_HANDLE;
 		} else {
-			img = Rc<Image>::create(*_alloc->getDevice(), it.image, *it.data, Rc<DeviceMemory>(mem));
+			img = Rc<Image>::create(*_alloc->getDevice(), it.image, *it.data, Rc<DeviceMemory>(mem), Rc<gl::ImageAtlas>(it.data->atlas));
 		}
 		if (it.barrier) {
 			img->setPendingBarrier(it.barrier.value());

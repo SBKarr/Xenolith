@@ -24,6 +24,7 @@
 #define XENOLITH_FEATURES_STORAGE_XLSTORAGESERVER_H_
 
 #include "XLDefine.h"
+#include "XLEventHeader.h"
 #include "STStorageScheme.h"
 
 namespace stappler::xenolith::storage {
@@ -74,11 +75,22 @@ public:
 
 	class Builder;
 
+	struct ServerData;
+
 	using Scheme = db::Scheme;
 
 	virtual ~Server();
 
-	virtual bool init(Application *, StringView, const data::Value &params, const Callback<bool(Builder &)> &);
+	virtual bool init(Application *, const data::Value &params, const Callback<bool(Builder &)> &);
+
+	// get value for key
+	bool get(CoderSource, DataCallback &&);
+
+	// set value for key, optionally returns previous
+	bool set(CoderSource, data::Value &&, DataCallback && = nullptr);
+
+	// remove value for key, optionally returns previous
+	bool clear(CoderSource, DataCallback && = nullptr);
 
 	bool get(const Scheme &, DataCallback &&, uint64_t oid, db::UpdateFlags = db::UpdateFlags::None) const;
 	bool get(const Scheme &, DataCallback &&, StringView alias, db::UpdateFlags = db::UpdateFlags::None) const;
@@ -138,8 +150,6 @@ public:
 	Application *getApplication() const;
 
 protected:
-	struct ServerData;
-
 	bool get(const Scheme &, DataCallback &&, uint64_t oid,
 			Vector<const db::Field *> &&fields, db::UpdateFlags = db::UpdateFlags::None) const;
 	bool get(const Scheme &, DataCallback &&, StringView alias,
@@ -152,9 +162,6 @@ protected:
 
 class Server::Builder final {
 public:
-	Builder(Application *, StringView, const data::Value &params);
-	~Builder();
-
 	template <typename Component>
 	auto addComponent(Component *c) -> Component * {
 		addComponentWithName(c->getName(), c);
@@ -166,9 +173,25 @@ public:
 protected:
 	friend class Server;
 
+	Builder(Application *, const data::Value &params);
+	~Builder();
+
 	void addComponentWithName(const StringView &name, ServerComponent *comp);
 
 	ServerData *_data = nullptr;
+};
+
+class StorageRoot : public db::StorageRoot {
+public:
+	static EventHeader onBroadcast;
+
+	virtual void scheduleAyncDbTask(const db::mem::Callback<db::mem::Function<void(const db::Transaction &)>(db::mem::pool_t *)> &setupCb) override;
+	virtual db::mem::String getDocuemntRoot() const override;
+	virtual const db::Scheme *getFileScheme() const override;
+	virtual const db::Scheme *getUserScheme() const override;
+
+	virtual void onLocalBroadcast(const db::mem::Value &) override;
+	virtual void onStorageTransaction(db::Transaction &) override;
 };
 
 }

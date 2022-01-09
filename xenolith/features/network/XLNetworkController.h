@@ -49,8 +49,8 @@ protected:
 	bool onComplete(const Rc<Handle> &);
 
 	virtual void threadInit() override;
+	virtual void threadDispose() override;
 	virtual bool worker() override;
-	void cancel();
 
 	virtual void *getSharegroup(StringView);
 
@@ -61,11 +61,12 @@ protected:
 	void *_handle = nullptr;
 	std::thread _thread;
 
-	Mutex _mutex;
+	Mutex _mutexQueue;
+	Mutex _mutexFree;
 	std::atomic_flag _shouldQuit;
 	Map<void *, Pair<Rc<Handle>, NetworkHandle::Context>> _handles;
 	Map<String, void *> _sharegroups;
-	Vector<Rc<Handle>> _pending;
+	memory::PriorityQueue<Rc<Handle>> _pending;
 	Bytes _signKey;
 };
 

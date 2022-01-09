@@ -80,12 +80,13 @@ static void AppScene_makeRenderQueue(gl::RenderQueue::Builder &builder, Extent2 
 
 	// Material input attachment - per-scene list of materials
 	auto materialInput = Rc<vk::MaterialVertexAttachment>::create("MaterialInput",
-			gl::BufferInfo(gl::BufferUsage::StorageBuffer),
+		gl::BufferInfo(gl::BufferUsage::StorageBuffer)/*,
 
-			// ... with predefined list of materials
-			Vector<Rc<gl::Material>>({
-				Rc<gl::Material>::create(materialPipeline, initImage)
-	}));
+		// ... with predefined list of materials
+		Vector<Rc<gl::Material>>({
+			Rc<gl::Material>::create(materialPipeline, initImage)
+		})*/
+	);
 
 	// Vertex input attachment - per-frame vertex list
 	auto vertexInput = Rc<vk::VertexMaterialAttachment>::create("VertexInput",

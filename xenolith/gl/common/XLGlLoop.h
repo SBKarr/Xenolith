@@ -34,6 +34,8 @@ struct PresentationData;
 
 class Loop : public thread::ThreadHandlerInterface {
 public:
+	static constexpr uint32_t LoopThreadId = 2;
+
 	enum class EventName {
 		Update, // force-update
 		SwapChainDeprecated, // swapchain was deprecated by view
@@ -41,6 +43,7 @@ public:
 		SwapChainForceRecreate, // force engine to recreate swapchain with best params
 		FrameUpdate,
 		FrameSubmitted,
+		FrameInvalidated,
 		FrameTimeoutPassed,
 		UpdateFrameInterval, // view wants us to update frame interval
 		CompileResource,
@@ -49,7 +52,6 @@ public:
 	};
 
 	struct Event final {
-
 		Event(EventName event, Rc<Ref> &&data, data::Value &&value, Function<void(bool)> &&cb = nullptr)
 		: event(event), data(move(data)), value(move(value)), callback(cb) { }
 

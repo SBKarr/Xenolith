@@ -93,7 +93,7 @@ public:
 		VkMemoryType type;
 		uint64_t min = 2; // in PageSize
 		uint64_t last = 0; // largest used index into free
-		uint64_t max = 0; // Pages to preserve, 0 - do not store preserve
+		uint64_t max = 0; // Pages to preserve, 0 - do not preserve
 		uint64_t current = 0; // current allocated size in BOUNDARY_SIZE
 		std::array<Vector<MemNode>, MaxIndex> buf;
 

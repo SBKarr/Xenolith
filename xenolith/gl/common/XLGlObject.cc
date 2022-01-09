@@ -56,6 +56,35 @@ Object::~Object() {
 
 static std::atomic<uint64_t> s_ImageViewCurrentIndex = 1;
 
+bool ImageAtlas::init(size_t count) {
+	_names.reserve(count);
+	_objects.reserve(count);
+	return true;
+}
+
+Vec2 ImageAtlas::getObjectByName(uint32_t id) const {
+	auto it = _names.find(id);
+	if (it != _names.end()) {
+		if (it->second < _objects.size()) {
+			return _objects[it->second];
+		}
+	}
+	return Vec2();
+}
+
+Vec2 ImageAtlas::getObjectByOrder(uint32_t id) const {
+	if (id < _objects.size()) {
+		return _objects[id];
+	}
+	return Vec2();
+}
+
+void ImageAtlas::addObject(uint32_t idx, Vec2 obj) {
+	_objects.emplace_back(obj);
+	auto num = _objects.size() - 1;
+	_names.emplace(idx, num);
+}
+
 bool ImageObject::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr) {
 	if (Object::init(dev, cb, type, ptr)) {
 		_index = s_ImageViewCurrentIndex.fetch_add(1);

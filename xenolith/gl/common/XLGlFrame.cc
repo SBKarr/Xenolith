@@ -345,7 +345,13 @@ void FrameHandle::invalidate() {
 			auto linkId = retain();
 			XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] frame invalidated");
 			_valid = false;
-			_device->invalidateFrame(*this);
+			if (_swapchain) {
+				_swapchain->invalidateFrame(*this);
+				if (!_submitted) {
+					_submitted = true;
+					_loop->pushContextEvent(gl::Loop::EventName::FrameInvalidated, _swapchain);
+				}
+			}
 			releaseResources();
 			_loop->autorelease(this);
 			if (_queue) {

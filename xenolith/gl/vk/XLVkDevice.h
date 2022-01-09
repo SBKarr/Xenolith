@@ -64,6 +64,8 @@ public:
 
 	const DeviceQueueFamily *getQueueFamily(QueueOperations) const;
 
+	const Vector<DeviceQueueFamily> &getQueueFamilies() const;
+
 	// acquire VkQueue handle
 	// - QueueOperations - one of QueueOperations flags, defining capabilities of required queue
 	// - gl::FrameHandle - frame, in which queue will be used

@@ -148,7 +148,18 @@ Application::Application() : _appLog(&log::__xenolith_log) {
 
 	s_application = this;
 
+	db::setStorageRoot(&_storageRoot);
+
 	_networkController = Rc<network::Controller>::alloc(this, "Root");
+
+	auto libpath = filesystem::writablePath("library");
+	filesystem::mkdir(libpath);
+
+	_assetLibrary = Rc<storage::AssetLibrary>::create(this, data::Value({
+		pair("driver", data::Value("sqlite")),
+		pair("dbname", data::Value(toString(libpath, "/assets.v2.db"))),
+		pair("serverName", data::Value("AssetStorage"))
+	}));
 }
 
 Application::~Application() {
@@ -160,12 +171,11 @@ bool Application::onFinishLaunching() {
 
 	thread::ThreadInfo::setMainThread();
 
-	_queue = Rc<thread::TaskQueue>::alloc(
-			math::clamp(uint16_t(std::thread::hardware_concurrency() / 2), uint16_t(2), uint16_t(16)),
-			nullptr, "Main", [this] {
+	_queue = Rc<thread::TaskQueue>::alloc("Main", [this] {
 		_loop->pushEvent(AppEvent::Thread);
 	});
-	if (!_queue->spawnWorkers(ApplicationThreadId, _queue->getName())) {
+	if (!_queue->spawnWorkers(thread::TaskQueue::Flags::None, ApplicationThreadId,
+			math::clamp(uint16_t(std::thread::hardware_concurrency() / 2), uint16_t(2), uint16_t(16)), _queue->getName())) {
 		log::text("Application", "Fail to spawn worker threads");
 		return false;
 	}
@@ -184,12 +194,6 @@ bool Application::onFinishLaunching() {
 }
 
 bool Application::onBuildStorage(storage::Server::Builder &builder) {
-	_assetLibrary = Rc<storage::AssetLibrary>::alloc(this);
-
-	if (_assetLibrary) {
-		builder.addComponent(_assetLibrary.get());
-	}
-
 	return true;
 }
 
@@ -205,6 +209,7 @@ int Application::run(data::Value &&data) {
 	_dbParams = data::Value({
 		pair("driver", data::Value("sqlite")),
 		pair("dbname", data::Value(filesystem::cachesPath("root.sqlite"))),
+		pair("serverName", data::Value("RootStorage"))
 	});
 
 	for (auto &it : data.asDict()) {
@@ -241,7 +246,7 @@ int Application::run(data::Value &&data) {
 		}
 	}
 
-	_storageServer = Rc<storage::Server>::create(this, _data.bundleName, _dbParams, [&] (storage::Server::Builder &builder) {
+	_storageServer = Rc<storage::Server>::create(this, _dbParams, [&] (storage::Server::Builder &builder) {
 		return onBuildStorage(builder);
 	});
 
@@ -433,7 +438,7 @@ void Application::perform(Rc<thread::Task> &&task, bool performFirst) {
 		task->setSuccessful(task->execute());
 		task->onComplete();
 	} else {
-		_queue->performWithPriority(std::move(task), performFirst);
+		_queue->perform(std::move(task), performFirst);
 	}
 }
 

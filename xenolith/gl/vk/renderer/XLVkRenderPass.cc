@@ -87,7 +87,7 @@ void RenderPassHandle::invalidate() {
 bool RenderPassHandle::prepare(gl::FrameHandle &frame) {
 	_device = (Device *)frame.getDevice();
 	_swapchain = (Swapchain *)frame.getSwapchain();
-	_pool = _device->acquireCommandPool(((RenderPass *)_renderPass.get())->getQueueOps());
+	_pool = _device->acquireCommandPool(getQueueOps());
 	if (!_pool) {
 		invalidate();
 		return false;
@@ -172,7 +172,7 @@ void RenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl:
 		});
 	}
 
-	auto ops = ((RenderPass *)_renderPass.get())->getQueueOps();
+	auto ops = getQueueOps();
 
 	_device->acquireQueue(ops, frame, [this] (gl::FrameHandle &frame, const Rc<DeviceQueue> &queue) {
 		_queue = queue;
@@ -236,6 +236,10 @@ void RenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl:
 	}, [this] (gl::FrameHandle &frame) {
 		invalidate();
 	}, this);
+}
+
+QueueOperations RenderPassHandle::getQueueOps() const {
+	return ((RenderPass *)_renderPass.get())->getQueueOps();
 }
 
 bool RenderPassHandle::doPrepareDescriptors(gl::FrameHandle &frame, uint32_t index, bool async) {

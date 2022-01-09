@@ -116,7 +116,7 @@ bool Device::init(const vk::Instance *inst, DeviceInfo && info, const Features &
 			}
 		}
 		count = std::min(count, std::min(info.count, uint32_t(std::thread::hardware_concurrency())));
-		_families.emplace_back(DeviceQueueFamily({ info.index, count, preferred, info.ops}));
+		_families.emplace_back(DeviceQueueFamily({ info.index, count, preferred, info.ops, info.minImageTransferGranularity}));
 	};
 
 	emplaceQueueFamily(info.graphicsFamily, std::thread::hardware_concurrency(), QueueOperations::Graphics);
@@ -255,6 +255,10 @@ const DeviceQueueFamily *Device::getQueueFamily(QueueOperations ops) const {
 		}
 	}
 	return nullptr;
+}
+
+const Vector<DeviceQueueFamily> &Device::getQueueFamilies() const {
+	return _families;
 }
 
 bool Device::acquireQueue(QueueOperations ops, gl::FrameHandle &handle, Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> && acquire,

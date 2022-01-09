@@ -37,6 +37,7 @@ class Pipeline;
 class RenderPassImpl;
 class Framebuffer;
 class ImageObject;
+class ImageAtlas;
 class ImageView;
 class BufferObject;
 class RenderPass;
@@ -273,6 +274,7 @@ struct ImageData : ImageInfo {
 	BytesView data;
 	memory::function<void(const DataCallback &)> callback = nullptr;
 	Rc<ImageObject> image; // GL implementation-dependent object
+	Rc<ImageAtlas> atlas;
 	const Resource *resource = nullptr; // owning resource;
 };
 
@@ -362,6 +364,26 @@ struct VertexSpan {
 struct VertexData : public AttachmentInputData {
 	Vector<Vertex_V4F_V4F_T2F2U> data;
 	Vector<uint32_t> indexes;
+};
+
+struct RenderFontInput : AttachmentInputData {
+	enum Anchor : uint32_t {
+		BottomLeft,
+		TopLeft,
+		TopRight,
+		BottomRight
+	};
+
+	struct FontRequest {
+		uint16_t sourceId;
+		Rc<font::FontFaceObject> face;
+		Vector<char16_t> chars;
+	};
+
+	static uint32_t getObjectId(uint16_t sourceId, char16_t, Anchor);
+	static uint32_t getObjectId(uint32_t, Anchor);
+
+	Vector<FontRequest> requests;
 };
 
 String getBufferFlagsDescription(BufferFlags fmt);

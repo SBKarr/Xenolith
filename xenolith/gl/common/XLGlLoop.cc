@@ -65,12 +65,11 @@ struct PresentationData {
 
 Loop::Loop(Application *app, const Rc<Device> &dev)
 : _application(app), _device(dev) {
-	_queue = Rc<thread::TaskQueue>::alloc(
-			math::clamp(uint16_t(std::thread::hardware_concurrency()), uint16_t(4), uint16_t(16)),
-			nullptr, "Gl::Loop::Queue", [this] {
+	_queue = Rc<thread::TaskQueue>::alloc("Gl::Loop::Queue", [this] {
 		_cond.notify_all();
 	});
-	_queue->spawnWorkers();
+	_queue->spawnWorkers(thread::TaskQueue::Flags::None, LoopThreadId,
+			math::clamp(uint16_t(std::thread::hardware_concurrency()), uint16_t(4), uint16_t(16)));
 }
 
 Loop::~Loop() {
@@ -181,6 +180,7 @@ bool Loop::worker() {
 					}
 					break;
 				case EventName::FrameSubmitted:
+				case EventName::FrameInvalidated:
 					if (auto s = (Swapchain *)it->data.get()) {
 						if (s->isResetRequired()) {
 							pushEvent(EventName::SwapChainForceRecreate, s);

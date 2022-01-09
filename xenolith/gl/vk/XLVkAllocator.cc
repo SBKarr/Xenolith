@@ -330,7 +330,7 @@ Allocator::MemNode Allocator::alloc(MemType *type, uint64_t in_size, bool persis
 			auto node = ref->back();
 			ref->pop_back();
 
-			type->current += node.index + 1;
+			type->current += node.index + (type->min - 1);
 			if (type->current > type->max) {
 				type->current = type->max;
 			}
@@ -361,7 +361,7 @@ Allocator::MemNode Allocator::alloc(MemType *type, uint64_t in_size, bool persis
 		if (it != ref.end()) {
 			MemNode node = *it;
 			type->buf[0].erase(type->buf[0].begin() + (it - ref.begin()));
-			type->current += node.index + 1;
+			type->current += node.index + (type->min - 1);
 			if (type->current > type->max) {
 				type->current = type->max;
 			}
@@ -428,7 +428,7 @@ void Allocator::free(MemType *type, SpanView<MemNode> nodes) {
 		uint64_t index = node.index;
 
 		// do not store large allocations
-		if (max_free_index != maxOf<uint64_t>() && index + 1 > current_free_index) {
+		if (max_free_index != maxOf<uint64_t>() && index + (type->min - 1) > current_free_index) {
 			freelist.emplace_back(node);
 		} else if (index < MaxIndex) {
 			/* Add the node to the appropriate 'size' bucket.  Adjust
@@ -437,8 +437,8 @@ void Allocator::free(MemType *type, SpanView<MemNode> nodes) {
 				max_index = index;
 			}
 			type->buf[index].emplace_back(node);
-			if (current_free_index >= index + 1) {
-				current_free_index -= index + 1;
+			if (current_free_index >= index + (type->min - 1)) {
+				current_free_index -= index + (type->min - 1);
 			} else {
 				current_free_index = 0;
 			}
@@ -447,8 +447,8 @@ void Allocator::free(MemType *type, SpanView<MemNode> nodes) {
 			 * just add it to the sink (at index 0).
 			 */
 			type->buf[0].emplace_back(node);
-			if (current_free_index >= index + 1) {
-				current_free_index -= index + 1;
+			if (current_free_index >= index + (type->min - 1)) {
+				current_free_index -= index + (type->min - 1);
 			} else {
 				current_free_index = 0;
 			}

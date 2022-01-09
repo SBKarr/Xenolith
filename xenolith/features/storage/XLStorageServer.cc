@@ -27,35 +27,45 @@
 
 namespace stappler::xenolith::storage {
 
+static thread_local Server::ServerData *tl_currentServer = nullptr;
+
 struct Server::ServerData : public thread::ThreadHandlerInterface {
 	using TaskCallback = Function<bool(const Server &, const db::Transaction &)>;
 
-	memory::pool_t *serverPool;
-	memory::pool_t *threadPool;
-	StringView name;
-	Application *application;
+	memory::pool_t *serverPool = nullptr;
+	memory::pool_t *threadPool = nullptr;
+	Application *application = nullptr;
 	db::mem::Map<db::mem::String, ServerComponent *> components;
 	db::mem::Map<std::type_index, ServerComponent *> typedComponents;
 	db::mem::Map<StringView, const Scheme *> schemes;
 	db::mem::Map<StringView, StringView> params;
 
+	StringView serverName;
 	std::thread thread;
 	std::condition_variable condition;
 	std::atomic_flag shouldQuit;
-	Mutex mutex;
-	Vector<TaskCallback> queue;
-	db::sql::Driver *driver;
+	Mutex mutexQueue;
+	Mutex mutexFree;
+	memory::PriorityQueue<TaskCallback> queue;
+	db::sql::Driver *driver = nullptr;
 	db::sql::Driver::Handle handle;
-	Server *server;
+	Server *server = nullptr;
 
+	db::mem::Vector<db::mem::Function<void(const db::Transaction &)>> *asyncTasks = nullptr;
+
+	ServerData();
 	virtual ~ServerData();
 
-	void dispose();
 	bool init();
 	bool execute(const TaskCallback &);
 
 	virtual void threadInit() override;
 	virtual bool worker() override;
+	virtual void threadDispose() override;
+
+	void onStorageTransaction(db::Transaction &);
+
+	void addAsyncTask(const db::mem::Callback<db::mem::Function<void(const db::Transaction &)>(db::mem::pool_t *)> &setupCb);
 };
 
 ServerComponent::ServerComponent(StringView name)
@@ -65,7 +75,9 @@ void ServerComponent::onChildInit(Server &serv) {
 	_server = &serv;
 }
 void ServerComponent::onStorageInit(Server &, const db::Adapter &) { }
+void ServerComponent::onStorageDisposed(Server &, const db::Adapter &) { }
 void ServerComponent::onComponentLoaded() { }
+void ServerComponent::onComponentDisposed() { }
 void ServerComponent::onStorageTransaction(db::Transaction &) { }
 void ServerComponent::onHeartbeat(Server &) { }
 
@@ -80,8 +92,8 @@ Server::~Server() {
 	}
 }
 
-bool Server::init(Application *app, StringView name, const data::Value &params, const Callback<bool(Builder &)> &cb) {
-	auto b = Builder(app, name, params);
+bool Server::init(Application *app, const data::Value &params, const Callback<bool(Builder &)> &cb) {
+	auto b = Builder(app, params);
 	memory::pool::push(b._data->serverPool);
 
 	auto ret = cb(b);
@@ -97,6 +109,62 @@ bool Server::init(Application *app, StringView name, const data::Value &params, 
 		return true;
 	}
 	return false;
+}
+
+bool Server::get(CoderSource key, DataCallback &&cb) {
+	if (!cb) {
+		return false;
+	}
+
+	auto p = new DataCallback(move(cb));
+	return perform([this, p, key = key.view().bytes()] (const Server &serv, const db::Transaction &t) {
+		auto d = t.getAdapter().get(key);
+		_data->application->performOnMainThread([p, ret = data::Value(d)] {
+			(*p)(ret);
+			delete p;
+		});
+		return true;
+	});
+}
+
+bool Server::set(CoderSource key, data::Value &&data, DataCallback &&cb) {
+	if (cb) {
+		auto p = new DataCallback(move(cb));
+		return perform([this, p, key = key.view().bytes(), data = move(data)] (const Server &serv, const db::Transaction &t) {
+			auto d = t.getAdapter().get(key);
+			t.getAdapter().set(key, data);
+			_data->application->performOnMainThread([p, ret = data::Value(d)] {
+				(*p)(ret);
+				delete p;
+			});
+			return true;
+		});
+	} else {
+		return perform([this, key = key.view().bytes(), data = move(data)] (const Server &serv, const db::Transaction &t) {
+			t.getAdapter().set(key, data);
+			return true;
+		});
+	}
+}
+
+bool Server::clear(CoderSource key, DataCallback &&cb) {
+	if (cb) {
+		auto p = new DataCallback(move(cb));
+		return perform([this, p, key = key.view().bytes()] (const Server &serv, const db::Transaction &t) {
+			auto d = t.getAdapter().get(key);
+			t.getAdapter().clear(key);
+			_data->application->performOnMainThread([p, ret = data::Value(d)] {
+				(*p)(ret);
+				delete p;
+			});
+			return true;
+		});
+	} else {
+		return perform([this, key = key.view().bytes()] (const Server &serv, const db::Transaction &t) {
+			t.getAdapter().clear(key);
+			return true;
+		});
+	}
 }
 
 bool Server::get(const Scheme &scheme, DataCallback &&cb, uint64_t oid, db::UpdateFlags flags) const {
@@ -496,9 +564,7 @@ bool Server::touch(const Scheme &scheme, const data::Value & obj) const {
 }
 
 bool Server::perform(Function<bool(const Server &, const db::Transaction &)> &&cb) const {
-	_data->mutex.lock();
-	_data->queue.emplace_back(move(cb));
-	_data->mutex.unlock();
+	_data->queue.push(0, false, move(cb));
 	_data->condition.notify_one();
 	return true;
 }
@@ -552,7 +618,7 @@ void Server::initComponents() {
 	}
 }
 
-Server::Builder::Builder(Application *app, StringView name, const data::Value &params) {
+Server::Builder::Builder(Application *app, const data::Value &params) {
 	auto pool = memory::pool::create();
 
 	memory::pool::context ctx(pool);
@@ -560,15 +626,16 @@ Server::Builder::Builder(Application *app, StringView name, const data::Value &p
 
 	_data = new (bytes) ServerData;
 	_data->serverPool = pool;
-	_data->name = name.pdup(pool);
 	_data->application = app;
-	_data->shouldQuit.clear();
+	_data->shouldQuit.test_and_set();
 
 	StringView driver;
 
 	for (auto &it : params.asDict()) {
 		if (it.first == "driver") {
 			driver = StringView(it.second.getString());
+		} else if (it.first == "serverName") {
+			_data->serverName = StringView(it.second.getString()).pdup(pool);
 		} else {
 			_data->params.emplace(StringView(it.first).pdup(pool), StringView(it.second.getString()).pdup(pool));
 		}
@@ -602,6 +669,11 @@ void Server::Builder::addComponentWithName(const StringView &name, ServerCompone
 	}
 }
 
+Server::ServerData::ServerData() {
+	queue.setQueueLocking(mutexQueue);
+	queue.setFreeLocking(mutexFree);
+}
+
 Server::ServerData::~ServerData() {
 	shouldQuit.clear();
 	condition.notify_all();
@@ -616,23 +688,6 @@ Server::ServerData::~ServerData() {
 	memory::pool::destroy(serverPool);
 }
 
-void Server::ServerData::dispose() {
-	memory::pool::push(threadPool);
-
-	if (!driver->isValid(handle)) {
-		driver->performWithStorage(handle, [&] (const db::Adapter &adapter) {
-			for (auto &it : components) {
-				it.second->onStorageDisposed(*server, adapter);
-			}
-		});
-	}
-
-	memory::pool::pop();
-
-	memory::pool::destroy(threadPool);
-	memory::pool::terminate();
-}
-
 bool Server::ServerData::init() {
 	thread = StdThread(ThreadHandlerInterface::workerThread, this, nullptr);
 	return true;
@@ -640,10 +695,6 @@ bool Server::ServerData::init() {
 
 bool Server::ServerData::execute(const TaskCallback &task) {
 	bool ret = false;
-
-	memory::pool::push(serverPool);
-	handle = driver->connect(params);
-	memory::pool::pop();
 
 	memory::pool::push(threadPool);
 
@@ -657,12 +708,31 @@ bool Server::ServerData::execute(const TaskCallback &task) {
 		});
 	});
 
+	while (asyncTasks && driver->isValid(handle)) {
+		auto tmp = asyncTasks;
+		asyncTasks = nullptr;
+
+		driver->performWithStorage(handle, [&] (const db::Adapter &adapter) {
+			adapter.performInTransaction([&] {
+				if (auto t = db::Transaction::acquire(adapter)) {
+					for (auto &it : *tmp) {
+						it(t);
+					}
+					t.release();
+				}
+				return ret;
+			});
+		});
+	}
+
 	memory::pool::pop();
 	memory::pool::clear(threadPool);
 	return ret;
 }
 
 void Server::ServerData::threadInit() {
+	tl_currentServer = this;
+
 	memory::pool::initialize();
 	memory::pool::push(serverPool);
 	handle = driver->connect(params);
@@ -688,26 +758,29 @@ void Server::ServerData::threadInit() {
 
 	memory::pool::pop();
 	memory::pool::clear(threadPool);
+
+	if (!serverName.empty()) {
+		thread::ThreadInfo::setThreadInfo(serverName);
+	}
+
+	tl_currentServer = nullptr;
 }
 
 bool Server::ServerData::worker() {
 	if (!shouldQuit.test_and_set()) {
-		dispose();
 		return false;
 	}
 
 	TaskCallback task;
 	do {
-		std::unique_lock<std::mutex> lock(mutex);
-		if (!queue.empty()) {
-			task = std::move(queue.front());
-			queue.erase(queue.begin());
-		}
+		queue.pop_direct([&] (memory::PriorityQueue<TaskCallback>::PriorityType, TaskCallback &&cb) {
+			task = move(cb);
+		});
 	} while (0);
 
 	if (!task) {
-		std::unique_lock<std::mutex> lock(mutex);
-		if (!queue.empty()) {
+		std::unique_lock<std::mutex> lock(mutexQueue);
+		if (!queue.empty(lock)) {
 			return true;
 		}
 		condition.wait(lock);
@@ -715,12 +788,71 @@ bool Server::ServerData::worker() {
 	}
 
 	if (!driver->isValid(handle)) {
-		dispose();
 		return false;
 	}
 
 	execute(task);
 	return true;
+}
+
+void Server::ServerData::threadDispose() {
+	memory::pool::push(threadPool);
+
+	if (driver->isValid(handle)) {
+		driver->performWithStorage(handle, [&] (const db::Adapter &adapter) {
+			for (auto &it : components) {
+				it.second->onStorageDisposed(*server, adapter);
+			}
+		});
+	}
+
+	memory::pool::pop();
+
+	memory::pool::destroy(threadPool);
+	memory::pool::terminate();
+}
+
+void Server::ServerData::onStorageTransaction(db::Transaction &t) {
+	for (auto &it : components) {
+		it.second->onStorageTransaction(t);
+	}
+}
+
+void Server::ServerData::addAsyncTask(const db::mem::Callback<db::mem::Function<void(const db::Transaction &)>(db::mem::pool_t *)> &setupCb) {
+	if (!asyncTasks) {
+		asyncTasks = new (threadPool) db::mem::Vector<db::mem::Function<void(const db::Transaction &)>>;
+	}
+	asyncTasks->emplace_back(setupCb(threadPool));
+}
+
+XL_DECLARE_EVENT_CLASS(StorageRoot, onBroadcast)
+
+void StorageRoot::scheduleAyncDbTask(const db::mem::Callback<db::mem::Function<void(const db::Transaction &)>(db::mem::pool_t *)> &setupCb) {
+	if (tl_currentServer) {
+		tl_currentServer->addAsyncTask(setupCb);
+	}
+}
+
+db::mem::String StorageRoot::getDocuemntRoot() const {
+	return StringView(filesystem::writablePath()).str<db::mem::Interface>();
+}
+
+const db::Scheme *StorageRoot::getFileScheme() const {
+	return nullptr;
+}
+
+const db::Scheme *StorageRoot::getUserScheme() const {
+	return nullptr;
+}
+
+void StorageRoot::onLocalBroadcast(const db::mem::Value &val) {
+	onBroadcast(nullptr, data::Value(val));
+}
+
+void StorageRoot::onStorageTransaction(db::Transaction &t) {
+	if (tl_currentServer) {
+		tl_currentServer->onStorageTransaction(t);
+	}
 }
 
 }

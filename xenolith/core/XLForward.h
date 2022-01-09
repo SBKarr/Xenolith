@@ -162,11 +162,17 @@ class Controller;
 
 namespace stappler::xenolith::storage {
 
+class StorageRoot;
 class Server;
 class Asset;
 class AssetLibrary;
 
 }
 
+namespace stappler::xenolith::font {
+
+class FontFaceObject;
+
+}
 
 #endif /* COMPONENTS_XENOLITH_CORE_XLFORWARD_H_ */

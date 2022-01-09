@@ -251,6 +251,7 @@ protected:
 	Rc<gl::Loop> _glLoop;
 	log::CustomLog _appLog;
 
+	storage::StorageRoot _storageRoot;
 	Rc<storage::AssetLibrary> _assetLibrary;
 	Rc<storage::Server> _storageServer;
 	Rc<network::Controller> _networkController;

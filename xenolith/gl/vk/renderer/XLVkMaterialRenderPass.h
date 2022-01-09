@@ -92,6 +92,8 @@ public:
 protected:
 	virtual bool loadVertexes(gl::FrameHandle &, const Rc<gl::CommandList> &);
 
+	virtual bool isGpuTransform() const { return false; }
+
 	Rc<DeviceBuffer> _indexes;
 	Rc<DeviceBuffer> _vertexes;
 	Vector<gl::VertexSpan> _spans;

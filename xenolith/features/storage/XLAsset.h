@@ -32,7 +32,7 @@ namespace stappler::xenolith::storage {
 class Asset;
 class AssetLibrary;
 
-class AssetFile : public Ref {
+/*class AssetFile : public Ref {
 public:
 	~AssetFile();
 
@@ -70,9 +70,9 @@ protected:
 	String _path;
 	String _contentType;
 	String _etag;
-};
+};*/
 
-class Asset : public SyncRWLock {
+class Asset : public data::Subscription {
 public:
 	enum Update : uint8_t {
 		CacheDataUpdated = 2,
@@ -87,12 +87,35 @@ public:
 		Unlocked,
 	};
 
-	using DownloadCallback = Function<bool(network::Handle &)>;
+	struct Data {
+		bool success = false;
+		Time ctime; // creation time
+		Time mtime; // last modification time
+		Time atime; // last access time (if supported)
+		size_t size = 0; // file size
+		uint64_t version = 0; // version id (if available)
 
-public:
+		bool download = false; // is download active for file
+		float progress = 0.0f; // download progress
+
+		bool isFile = true; // is direct file access available (so, path can be opened with filesystem::open)
+		String path;
+	};
+
+	Asset(AssetLibrary *, const db::mem::Value &);
 	virtual ~Asset();
 
-	bool download();
+	// try to read asset data, returns false if no data available
+	// also can fail with callback (.success = false, BytesView()) with no data
+	bool read(Function<void(Data, BytesView)> &&);
+
+	// get info about asset
+	bool info(Function<void(Data)> &&);
+
+	int64_t getId() const { return _id; }
+	StringView getUrl() const { return _url; }
+
+	/*bool download();
 	void clear();
 	void checkFile();
 
@@ -100,18 +123,14 @@ public:
 	bool isDownloadAvailable() const;
 	bool isUpdateAvailable() const;
 
-	void setDownloadCallback(const DownloadCallback &);
-
 	StringView getFilePath() const { return _path; }
 	StringView getCachePath() const { return _cachePath; }
-	StringView getUrl() const { return _url; }
 	StringView getContentType() const { return _contentType; }
 
 	bool isDownloadInProgress() const { return _downloadInProgress; }
 	float getProgress() const { return _progress; }
 
 	uint64_t getMTime() const { return _mtime; }
-	uint64_t getId() const { return _id; }
 	size_t getSize() const { return _size; }
 	StringView getETag() const { return _etag; }
 
@@ -136,22 +155,18 @@ public:
 	bool isStorageDirty() const { return _storageDirty; }
 	void setStorageDirty(bool value) { _storageDirty = value; }
 
-	Rc<AssetFile> cloneFile();
+	// Rc<AssetFile> cloneFile();*/
 
 protected:
 	friend class AssetLibrary;
 
-	Asset(AssetLibrary *, const db::mem::Value &);
-
-	void update(Update);
+	/*void update(Update);
 	bool swapFiles(const StringView &file, const StringView &ct, const StringView &etag, uint64_t mtime, size_t size);
 	void touchWithTime(Time t);
 
 	virtual void onLocked(Lock) override;
 
-	uint64_t _id = 0;
 
-	String _url;
 	String _path;
 	String _cachePath;
 	String _contentType;
@@ -171,10 +186,10 @@ protected:
 	bool _unupdated = false;
 	bool _waitFileSwap = false;
 	bool _downloadInProgress = false;
-	bool _fileUpdate = false;
+	bool _fileUpdate = false;*/
 
-	String _tempPath; // if set - we should swap files on write lock or in destructor
-
+	int64_t _id = 0;
+	String _url;
 	data::Value _data;
 	AssetLibrary *_library = nullptr;
 };

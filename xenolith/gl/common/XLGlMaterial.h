@@ -122,6 +122,8 @@ public:
 	uint32_t getLayoutIndex() const { return _layoutIndex; }
 	void setLayoutIndex(uint32_t);
 
+	const Rc<ImageAtlas> &getAtlas() const { return _atlas; }
+
 protected:
 	friend class MaterialSet;
 
@@ -130,6 +132,7 @@ protected:
 	uint32_t _layoutIndex = 0; // set after compilation
 	const PipelineData *_pipeline;
 	Vector<MaterialImage> _images;
+	Rc<ImageAtlas> _atlas;
 	Bytes _data;
 };
 

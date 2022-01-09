@@ -31,6 +31,9 @@ namespace stappler::xenolith::network {
 Controller::Controller(Application *app, StringView name) : _application(app), _name(name.str()) {
 	_shouldQuit.test_and_set();
 	_thread = StdThread(ThreadHandlerInterface::workerThread, this, nullptr);
+
+	_pending.setQueueLocking(_mutexQueue);
+	_pending.setFreeLocking(_mutexFree);
 }
 
 Controller::~Controller() {
@@ -62,15 +65,35 @@ void Controller::threadInit() {
 	_handle = curl_multi_init();
 }
 
+void Controller::threadDispose() {
+	if (_handle) {
+		for (auto &it : _handles) {
+			curl_multi_remove_handle((CURLM *)_handle, it.first);
+			it.second.second.code = CURLE_FAILED_INIT;
+			it.second.first->finalize(&it.second.second, nullptr);
+			curl_easy_cleanup(it.first);
+		}
+
+		curl_multi_cleanup((CURLM *)_handle);
+
+		for (auto &it : _sharegroups) {
+			curl_share_cleanup((CURLSH *)it.second);
+		}
+
+		_handles.clear();
+		_sharegroups.clear();
+
+		_handle = nullptr;
+	}
+}
+
 bool Controller::worker() {
 	if (!_shouldQuit.test_and_set()) {
-		cancel();
 		return false;
 	}
 
 	do {
-		std::unique_lock<Mutex> lock(_mutex);
-		for (auto &it : _pending) {
+		if (!_pending.pop_direct([&] (memory::PriorityQueue<Rc<Handle>>::PriorityType type, Rc<Handle> &&it) {
 			auto handle = it.get();
 			auto h = curl_easy_init();
 			auto i = _handles.emplace(h, pair(move(it), NetworkHandle::Context())).first;
@@ -101,8 +124,9 @@ bool Controller::worker() {
 			i->second.first->prepare(&i->second.second, nullptr);
 
 			curl_multi_add_handle((CURLM *)_handle, h);
+		})) {
+			break;
 		}
-		_pending.clear();
 	} while (0);
 
 	int running = 0;
@@ -137,7 +161,6 @@ bool Controller::worker() {
 				it->second.first->finalize(&it->second.second, nullptr);
 				if (!onComplete(it->second.first)) {
 					_handles.erase(it);
-					cancel();
 					return false;
 				}
 				_handles.erase(it);
@@ -148,28 +171,6 @@ bool Controller::worker() {
 	} while (msg);
 
 	return true;
-}
-
-void Controller::cancel() {
-	if (_handle) {
-		for (auto &it : _handles) {
-			curl_multi_remove_handle((CURLM *)_handle, it.first);
-			it.second.second.code = CURLE_FAILED_INIT;
-			it.second.first->finalize(&it.second.second, nullptr);
-			curl_easy_cleanup(it.first);
-		}
-
-		curl_multi_cleanup((CURLM *)_handle);
-
-		for (auto &it : _sharegroups) {
-			curl_share_cleanup((CURLSH *)it.second);
-		}
-
-		_handles.clear();
-		_sharegroups.clear();
-
-		_handle = nullptr;
-	}
 }
 
 void *Controller::getSharegroup(StringView name) {
@@ -207,8 +208,7 @@ void Controller::sign(Handle &handle, NetworkHandle::Context &ctx) const {
 }
 
 void Controller::run(const Rc<Handle> &handle) {
-	std::unique_lock<Mutex> lock(_mutex);
-	_pending.emplace_back(handle);
+	_pending.push(0, false, handle);
 	curl_multi_wakeup((CURLM *)_handle);
 }
 

@@ -24,6 +24,17 @@
 
 namespace stappler::xenolith::gl {
 
+uint32_t RenderFontInput::getObjectId(uint16_t sourceId, char16_t ch, Anchor a) {
+	uint32_t ret = ch;
+	ret |= (toInt(a) << (sizeof(char16_t) * 8));
+	ret |= (sourceId << ((sizeof(char16_t) * 8) + 2));
+	return ret;
+}
+
+uint32_t RenderFontInput::getObjectId(uint32_t ret, Anchor a) {
+	return (ret & (~ (3 << (sizeof(char16_t) * 8)))) | toInt(a);
+}
+
 String getBufferFlagsDescription(BufferFlags fmt) {
 	StringStream stream;
 	if ((fmt & BufferFlags::SparceBinding) != BufferFlags::None) { stream << " SparceBinding"; }

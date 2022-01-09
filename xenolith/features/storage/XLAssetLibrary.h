@@ -31,57 +31,62 @@ namespace stappler::xenolith::storage {
 
 class AssetStorage;
 
+class AssetStorageServer : public Server {
+public:
+	virtual bool init(AssetLibrary *, const data::Value &params);
+
+	AssetStorage *getStorage() const { return _storage; }
+
+protected:
+	AssetStorage *_storage = nullptr;
+};
+
 class AssetLibrary : public Ref {
 public:
 	static EventHeader onLoaded;
 
-	struct AssetRequest;
-
-	using AssetCallback = Function<void (Asset *)>;
-
-	using AssetVec = Vector<Rc<Asset>>;
-	using AssetVecCallback = Function<void (const AssetVec &)>;
-
-	using AssetRequestVec = Vector<AssetRequest>;
-	using AssetMultiRequestVec = Vector<Pair<AssetRequestVec, AssetVecCallback>>;
-
-	using DownloadCallback = Asset::DownloadCallback;
-
-	using CallbackVec = Vector<AssetCallback>;
-	using CallbacksList = Map<uint64_t, CallbackVec>;
+	using AssetCallback = Function<void (const Rc<Asset> &)>;
+	using AssetVecCallback = Function<void (const SpanView<Rc<Asset>> &)>;
 
 	struct AssetRequest {
-		AssetCallback callback;
-		uint64_t id;
 		String url;
-		String path;
+		AssetCallback callback;
 		TimeInterval ttl;
-		String cacheDir;
-		DownloadCallback download;
 
-		AssetRequest(const AssetCallback &, const StringView &url, const StringView &path,
-				TimeInterval ttl = TimeInterval(), const StringView &cacheDir = StringView(), const DownloadCallback & = nullptr);
+		AssetRequest(StringView, AssetCallback &&, TimeInterval);
 	};
 
 	static String getTempPath(StringView);
+	static String getAssetUrl(StringView);
 
-	bool init(Application *, storage::Server::Builder &, StringView name);
+	virtual ~AssetLibrary();
+
+	bool init(Application *, const data::Value &dbParams);
 
 	void onComponentLoaded();
 	void onComponentDisposed();
 
 	void setServerDate(const Time &t);
 
-	/* get asset from db, new asset is autoreleased */
-	bool getAsset(const AssetCallback &cb, const StringView &url, const StringView &path,
-			TimeInterval ttl = TimeInterval(), const StringView &cacheDir = StringView(), const DownloadCallback & = nullptr);
+	// acquire single asset with url and ttl
+	// asset can be:
+	// - network asset, url started with some network scheme (`http://`. `https://`)
+	// - application asset, url started with `app://`
+	// - file asset, url started with `/` (absolute path) or '%` (app-relative path)
+	// all others urls converted into app urls
+	bool acquireAsset(StringView url, AssetCallback &&cb, TimeInterval ttl = TimeInterval());
 
-	bool getAssets(const AssetRequestVec &, const AssetVecCallback & = nullptr);
+	// acquire multiple assets with optional single competition callback
+	bool acquireAssets(const SpanView<AssetRequest> &, AssetVecCallback && = nullptr);
 
-	Asset *acquireLiveAsset(const StringView &url, const StringView &path);
+	Application *getApplication() const { return _application; }
+
+	Asset *getLiveAsset(StringView) const;
+	Asset *getLiveAsset(int64_t) const;
+
+	/*
 
 	bool isLoaded() const { return _loaded; }
-	uint64_t getAssetId(const StringView &url, const StringView &path) const;
 
 	bool isLiveAsset(uint64_t) const;
 	bool isLiveAsset(const StringView &url, const StringView &path) const;
@@ -91,63 +96,39 @@ public:
 	void addAssetFile(const StringView &, const StringView &, uint64_t asset, uint64_t ctime);
 	void removeAssetFile(const StringView &);
 
-	void finalize();
+	void finalize();*/
 
 protected:
 	friend class Asset;
 
 	void removeAsset(Asset *);
-	void saveAsset(Asset *);
-	void touchAsset(Asset *);
 
 	network::Handle * downloadAsset(Asset *);
 
-protected:
 	friend class AssetStorage;
 
 	void cleanup();
 
-	void removeDownload(network::AssetHandle *);
+	// void removeDownload(network::AssetHandle *);
 
 	Time getCorrectTime() const;
-	Asset *getLiveAsset(uint64_t id) const;
-	Asset *getLiveAsset(const StringView &, const StringView &) const;
 
-	void onAssetCreated(Asset *);
+	void notifyAssetCallbacks(Rc<Asset> &&);
 
-	void performGetAssets(AssetVec &, const Vector<AssetRequest> &);
-
-	Application *_application = nullptr;
 	bool _loaded = false;
-
-	Map<uint64_t, Asset *> _assets;
-	Map<Asset *, Rc<network::AssetHandle>> _downloads;
-
-	std::mutex _mutex;
-
 	int64_t _dt = 0;
 
-	AssetRequestVec _tmpRequests;
-	AssetMultiRequestVec _tmpMultiRequest;
+	Vector<AssetRequest> _tmpRequests;
+	Vector<Pair<Vector<AssetRequest>, AssetVecCallback>> _tmpMultiRequest;
 
-	CallbacksList _callbacks;
-	AssetStorage *_storage = nullptr;
-};
+	Map<String, Vector<AssetCallback>> _callbacks;
 
-class AssetStorage : public ServerComponent {
-public:
-	AssetStorage(AssetLibrary *, StringView name);
+	Map<StringView, Asset *> _assetsByUrl;
+	Map<uint64_t, Asset *> _assetsById;
+	Map<Asset *, Rc<network::AssetHandle>> _downloads;
 
-	virtual void onStorageInit(storage::Server &, const db::Adapter &) override;
-	virtual void onComponentLoaded() override;
-	virtual void onComponentDisposed() override;
-
-	void cleanup(const db::Transaction &t);
-
-protected:
-	AssetLibrary *_library = nullptr;
-	Scheme _assetsScheme = Scheme("assets");
-	Scheme _stateScheme = Scheme("state");
+	Application *_application = nullptr;
+	Rc<AssetStorageServer> _server;
 };
 
 }
