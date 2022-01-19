@@ -109,7 +109,6 @@ public:
 	// returns true for immediate setup, false if setup job was scheduled
 	virtual bool setup(gl::FrameHandle &) override;
 
-	uint32_t getIndex() const { return _index; }
 	const Rc<SwapchainSync> &getSync() const { return _sync; }
 	Swapchain *getSwapchain() const { return _swapchain; }
 
@@ -118,8 +117,6 @@ public:
 protected:
 	virtual bool acquire(gl::FrameHandle &);
 	virtual void invalidate();
-
-	uint32_t _index = maxOf<uint32_t>();
 
 	Rc<SwapchainSync> _sync;
 	Device * _device = nullptr;

@@ -20,31 +20,47 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_GL_VK_XLVKFRAME_H_
-#define XENOLITH_GL_VK_XLVKFRAME_H_
+#ifndef XENOLITH_GL_VK_RENDERER_XLVKMATERIALCOMPILATIONATTACHMENT_H_
+#define XENOLITH_GL_VK_RENDERER_XLVKMATERIALCOMPILATIONATTACHMENT_H_
 
+#include "XLVkRenderPass.h"
 #include "XLVkAllocator.h"
-#include "XLGlFrame.h"
+#include "XLGlAttachment.h"
+#include "XLGlMaterial.h"
 
 namespace stappler::xenolith::vk {
 
-class FrameHandle : public gl::FrameHandle {
+class MaterialCompilationAttachment;
+
+class MaterialCompiler : public gl::RenderQueue {
 public:
-	virtual ~FrameHandle() { }
+	virtual ~MaterialCompiler();
 
-	bool init(gl::Loop &, gl::Swapchain &swapchain, gl::RenderQueue &, uint32_t gen, bool readyForSubmit = false);
-	bool init(gl::Loop &, gl::RenderQueue &, uint32_t gen);
+	bool init();
 
-	const Rc<DeviceMemoryPool> &getMemPool() const { return _memPool; }
+	bool inProgress(const gl::MaterialAttachment *) const;
+	void setInProgress(const gl::MaterialAttachment *);
+	void dropInProgress(const gl::MaterialAttachment *);
 
-	Rc<SwapchainSync> acquireSwapchainSync();
-	void invalidateSwapchain();
+	bool hasRequest(const gl::MaterialAttachment *) const;
+	void appendRequest(const gl::MaterialAttachment *, Rc<gl::MaterialInputData> &&);
+	Rc<gl::MaterialInputData> popRequest(const gl::MaterialAttachment *);
+	void clearRequests();
+
+	void submitInput(gl::FrameHandle &, Rc<gl::MaterialInputData> &&);
 
 protected:
-	Rc<SwapchainSync> _swapchainSync;
-	Rc<DeviceMemoryPool> _memPool;
+	struct MaterialRequest {
+		Map<gl::MaterialId, Rc<gl::Material>> materials;
+		Set<gl::MaterialId> dynamic;
+		Set<gl::MaterialId> remove;
+	};
+
+	MaterialCompilationAttachment *_attachment = nullptr;
+	Set<const gl::MaterialAttachment *> _inProgress;
+	Map<const gl::MaterialAttachment *, MaterialRequest> _requests;
 };
 
 }
 
-#endif /* XENOLITH_GL_VK_XLVKFRAME_H_ */
+#endif /* XENOLITH_GL_VK_RENDERER_XLVKMATERIALCOMPILATIONATTACHMENT_H_ */

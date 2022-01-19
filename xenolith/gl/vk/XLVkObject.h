@@ -37,6 +37,9 @@ public:
 	VkDeviceMemory getMemory() const { return _memory; }
 
 protected:
+
+	virtual bool isRetainTrackerEnabled() const { return true; }
+
 	VkDeviceMemory _memory = VK_NULL_HANDLE;
 };
 
@@ -44,8 +47,12 @@ class Image : public gl::ImageObject {
 public:
 	virtual ~Image() { }
 
-	bool init(Device &dev, VkImage, const gl::ImageInfo &, Rc<gl::ImageAtlas> && = Rc<gl::ImageAtlas>()); // non-owining image wrapping
-	bool init(Device &dev, VkImage, const gl::ImageInfo &, Rc<DeviceMemory> &&, Rc<gl::ImageAtlas> && = Rc<gl::ImageAtlas>()); // owning image wrapping
+	// non-owining image wrapping
+	bool init(Device &dev, VkImage, const gl::ImageInfo &, Rc<gl::ImageAtlas> && = Rc<gl::ImageAtlas>());
+
+	// owning image wrapping
+	bool init(Device &dev, VkImage, const gl::ImageInfo &, Rc<DeviceMemory> &&, Rc<gl::ImageAtlas> && = Rc<gl::ImageAtlas>());
+	bool init(Device &dev, uint64_t, VkImage, const gl::ImageInfo &, Rc<DeviceMemory> &&, Rc<gl::ImageAtlas> && = Rc<gl::ImageAtlas>());
 
 	VkImage getImage() const { return _image; }
 
@@ -54,6 +61,8 @@ public:
 	void dropPendingBarrier();
 
 protected:
+	virtual bool isRetainTrackerEnabled() const { return true; }
+
 	Rc<DeviceMemory> _memory;
 	VkImage _image = VK_NULL_HANDLE;
 	std::optional<VkImageMemoryBarrier> _barrier;

@@ -112,7 +112,7 @@ void Scene::on2dVertexInput(gl::FrameHandle &frame, const Rc<gl::AttachmentHandl
 			for (auto &it : _pendingMaterials) {
 				auto req = Rc<gl::MaterialInputData>::alloc();
 				req->attachment = it.first;
-				req->materials = move(it.second);
+				req->materialsToAddOrUpdate = move(it.second);
 				frame->getLoop()->compileMaterials(req);
 			}
 			_pendingMaterials.clear();
@@ -140,7 +140,7 @@ uint64_t Scene::getMaterial(const MaterialInfo &info) const {
 	return 0;
 }
 
-uint64_t Scene::acquireMaterial(const MaterialInfo &info, const Vector<const gl::ImageData *> &images) {
+/*uint64_t Scene::acquireMaterial(const MaterialInfo &info, const Vector<const gl::ImageData *> &images) {
 	if (auto a = getAttachmentByType(info.type)) {
 		auto pipeline = getPipelineForMaterial(a, info);
 		if (!pipeline) {
@@ -149,7 +149,7 @@ uint64_t Scene::acquireMaterial(const MaterialInfo &info, const Vector<const gl:
 
 		Vector<gl::MaterialImage> imgs;
 		for (size_t idx = 0; idx < images.size(); ++ idx) {
-			if (images[idx] != 0) {
+			if (images[idx] != nullptr) {
 				gl::MaterialImage image;
 				image.image = images[idx];
 				image.info = getImageViewForMaterial(info, idx, images[idx]);
@@ -159,6 +159,32 @@ uint64_t Scene::acquireMaterial(const MaterialInfo &info, const Vector<const gl:
 			}
 		}
 		if (auto m = Rc<gl::Material>::create(pipeline, move(imgs), getDataForMaterial(a, info))) {
+			auto id = m->getId();
+			addPendingMaterial(a, move(m));
+			addMaterial(info, id);
+			return id;
+		}
+	}
+	return 0;
+}*/
+
+uint64_t Scene::acquireMaterial(const MaterialInfo &info, Vector<gl::MaterialImage> &&images) {
+	if (auto a = getAttachmentByType(info.type)) {
+		auto pipeline = getPipelineForMaterial(a, info);
+		if (!pipeline) {
+			return 0;
+		}
+
+		for (size_t idx = 0; idx < images.size(); ++ idx) {
+			if (images[idx].image != nullptr) {
+				auto &image = images[idx];
+				image.info = getImageViewForMaterial(info, idx, images[idx].image);
+				image.view = nullptr;
+				image.sampler = info.samplers[idx];
+			}
+		}
+
+		if (auto m = Rc<gl::Material>::create(pipeline, move(images), getDataForMaterial(a, info))) {
 			auto id = m->getId();
 			addPendingMaterial(a, move(m));
 			addMaterial(info, id);
@@ -220,10 +246,14 @@ gl::ImageViewInfo Scene::getImageViewForMaterial(const MaterialInfo &info, uint3
 		switch (format) {
 		case gl::PixelFormat::Unknown: break;
 		case gl::PixelFormat::A:
-			ret.r = gl::ComponentMapping::One;
+			ret.r = gl::ComponentMapping::R;
+			ret.g = gl::ComponentMapping::R;
+			ret.b = gl::ComponentMapping::R;
+			ret.a = gl::ComponentMapping::One;
+			/*ret.r = gl::ComponentMapping::One;
 			ret.g = gl::ComponentMapping::One;
 			ret.b = gl::ComponentMapping::One;
-			ret.a = gl::ComponentMapping::R;
+			ret.a = gl::ComponentMapping::R;*/
 			break;
 		case gl::PixelFormat::IA:
 			ret.r = gl::ComponentMapping::B;

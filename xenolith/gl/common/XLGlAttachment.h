@@ -367,6 +367,8 @@ public:
 	// returns true for immediate setup, false if setup job was scheduled
 	virtual bool setup(FrameHandle &);
 
+	virtual void finalize(FrameHandle &, bool successful);
+
 	virtual bool isReady() const { return _ready; }
 	virtual void setReady(bool);
 

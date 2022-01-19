@@ -72,7 +72,7 @@ bool DeviceBuffer::setData(BytesView data, VkDeviceSize offset) {
 	}
 
 	if (_memory.ptr) {
-		mapped = (uint8_t *)_memory.ptr + _memory.offset;
+		mapped = (uint8_t *)_memory.ptr + _memory.offset + offset;
 	} else {
 		if (_pool->getDevice()->getTable()->vkMapMemory(_pool->getDevice()->getDevice(),
 				_memory.mem, _memory.offset + offset, size, 0, &mapped) != VK_SUCCESS) {

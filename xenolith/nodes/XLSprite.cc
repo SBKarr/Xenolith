@@ -143,9 +143,9 @@ MaterialInfo Sprite::getMaterialInfo() const {
 	return ret;
 }
 
-Vector<const gl::ImageData *> Sprite::getMaterialImages() const {
-	Vector<const gl::ImageData *> ret;
-	ret.emplace_back(_texture->getData());
+Vector<gl::MaterialImage> Sprite::getMaterialImages() const {
+	Vector<gl::MaterialImage> ret;
+	ret.emplace_back(_texture->getMaterialImage());
 	return ret;
 }
 

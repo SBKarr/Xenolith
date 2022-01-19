@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -85,7 +85,6 @@ public:
 
 	virtual void buildRequirements(const FrameHandle &, const Vector<Rc<RenderPassHandle>> &, const Vector<Rc<AttachmentHandle>> &);
 
-	virtual bool isSubmitted() const { return _submitted; }
 	virtual RenderPassData *getData() const { return _data; }
 	virtual const Rc<RenderPass> &getRenderPass() const { return _renderPass; }
 
@@ -93,9 +92,18 @@ public:
 	virtual bool isAvailable(const FrameHandle &) const;
 	virtual bool isAsync() const { return _isAsync; }
 
+	virtual bool isSubmitted() const { return _submitted; }
+	virtual void setSubmitted(bool value) { _submitted = value; }
+
+	virtual bool isCompleted() const { return _completed; }
+	virtual void setCompleted(bool value) { _completed = value; }
+
 	// if submit is true - do run + submit in one call
 	virtual bool prepare(FrameHandle &);
-	virtual void submit(FrameHandle &, Function<void(const Rc<RenderPass> &)> &&);
+	virtual void submit(FrameHandle &, Function<void(const Rc<gl::RenderPassHandle> &)> &&);
+
+	// after submit
+	virtual void finalize(FrameHandle &, bool successful);
 
 	virtual AttachmentHandle *getAttachmentHandle(const Attachment *) const;
 
@@ -104,6 +112,7 @@ protected:
 
 	bool _isAsync = false; // async passes can be submitted before previous frame submits all passes
 	bool _submitted = false;
+	bool _completed = false;
 	Rc<RenderPass> _renderPass;
 	RenderPassData *_data = nullptr;
 	Map<const gl::Attachment *, Rc<AttachmentHandle>> _attachments;

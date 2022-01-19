@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -24,8 +24,11 @@
 #define TEST_XENOLITH_SRC_XLTESTAPPDELEGATE_H_
 
 #include "XLApplication.h"
+#include "XLVkRenderFontQueue.h"
 
 namespace stappler::xenolith::app {
+
+class AppScene;
 
 class AppDelegate : public Application {
 public:
@@ -35,8 +38,14 @@ public:
     virtual bool onFinishLaunching() override;
 	virtual bool onMainLoop() override;
 
+	virtual void update(uint64_t dt) override;
+
 protected:
-	void runMainView(Rc<Scene> &&scene);
+	void runMainView(Rc<AppScene> &&scene);
+	void runFontTest();
+
+	Rc<font::FontLibrary> _fontLibrary;
+	Rc<font::FontController> _fontMainController;
 };
 
 }

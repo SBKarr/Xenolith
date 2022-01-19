@@ -55,6 +55,18 @@ bool Image::init(Device &dev, VkImage image, const gl::ImageInfo &info, Rc<Devic
 	}, gl::ObjectType::Image, _image);
 }
 
+bool Image::init(Device &dev, uint64_t idx, VkImage image, const gl::ImageInfo &info, Rc<DeviceMemory> &&mem, Rc<gl::ImageAtlas> &&atlas) {
+	_info = info;
+	_image = image;
+	_atlas = atlas;
+	_memory = move(mem);
+
+	return gl::ImageObject::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+		auto d = ((Device *)dev);
+		d->getTable()->vkDestroyImage(d->getDevice(), (VkImage)ptr, nullptr);
+	}, gl::ObjectType::Image, _image, idx);
+}
+
 void Image::setPendingBarrier(const VkImageMemoryBarrier &barrier) {
 	_barrier = barrier;
 }

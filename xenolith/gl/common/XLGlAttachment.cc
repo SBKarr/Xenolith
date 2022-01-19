@@ -607,6 +607,10 @@ bool AttachmentHandle::setup(FrameHandle &) {
 	return true;
 }
 
+void AttachmentHandle::finalize(FrameHandle &, bool successful) {
+
+}
+
 bool AttachmentHandle::isInput() const {
 	return (_attachment->getUsage() & AttachmentUsage::Input) != AttachmentUsage::None;
 }

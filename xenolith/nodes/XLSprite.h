@@ -50,7 +50,7 @@ public:
 
 protected:
 	virtual MaterialInfo getMaterialInfo() const;
-	virtual Vector<const gl::ImageData *> getMaterialImages() const;
+	virtual Vector<gl::MaterialImage> getMaterialImages() const;
 	virtual void updateColor() override;
 	virtual void updateVertexes();
 

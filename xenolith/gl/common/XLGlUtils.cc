@@ -546,6 +546,14 @@ String ImageInfo::description() const {
 	return stream.str();
 }
 
+ImageData ImageData::make(Rc<ImageObject> &&obj) {
+	ImageData ret;
+	static_cast<gl::ImageInfo &>(ret) = obj->getInfo();
+	ret.image = move(obj);
+	ret.key = StringView(SolidTextureName);
+	return ret;
+}
+
 bool ImageViewInfo::isCompatible(const ImageInfo &info) const {
 	// not perfect, multi-planar format not tracked, bun enough for now
 	if (format != ImageFormat::Undefined && getFormatBlockSize(info.format) != getFormatBlockSize(format)) {

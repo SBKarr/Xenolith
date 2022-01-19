@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -43,6 +43,9 @@ class BufferObject;
 class RenderPass;
 class Resource;
 class CommandList;
+class Material;
+class MaterialAttachment;
+class DynamicImage;
 
 using MaterialId = uint32_t;
 
@@ -249,6 +252,7 @@ struct ImageInfo : NamedMem {
 	void setup(ForceImageUsage value) { usage = value.get(); }
 	void setup(ImageFormat value) { format = value; }
 	void setup(RenderPassType value) { type = value; }
+	void setup(StringView value) { key = value; }
 
 	template <typename T>
 	void define(T && t) {
@@ -271,8 +275,11 @@ struct ImageInfo : NamedMem {
 struct ImageData : ImageInfo {
 	using DataCallback = memory::callback<void(BytesView)>;
 
+	static ImageData make(Rc<ImageObject> &&);
+
 	BytesView data;
-	memory::function<void(const DataCallback &)> callback = nullptr;
+	memory::function<void(const DataCallback &)> memCallback = nullptr;
+	Function<void(const DataCallback &)> stdCallback = nullptr;
 	Rc<ImageObject> image; // GL implementation-dependent object
 	Rc<ImageAtlas> atlas;
 	const Resource *resource = nullptr; // owning resource;
@@ -350,7 +357,9 @@ struct Quad_V3F_C4F_T2F {
 	Vertex_V4F_V4F_T2F2U br;
 };
 
+// dummy class for attachment input, made just to separate inputs from simple refs
 struct AttachmentInputData : public Ref {
+	virtual ~AttachmentInputData() { }
 
 };
 
@@ -366,7 +375,9 @@ struct VertexData : public AttachmentInputData {
 	Vector<uint32_t> indexes;
 };
 
-struct RenderFontInput : AttachmentInputData {
+struct RenderFontInput : public AttachmentInputData {
+	using FontRequest = Pair<Rc<font::FontFaceObject>, Vector<char16_t>>;
+
 	enum Anchor : uint32_t {
 		BottomLeft,
 		TopLeft,
@@ -374,16 +385,12 @@ struct RenderFontInput : AttachmentInputData {
 		BottomRight
 	};
 
-	struct FontRequest {
-		uint16_t sourceId;
-		Rc<font::FontFaceObject> face;
-		Vector<char16_t> chars;
-	};
-
 	static uint32_t getObjectId(uint16_t sourceId, char16_t, Anchor);
 	static uint32_t getObjectId(uint32_t, Anchor);
 
+	Rc<DynamicImage> image;
 	Vector<FontRequest> requests;
+	Function<void(const ImageInfo &, BytesView)> output;
 };
 
 String getBufferFlagsDescription(BufferFlags fmt);

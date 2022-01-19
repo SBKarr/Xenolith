@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -237,13 +237,15 @@ public:
 			p = memory::pool::acquire();
 		}
 
+		XL_ASSERT(p, "Pool should be defined");
+
 		auto now = Time::now().toMicros();
 		this->pool = p;
 		this->free = nullptr;
 		this->count = 0;
 		this->max = INITIAL_MAX;
 		this->seed = (unsigned int)((now >> 32) ^ now ^ (uintptr_t)pool ^ (uintptr_t)this ^ (uintptr_t)&now) - 1;
-		this->array = alloc_array(this, max);
+		this->array = alloc_array(this->pool, max);
 	}
 
 	HashTable(const HashTable &copy, Pool *p = nullptr) {
@@ -251,28 +253,34 @@ public:
 			p = memory::pool::acquire();
 		}
 
+		XL_ASSERT(p, "Pool should be defined");
+
 		this->pool = p;
 		this->free = nullptr;
 		this->count = copy.count;
 		this->max = copy.max;
 		this->seed = copy.seed;
-		this->array = alloc_array(this, copy.max);
+		this->array = this->do_copy(copy.array, copy.max);
+	}
 
-		auto new_vals = (HashEntry<Value> *)memory::pool::palloc(this->pool, sizeof(ValueType) * this->count);
+	HashTable(HashTable &&copy, Pool *p = nullptr) {
+		if (!p) {
+			p = memory::pool::acquire();
+		}
 
-		size_t j = 0;
-		for (size_t i = 0; i <= copy.max; i++) {
-			auto target = &this->array[i];
-			auto orig_entry = copy.array[i];
-			while (orig_entry) {
-				auto new_entry = &new_vals[j++];
-				new_entry->next = nullptr;
-				new_entry->hash = orig_entry->hash;
-				new (new_entry->data.data()) Value(*orig_entry->get());
-				*target = new_entry;
-				target = &new_entry->next;
-				orig_entry = orig_entry->next;
-			}
+		XL_ASSERT(p, "Pool should be defined");
+
+		this->pool = p;
+		this->free = nullptr;
+		this->count = copy.count;
+		this->max = copy.max;
+		this->seed = copy.seed;
+
+		if (p == copy.pool) {
+			this->array = this->do_copy(copy.array, copy.max);
+		} else {
+			this->free = copy.free; copy.free = nullptr;
+			this->array = copy.array; copy.array = nullptr;
 		}
 	}
 
@@ -280,6 +288,51 @@ public:
 		if (count) {
 			clear();
 		}
+
+		if (array) {
+			memory::pool::free(pool, array, (max + 1) * sizeof(ValueType));
+			array = nullptr;
+		}
+	}
+
+	HashTable &operator=(const HashTable &other) {
+		clear();
+
+		if (array) {
+			memory::pool::free(pool, array, (max + 1) * sizeof(ValueType));
+			array = nullptr;
+		}
+
+		this->free = nullptr;
+		this->count = other.count;
+		this->max = other.max;
+		this->seed = other.seed;
+		this->array = this->do_copy(other.array, other.max);
+
+		return *this;
+	}
+
+	HashTable &operator=(HashTable &&other) {
+		clear();
+
+		if (array) {
+			memory::pool::free(pool, array, (max + 1) * sizeof(ValueType));
+			array = nullptr;
+		}
+
+		this->free = nullptr;
+		this->count = other.count;
+		this->max = other.max;
+		this->seed = other.seed;
+
+		if (this->pool == other.pool) {
+			this->array = this->do_copy(other.array, other.max);
+		} else {
+			this->free = other.free; other.free = nullptr;
+			this->array = other.array; other.array = nullptr;
+		}
+
+		return *this;
 	}
 
 	template <typename ... Args>
@@ -405,6 +458,11 @@ public:
 	bool empty() const { return count == 0; }
 
 	void reserve(size_t c) {
+		if (!this->array) {
+			do_allocate_array(math::npot(c) - 1);
+			return;
+		}
+
 		if (c <= this->count) {
 			return;
 		}
@@ -423,6 +481,10 @@ public:
 	}
 
 	void clear() {
+		if (!array) {
+			return;
+		}
+
 		for (size_t i = 0; i <= max; ++ i) {
 			auto v = array[i];
 			while (v) {
@@ -435,10 +497,15 @@ public:
 			}
 			array[i] = nullptr;
 		}
+
 		count = 0;
 	}
 
 	iterator begin() {
+		if (!array) {
+			return end();
+		}
+
 		HashIndex<Value> hi;
 		hi.ht = this;
 		hi.index = 0;
@@ -459,6 +526,10 @@ public:
 	}
 
 	const_iterator begin() const {
+		if (!array) {
+			return end();
+		}
+
 		ConstHashIndex<Value> hi;
 		hi.ht = this;
 		hi.index = 0;
@@ -480,6 +551,10 @@ public:
 	}
 
 	size_t get_cell_count() const {
+		if (!array) {
+			return 0;
+		}
+
 		size_t count = 0;
 		for (size_t i = 0; i <= max; ++ i) {
 			if (array[i]) {
@@ -509,8 +584,8 @@ private:
 		return (ValueType *)memory::pool::palloc(this->pool, sizeof(ValueType));
 	}
 
-	static HashEntry<Value> **alloc_array(HashTable *ht, uint32_t max) {
-		return (ValueType **)memory::pool::calloc(ht->pool, max + 1, sizeof(ValueType));
+	static HashEntry<Value> **alloc_array(memory::pool_t *p, uint32_t max) {
+		return (ValueType **)memory::pool::calloc(p, max + 1, sizeof(ValueType));
 	}
 
 	static void expand_array(HashTable *ht, uint32_t new_max = 0) {
@@ -525,7 +600,7 @@ private:
 			}
 		}
 
-		new_array = alloc_array(ht, new_max);
+		new_array = alloc_array(ht->pool, new_max);
 
 		auto end = ht->end();
 		auto hi = ht->begin();
@@ -535,12 +610,19 @@ private:
 			new_array[i] = hi._self;
 			++ hi;
 		}
+
+		memory::pool::free(ht->pool, ht->array, (ht->max + 1) * sizeof(ValueType));
+
 		ht->array = new_array;
 		ht->max = new_max;
 	}
 
 	template <typename ... Args>
 	ValueType * get_value(ValueType ***bucket, Args &&  ... args) const {
+		if (!this->array) {
+			return nullptr;
+		}
+
 		ValueType **hep, *he;
 		const auto hash = ValueType::getHash(seed, std::forward<Args>(args)...);
 		const auto idx = hash & this->max;
@@ -560,6 +642,10 @@ private:
 
 	template <typename ... Args>
 	Pair<ValueType *, bool> set_value(bool replace, ValueType ***bucket, Args &&  ... args) {
+		if (!this->array) {
+			do_allocate_array(INITIAL_MAX);
+		}
+
 		ValueType **hep, *he;
 		const auto hash = ValueType::getHash(seed, std::forward<Args>(args)...);
 		const auto idx = hash & this->max;
@@ -604,6 +690,35 @@ private:
 			}
 			return pair(he, true);
 		}
+	}
+
+	HashEntry<Value> ** do_copy(HashEntry<Value> **copy_array, uint32_t copy_max) {
+		auto new_array = alloc_array(this->pool, copy_max);
+		auto new_vals = (HashEntry<Value> *)memory::pool::palloc(this->pool, sizeof(ValueType) * this->count);
+
+		size_t j = 0;
+		for (size_t i = 0; i <= copy_max; i++) {
+			auto target = &new_array[i];
+			auto orig_entry = copy_array[i];
+			while (orig_entry) {
+				auto new_entry = &new_vals[j++];
+				new_entry->next = nullptr;
+				new_entry->hash = orig_entry->hash;
+				new (new_entry->data.data()) Value(*orig_entry->get());
+				*target = new_entry;
+				target = &new_entry->next;
+				orig_entry = orig_entry->next;
+			}
+		}
+		return new_array;
+	}
+
+	void do_allocate_array(uint32_t max) {
+		auto now = Time::now().toMicros();
+		this->count = 0;
+		this->max = max;
+		this->seed = (unsigned int)((now >> 32) ^ now ^ (uintptr_t)pool ^ (uintptr_t)this ^ (uintptr_t)&now) - 1;
+		this->array = alloc_array(this->pool, this->max);
 	}
 
 	Pool *pool = nullptr;

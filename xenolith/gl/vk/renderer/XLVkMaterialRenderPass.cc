@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -310,10 +310,11 @@ void MaterialRenderPassHandle::addRequiredAttachment(const gl::Attachment *a, co
 	}
 }
 
-Vector<VkCommandBuffer> MaterialRenderPassHandle::doPrepareCommands(gl::FrameHandle &handle, uint32_t index) {
+Vector<VkCommandBuffer> MaterialRenderPassHandle::doPrepareCommands(gl::FrameHandle &handle) {
 	auto table = _device->getTable();
 	auto buf = _pool->allocBuffer(*_device);
 
+	auto index = (*_sync.swapchainSync.begin())->getImageIndex();
 	auto targetFb = _data->framebuffers[index].cast<Framebuffer>();
 	auto currentExtent = targetFb->getExtent();
 

@@ -59,7 +59,8 @@ public:
 	// dynamically load material
 	// this can be severe less effective then pre-initialized materials,
 	// so, it's preferred to pre-initialize all materials in release builds
-	virtual uint64_t acquireMaterial(const MaterialInfo &, const Vector<const gl::ImageData *> &images);
+	// virtual uint64_t acquireMaterial(const MaterialInfo &, const Vector<const gl::ImageData *> &images);
+	virtual uint64_t acquireMaterial(const MaterialInfo &, Vector<gl::MaterialImage> &&images);
 
 protected:
 	virtual Rc<gl::RenderQueue> makeQueue(gl::RenderQueue::Builder &&);

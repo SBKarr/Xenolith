@@ -171,6 +171,8 @@ class AssetLibrary;
 
 namespace stappler::xenolith::font {
 
+class FontLibrary;
+class FontController;
 class FontFaceObject;
 
 }

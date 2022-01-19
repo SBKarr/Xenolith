@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -29,6 +29,12 @@
 namespace stappler::xenolith::vk {
 
 class Device;
+class SwapchainSync;
+class DeviceBuffer;
+class Swapchain;
+class CommandPool;
+class DeviceQueue;
+class SwapchainAttachmentHandle;
 
 class RenderPass : public gl::RenderPass {
 public:
@@ -62,15 +68,16 @@ public:
 	virtual void invalidate();
 
 	virtual bool prepare(gl::FrameHandle &) override;
-	virtual void submit(gl::FrameHandle &, Function<void(const Rc<gl::RenderPass> &)> &&) override;
+	virtual void submit(gl::FrameHandle &, Function<void(const Rc<gl::RenderPassHandle> &)> &&) override;
+	virtual void finalize(gl::FrameHandle &, bool) override;
 
 	virtual QueueOperations getQueueOps() const;
 
 protected:
 	// if async is true - update descriptors with updateAfterBind flag
 	// 			   false - without updateAfterBindFlag
-	virtual bool doPrepareDescriptors(gl::FrameHandle &, uint32_t index, bool async);
-	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &, uint32_t index);
+	virtual bool doPrepareDescriptors(gl::FrameHandle &, bool async);
+	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &);
 	virtual bool doSubmit(gl::FrameHandle &);
 
 	virtual bool present(gl::FrameHandle &);
@@ -82,7 +89,7 @@ protected:
 	};
 
 	virtual MaterialBuffers updateMaterials(gl::FrameHandle &iframe, const Rc<gl::MaterialSet> &data,
-			const Vector<Rc<gl::Material>> &materials);
+			const Vector<Rc<gl::Material>> &materials, SpanView<gl::MaterialId> dynamicMaterials, SpanView<gl::MaterialId> materialsToRemove);
 
 	virtual Sync makeSyncInfo();
 
@@ -118,7 +125,7 @@ public:
 
 protected:
 	virtual void addRequiredAttachment(const gl::Attachment *, const Rc<gl::AttachmentHandle> &);
-	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &, uint32_t index) override;
+	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &) override;
 	virtual bool doSubmit(gl::FrameHandle &) override;
 
 	VertexBufferAttachmentHandle *_mainBuffer;

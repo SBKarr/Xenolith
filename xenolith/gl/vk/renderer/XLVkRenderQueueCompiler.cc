@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,14 +20,80 @@
  THE SOFTWARE.
  **/
 
-#include "XLVkRenderQueueAttachment.h"
 #include "XLGlFrame.h"
 #include "XLGlRenderQueue.h"
 #include "XLVkPipeline.h"
 #include "XLVkRenderPassImpl.h"
 #include "XLGlRenderQueue.h"
+#include "XLVkRenderQueueCompiler.h"
 
 namespace stappler::xenolith::vk {
+
+class RenderQueueAttachment : public gl::GenericAttachment {
+public:
+	virtual ~RenderQueueAttachment();
+
+	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameHandle &) override;
+};
+
+class RenderQueueAttachmentHandle : public gl::AttachmentHandle {
+public:
+	virtual ~RenderQueueAttachmentHandle();
+
+	virtual bool setup(gl::FrameHandle &handle) override;
+	virtual bool submitInput(gl::FrameHandle &, Rc<gl::AttachmentInputData> &&) override;
+
+	const Rc<gl::RenderQueue> &getRenderQueue() const { return _input->queue; }
+	const Rc<TransferResource> &getTransferResource() const { return _resource; }
+
+protected:
+	void runShaders(gl::FrameHandle &frame);
+	void runPipelines(gl::FrameHandle &frame);
+
+	Device *_device = nullptr;
+	std::atomic<size_t> _programsInQueue = 0;
+	std::atomic<size_t> _pipelinesInQueue = 0;
+	Rc<TransferResource> _resource;
+	Rc<RenderQueueInput> _input;
+};
+
+class RenderQueueRenderPass : public RenderPass {
+public:
+	virtual ~RenderQueueRenderPass();
+
+	virtual bool init(StringView);
+
+	virtual Rc<gl::RenderPassHandle> makeFrameHandle(gl::RenderPassData *, const gl::FrameHandle &) override;
+
+	const RenderQueueAttachment *getAttachment() const {
+		return _attachment;
+	}
+
+protected:
+	virtual void prepare(gl::Device &) override;
+
+	RenderQueueAttachment *_attachment = nullptr;
+};
+
+class RenderQueueRenderPassHandle : public RenderPassHandle {
+public:
+	virtual ~RenderQueueRenderPassHandle();
+
+	virtual bool prepare(gl::FrameHandle &) override;
+	virtual void submit(gl::FrameHandle &, Function<void(const Rc<gl::RenderPassHandle> &)> &&) override;
+
+	virtual void finalize(gl::FrameHandle &, bool successful) override;
+
+protected:
+	virtual void addRequiredAttachment(const gl::Attachment *a, const Rc<gl::AttachmentHandle> &h) override;
+
+	virtual bool prepareMaterials(gl::FrameHandle &frame, VkCommandBuffer buf,
+			const Rc<gl::MaterialAttachment> &attachment, Vector<VkBufferMemoryBarrier> &outputBufferBarriers);
+
+	Rc<TransferResource> _resource;
+	Rc<gl::RenderQueue> _queue;
+	RenderQueueAttachmentHandle *_attachment;
+};
 
 RenderQueueCompiler::~RenderQueueCompiler() { }
 
@@ -36,8 +102,6 @@ bool RenderQueueCompiler::init(Device &dev) {
 
 	auto attachment = Rc<RenderQueueAttachment>::create("RenderQueueAttachment");
 	auto pass = Rc<RenderQueueRenderPass>::create("RenderQueueRenderPass");
-
-	attachment->setInputCallback([] (gl::FrameHandle &frame, const Rc<gl::AttachmentHandle> &a) { });
 
 	builder.addRenderPass(pass);
 	builder.addPassInput(pass, 0, attachment);
@@ -58,6 +122,10 @@ bool RenderQueueCompiler::init(Device &dev) {
 		return true;
 	}
 	return false;
+}
+
+void RenderQueueCompiler::submitInput(gl::FrameHandle &frame, Rc<RenderQueueInput> &&input) {
+	frame.submitInput(_attachment, move(input), true);
 }
 
 RenderQueueAttachment::~RenderQueueAttachment() { }
@@ -123,7 +191,6 @@ void RenderQueueAttachmentHandle::runShaders(gl::FrameHandle &frame) {
 			auto ret = Rc<Shader>::create(*_device, *req);
 			if (!ret) {
 				log::vtext("Gl-Device", "Fail to compile shader program ", req->key);
-				fail();
 			} else {
 				req->program = _device->addProgram(ret);
 				if (_programsInQueue.fetch_sub(1) == 1) {
@@ -140,7 +207,6 @@ void RenderQueueAttachmentHandle::runShaders(gl::FrameHandle &frame) {
 			auto ret = Rc<RenderPassImpl>::create(*_device, *req);
 			if (!ret) {
 				log::vtext("Gl-Device", "Fail to compile render pass ", req->key);
-				fail();
 			} else {
 				req->impl = ret.get();
 				if (_programsInQueue.fetch_sub(1) == 1) {
@@ -172,31 +238,15 @@ void RenderQueueAttachmentHandle::runPipelines(gl::FrameHandle &frame) {
 					auto ret = Rc<Pipeline>::create(*_device, *pipeline, *pass, *_input->queue);
 					if (!ret) {
 						log::vtext("Gl-Device", "Fail to compile pipeline ", pipeline->key);
-						fail();
 						return false;
 					} else {
 						pipeline->pipeline = ret.get();
-						if (_pipelinesInQueue.fetch_sub(1) == 1) {
-							complete();
-						}
 					}
 					return true;
 				}, this);
 			}
 		}
 	}
-
-	if (tasksCount == 0) {
-		complete();
-	}
-}
-
-void RenderQueueAttachmentHandle::fail() {
-
-}
-
-void RenderQueueAttachmentHandle::complete() {
-
 }
 
 RenderQueueRenderPass::~RenderQueueRenderPass() { }
@@ -296,12 +346,18 @@ bool RenderQueueRenderPassHandle::prepare(gl::FrameHandle &frame) {
 	return true;
 }
 
-void RenderQueueRenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl::RenderPass> &)> &&func) {
+void RenderQueueRenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl::RenderPassHandle> &)> &&func) {
 	if (_buffers.empty()) {
-		func(_renderPass);
+		frame.setRenderPassSubmitted(this);
+		func(this);
 	} else {
 		RenderPassHandle::submit(frame, move(func));
 	}
+}
+
+void RenderQueueRenderPassHandle::finalize(gl::FrameHandle &frame, bool successful) {
+	RenderPassHandle::finalize(frame, successful);
+	_attachment->getRenderQueue()->setCompiled(true);
 }
 
 void RenderQueueRenderPassHandle::addRequiredAttachment(const gl::Attachment *a, const Rc<gl::AttachmentHandle> &h) {
@@ -321,7 +377,7 @@ bool RenderQueueRenderPassHandle::prepareMaterials(gl::FrameHandle &iframe, VkCo
 
 	auto data = attachment->allocateSet(*_device);
 
-	auto buffers = updateMaterials(iframe, data, initial);
+	auto buffers = updateMaterials(iframe, data, initial, SpanView<gl::MaterialId>(), SpanView<gl::MaterialId>());
 
 	VkBufferCopy indexesCopy;
 	indexesCopy.srcOffset = 0;
@@ -357,9 +413,15 @@ bool RenderQueueRenderPassHandle::prepareMaterials(gl::FrameHandle &iframe, VkCo
 			buffers.targetBuffer->setPendingBarrier(b);
 		}
 
-		auto dataPtr = data.get();
-		dataPtr->setBuffer(move(buffers.targetBuffer), move(buffers.ordering));
-		attachment->setMaterials(data);
+		auto tmpBuffer = new Rc<Buffer>(move(buffers.targetBuffer));
+		auto tmpOrder = new std::unordered_map<gl::MaterialId, uint32_t>(move(buffers.ordering));
+		iframe.performOnGlThread([attachment, data, tmpBuffer, tmpOrder] (gl::FrameHandle &) {
+			data->setBuffer(move(*tmpBuffer), move(*tmpOrder));
+			attachment->setMaterials(data);
+			delete tmpBuffer;
+			delete tmpOrder;
+		});
+
 		return true;
 	}
 	return false;

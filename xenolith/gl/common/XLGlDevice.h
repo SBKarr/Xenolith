@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -70,16 +70,21 @@ public:
 
 	virtual bool supportsUpdateAfterBind(gl::DescriptorType) const;
 
-	virtual gl::ImageData getEmptyImage() const = 0;
-	virtual gl::ImageData getSolidImage() const = 0;
+	virtual Rc<gl::ImageObject> getEmptyImageObject() const = 0;
+	virtual Rc<gl::ImageObject> getSolidImageObject() const = 0;
 
 protected:
 	friend class Loop;
 
-	virtual void compileResource(thread::TaskQueue &queue, const Rc<Resource> &req, Function<void(bool)> && = nullptr);
+	virtual Rc<gl::FrameHandle> makeFrame(gl::Loop &, gl::Swapchain &swapchain, gl::RenderQueue &, uint32_t gen, bool readyForSubmit = false);
+	virtual Rc<gl::FrameHandle> makeFrame(gl::Loop &, gl::RenderQueue &, uint32_t gen);
+
+	virtual void compileResource(gl::Loop &loop, const Rc<Resource> &req, Function<void(bool)> && = nullptr);
 	virtual void compileRenderQueue(gl::Loop &loop, const Rc<RenderQueue> &req, Function<void(bool)> &&);
 
 	virtual void compileMaterials(gl::Loop &loop, Rc<MaterialInputData> &&);
+
+	virtual void compileImage(gl::Loop &loop, const Rc<DynamicImage> &, Function<void(bool)> &&) = 0;
 
 	virtual void compileSamplers(thread::TaskQueue &q, bool force = true) = 0;
 

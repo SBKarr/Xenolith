@@ -32,4 +32,5 @@ THE SOFTWARE.
 #include "XLAssetLibrary.cc"
 #include "XLAsset.cc"
 
+#include "XLFontLibrary.cc"
 #include "XLFontFace.cc"

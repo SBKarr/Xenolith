@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -40,6 +40,7 @@ struct RenderQueue::QueueData : NamedMem {
 	Function<void()> disableCallback;
 	Rc<Resource> resource;
 	bool compiled = false;
+	uint64_t order = 0;
 
 	void clear() {
 		for (auto &it : programs) {
@@ -484,12 +485,28 @@ Rc<Resource> RenderQueue::getInternalResource() const {
 	return _data->resource;
 }
 
+const memory::vector<Attachment *> &RenderQueue::getInputAttachments() const {
+	return _data->input;
+}
+
+const memory::vector<Attachment *> &RenderQueue::getOutputAttachments() const {
+	return _data->output;
+}
+
+const RenderPassData *RenderQueue::getPass(StringView key) const {
+	return _data->passes.get(key);
+}
+
 const ProgramData *RenderQueue::getProgram(StringView key) const {
 	return _data->programs.get(key);
 }
 
 const PipelineData *RenderQueue::getPipeline(StringView key) const {
 	return _data->pipelines.get(key);
+}
+
+const Attachment *RenderQueue::getAttachment(StringView key) const {
+	return _data->attachments.get(key);
 }
 
 Vector<Rc<Attachment>> RenderQueue::getOutput() const {
@@ -507,6 +524,12 @@ Vector<Rc<Attachment>> RenderQueue::getOutput(AttachmentType t) const {
 			ret.emplace_back(it);
 		}
 	}
+	return ret;
+}
+
+uint64_t RenderQueue::incrementOrder() {
+	auto ret = _data->order;
+	++ _data->order;
 	return ret;
 }
 

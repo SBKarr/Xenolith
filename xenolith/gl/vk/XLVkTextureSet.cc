@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -21,6 +21,7 @@
  **/
 
 #include "XLVkTextureSet.h"
+#include "XLGlDynamicImage.h"
 #include <forward_list>
 
 namespace stappler::xenolith::vk {
@@ -68,11 +69,11 @@ bool TextureSetLayout::init(Device &dev, uint32_t imageLimit) {
 	// create dummy image
 
 	_emptyImage = dev.getAllocator()->spawnPersistent(AllocationUsage::DeviceLocal,
-			gl::ImageInfo(Extent2(1, 1), gl::ImageUsage::Sampled, gl::ImageFormat::R8_UNORM), false);
+			gl::ImageInfo(Extent2(1, 1), gl::ImageUsage::Sampled, gl::ImageFormat::R8_UNORM, EmptyTextureName), false);
 	_emptyImageView = Rc<ImageView>::create(dev, _emptyImage, gl::ImageViewInfo());
 
 	_solidImage = dev.getAllocator()->spawnPersistent(AllocationUsage::DeviceLocal,
-			gl::ImageInfo(Extent2(1, 1), gl::ImageUsage::Sampled, gl::ImageFormat::R8_UNORM), false);
+			gl::ImageInfo(Extent2(1, 1), gl::ImageUsage::Sampled, gl::ImageFormat::R8_UNORM, SolidTextureName), false);
 	_solidImageView = Rc<ImageView>::create(dev, _solidImage, gl::ImageViewInfo());
 
 	return true;
@@ -166,20 +167,108 @@ void TextureSetLayout::initDefault(Device &dev, gl::Loop &loop) {
 	}, [this] (gl::Loop &) { }, this);
 }
 
-gl::ImageData TextureSetLayout::getEmptyImage() const {
-	gl::ImageData ret;
-	static_cast<gl::ImageInfo &>(ret) = _emptyImage->getInfo();
-	ret.image = _emptyImage;
-	ret.key = StringView(EmptyTextureName);
-	return ret;
+Rc<Image> TextureSetLayout::getEmptyImageObject() const {
+	return _emptyImage;
 }
 
-gl::ImageData TextureSetLayout::getSolidImage() const {
-	gl::ImageData ret;
-	static_cast<gl::ImageInfo &>(ret) = _solidImage->getInfo();
-	ret.image = _solidImage;
-	ret.key = StringView(SolidTextureName);
-	return ret;
+Rc<Image> TextureSetLayout::getSolidImageObject() const {
+	return _solidImage;
+}
+
+void TextureSetLayout::compileImage(Device &dev, gl::Loop &loop, const Rc<gl::DynamicImage> &img, Function<void(bool)> &&cb) {
+	auto tmp = new Function<void(bool)>(move(cb));
+	auto image = new Rc<gl::DynamicImage>(img);
+
+	loop.getQueue()->perform([this, tmp, image, loop = &loop, dev = &dev] () {
+		// make transfer buffer
+		Rc<Buffer> transferBuffer;
+		Rc<Image> resultImage;
+
+		(*image)->acquireData([&] (BytesView view) {
+			transferBuffer = dev->getAllocator()->spawnPersistent(AllocationUsage::HostTransitionSource,
+					gl::BufferInfo(gl::ForceBufferUsage(gl::BufferUsage::TransferSrc), gl::RenderPassType::Transfer), view);
+		});
+
+		resultImage = dev->getAllocator()->spawnPersistent(AllocationUsage::DeviceLocal, (*image)->getInfo(), false);
+
+		if (!transferBuffer) {
+			loop->performOnThread([tmp, image] {
+				(*tmp)(false);
+				delete image;
+				delete tmp;
+			}, loop);
+			return;
+		}
+
+		loop->performOnThread([this, tmp, image, transferBuffer = move(transferBuffer), resultImage = move(resultImage), dev, loop] {
+			dev->acquireQueue(QueueOperations::Transfer, *loop, [this, tmp, image, transferBuffer, resultImage] (gl::Loop &loop, const Rc<DeviceQueue> &queue) {
+				auto device = (Device *)loop.getDevice().get();
+				auto fence = device->acquireFence(0);
+				auto pool = device->acquireCommandPool(QueueOperations::Transfer);
+
+				fence->addRelease([dev = device, pool, transferBuffer] {
+					dev->releaseCommandPool(Rc<CommandPool>(pool));
+					transferBuffer->dropPendingBarrier(); // hold reference while commands is active
+				});
+
+				loop.getQueue()->perform(Rc<thread::Task>::create([this, loop = &loop, pool, queue, fence, transferBuffer, resultImage] (const thread::Task &) -> bool {
+					auto device = (Device *)loop->getDevice().get();
+					auto table = device->getTable();
+					auto buf = pool->allocBuffer(*device);
+
+					VkCommandBufferBeginInfo beginInfo { };
+					beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+					beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+					beginInfo.pInheritanceInfo = nullptr;
+
+					if (table->vkBeginCommandBuffer(buf, &beginInfo) != VK_SUCCESS) {
+						return false;
+					}
+
+					writeImageTransfer(*device, buf, pool->getFamilyIdx(), transferBuffer, resultImage);
+
+					if (table->vkEndCommandBuffer(buf) != VK_SUCCESS) {
+						return false;
+					}
+
+					VkSubmitInfo submitInfo{};
+					submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+					submitInfo.pNext = nullptr;
+					submitInfo.waitSemaphoreCount = 0;
+					submitInfo.pWaitSemaphores = nullptr;
+					submitInfo.pWaitDstStageMask = nullptr;
+					submitInfo.commandBufferCount = 1;
+					submitInfo.pCommandBuffers = &buf;
+					submitInfo.signalSemaphoreCount = 0;
+					submitInfo.pSignalSemaphores = nullptr;
+
+					if (table->vkQueueSubmit(queue->getQueue(), 1, &submitInfo, fence->getFence()) == VK_SUCCESS) {
+						return true;
+					}
+					return false;
+				}, [tmp, image, loop = &loop, fence, queue, resultImage] (const thread::Task &, bool success) {
+					auto device = (Device *)loop->getDevice().get();
+					if (queue) {
+						device->releaseQueue(Rc<DeviceQueue>(queue));
+					}
+					if (success) {
+						(*image)->setImage(resultImage.get());
+						(*tmp)(true);
+						device->scheduleFence(*loop, Rc<Fence>(fence));
+					} else {
+						(*tmp)(false);
+						device->releaseFence(Rc<Fence>(fence));
+					}
+					delete image;
+					delete tmp;
+				}, &loop));
+			}, [tmp, image] (gl::Loop &) {
+				(*tmp)(false);
+				delete image;
+				delete tmp;
+			}, loop);
+		}, loop);
+	}, &loop);
 }
 
 void TextureSetLayout::writeDefaults(Device &dev, VkCommandBuffer buf) {
@@ -232,7 +321,6 @@ void TextureSetLayout::writeDefaults(Device &dev, VkCommandBuffer buf) {
 	dev.getTable()->vkCmdClearColorImage(buf, _solidImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			&clearColorSolid, 1, &range);
 
-
 	std::array<VkImageMemoryBarrier, 2> outImageBarriers;
 	outImageBarriers[0] = VkImageMemoryBarrier({
 		VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
@@ -253,6 +341,65 @@ void TextureSetLayout::writeDefaults(Device &dev, VkCommandBuffer buf) {
 			0, nullptr, // memory
 			0, nullptr, // buffers
 			outImageBarriers.size(), outImageBarriers.data());
+}
+
+void TextureSetLayout::writeImageTransfer(Device &dev, VkCommandBuffer buf, uint32_t qidx, const Rc<Buffer> &buffer, const Rc<Image> &image) {
+	VkImageSubresourceRange range;
+	range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	range.baseArrayLayer = 0;
+	range.layerCount = 1;
+	range.baseMipLevel = 0;
+	range.levelCount = 1;
+
+	VkImageMemoryBarrier inImageBarrier({
+		VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
+		0, VK_ACCESS_TRANSFER_WRITE_BIT,
+		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+		image->getImage(), range
+	});
+
+	dev.getTable()->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+			0, nullptr, // memory
+			0, nullptr, // buffers
+			1, &inImageBarrier);
+
+	auto sourceFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	auto targetFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+	if (image->getInfo().type != gl::RenderPassType::Generic) {
+		auto q = dev.getQueueFamily(image->getInfo().type);
+		if (qidx != q->index) {
+			sourceFamilyIndex = qidx;
+			targetFamilyIndex = q->index;
+		}
+	}
+
+	auto &extent = image->getInfo().extent;
+	VkImageSubresourceLayers copyLayers({ VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 });
+	VkBufferImageCopy copyRegion{0, 0, 0, copyLayers, VkOffset3D{0, 0, 0},
+		VkExtent3D{extent.width, extent.height, extent.depth}};
+
+	dev.getTable()->vkCmdCopyBufferToImage(buf, buffer->getBuffer(), image->getImage(),
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+
+	VkImageMemoryBarrier outImageBarrier({
+		VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
+		VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		sourceFamilyIndex, targetFamilyIndex,
+		image->getImage(), range
+	});
+
+	dev.getTable()->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+			0, nullptr, // memory
+			0, nullptr, // buffers
+			1, &outImageBarrier);
+
+	if (targetFamilyIndex != VK_QUEUE_FAMILY_IGNORED) {
+		image->setPendingBarrier(outImageBarrier);
+	}
 }
 
 bool TextureSet::init(Device &dev, const TextureSetLayout &layout) {

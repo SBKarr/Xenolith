@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -88,6 +88,13 @@ void ImageAtlas::addObject(uint32_t idx, Vec2 obj) {
 bool ImageObject::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr) {
 	if (Object::init(dev, cb, type, ptr)) {
 		_index = s_ImageViewCurrentIndex.fetch_add(1);
+		return true;
+	}
+	return false;
+}
+bool ImageObject::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr, uint64_t idx) {
+	if (Object::init(dev, cb, type, ptr)) {
+		_index = idx;
 		return true;
 	}
 	return false;

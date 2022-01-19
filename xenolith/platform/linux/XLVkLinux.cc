@@ -39,6 +39,7 @@ namespace stappler::xenolith::vk {
 
 class LinuxViewInterface : public Ref {
 public:
+	virtual ~LinuxViewInterface() { }
 	virtual bool isAvailableOnDevice(const Device &) const = 0;
 	virtual VkSurfaceKHR createWindowSurface() = 0;
 

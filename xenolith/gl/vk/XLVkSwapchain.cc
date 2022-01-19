@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -30,16 +30,24 @@ namespace stappler::xenolith::vk {
 
 SwapchainSync::~SwapchainSync() { }
 
-bool SwapchainSync::init(Device &dev, uint32_t idx) {
-	_index = idx;
+bool SwapchainSync::init(Device &dev, uint32_t idx, uint64_t gen) {
+	_frameIndex = idx;
 	_imageReady = Rc<Semaphore>::create(dev);
 	_renderFinished = Rc<Semaphore>::create(dev);
+	_gen = gen;
 	return true;
 }
 
-void SwapchainSync::reset() {
+void SwapchainSync::reset(uint64_t gen) {
 	_swapchainValid = true;
-	_imageReady->reset();
+	if (gen != _gen) {
+		_imageIndex = maxOf<uint32_t>();
+		_imageReady->reset();
+	} else {
+		if (_imageIndex == maxOf<uint32_t>()) {
+			_imageReady->reset();
+		}
+	}
 	_renderFinished->reset();
 }
 
@@ -58,12 +66,16 @@ void SwapchainSync::unlock() {
 	_mutex.unlock();
 }
 
-VkResult SwapchainSync::acquireImage(Device &dev, Swapchain &swapchain, uint32_t *pImageIndex) {
+VkResult SwapchainSync::acquireImage(Device &dev, Swapchain &swapchain) {
 	VkResult result = VK_ERROR_UNKNOWN;
 	_mutex.lock();
+	if (_imageIndex != maxOf<uint32_t>()) {
+		_mutex.unlock();
+		return VK_SUCCESS;
+	}
 	if (_swapchainValid) {
 		result = dev.getTable()->vkAcquireNextImageKHR(dev.getDevice(), swapchain.getSwapchain(),
-				0, _imageReady->getUnsignalled(), VK_NULL_HANDLE, pImageIndex);
+				0, _imageReady->getUnsignalled(), VK_NULL_HANDLE, &_imageIndex);
 	}
 	_mutex.unlock();
 	switch (result) {
@@ -75,6 +87,10 @@ VkResult SwapchainSync::acquireImage(Device &dev, Swapchain &swapchain, uint32_t
 		break;
 	}
 	return result;
+}
+
+void SwapchainSync::clearImageIndex() {
+	_imageIndex = maxOf<uint32_t>();
 }
 
 Swapchain::~Swapchain() {
@@ -106,27 +122,6 @@ bool Swapchain::init(const gl::View *view, Device &device, VkSurfaceKHR surface,
 
 	bool formatFound = false;
 	for (const auto& availableFormat : _info.formats) {
-		/*std::cout << gl::getImageFormatName(gl::ImageFormat(availableFormat.format)) << " - ";
-		switch (availableFormat.colorSpace) {
-		case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR: std::cout << "VK_COLOR_SPACE_SRGB_NONLINEAR_KHR"; break;
-		case VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT: std::cout << "VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT"; break;
-		case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT: std::cout << "VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT"; break;
-		case VK_COLOR_SPACE_DISPLAY_P3_LINEAR_EXT: std::cout << "VK_COLOR_SPACE_DISPLAY_P3_LINEAR_EXT"; break;
-		case VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT: std::cout << "VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT"; break;
-		case VK_COLOR_SPACE_BT709_LINEAR_EXT: std::cout << "VK_COLOR_SPACE_BT709_LINEAR_EXT"; break;
-		case VK_COLOR_SPACE_BT709_NONLINEAR_EXT: std::cout << "VK_COLOR_SPACE_BT709_NONLINEAR_EXT"; break;
-		case VK_COLOR_SPACE_BT2020_LINEAR_EXT: std::cout << "VK_COLOR_SPACE_BT2020_LINEAR_EXT"; break;
-		case VK_COLOR_SPACE_HDR10_ST2084_EXT: std::cout << "VK_COLOR_SPACE_HDR10_ST2084_EXT"; break;
-		case VK_COLOR_SPACE_DOLBYVISION_EXT: std::cout << "VK_COLOR_SPACE_DOLBYVISION_EXT"; break;
-		case VK_COLOR_SPACE_HDR10_HLG_EXT: std::cout << "VK_COLOR_SPACE_HDR10_HLG_EXT"; break;
-		case VK_COLOR_SPACE_ADOBERGB_LINEAR_EXT: std::cout << "VK_COLOR_SPACE_ADOBERGB_LINEAR_EXT"; break;
-		case VK_COLOR_SPACE_ADOBERGB_NONLINEAR_EXT: std::cout << "VK_COLOR_SPACE_ADOBERGB_NONLINEAR_EXT"; break;
-		case VK_COLOR_SPACE_PASS_THROUGH_EXT: std::cout << "VK_COLOR_SPACE_PASS_THROUGH_EXT"; break;
-		case VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT: std::cout << "VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT"; break;
-		case VK_COLOR_SPACE_DISPLAY_NATIVE_AMD: std::cout << "VK_COLOR_SPACE_DISPLAY_NATIVE_AMD"; break;
-		default: break;
-		}
-		std::cout << "\n";*/
 		if (availableFormat.format == VkFormat(swapchainImageInfo->format) &&
 				availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
 			_format = availableFormat;
@@ -381,20 +376,20 @@ Rc<SwapchainSync> Swapchain::acquireSwapchainSync(Device &dev, uint64_t idx) {
 	if (!v.empty()) {
 		auto ret = v.back();
 		v.pop_back();
-		ret->reset();
+		ret->reset(_gen);
 		return ret;
 	}
-	return Rc<SwapchainSync>::create(dev, idx);
+	return Rc<SwapchainSync>::create(dev, idx, _gen);
 }
 
 void Swapchain::releaseSwapchainSync(Rc<SwapchainSync> &&ref) {
 	if (!_sems.empty()) {
-		_sems.at(ref->getIndex() % FramesInFlight).emplace_back(move(ref));
+		_sems.at(ref->getFrameIndex() % FramesInFlight).emplace_back(move(ref));
 	}
 }
 
 Rc<gl::FrameHandle> Swapchain::makeFrame(gl::Loop &loop, bool readyForSubmit) {
-	return Rc<FrameHandle>::create(loop, *this, *_renderQueue, _order ++, _gen, readyForSubmit);
+	return Rc<FrameHandle>::create(loop, *this, *_renderQueue, _gen, readyForSubmit);
 }
 
 void Swapchain::buildAttachments(Device &device, gl::RenderQueue *queue, gl::RenderPassData *pass, const Vector<VkImage> &swapchainImages) {
@@ -429,7 +424,7 @@ void Swapchain::updateAttachment(Device &device, const Rc<gl::Attachment> &) {
 
 void Swapchain::updateFramebuffer(Device &device, gl::RenderPassData *pass) {
 	Extent2 extent;
-	auto lastSubpass = pass->subpasses.back();
+	auto &lastSubpass = pass->subpasses.back();
 	if (!lastSubpass.resolveImages.empty()) {
 		for (auto &it : lastSubpass.resolveImages) {
 			if (it) {

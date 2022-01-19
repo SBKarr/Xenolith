@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -141,8 +141,8 @@ public:
 	MemoryRequirements getMemoryRequirements(VkBuffer target);
 	MemoryRequirements getMemoryRequirements(VkImage target);
 
-	Rc<Buffer> spawnPersistent(AllocationUsage, const gl::BufferInfo &);
-	Rc<Image> spawnPersistent(AllocationUsage, const gl::ImageInfo &, bool preinitialized);
+	Rc<Buffer> spawnPersistent(AllocationUsage, const gl::BufferInfo &, BytesView = BytesView());
+	Rc<Image> spawnPersistent(AllocationUsage, const gl::ImageInfo &, bool preinitialized, uint64_t forceId = 0);
 
 protected:
 	friend class DeviceMemoryPool;

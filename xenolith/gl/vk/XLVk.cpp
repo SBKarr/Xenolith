@@ -1,5 +1,5 @@
 /**
-Copyright (c) 2020 Roman Katuntsev <sbkarr@stappler.org>
+Copyright (c) 2020-2022 Roman Katuntsev <sbkarr@stappler.org>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -46,8 +46,8 @@ THE SOFTWARE.
 #include "renderer/XLVkImageAttachment.cc"
 #include "renderer/XLVkBufferAttachment.cc"
 #include "renderer/XLVkRenderPass.cc"
-#include "renderer/XLVkTransferAttachment.cc"
-#include "renderer/XLVkMaterialCompilationAttachment.cc"
+#include "renderer/XLVkTransferQueue.cc"
+#include "renderer/XLVkMaterialCompiler.cc"
 #include "renderer/XLVkMaterialRenderPass.cc"
-#include "renderer/XLVkRenderQueueAttachment.cc"
-#include "renderer/XLVkRenderFontAttachment.cc"
+#include "renderer/XLVkRenderQueueCompiler.cc"
+#include "renderer/XLVkRenderFontQueue.cc"

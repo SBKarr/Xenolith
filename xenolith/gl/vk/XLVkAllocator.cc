@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -536,10 +536,10 @@ MemoryRequirements Allocator::getMemoryRequirements(VkImage target) {
 	return ret;
 }
 
-Rc<Buffer> Allocator::spawnPersistent(AllocationUsage usage, const gl::BufferInfo &info) {
+Rc<Buffer> Allocator::spawnPersistent(AllocationUsage usage, const gl::BufferInfo &info, BytesView view) {
 	VkBufferCreateInfo bufferInfo { };
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.size = info.size;
+	bufferInfo.size = (view.empty() ? info.size : view.size());
 	bufferInfo.flags = VkBufferCreateFlags(info.flags);
 	bufferInfo.usage = VkBufferUsageFlags(info.usage);
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -588,11 +588,23 @@ Rc<Buffer> Allocator::spawnPersistent(AllocationUsage usage, const gl::BufferInf
 
 	_device->getTable()->vkBindBufferMemory(_device->getDevice(), target, memory, 0);
 
+	if (!view.empty()) {
+		void *ptr = nullptr;
+		if (_device->getTable()->vkMapMemory(_device->getDevice(), memory, 0, view.size(), 0, &ptr) == VK_SUCCESS) {
+			memcpy(ptr, view.data(), view.size());
+			_device->getTable()->vkUnmapMemory(_device->getDevice(), memory);
+		} else {
+			_device->getTable()->vkFreeMemory(_device->getDevice(), memory, nullptr);
+			_device->getTable()->vkDestroyBuffer(_device->getDevice(), target, nullptr);
+			return nullptr;
+		}
+	}
+
 	auto mem = Rc<DeviceMemory>::create(*_device, memory);
 	return Rc<Buffer>::create(*_device, target, info, move(mem));
 }
 
-Rc<Image> Allocator::spawnPersistent(AllocationUsage usage, const gl::ImageInfo &info, bool preinitialized) {
+Rc<Image> Allocator::spawnPersistent(AllocationUsage usage, const gl::ImageInfo &info, bool preinitialized, uint64_t forceId) {
 	VkImageCreateInfo imageInfo { };
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 	imageInfo.pNext = nullptr;
@@ -658,7 +670,11 @@ Rc<Image> Allocator::spawnPersistent(AllocationUsage usage, const gl::ImageInfo 
 	_device->getTable()->vkBindImageMemory(_device->getDevice(), target, memory, 0);
 
 	auto mem = Rc<DeviceMemory>::create(*_device, memory);
-	return Rc<Image>::create(*_device, target, info, move(mem));
+	if (forceId) {
+		return Rc<Image>::create(*_device, forceId, target, info, move(mem));
+	} else {
+		return Rc<Image>::create(*_device, target, info, move(mem));
+	}
 }
 
 DeviceMemoryPool::~DeviceMemoryPool() {

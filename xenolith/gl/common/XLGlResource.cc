@@ -379,7 +379,7 @@ const ImageData *Resource::Builder::addImage(StringView key, ImageInfo &&img, Fi
 		auto buf = new (_data->pool) ImageData;
 		static_cast<ImageInfo &>(*buf) = move(img);
 		buf->key = key.pdup(_data->pool);
-		buf->callback = [fpath, format = img.format] (const ImageData::DataCallback &dcb) {
+		buf->memCallback = [fpath, format = img.format] (const ImageData::DataCallback &dcb) {
 			Resource_loadImageFileData(fpath, format, dcb);
 		};
 		buf->extent = Extent3(width, height, depth);
@@ -421,7 +421,7 @@ const ImageData *Resource::Builder::addImage(StringView key, ImageInfo &&img,
 		auto buf = new (_data->pool) ImageData;
 		static_cast<ImageInfo &>(*buf) = move(img);
 		buf->key = key.pdup(_data->pool);
-		buf->callback = cb;
+		buf->memCallback = cb;
 		return buf;
 	}, _data->pool);
 	if (!p) {

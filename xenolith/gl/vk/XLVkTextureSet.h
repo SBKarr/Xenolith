@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -50,11 +50,14 @@ public:
 
 	bool isPartiallyBound() const { return _partiallyBound; }
 
-	gl::ImageData getEmptyImage() const;
-	gl::ImageData getSolidImage() const;
+	Rc<Image> getEmptyImageObject() const;
+	Rc<Image> getSolidImageObject() const;
+
+	void compileImage(Device &dev, gl::Loop &loop, const Rc<gl::DynamicImage> &, Function<void(bool)> &&);
 
 protected:
 	void writeDefaults(Device &dev, VkCommandBuffer buf);
+	void writeImageTransfer(Device &dev, VkCommandBuffer buf, uint32_t qidx, const Rc<Buffer> &, const Rc<Image> &);
 
 	bool _partiallyBound = false;
 	uint32_t _imageCount = 0;

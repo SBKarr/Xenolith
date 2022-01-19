@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -22,6 +22,7 @@
 
 #include "XLGlMaterial.h"
 #include "XLGlRenderPass.h"
+#include "XLGlDynamicImage.h"
 
 namespace stappler::xenolith::gl {
 
@@ -30,13 +31,14 @@ MaterialSet::~MaterialSet() {
 }
 
 bool MaterialSet::init(const BufferInfo &info, const EncodeCallback &callback, const FinalizeCallback &fin,
-		uint32_t objectSize, uint32_t imagesInSet) {
+		uint32_t objectSize, uint32_t imagesInSet, const MaterialAttachment *owner) {
 	_info = info;
 	_encodeCallback = callback;
 	_finalizeCallback = fin;
 	_objectSize = objectSize;
 	_imagesInSet = imagesInSet;
 	_info.size = 0;
+	_owner = owner;
 	return true;
 }
 
@@ -49,6 +51,8 @@ bool MaterialSet::init(const Rc<MaterialSet> &other) {
 	_objectSize = other->_objectSize;
 	_imagesInSet = other->_imagesInSet;
 	_layouts = other->_layouts;
+	_owner = other->_owner;
+	_buffer = other->_buffer;
 
 	for (auto &it : _layouts) {
 		it.set = nullptr;
@@ -74,17 +78,54 @@ void MaterialSet::clear() {
 
 Vector<Material *> MaterialSet::updateMaterials(const Rc<MaterialInputData> &data,
 		const Callback<Rc<ImageView>(const MaterialImage &)> &cb) {
-	return updateMaterials(data->materials, cb);
+	return updateMaterials(data->materialsToAddOrUpdate, data->dynamicMaterialsToUpdate, data->materialsToRemove, cb);
 }
 
-Vector<Material *> MaterialSet::updateMaterials(const Vector<Rc<Material>> &materials,
-		const Callback<Rc<ImageView>(const MaterialImage &)> &cb) {
+Vector<Material *> MaterialSet::updateMaterials(const Vector<Rc<Material>> &materials, SpanView<MaterialId> dynamicMaterials,
+		SpanView<MaterialId> materialsToRemove, const Callback<Rc<ImageView>(const MaterialImage &)> &cb) {
+	Vector<MaterialId> updatedIds; updatedIds.reserve(materials.size() + dynamicMaterials.size());
 	Vector<Material *> ret; ret.reserve(materials.size());
+
+	for (auto &it : materialsToRemove) {
+		auto mIt = _materials.find(it);
+		if (mIt != _materials.end()) {
+			removeMaterial(mIt->second);
+			_materials.erase(mIt);
+			for (auto &it : mIt->second->getImages()) {
+				if (it.dynamic && _owner) {
+					_owner->removeDynamicTracker(mIt->second->getId(), it.dynamic->image);
+				}
+			}
+		}
+	}
+
 	for (auto &material : materials) {
 		bool isImagesValid = true;
-		for (auto &it : material->getImages()) {
+
+		if (!materialsToRemove.empty()) {
+			auto it = std::find(materialsToRemove.begin(), materialsToRemove.end(), material->getId());
+			if (it != materialsToRemove.end()) {
+				continue;
+			}
+		}
+
+		for (auto &it : material->_images) {
 			if (!it.image) {
 				isImagesValid = false;
+			}
+			if (it.dynamic) {
+				// try to actualize image
+				auto current = it.dynamic->image->getInstance();
+				if (current != it.dynamic) {
+					if (material->_atlas == it.image->atlas) {
+						material->_atlas = current->data.atlas;
+					}
+					it.dynamic = current;
+					it.image = &it.dynamic->data;
+				}
+				if (_owner) {
+					_owner->addDynamicTracker(material->getId(), it.dynamic->image);
+				}
 			}
 		}
 
@@ -92,17 +133,87 @@ Vector<Material *> MaterialSet::updateMaterials(const Vector<Rc<Material>> &mate
 			continue;
 		}
 
+		updatedIds.emplace_back(material->getId());
+
 		auto mIt = _materials.find(material->getId());
 		if (mIt != _materials.end()) {
 			emplaceMaterialImages(mIt->second, material.get(), cb);
 			mIt->second = move(material);
 			ret.emplace_back(mIt->second.get());
+			for (auto &it : mIt->second->getImages()) {
+				if (it.dynamic && _owner) {
+					_owner->removeDynamicTracker(material->getId(), it.dynamic->image);
+				}
+			}
 		} else {
 			auto it = _materials.emplace(material->getId(), move(material)).first;
 			emplaceMaterialImages(nullptr, it->second.get(), cb);
 			ret.emplace_back(it->second.get());
 		}
 	}
+
+	for (auto &it : dynamicMaterials) {
+		if (!materialsToRemove.empty()) {
+			auto iit = std::find(materialsToRemove.begin(), materialsToRemove.end(), it);
+			if (iit != materialsToRemove.end()) {
+				continue;
+			}
+		}
+
+		auto mIt = _materials.find(it);
+		if (mIt != _materials.end()) {
+			auto &material = mIt->second;
+			bool hasUpdates = false;
+			Vector<Rc<DynamicImageInstance>> dynamics;
+			dynamics.reserve(mIt->second->getImages().size());
+
+			for (auto &image : mIt->second->getImages()) {
+				if (image.dynamic) {
+					auto current = image.dynamic->image->getInstance();
+					if (current != image.dynamic) {
+						hasUpdates = true;
+						dynamics.emplace_back(current);
+					} else {
+						dynamics.emplace_back(nullptr);
+					}
+				} else {
+					dynamics.emplace_back(nullptr);
+				}
+			}
+
+			if (hasUpdates) {
+				// create new material
+				Vector<MaterialImage> images = material->getImages();
+				size_t i = 0;
+				for (auto &it : images) {
+					if (auto v = dynamics[i]) {
+						it.dynamic = v;
+						it.image = &v->data;
+					}
+					it.view = nullptr;
+					++ i;
+				}
+
+				auto mat = Rc<Material>::create(material->getPipeline(), move(images), material->getData().bytes());
+
+				for (auto &it : mat->getImages()) {
+					if (it.dynamic && _owner) {
+						_owner->addDynamicTracker(mat->getId(), it.dynamic->image);
+					}
+				}
+
+				emplaceMaterialImages(mIt->second, mat.get(), cb);
+				mIt->second = move(mat);
+				ret.emplace_back(mIt->second.get());
+				for (auto &it : mIt->second->getImages()) {
+					if (it.dynamic && _owner) {
+						_owner->removeDynamicTracker(material->getId(), it.dynamic->image);
+					}
+				}
+			}
+		}
+	}
+
 	_info.size = _objectSize * _materials.size();
 	return ret;
 }
@@ -133,6 +244,17 @@ uint32_t MaterialSet::getMaterialOrder(MaterialId idx) const {
 		return it->second;
 	}
 	return maxOf<uint32_t>();
+}
+
+void MaterialSet::removeMaterial(Material *oldMaterial) {
+	auto &oldSet = _layouts[oldMaterial->getLayoutIndex()];
+	for (auto &oIt : oldMaterial->_images) {
+		-- oldSet.slots[oIt.descriptor].refCount;
+		if (oldSet.slots[oIt.descriptor].refCount == 0) {
+			oldSet.slots[oIt.descriptor].image = nullptr;
+		}
+		oIt.view = nullptr;
+	}
 }
 
 void MaterialSet::emplaceMaterialImages(Material *oldMaterial, Material *newMaterial,
@@ -307,7 +429,13 @@ bool MaterialImage::canAlias(const MaterialImage &other) const {
 
 static std::atomic<MaterialId> s_MaterialCurrentIndex = 1;
 
-Material::~Material() { }
+Material::~Material() {
+	if (_ownedData) {
+		_images.clear();
+		delete _ownedData;
+		_ownedData = nullptr;
+	}
+}
 
 bool Material::init(const PipelineData *pipeline, Vector<MaterialImage> &&images, Bytes &&data) {
 	_id = s_MaterialCurrentIndex.fetch_add(1);
@@ -317,7 +445,21 @@ bool Material::init(const PipelineData *pipeline, Vector<MaterialImage> &&images
 	return true;
 }
 
-bool Material::init(const PipelineData *pipeline, const ImageData *image, Bytes &&data) {
+bool Material::init(const PipelineData *pipeline, const Rc<DynamicImageInstance> &image, Bytes &&data) {
+	_id = s_MaterialCurrentIndex.fetch_add(1);
+	_pipeline = pipeline;
+	_images = Vector<MaterialImage>({
+		MaterialImage{
+			.image = &image->data,
+			.dynamic = image
+		}
+	});
+	_atlas = image->data.atlas;
+	_data = move(data);
+	return true;
+}
+
+bool Material::init(const PipelineData *pipeline, const ImageData *image, Bytes &&data, bool ownedData) {
 	_id = s_MaterialCurrentIndex.fetch_add(1);
 	_pipeline = pipeline;
 	_images = Vector<MaterialImage>({
@@ -327,6 +469,36 @@ bool Material::init(const PipelineData *pipeline, const ImageData *image, Bytes 
 	});
 	_atlas = image->atlas;
 	_data = move(data);
+	if (ownedData) {
+		_ownedData = image;
+	}
+	return true;
+}
+
+bool Material::init(const Material *master, Rc<ImageObject> &&image, Rc<ImageAtlas> &&atlas, Bytes &&data) {
+	_id = master->getId();
+	_pipeline = master->getPipeline();
+	_data = move(data);
+
+	auto otherData = master->getOwnedData();
+	if (!otherData) {
+		auto &images = master->getImages();
+		if (images.size() > 0) {
+			otherData = images[0].image;
+		}
+	}
+
+	auto ownedData = new ImageData;
+	static_cast<ImageInfo &>(*ownedData) = image->getInfo();
+	ownedData->image = move(image);
+	ownedData->atlas = move(atlas);
+	_ownedData = ownedData;
+
+	_images = Vector<MaterialImage>({
+		MaterialImage({
+			_ownedData
+		})
+	});
 	return true;
 }
 
@@ -362,7 +534,7 @@ void MaterialAttachment::setMaterials(const Rc<gl::MaterialSet> &data) const {
 }
 
 Rc<gl::MaterialSet> MaterialAttachment::allocateSet(const Device &dev) const {
-	return Rc<gl::MaterialSet>::create(_info, _encodeCallback, _finalizeCallback, _materialObjectSize, dev.getTextureLayoutImagesCount());
+	return Rc<gl::MaterialSet>::create(_info, _encodeCallback, _finalizeCallback, _materialObjectSize, dev.getTextureLayoutImagesCount(), this);
 }
 
 Rc<gl::MaterialSet> MaterialAttachment::cloneSet(const Rc<gl::MaterialSet> &other) const {
@@ -374,6 +546,56 @@ void MaterialAttachment::sortDescriptors(RenderQueue &queue, Device &dev) {
 	if (!_data) {
 		_data = allocateSet(dev);
 	}
+}
+
+void MaterialAttachment::addDynamicTracker(MaterialId id, const Rc<DynamicImage> &image) const {
+	std::unique_lock<Mutex> lock(_dynamicMutex);
+	auto it = _dynamicTrackers.find(image);
+	if (it != _dynamicTrackers.end()) {
+		++ it->second.refCount;
+	} else {
+		it = _dynamicTrackers.emplace(image, DynamicImageTracker{1}).first;
+		image->addTracker(this);
+	}
+
+	auto iit = it->second.materials.find(id);
+	if (iit != it->second.materials.end()) {
+		++ iit->second;
+	} else {
+		it->second.materials.emplace(id, 1);
+	}
+}
+
+void MaterialAttachment::removeDynamicTracker(MaterialId id, const Rc<DynamicImage> &image) const {
+	std::unique_lock<Mutex> lock(_dynamicMutex);
+	auto it = _dynamicTrackers.find(image);
+	if (it != _dynamicTrackers.end()) {
+		auto iit = it->second.materials.find(id);
+		if (iit != it->second.materials.end()) {
+			-- iit->second;
+			if (iit->second == 0) {
+				it->second.materials.erase(iit);
+			}
+		}
+		-- it->second.refCount;
+		if (it->second.refCount == 0) {
+			_dynamicTrackers.erase(it);
+			image->removeTracker(this);
+		}
+	}
+}
+
+void MaterialAttachment::updateDynamicImage(Loop &loop, const DynamicImage *image) const {
+	auto input = Rc<MaterialInputData>::alloc();
+	input->attachment = this;
+	std::unique_lock<Mutex> lock(_dynamicMutex);
+	auto it = _dynamicTrackers.find(image);
+	if (it != _dynamicTrackers.end()) {
+		for (auto &materialIt : it->second.materials) {
+			input->dynamicMaterialsToUpdate.emplace_back(materialIt.first);
+		}
+	}
+	loop.compileMaterials(move(input));
 }
 
 Rc<AttachmentDescriptor> MaterialAttachment::makeDescriptor(RenderPassData *pass) {

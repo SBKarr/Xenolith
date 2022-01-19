@@ -27,6 +27,8 @@
 
 namespace stappler::xenolith {
 
+Texture::~Texture() { }
+
 bool Texture::init(const gl::ImageData *data, const Rc<gl::Resource> &res) {
 	_data = data;
 	if (res) {
@@ -35,19 +37,30 @@ bool Texture::init(const gl::ImageData *data, const Rc<gl::Resource> &res) {
 	return true;
 }
 
+bool Texture::init(const Rc<gl::DynamicImage> &image) {
+	_dynamic = image;
+	return true;
+}
+
 StringView Texture::getName() const {
 	return _data->key;
 }
 
-const gl::ImageObject *Texture::getImage() const {
-	if (_data->image) {
-		return _data->image.get();
+gl::MaterialImage Texture::getMaterialImage() const {
+	gl::MaterialImage ret;
+	if (_dynamic) {
+		ret.dynamic = _dynamic->getInstance();
+		ret.image = &ret.dynamic->data;
+	} else {
+		ret.image = _data;
 	}
-	return nullptr;
+	return ret;
 }
 
 uint64_t Texture::getIndex() const {
-	if (_data->image) {
+	if (_dynamic) {
+		return _dynamic->getInstance()->data.image->getIndex();
+	} else if (_data->image) {
 		return _data->image->getIndex();
 	}
 	return 0;
@@ -60,9 +73,11 @@ Rc<ResourceCache> ResourceCache::getInstance() {
 	return nullptr;
 }
 
+ResourceCache::~ResourceCache() { }
+
 bool ResourceCache::init(gl::Device &dev) {
-	_emptyImage = dev.getEmptyImage();
-	_solidImage = dev.getSolidImage();
+	_emptyImage = gl::ImageData::make(dev.getEmptyImageObject());
+	_solidImage = gl::ImageData::make(dev.getSolidImageObject());
 	return true;
 }
 

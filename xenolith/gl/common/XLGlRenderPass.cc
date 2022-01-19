@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -137,7 +137,11 @@ bool RenderPassHandle::prepare(FrameHandle &) {
 	return true;
 }
 
-void RenderPassHandle::submit(FrameHandle &, Function<void(const Rc<RenderPass> &)> &&) {
+void RenderPassHandle::submit(FrameHandle &, Function<void(const Rc<RenderPassHandle> &)> &&) {
+
+}
+
+void RenderPassHandle::finalize(FrameHandle &, bool successful) {
 
 }
 

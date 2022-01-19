@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -67,8 +67,15 @@ inline bool operator == (const RenderSubpassDependency &l, const RenderSubpassDe
 inline bool operator != (const RenderSubpassDependency &l, const RenderSubpassDependency &r) { return l.value() != r.value(); }
 
 struct RenderSubpassData {
+	RenderSubpassData() = default;
+	RenderSubpassData(const RenderSubpassData &) = default;
+	RenderSubpassData(RenderSubpassData &&) = default;
+
+	RenderSubpassData &operator=(const RenderSubpassData &) = delete;
+	RenderSubpassData &operator=(RenderSubpassData &&) = delete;
+
 	uint32_t index = 0;
-	RenderPassData *renderPass;
+	RenderPassData *renderPass = nullptr;
 
 	HashTable<PipelineData *> pipelines;
 	memory::vector<BufferAttachmentRef *> inputBuffers;
@@ -80,11 +87,18 @@ struct RenderSubpassData {
 	memory::vector<ImageAttachmentRef *> inputImages;
 	memory::vector<ImageAttachmentRef *> outputImages;
 	memory::vector<ImageAttachmentRef *> resolveImages;
-	ImageAttachmentRef *depthStencil;
+	ImageAttachmentRef *depthStencil = nullptr;
 	memory::vector<uint32_t> preserve;
 };
 
 struct RenderPassData : NamedMem {
+	RenderPassData() = default;
+	RenderPassData(const RenderPassData &) = default;
+	RenderPassData(RenderPassData &&) = default;
+
+	RenderPassData &operator=(const RenderPassData &) = delete;
+	RenderPassData &operator=(RenderPassData &&) = delete;
+
 	memory::vector<AttachmentDescriptor *> descriptors;
 	memory::vector<RenderSubpassData> subpasses;
 	memory::vector<RenderSubpassDependency> dependencies;
@@ -134,12 +148,21 @@ public:
 	const HashTable<Rc<Resource>> &getLinkedResources() const;
 	Rc<Resource> getInternalResource() const;
 
+	const memory::vector<Attachment *> &getInputAttachments() const;
+	const memory::vector<Attachment *> &getOutputAttachments() const;
+
+	const RenderPassData *getPass(StringView) const;
 	const ProgramData *getProgram(StringView) const;
 	const PipelineData *getPipeline(StringView) const;
+	const Attachment *getAttachment(StringView) const;
 
 	Vector<Rc<Attachment>> getOutput() const;
 	Vector<Rc<Attachment>> getOutput(AttachmentType) const;
 
+	// get next frame order dumber for this queue
+	uint64_t incrementOrder();
+
+	// Prepare queue to be used on target device
 	bool prepare(Device &);
 
 	void beginFrame(gl::FrameHandle &);

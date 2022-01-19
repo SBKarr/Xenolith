@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -48,6 +48,7 @@ public:
 		UpdateFrameInterval, // view wants us to update frame interval
 		CompileResource,
 		CompileMaterials,
+		RunRenderQueue,
 		Exit,
 	};
 
@@ -115,10 +116,16 @@ public:
 
 	// if called before loop is started - should compile RenderQueue in place
 	// if not - compilation is scheduled on TaskQueue
-	void compileRenderQueue(const Rc<RenderQueue> &req, Function<void(bool)> &&);
-	void scheduleSwapchainRenderQueue(const Rc<RenderQueue> &req, Function<void()> &&);
+	void compileRenderQueue(const Rc<RenderQueue> &req, Function<void(bool)> && = nullptr);
 
-	// void reset(const Rc<Swapchain> &ref, bool best);
+	void compileImage(const Rc<DynamicImage> &, Function<void(bool)> && = nullptr);
+
+	// run frame with RenderQueue
+	void runRenderQueue(const Rc<RenderQueue> &req,
+			uint64_t gen = 0, Function<void(bool)> && = nullptr);
+
+	void runRenderQueue(const Rc<RenderQueue> &req, Map<const Attachment *, Rc<AttachmentInputData>> &&,
+			uint64_t gen = 0, Function<void(bool)> && = nullptr);
 
 	bool isOnThread() const;
 

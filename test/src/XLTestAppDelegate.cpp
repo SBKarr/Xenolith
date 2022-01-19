@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -27,6 +27,8 @@
 #include "XLAppScene.h"
 #include "XLAppShaders.h"
 #include "XLDefaultShaders.h"
+#include "XLFontSourceSystem.h"
+#include "XLFontFace.h"
 
 namespace stappler::xenolith::app {
 
@@ -54,10 +56,30 @@ bool AppDelegate::onMainLoop() {
 		log::text("App", "Compiled");
 	});
 
-	return _loop->run();
+	auto ret = _loop->run();
+
+	_fontMainController = nullptr;
+	_fontLibrary = nullptr;
+
+	return ret;
 }
 
-void AppDelegate::runMainView(Rc<Scene> &&scene) {
+void AppDelegate::update(uint64_t dt) {
+	Application::update(dt);
+	if (_fontLibrary) {
+		_fontLibrary->update();
+	}
+}
+
+void AppDelegate::runMainView(Rc<AppScene> &&scene) {
+	_fontLibrary = Rc<font::FontLibrary>::create(_glLoop, Rc<vk::RenderFontQueue>::create("FontQueue"));
+	_fontLibrary->acquireController("AppFont", [this, scene] (Rc<font::FontController> &&c) {
+		_fontMainController = move(c);
+		log::text("App", "AppFont created");
+		runFontTest();
+		scene->addFontController(_fontMainController);
+	});
+
 	auto dir = Rc<Director>::create(this, move(scene));
 
 	auto view = platform::graphic::createView(_loop, _glLoop, "Xenolith",
@@ -65,6 +87,26 @@ void AppDelegate::runMainView(Rc<Scene> &&scene) {
 
 	view->begin(dir, [this] {
 		_loop->pushEvent(AppEvent::Terminate);
+	});
+}
+
+void AppDelegate::runFontTest() {
+	auto query = Rc<gl::RenderFontInput>::alloc();
+
+	Vector<char16_t> chars;
+	chars::CharGroup<char16_t, CharGroupId::Numbers>::foreach([&] (char16_t c) {
+		chars.emplace_back(c);
+	});
+	chars::CharGroup<char16_t, CharGroupId::Cyrillic>::foreach([&] (char16_t c) {
+		chars.emplace_back(c);
+	});
+
+	auto monoFace = _fontLibrary->openFontFace(font::SystemFontName::DejaVuSansMono, font::FontSize(24));
+	auto regularFace = _fontLibrary->openFontFace(font::SystemFontName::DejaVuSans, font::FontSize(24));
+
+	_fontMainController->updateTexture({
+		pair(monoFace, chars),
+		pair(regularFace, chars)
 	});
 }
 

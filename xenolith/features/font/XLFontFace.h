@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -23,46 +23,22 @@
 #ifndef XENOLITH_FEATURES_FONT_XLFONTFACE_H_
 #define XENOLITH_FEATURES_FONT_XLFONTFACE_H_
 
-#include "XLDefine.h"
-
-typedef struct FT_FaceRec_ * FT_Face;
-typedef struct FT_LibraryRec_ * FT_Library;
+#include "XLFontLibrary.h"
 
 namespace stappler::xenolith::font {
-
-using FontSize = layout::style::FontSize;
-
-class FontFaceObject;
-class FontFaceData;
-
-class FontLibrary : public Ref {
-public:
-	FontLibrary();
-	virtual ~FontLibrary();
-
-	Rc<FontFaceObject> openFontFace(StringView, FontSize, const Callback<Bytes()> &);
-
-	void update();
-
-protected:
-	FT_Face newFontFace(BytesView);
-	void doneFontFace(FT_Face);
-
-	Mutex _mutex;
-	Map<String, Rc<FontFaceObject>> _faces;
-	Map<String, Rc<FontFaceData>> _data;
-	FT_Library _library = nullptr;
-};
 
 class FontFaceData : public Ref {
 public:
 	virtual ~FontFaceData() { }
 
+	bool init(BytesView, bool);
 	bool init(Bytes &&);
 
-	BytesView getView() const { return _data; }
+	BytesView getView() const { return _view; }
 
 protected:
+	bool _persisent = false;
+	BytesView _view;
 	Bytes _data;
 };
 
@@ -70,14 +46,16 @@ class FontFaceObject : public Ref {
 public:
 	virtual ~FontFaceObject();
 
-	bool init(const Rc<FontFaceData> &, FT_Face, FontSize);
+	bool init(const Rc<FontFaceData> &, FT_Face, FontSize, uint16_t);
 
+	uint16_t getId() const { return _id; }
 	FT_Face getFace() const { return _face; }
 
 	bool acquireTexture(char16_t, const Callback<void(uint8_t *, uint32_t width, uint32_t rows, int pitch)> &);
 
 protected:
 	Rc<FontFaceData> _data;
+	uint16_t _id = 0;
 	FontSize _size;
 	FT_Face _face = nullptr;
 	Mutex _mutex;

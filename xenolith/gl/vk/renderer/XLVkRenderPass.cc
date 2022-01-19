@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -93,17 +93,21 @@ bool RenderPassHandle::prepare(gl::FrameHandle &frame) {
 		return false;
 	}
 
-	uint32_t index = 0;
-	for (auto &it : _attachments) {
-		if (it.first->getType() == gl::AttachmentType::SwapchainImage) {
-			auto img = it.second.cast<SwapchainAttachmentHandle>();
-			index = img->getIndex();
+	if (_data->isPresentable) {
+		for (auto &it : _attachments) {
+			if (it.first->getType() == gl::AttachmentType::SwapchainImage) {
+				if (auto d = it.second.cast<SwapchainAttachmentHandle>()) {
+					_presentAttachment = d;
+				}
+			}
 		}
 	}
 
-	if (index == maxOf<uint32_t>()) {
-		invalidate();
-		return false;
+	_sync = makeSyncInfo();
+	for (auto &it : _sync.swapchainSync) {
+		if (it->getImageIndex() == maxOf<uint32_t>()) {
+			return false;
+		}
 	}
 
 	// If updateAfterBind feature supported for all renderpass bindings
@@ -111,8 +115,8 @@ bool RenderPassHandle::prepare(gl::FrameHandle &frame) {
 	// (ordering of bind|update is not defined in this case)
 
 	if (_data->hasUpdateAfterBind) {
-		frame.performInQueue([this, index] (gl::FrameHandle &frame) {
-			return doPrepareDescriptors(frame, index, true);
+		frame.performInQueue([this] (gl::FrameHandle &frame) {
+			return doPrepareDescriptors(frame, true);
 		}, [this] (gl::FrameHandle &frame, bool success) {
 			if (success) {
 				_descriptorsReady = true;
@@ -128,12 +132,12 @@ bool RenderPassHandle::prepare(gl::FrameHandle &frame) {
 		_descriptorsReady = true;
 	}
 
-	frame.performInQueue([this, index] (gl::FrameHandle &frame) {
-		if (!doPrepareDescriptors(frame, index, false)) {
+	frame.performInQueue([this] (gl::FrameHandle &frame) {
+		if (!doPrepareDescriptors(frame, false)) {
 			return false;
 		}
 
-		auto ret = doPrepareCommands(frame, index);
+		auto ret = doPrepareCommands(frame);
 		if (!ret.empty()) {
 			_buffers = move(ret);
 			return true;
@@ -153,19 +157,18 @@ bool RenderPassHandle::prepare(gl::FrameHandle &frame) {
 	return false;
 }
 
-void RenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl::RenderPass> &)> &&func) {
+void RenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl::RenderPassHandle> &)> &&func) {
 	Rc<gl::FrameHandle> f = &frame; // capture frame ref
 
 	_fence = _device->acquireFence(frame.getOrder());
 	_fence->addRelease([dev = _device, pool = move(_pool)] {
 		dev->releaseCommandPool(Rc<CommandPool>(pool));
 	});
-	_fence->addRelease([func = move(func), pass = _renderPass] {
+	_fence->addRelease([func = move(func), pass = Rc<gl::RenderPassHandle>(this)] {
 		func(pass);
 	});
 
 	_pool = nullptr;
-	_sync = makeSyncInfo();
 	for (auto &it : _sync.swapchainSync) {
 		_fence->addRelease([dev = _swapchain, sync = it] {
 			dev->releaseSwapchainSync(Rc<SwapchainSync>(sync));
@@ -176,15 +179,6 @@ void RenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl:
 
 	_device->acquireQueue(ops, frame, [this] (gl::FrameHandle &frame, const Rc<DeviceQueue> &queue) {
 		_queue = queue;
-		if (_data->isPresentable) {
-			for (auto &it : _attachments) {
-				if (it.first->getType() == gl::AttachmentType::SwapchainImage) {
-					if (auto d = it.second.cast<SwapchainAttachmentHandle>()) {
-						_presentAttachment = d;
-					}
-				}
-			}
-		}
 
 		frame.performInQueue([this] (gl::FrameHandle &frame) {
 			for (auto &it : _sync.swapchainSync) {
@@ -238,11 +232,19 @@ void RenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl:
 	}, this);
 }
 
+void RenderPassHandle::finalize(gl::FrameHandle &, bool success) {
+	if (!_commandsReady && !success && _swapchain) {
+		for (auto &it : _sync.swapchainSync) {
+			_swapchain->releaseSwapchainSync(Rc<SwapchainSync>(it));
+		}
+	}
+}
+
 QueueOperations RenderPassHandle::getQueueOps() const {
 	return ((RenderPass *)_renderPass.get())->getQueueOps();
 }
 
-bool RenderPassHandle::doPrepareDescriptors(gl::FrameHandle &frame, uint32_t index, bool async) {
+bool RenderPassHandle::doPrepareDescriptors(gl::FrameHandle &frame, bool async) {
 	auto table = _device->getTable();
 	auto pass = (RenderPassImpl *)_data->impl.get();
 
@@ -415,9 +417,11 @@ bool RenderPassHandle::doPrepareDescriptors(gl::FrameHandle &frame, uint32_t ind
 	return true;
 }
 
-Vector<VkCommandBuffer> RenderPassHandle::doPrepareCommands(gl::FrameHandle &frame, uint32_t index) {
+Vector<VkCommandBuffer> RenderPassHandle::doPrepareCommands(gl::FrameHandle &frame) {
 	auto table = _device->getTable();
 	auto buf = _pool->allocBuffer(*_device);
+
+	auto index = (*_sync.swapchainSync.begin())->getImageIndex();
 
 	auto targetFb = _data->framebuffers[index].cast<Framebuffer>();
 	auto currentExtent = targetFb->getExtent();
@@ -430,8 +434,6 @@ Vector<VkCommandBuffer> RenderPassHandle::doPrepareCommands(gl::FrameHandle &fra
 	if (table->vkBeginCommandBuffer(buf, &beginInfo) != VK_SUCCESS) {
 		return Vector<VkCommandBuffer>();
 	}
-
-
 
 	VkRenderPassBeginInfo renderPassInfo { };
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -494,7 +496,6 @@ bool RenderPassHandle::present(gl::FrameHandle &frame) {
 
 	Vector<VkSemaphore> presentSem;
 
-	auto imageIndex = _presentAttachment->getIndex();
 	for (auto &it : _sync.signalSwapchainSync) {
 		presentSem.emplace_back(it->getRenderFinished()->getSemaphore());
 	}
@@ -505,10 +506,20 @@ bool RenderPassHandle::present(gl::FrameHandle &frame) {
 	presentInfo.waitSemaphoreCount = presentSem.size();
 	presentInfo.pWaitSemaphores = presentSem.data();
 
+	Vector<uint32_t> indexes;
+	for (auto &it : _sync.swapchainSync) {
+		auto idx = it->getImageIndex();
+		if (idx != maxOf<uint32_t>()) {
+			indexes.emplace_back(idx);
+		} else {
+			return false;
+		}
+	}
+
 	VkSwapchainKHR swapChains[] = {_presentAttachment->getSwapchain()->getSwapchain()};
 	presentInfo.swapchainCount = 1;
 	presentInfo.pSwapchains = swapChains;
-	presentInfo.pImageIndices = &imageIndex;
+	presentInfo.pImageIndices = indexes.data();
 	presentInfo.pResults = nullptr; // Optional
 
 	// auto t = platform::device::_clock();
@@ -522,6 +533,9 @@ bool RenderPassHandle::present(gl::FrameHandle &frame) {
 		for (auto &it : _sync.signalSwapchainSync) {
 			it->getRenderFinished()->setSignaled(false);
 		}
+		for (auto &it : _sync.swapchainSync) {
+			it->clearImageIndex();
+		}
 		return true;
 	} else {
 		log::vtext("VK-Error", "Fail to vkQueuePresentKHR: ", result);
@@ -534,12 +548,12 @@ bool RenderPassHandle::present(gl::FrameHandle &frame) {
 }
 
 RenderPassHandle::MaterialBuffers RenderPassHandle::updateMaterials(gl::FrameHandle &iframe, const Rc<gl::MaterialSet> &data,
-		const Vector<Rc<gl::Material>> &materials) {
+		const Vector<Rc<gl::Material>> &materials, SpanView<gl::MaterialId> dynamicMaterials, SpanView<gl::MaterialId> materialsToRemove) {
 	MaterialBuffers ret;
 	auto &layout = _device->getTextureSetLayout();
 
 	// update list of materials in set
-	data->updateMaterials(materials, [&] (const gl::MaterialImage &image) -> Rc<gl::ImageView> {
+	data->updateMaterials(materials, dynamicMaterials, materialsToRemove, [&] (const gl::MaterialImage &image) -> Rc<gl::ImageView> {
 		return Rc<ImageView>::create(*_device, (Image *)image.image->image.get(), image.info);
 	});
 
@@ -589,6 +603,7 @@ RenderPassHandle::Sync RenderPassHandle::makeSyncInfo() {
 				auto dSync = (lastPass == _data) ? d->acquireSync() : d->getSync();
 
 				if (firstPass == _data) {
+					// swapchain to wait before submit
 					sync.waitAttachment.emplace_back(it.second);
 					sync.waitSem.emplace_back(dSync->getImageReady()->getSemaphore());
 					sync.waitStages.emplace_back(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
@@ -596,6 +611,7 @@ RenderPassHandle::Sync RenderPassHandle::makeSyncInfo() {
 				}
 
 				if (lastPass == _data) {
+					// swapchain to signal after submit
 					sync.signalSem.emplace_back(dSync->getRenderFinished()->getUnsignalled());
 					sync.signalAttachment.emplace_back(it.second);
 					sync.swapchainSync.emplace(sync.signalSwapchainSync.emplace_back(dSync));
@@ -629,10 +645,12 @@ void VertexRenderPassHandle::addRequiredAttachment(const gl::Attachment *a, cons
 	}
 }
 
-Vector<VkCommandBuffer> VertexRenderPassHandle::doPrepareCommands(gl::FrameHandle &handle, uint32_t index) {
+Vector<VkCommandBuffer> VertexRenderPassHandle::doPrepareCommands(gl::FrameHandle &handle) {
 	auto table = _device->getTable();
 	auto buf = _pool->allocBuffer(*_device);
 	auto pass = (RenderPassImpl *)_data->impl.get();
+
+	auto index = (*_sync.swapchainSync.begin())->getImageIndex();
 
 	auto targetFb = _data->framebuffers[index].cast<Framebuffer>();
 	auto currentExtent = targetFb->getExtent();

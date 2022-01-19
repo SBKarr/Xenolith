@@ -22,9 +22,12 @@ THE SOFTWARE.
 
 // Generated with FontGenerator (%STAPPLER_ROOT%/test/generators/FontGenerator)
 
+#ifndef XENOLITH_RESOURCE_FONTs_XLFONTSOURCESYSTEM_H_
+#define XENOLITH_RESOURCE_FONTs_XLFONTSOURCESYSTEM_H_
+
 #include "XLDefine.h"
 
-namespace stappler::xenolith {
+namespace stappler::xenolith::font {
 
 enum class SystemFontName {
 	DejaVuSans,
@@ -42,6 +45,9 @@ enum class SystemFontName {
 	DejaVuSansMono_Oblique,
 };
 
+StringView getSystemFontName(SystemFontName);
 BytesView getSystemFont(SystemFontName);
 
 }
+
+#endif /* XENOLITH_FEATURES_FONT_XLFONTFACE_H_ */

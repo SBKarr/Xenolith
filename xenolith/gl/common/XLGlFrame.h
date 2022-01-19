@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -34,8 +34,8 @@ public:
 
 	virtual ~FrameHandle();
 
-	bool init(Loop &, Swapchain &, RenderQueue &, uint64_t order, uint32_t gen, bool readyForSubmit = false);
-	bool init(Loop &, RenderQueue &, uint64_t order, uint32_t gen);
+	bool init(Loop &, Swapchain &, RenderQueue &, uint32_t gen, bool readyForSubmit = false);
+	bool init(Loop &, RenderQueue &, uint32_t gen);
 
 	void update(bool init = false);
 
@@ -72,8 +72,9 @@ public:
 	const Vector<Rc<AttachmentHandle>> &getOutputAttachments() const { return _outputAttachments; }
 	const Vector<Rc<AttachmentHandle>> &getRequiredAttachments() const { return _requiredAttachments; }
 
-	virtual bool submitInput(const Rc<AttachmentHandle> &, Rc<AttachmentInputData> &&);
-	virtual bool submitInput(const Attachment *, Rc<AttachmentInputData> &&);
+	virtual bool submitInput(const Rc<AttachmentHandle> &, Rc<AttachmentInputData> &&, bool force = false);
+	virtual bool submitInput(const Attachment *, Rc<AttachmentInputData> &&, bool force = false);
+	virtual bool submitInput(Map<const Attachment *, Rc<AttachmentInputData>> &&);
 
 	virtual void setAttachmentReady(const Rc<AttachmentHandle> &); // should be called from GL thread
 	virtual void setInputSubmitted(const Rc<AttachmentHandle> &); // should be called from GL thread
@@ -93,7 +94,7 @@ protected:
 	virtual bool setup();
 	virtual void releaseResources();
 	virtual void releaseRenderPassResources(const Rc<RenderPass> &, const Rc<SwapchainAttachment> &);
-	virtual void setRenderPassComplete(const Rc<RenderPass> &);
+	virtual void setRenderPassComplete(const Rc<RenderPassHandle> &);
 	virtual void onRequiredTaskCompleted(StringView tag);
 	virtual void onComplete();
 
@@ -115,6 +116,10 @@ protected:
 	bool _submitted = false;
 	bool _completed = false;
 	bool _valid = true;
+
+	Vector<Rc<AttachmentHandle>> _allAttachments;
+	Vector<Rc<RenderPassHandle>> _allRenderPasses;
+
 	Vector<Rc<AttachmentHandle>> _availableAttachments;
 	Vector<Rc<AttachmentHandle>> _requiredAttachments;
 	Vector<Rc<AttachmentHandle>> _inputAttachments;
@@ -125,35 +130,11 @@ protected:
 	Vector<Rc<RenderPassHandle>> _preparedRenderPasses;
 	Vector<Rc<RenderPassHandle>> _submittedRenderPasses;
 
+	Map<const Attachment *, Rc<AttachmentInputData>> _inputData;
 	Map<Rc<RenderPassHandle>, Rc<SwapchainAttachment>> _swapchainAttachments;
 
 	Function<void(FrameHandle &)> _complete;
 };
-
-/*struct FrameData : public Ref {
-	virtual ~FrameData();
-
-	Rc<gl::Device> device;
-	Rc<gl::Loop> loop;
-
-	FrameStatus status = FrameStatus::ImageAcquired;
-
-	// frame info
-	Rc<OptionsContainer> options;
-	Rc<FrameSync> sync;
-	// Vector<VkPipelineStageFlags> waitStages;
-
-	// target image info
-	Rc<Framebuffer> framebuffer;
-	uint32_t imageIdx;
-
-	// data
-	Vector<VkCommandBuffer> buffers;
-	Vector<CommandBufferTask> tasks;
-	uint32_t gen = 0;
-	uint64_t order = 0;
-};*/
-
 
 }
 

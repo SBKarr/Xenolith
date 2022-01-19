@@ -114,7 +114,7 @@ Rc<SwapchainSync> SwapchainAttachmentHandle::acquireSync() {
 }
 
 bool SwapchainAttachmentHandle::acquire(gl::FrameHandle &handle) {
-	VkResult result = _sync->acquireImage(*_device, *_swapchain, &_index);
+	VkResult result = _sync->acquireImage(*_device, *_swapchain);
 	switch (result) {
 	case VK_ERROR_OUT_OF_DATE_KHR:
 		handle.getLoop()->recreateSwapChain(handle.getSwapchain());
@@ -138,7 +138,7 @@ bool SwapchainAttachmentHandle::acquire(gl::FrameHandle &handle) {
 				return true; // end spinning
 			}
 
-			VkResult result = _sync->acquireImage(*_device, *_swapchain, &_index);
+			VkResult result = _sync->acquireImage(*_device, *_swapchain);
 			switch (result) {
 			case VK_ERROR_OUT_OF_DATE_KHR:
 				// push swapchain invalidation

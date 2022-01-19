@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -256,7 +256,15 @@ bool RenderPassImpl::initComputePass(Device &dev, gl::RenderPassData &) {
 }
 
 bool RenderPassImpl::initTransferPass(Device &dev, gl::RenderPassData &) {
-	return false; // TODO - deal with Transfer passes
+	// init nothing - no descriptors or render pass implementation needed
+	auto l = new PassData();
+	_data = l;
+	return gl::RenderPassImpl::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+		auto d = ((Device *)dev);
+		auto l = (PassData *)ptr;
+		l->cleanup(*d);
+		delete l;
+	}, gl::ObjectType::RenderPass, l);
 }
 
 bool RenderPassImpl::initGenericPass(Device &dev, gl::RenderPassData &) {

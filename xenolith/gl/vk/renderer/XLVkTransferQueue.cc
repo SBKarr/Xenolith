@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,11 +20,74 @@
  THE SOFTWARE.
  **/
 
-#include "XLVkTransferAttachment.h"
+#include "XLVkTransferQueue.h"
 #include "XLVkDevice.h"
 #include "XLVkObject.h"
 
 namespace stappler::xenolith::vk {
+
+class TransferAttachment : public gl::GenericAttachment {
+public:
+	virtual ~TransferAttachment();
+
+	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameHandle &) override;
+};
+
+class TransferAttachmentHandle : public gl::AttachmentHandle {
+public:
+	virtual ~TransferAttachmentHandle();
+
+	virtual bool setup(gl::FrameHandle &) override;
+	virtual bool submitInput(gl::FrameHandle &, Rc<gl::AttachmentInputData> &&) override;
+
+	const Rc<TransferResource> &getResource() const { return _resource; }
+
+protected:
+	Rc<TransferResource> _resource;
+};
+
+class TransferRenderPass : public RenderPass {
+public:
+	virtual ~TransferRenderPass();
+
+	virtual bool init(StringView);
+
+	virtual Rc<gl::RenderPassHandle> makeFrameHandle(gl::RenderPassData *, const gl::FrameHandle &);
+};
+
+class TransferRenderPassHandle : public RenderPassHandle {
+public:
+	virtual ~TransferRenderPassHandle();
+
+protected:
+	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &, uint32_t index);
+};
+
+
+TransferQueue::~TransferQueue() { }
+
+bool TransferQueue::init() {
+	gl::RenderQueue::Builder builder("Transfer", gl::RenderQueue::RenderOnDemand);
+
+	auto attachment = Rc<TransferAttachment>::create("TransferAttachment");
+	auto pass = Rc<TransferRenderPass>::create("TransferRenderPass");
+
+	builder.addRenderPass(pass);
+	builder.addPassInput(pass, 0, attachment);
+	builder.addPassOutput(pass, 0, attachment);
+	builder.addInput(attachment);
+	builder.addOutput(attachment);
+
+	if (gl::RenderQueue::init(move(builder))) {
+		_attachment = attachment;
+		return true;
+	}
+	return false;
+}
+
+void TransferQueue::submitInput(gl::FrameHandle &frame, Rc<TransferResource> &&input) {
+	frame.submitInput(_attachment, move(input), true);
+}
 
 TransferResource::BufferAllocInfo::BufferAllocInfo(gl::BufferData *d) {
 	data = d;
@@ -422,48 +485,48 @@ bool TransferResource::prepareCommands(uint32_t idx, VkCommandBuffer buf,
 	for (auto &it : _stagingBuffer.copyData) {
 		if (it.targetImage) {
 			if (auto q = dev->getQueueFamily(getQueueOperations(it.targetImage->data->type))) {
+				uint32_t srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				uint32_t dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
 				if (q->index != idx) {
-					auto &ref = outputImageBarriers.emplace_back(VkImageMemoryBarrier({
-						VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
-						VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-						VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-						idx, q->index,
-						it.targetImage->image, VkImageSubresourceRange({
-							getFormatAspectFlags(it.targetImage->info.format, false),
-							0, it.targetImage->data->mipLevels.get(), 0, it.targetImage->data->arrayLayers.get()
-						})
-					}));
+					srcQueueFamilyIndex = idx;
+					dstQueueFamilyIndex = q->index;
+				}
+
+				auto &ref = outputImageBarriers.emplace_back(VkImageMemoryBarrier({
+					VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
+					VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+					VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+					srcQueueFamilyIndex, dstQueueFamilyIndex,
+					it.targetImage->image, VkImageSubresourceRange({
+						getFormatAspectFlags(it.targetImage->info.format, false),
+						0, it.targetImage->data->mipLevels.get(), 0, it.targetImage->data->arrayLayers.get()
+					})
+				}));
+
+				if (q->index != idx) {
 					it.targetImage->barrier.emplace(ref);
-				} else {
-					outputImageBarriers.emplace_back(VkImageMemoryBarrier({
-						VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
-						VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-						VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-						VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-						it.targetImage->image, VkImageSubresourceRange({
-							getFormatAspectFlags(it.targetImage->info.format, false),
-							0, it.targetImage->data->mipLevels.get(), 0, it.targetImage->data->arrayLayers.get()
-						})
-					}));
 				}
 			}
 		} else if (it.targetBuffer) {
 			if (auto q = dev->getQueueFamily(getQueueOperations(it.targetImage->data->type))) {
+				uint32_t srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				uint32_t dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
 				if (q->index != idx) {
-					auto &ref = outputBufferBarriers.emplace_back(VkBufferMemoryBarrier({
-						VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
-						VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-						idx, q->index,
-						it.targetBuffer->buffer, 0, VK_WHOLE_SIZE
-					}));
+					srcQueueFamilyIndex = idx;
+					dstQueueFamilyIndex = q->index;
+				}
+
+				auto &ref = outputBufferBarriers.emplace_back(VkBufferMemoryBarrier({
+					VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+					VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+					srcQueueFamilyIndex, dstQueueFamilyIndex,
+					it.targetBuffer->buffer, 0, VK_WHOLE_SIZE
+				}));
+
+				if (q->index != idx) {
 					it.targetBuffer->barrier.emplace(ref);
-				} else {
-					outputBufferBarriers.emplace_back(VkBufferMemoryBarrier({
-						VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
-						VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-						VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-						it.targetBuffer->buffer, 0, VK_WHOLE_SIZE
-					}));
 				}
 			}
 		}
@@ -608,9 +671,16 @@ size_t TransferResource::writeData(uint8_t *mem, ImageAllocInfo &info) {
 		auto size = info.data->data.size();
 		memcpy(mem, info.data->data.data(), size);
 		return size;
-	} else if (info.data->callback) {
+	} else if (info.data->memCallback) {
 		size_t size = 0;
-		info.data->callback([&] (BytesView data) {
+		info.data->memCallback([&] (BytesView data) {
+			size = data.size();
+			memcpy(mem, data.data(), size);
+		});
+		return size;
+	} else if (info.data->stdCallback) {
+		size_t size = 0;
+		info.data->stdCallback([&] (BytesView data) {
 			size = data.size();
 			memcpy(mem, data.data(), size);
 		});

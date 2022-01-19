@@ -20,32 +20,34 @@
  THE SOFTWARE.
  **/
 
-#include "XLDefine.h"
+#ifndef XENOLITH_GL_VK_RENDERER_XLVKRENDERQUEUECOMPILER_H_
+#define XENOLITH_GL_VK_RENDERER_XLVKRENDERQUEUECOMPILER_H_
 
-#ifdef XL_LOOP_DEBUG
-#define XL_LOOP_LOG(...) log::vtext("Gl::Loop", __VA_ARGS__)
-#else
-#define XL_LOOP_LOG(...)
-#endif
+#include "XLVkRenderPass.h"
+#include "XLVkDeviceQueue.h"
+#include "XLVkTransferQueue.h"
+#include "XLGlMaterial.h"
 
-#ifdef XL_FRAME_DEBUG
-#define XL_FRAME_LOG(...) log::vtext("Gl::Frame", __VA_ARGS__)
-#else
-#define XL_FRAME_LOG(...)
-#endif
+namespace stappler::xenolith::vk {
 
-#include "XLGlDevice.cc"
-#include "XLGlCommandList.cc"
-#include "XLGlLoop.cc"
-#include "XLGlView.cc"
-#include "XLGlObject.cc"
-#include "XLGlResource.cc"
-#include "XLGlAttachment.cc"
-#include "XLGlRenderQueue.cc"
-#include "XLGlMaterial.cc"
-#include "XLGlInstance.cc"
-#include "XLGlFrame.cc"
-#include "XLGlRenderPass.cc"
-#include "XLGlUtils.cc"
-#include "XLGlSwapchain.cc"
-#include "XLGlDynamicImage.cc"
+class RenderQueueAttachment;
+
+struct RenderQueueInput : public gl::AttachmentInputData {
+	Rc<gl::RenderQueue> queue;
+};
+
+class RenderQueueCompiler : public gl::RenderQueue {
+public:
+	virtual ~RenderQueueCompiler();
+
+	bool init(Device &);
+
+	void submitInput(gl::FrameHandle &, Rc<RenderQueueInput> &&);
+
+protected:
+	RenderQueueAttachment *_attachment;
+};
+
+}
+
+#endif /* XENOLITH_GL_VK_RENDERER_XLVKRENDERQUEUECOMPILER_H_ */

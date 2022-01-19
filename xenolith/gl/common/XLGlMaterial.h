@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -25,20 +25,25 @@
 
 #include "XLGlResource.h"
 #include "XLGlAttachment.h"
+#include "XLGlDynamicImage.h"
 
 namespace stappler::xenolith::gl {
 
+class Loop;
 class Material;
 class MaterialSet;
 class MaterialAttachment;
 
 struct MaterialInputData : gl::AttachmentInputData {
 	const MaterialAttachment * attachment;
-	Vector<Rc<Material>> materials; // new materials to update buffer
+	Vector<Rc<Material>> materialsToAddOrUpdate;
+	Vector<MaterialId> materialsToRemove;
+	Vector<MaterialId> dynamicMaterialsToUpdate;
 };
 
 struct MaterialImage {
 	const ImageData *image;
+	Rc<DynamicImageInstance> dynamic;
 	ImageViewInfo info;
 	Rc<ImageView> view;
 	uint16_t sampler = 0;
@@ -57,7 +62,7 @@ public:
 	virtual ~MaterialSet();
 
 	bool init(const BufferInfo &, const EncodeCallback &callback, const FinalizeCallback &,
-			uint32_t objectSize, uint32_t imagesInSet);
+			uint32_t objectSize, uint32_t imagesInSet, const MaterialAttachment * = nullptr);
 	bool init(const Rc<MaterialSet> &);
 
 	bool encode(uint8_t *, const Material *);
@@ -66,7 +71,7 @@ public:
 
 	Vector<Material *> updateMaterials(const Rc<MaterialInputData> &,
 			const Callback<Rc<ImageView>(const MaterialImage &)> &);
-	Vector<Material *> updateMaterials(const Vector<Rc<Material>> &materials,
+	Vector<Material *> updateMaterials(const Vector<Rc<Material>> &materials, SpanView<MaterialId> dynamic, SpanView<MaterialId> remove,
 			const Callback<Rc<ImageView>(const MaterialImage &)> &);
 
 	const BufferInfo &getInfo() const { return _info; }
@@ -85,6 +90,7 @@ public:
 	uint32_t getMaterialOrder(MaterialId) const;
 
 protected:
+	void removeMaterial(Material *oldMaterial);
 	void emplaceMaterialImages(Material *oldMaterial, Material *newMaterial,
 			const Callback<Rc<ImageView>(const MaterialImage &)> &);
 
@@ -104,6 +110,7 @@ protected:
 
 	Rc<BufferObject> _buffer;
 	Rc<TextureSet> _textureSet;
+	const MaterialAttachment *_owner = nullptr;
 };
 
 class Material final : public Ref {
@@ -112,7 +119,9 @@ public:
 
 	// view for image must be empty
 	bool init(const PipelineData *, Vector<MaterialImage> &&, Bytes && = Bytes());
-	bool init(const PipelineData *, const ImageData *, Bytes && = Bytes());
+	bool init(const PipelineData *, const Rc<DynamicImageInstance> &, Bytes && = Bytes());
+	bool init(const PipelineData *, const ImageData *, Bytes && = Bytes(), bool ownedData = false);
+	bool init(const Material *, Rc<ImageObject> &&, Rc<ImageAtlas> &&, Bytes && = Bytes());
 
 	MaterialId getId() const { return _id; }
 	const PipelineData * getPipeline() const { return _pipeline; }
@@ -123,6 +132,7 @@ public:
 	void setLayoutIndex(uint32_t);
 
 	const Rc<ImageAtlas> &getAtlas() const { return _atlas; }
+	const ImageData *getOwnedData() const { return _ownedData; }
 
 protected:
 	friend class MaterialSet;
@@ -134,6 +144,7 @@ protected:
 	Vector<MaterialImage> _images;
 	Rc<ImageAtlas> _atlas;
 	Bytes _data;
+	const ImageData *_ownedData = nullptr;
 };
 
 // this attachment should provide material data buffer for rendering
@@ -156,8 +167,18 @@ public:
 
 	virtual void sortDescriptors(RenderQueue &queue, Device &dev) override;
 
+	virtual void addDynamicTracker(MaterialId, const Rc<DynamicImage> &) const;
+	virtual void removeDynamicTracker(MaterialId, const Rc<DynamicImage> &) const;
+
+	virtual void updateDynamicImage(Loop &, const DynamicImage *) const;
+
 protected:
 	virtual Rc<AttachmentDescriptor> makeDescriptor(RenderPassData *) override;
+
+	struct DynamicImageTracker {
+		uint32_t refCount;
+		Map<MaterialId, uint32_t> materials;
+	};
 
 	uint32_t _materialObjectSize = 0;
 	MaterialType _type;
@@ -165,6 +186,9 @@ protected:
 	MaterialSet::FinalizeCallback _finalizeCallback;
 	mutable Rc<gl::MaterialSet> _data;
 	Vector<Rc<Material>> _initialMaterials;
+
+	mutable Mutex _dynamicMutex;
+	mutable Map<Rc<DynamicImage>, DynamicImageTracker> _dynamicTrackers;
 };
 
 class MaterialAttachmentDescriptor : public BufferAttachmentDescriptor {

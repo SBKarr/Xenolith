@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -34,11 +34,16 @@ public:
 
 	virtual bool init(Extent2 extent);
 
+	virtual void onPresented(Director *) override;
+	virtual void onFinished(Director *) override;
+
 	virtual void update(const UpdateTime &) override;
 
 	virtual void onEnter(Scene *) override;
 	virtual void onExit() override;
 	virtual void onContentSizeDirty() override;
+
+	void addFontController(const Rc<font::FontController> &);
 
 protected:
 	Sprite *_sprite = nullptr;

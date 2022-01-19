@@ -29,6 +29,8 @@ namespace stappler::xenolith {
 
 class EventDispatcher : public Ref {
 public:
+	virtual ~EventDispatcher() { }
+
 	uint32_t addEventHeader(const EventHeader *header);
 	void removeEventHeader(const EventHeader *header);
 

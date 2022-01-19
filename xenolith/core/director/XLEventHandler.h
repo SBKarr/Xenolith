@@ -71,7 +71,7 @@ public:
 	static Rc<EventHandlerNode> onEvent(const EventHeader &header, Ref *ref, Callback && callback, EventHandler *obj, bool destroyAfterEvent);
 
 	EventHandlerNode(const EventHeader &header, Ref *ref, Callback && callback, EventHandler *obj, bool destroyAfterEvent);
-	~EventHandlerNode();
+	virtual ~EventHandlerNode();
 
 	void setSupport(EventHandler *s);
 	bool shouldRecieveEventWithObject(EventHeader::EventID eventID, Ref *object) const;

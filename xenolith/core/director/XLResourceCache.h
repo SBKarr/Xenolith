@@ -25,27 +25,33 @@
 
 #include "XLDefine.h"
 #include "XLGlResource.h"
+#include "XLGlMaterial.h"
 
 namespace stappler::xenolith {
 
 class Texture : public NamedRef {
 public:
+	virtual ~Texture();
+
 	bool init(const gl::ImageData *, const Rc<gl::Resource> &);
+	bool init(const Rc<gl::DynamicImage> &);
 
 	virtual StringView getName() const;
-	const gl::ImageObject *getImage() const;
-	const gl::ImageData *getData() const { return _data; }
+	gl::MaterialImage getMaterialImage() const;
 
 	uint64_t getIndex() const;
 
 protected:
 	const gl::ImageData *_data = nullptr;
 	Rc<gl::Resource> _resource;
+	Rc<gl::DynamicImage> _dynamic;
 };
 
 class ResourceCache : public Ref {
 public:
 	static Rc<ResourceCache> getInstance();
+
+	virtual ~ResourceCache();
 
 	bool init(gl::Device &);
 	void invalidate(gl::Device &);

@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -40,26 +40,31 @@ class SwapchainSync : public Ref {
 public:
 	virtual ~SwapchainSync();
 
-	bool init(Device &dev, uint32_t idx);
-	void reset();
+	bool init(Device &dev, uint32_t idx, uint64_t gen);
+	void reset(uint64_t gen);
 	void invalidate();
 
 	void lock();
 	void unlock();
 
-	VkResult acquireImage(Device &, Swapchain &, uint32_t *);
+	VkResult acquireImage(Device &, Swapchain &);
 
 	void setSwapchainValid(bool value) { _swapchainValid = value; }
 	bool isSwapchainValid() const { return _swapchainValid; }
 
-	uint32_t getIndex() const { return _index; }
+	uint32_t getFrameIndex() const { return _frameIndex; }
+	uint32_t getImageIndex() const { return _imageIndex; }
+	void clearImageIndex();
+
 	const Rc<Semaphore> &getImageReady() const { return _imageReady; }
 	const Rc<Semaphore> &getRenderFinished() const { return _renderFinished; }
 
 protected:
 	Mutex _mutex;
 	bool _swapchainValid = true;
-	uint32_t _index = 0;
+	uint32_t _frameIndex = 0;
+	uint32_t _imageIndex = maxOf<uint32_t>();
+	uint64_t _gen = 0;
 	Rc<Semaphore> _imageReady;
 	Rc<Semaphore> _renderFinished;
 };

@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,8 +20,8 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_GL_VK_RENDERER_XLVKTRANSFERATTACHMENT_H_
-#define XENOLITH_GL_VK_RENDERER_XLVKTRANSFERATTACHMENT_H_
+#ifndef XENOLITH_GL_VK_RENDERER_XLVKTRANSFERQUEUE_H_
+#define XENOLITH_GL_VK_RENDERER_XLVKTRANSFERQUEUE_H_
 
 #include "XLVkRenderPass.h"
 #include "XLVkAllocator.h"
@@ -32,6 +32,7 @@ namespace stappler::xenolith::vk {
 
 class DeviceQueue;
 class CommandPool;
+class TransferAttachment;
 
 class TransferResource : public gl::AttachmentInputData {
 public:
@@ -75,6 +76,8 @@ public:
 	};
 
 	struct StagingBuffer : public Ref {
+		virtual ~StagingBuffer() { }
+
 		uint32_t memoryTypeIndex = maxOf<uint32_t>();
 		BufferAllocInfo buffer;
 		Vector<StagingCopy> copyData;
@@ -124,43 +127,18 @@ protected:
 	Function<void(bool)> _callback;
 };
 
-class TransferAttachment : public gl::GenericAttachment {
+class TransferQueue : public gl::RenderQueue {
 public:
-	virtual ~TransferAttachment();
+	virtual ~TransferQueue();
 
-	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameHandle &) override;
-};
+	bool init();
 
-class TransferAttachmentHandle : public gl::AttachmentHandle {
-public:
-	virtual ~TransferAttachmentHandle();
-
-	virtual bool setup(gl::FrameHandle &) override;
-	virtual bool submitInput(gl::FrameHandle &, Rc<gl::AttachmentInputData> &&) override;
-
-	const Rc<TransferResource> &getResource() const { return _resource; }
+	void submitInput(gl::FrameHandle &, Rc<TransferResource> &&);
 
 protected:
-	Rc<TransferResource> _resource;
-};
-
-class TransferRenderPass : public RenderPass {
-public:
-	virtual ~TransferRenderPass();
-
-	virtual bool init(StringView);
-
-	virtual Rc<gl::RenderPassHandle> makeFrameHandle(gl::RenderPassData *, const gl::FrameHandle &);
-};
-
-class TransferRenderPassHandle : public RenderPassHandle {
-public:
-	virtual ~TransferRenderPassHandle();
-
-protected:
-	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &, uint32_t index);
+	TransferAttachment *_attachment = nullptr;
 };
 
 }
 
-#endif /* XENOLITH_GL_VK_RENDERER_XLVKTRANSFERATTACHMENT_H_ */
+#endif /* XENOLITH_GL_VK_RENDERER_XLVKTRANSFERQUEUE_H_ */

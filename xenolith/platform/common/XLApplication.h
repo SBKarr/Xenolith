@@ -1,5 +1,5 @@
 /**
-Copyright (c) 2020-2021 Roman Katuntsev <sbkarr@stappler.org>
+Copyright (c) 2020-2022 Roman Katuntsev <sbkarr@stappler.org>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -135,11 +135,11 @@ public: // Threading, Events
 
 	/* If current thread is main thread: executes function/task
 	   If not: adds function/task to main thread queue */
-	void performOnMainThread(const Function<void()> &func, Ref *target = nullptr, bool onNextFrame = false);
+	void performOnMainThread(const Function<void()> &func, Ref *target = nullptr, bool onNextFrame = false) const;
 
 	/* If current thread is main thread: executes function/task
 	   If not: adds function/task to main thread queue */
-    void performOnMainThread(Rc<thread::Task> &&task, bool onNextFrame = false);
+    void performOnMainThread(Rc<thread::Task> &&task, bool onNextFrame = false) const;
 
 	/* Performs action in this thread, task will be constructed in place */
 	void perform(const ExecuteCallback &, const CompleteCallback & = nullptr, Ref * = nullptr);
@@ -255,6 +255,9 @@ protected:
 	Rc<storage::AssetLibrary> _assetLibrary;
 	Rc<storage::Server> _storageServer;
 	Rc<network::Controller> _networkController;
+
+	memory::pool_t *_rootPool = nullptr;
+	memory::pool_t *_updatePool = nullptr;
 };
 
 }

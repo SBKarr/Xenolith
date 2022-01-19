@@ -1,5 +1,5 @@
 /**
-Copyright (c) 2020-2021 Roman Katuntsev <sbkarr@stappler.org>
+Copyright (c) 2020-2022 Roman Katuntsev <sbkarr@stappler.org>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include "XLEventHandler.h"
 #include "XLNetworkController.h"
 #include "XLAssetLibrary.h"
+#include "XLFontFace.h"
 
 namespace stappler::log {
 
@@ -133,6 +134,11 @@ uint64_t Application::getClock() const {
 Application::Application() : _appLog(&log::__xenolith_log) {
 	XLASSERT(s_application == nullptr, "Application should be only one");
 
+	memory::pool::initialize();
+
+	_rootPool = memory::pool::create(memory::pool::acquire());
+	_updatePool = memory::pool::create(_rootPool);
+
 	_loop = platform::device::createEventLoop(this);
 	_clockStart = _loop->getClock();
 
@@ -163,7 +169,9 @@ Application::Application() : _appLog(&log::__xenolith_log) {
 }
 
 Application::~Application() {
-
+	memory::pool::destroy(_updatePool);
+	memory::pool::destroy(_rootPool);
+	memory::pool::terminate();
 }
 
 bool Application::onFinishLaunching() {
@@ -206,6 +214,7 @@ void Application::onMemoryWarning() {
 }
 
 int Application::run(data::Value &&data) {
+	memory::pool::push(_updatePool);
 	_dbParams = data::Value({
 		pair("driver", data::Value("sqlite")),
 		pair("dbname", data::Value(filesystem::cachesPath("root.sqlite"))),
@@ -252,11 +261,13 @@ int Application::run(data::Value &&data) {
 
 	if (!_storageServer) {
 		log::text("Application", "Fail to launch application: onBuildStorage failed");
+		memory::pool::pop();
 		return 1;
 	}
 
 	if (!onFinishLaunching()) {
 		log::text("Application", "Fail to launch application: onFinishLaunching failed");
+		memory::pool::pop();
 		return 1;
 	}
 
@@ -268,6 +279,8 @@ int Application::run(data::Value &&data) {
 	_glLoop = nullptr;
 
 	_instance = nullptr;
+
+	memory::pool::pop();
     return ret ? 0 : -1;
 }
 
@@ -278,23 +291,31 @@ bool Application::openURL(const StringView &url) {
 void Application::update(uint64_t dt) {
 	updateQueue();
 
-    if (!_isNetworkOnline) {
-        _updateTimer += dt;
-        if (_updateTimer >= 10'000'000) {
-            _updateTimer = -10'000'000;
-			setNetworkOnline(platform::network::_isNetworkOnline());
-        }
-    }
+	memory::pool::push(_updatePool);
 
-    if (_deviceIdentifier.empty()) {
-        _deviceIdentifier = platform::device::_deviceIdentifier();
-    }
+	if (!_isNetworkOnline) {
+		_updateTimer += dt;
+		if (_updateTimer >= 10'000'000) {
+			_updateTimer = -10'000'000;
+			setNetworkOnline(platform::network::_isNetworkOnline());
+		}
+	}
+
+	if (_deviceIdentifier.empty()) {
+		_deviceIdentifier = platform::device::_deviceIdentifier();
+	}
+
+	memory::pool::pop();
+	memory::pool::clear(_updatePool);
 }
 
 void Application::updateQueue() {
+	memory::pool::push(_updatePool);
 	if (_queue) {
 		_queue->update();
 	}
+	memory::pool::pop();
+	memory::pool::clear(_updatePool);
 }
 
 void Application::registerDeviceToken(const uint8_t *data, size_t len) {
@@ -402,7 +423,7 @@ bool Application::isMainThread() const {
 	return _threadId == std::this_thread::get_id();
 }
 
-void Application::performOnMainThread(const Function<void()> &func, Ref *target, bool onNextFrame) {
+void Application::performOnMainThread(const Function<void()> &func, Ref *target, bool onNextFrame) const {
 	if (!_queue || ((isMainThread() || _singleThreaded) && !onNextFrame)) {
 		func();
 	} else {
@@ -412,7 +433,7 @@ void Application::performOnMainThread(const Function<void()> &func, Ref *target,
 	}
 }
 
-void Application::performOnMainThread(Rc<thread::Task> &&task, bool onNextFrame) {
+void Application::performOnMainThread(Rc<thread::Task> &&task, bool onNextFrame) const {
 	if (!_queue || ((isMainThread() || _singleThreaded) && !onNextFrame)) {
 		task->onComplete();
 	} else {

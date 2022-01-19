@@ -108,6 +108,8 @@ protected:
 
 class ImageAtlas : public Ref {
 public:
+	virtual ~ImageAtlas() { }
+
 	bool init(size_t);
 
 	Vec2 getObjectByName(uint32_t) const;
@@ -125,6 +127,7 @@ public:
 	virtual ~ImageObject() { }
 
 	virtual bool init(Device &, ClearCallback, ObjectType, void *ptr) override;
+	virtual bool init(Device &, ClearCallback, ObjectType, void *ptr, uint64_t idx);
 
 	const ImageInfo &getInfo() const { return _info; }
 	uint64_t getIndex() const { return _index; }

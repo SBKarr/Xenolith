@@ -15,12 +15,15 @@ void sp_android_terminate () {
 }
 
 SP_EXTERN_C int _spMain(argc, argv) {
+	memory::pool::initialize();
 	std::set_terminate(sp_android_terminate);
 
 	auto args = stappler::data::parseCommandLineOptions(argc, argv, &parseOptionSwitch, &Application::parseOptionString);
 
     // create the application instance
-    return Application::getInstance()->run(move(args));
+    auto ret = Application::getInstance()->run(move(args));
+	memory::pool::terminate();
+	return ret;
 }
 
 }

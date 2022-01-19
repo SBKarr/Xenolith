@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -32,7 +32,8 @@ class Swapchain;
 class Fence;
 class Allocator;
 class TextureSetLayout;
-class MaterialCompilationRenderPass;
+class MaterialCompiler;
+class TransferQueue;
 class Sampler;
 
 class RenderQueueCompiler;
@@ -63,6 +64,7 @@ public:
 	const Rc<Allocator> & getAllocator() const { return _allocator; }
 
 	const DeviceQueueFamily *getQueueFamily(QueueOperations) const;
+	const DeviceQueueFamily *getQueueFamily(gl::RenderPassType) const;
 
 	const Vector<DeviceQueueFamily> &getQueueFamilies() const;
 
@@ -100,14 +102,18 @@ public:
 
 	virtual bool supportsUpdateAfterBind(gl::DescriptorType) const override;
 
-	virtual gl::ImageData getEmptyImage() const override;
-	virtual gl::ImageData getSolidImage() const override;
+	virtual Rc<gl::ImageObject> getEmptyImageObject() const override;
+	virtual Rc<gl::ImageObject> getSolidImageObject() const override;
 
 private:
 	friend class DeviceQueue;
 
-	virtual void compileResource(thread::TaskQueue &queue, const Rc<gl::Resource> &req, Function<void(bool)> &&) override;
-	virtual void compileRenderQueue(gl::Loop &loop, const Rc<gl::RenderQueue> &req, Function<void(bool)> &&) override;
+	virtual Rc<gl::FrameHandle> makeFrame(gl::Loop &, gl::Swapchain &swapchain, gl::RenderQueue &, uint32_t gen, bool readyForSubmit = false) override;
+	virtual Rc<gl::FrameHandle> makeFrame(gl::Loop &, gl::RenderQueue &, uint32_t gen) override;
+
+	virtual void compileResource(gl::Loop &loop, const Rc<gl::Resource> &req, Function<void(bool)> &&) override;
+	virtual void compileRenderQueue(gl::Loop &loop, const Rc<gl::RenderQueue> &req, Function<void(bool)> && = Function<void(bool)>()) override;
+	virtual void compileImage(gl::Loop &loop, const Rc<gl::DynamicImage> &, Function<void(bool)> &&) override;
 	virtual void compileSamplers(thread::TaskQueue &q, bool force) override;
 
 	void runMaterialCompilationFrame(gl::Loop &loop, Rc<gl::MaterialInputData> &&req);
@@ -115,9 +121,6 @@ private:
 
 	bool setup(const Instance *instance, VkPhysicalDevice p, const Properties &prop,
 			const Vector<DeviceQueueFamily> &queueFamilies, Features &features, const Vector<const char *> &requiredExtension);
-
-	Rc<gl::RenderQueue> createTransferQueue() const;
-	Rc<gl::RenderQueue> createMaterialQueue();
 
 	const vk::Instance *_vkInstance = nullptr;
 	const DeviceCallTable *_table = nullptr;
@@ -131,18 +134,17 @@ private:
 
 	Vector<DeviceQueueFamily> _families;
 
-	uint64_t _renderQueueOrder = 0;
 	bool _finished = false;
 
 	Vector<Rc<Fence>> _fences;
 	Set<Rc<Fence>> _scheduled;
 	Rc<RenderQueueCompiler> _renderQueueCompiler;
-	Rc<gl::RenderQueue> _transferQueue;
-	Rc<gl::RenderQueue> _materialQueue;
-	Rc<MaterialCompilationRenderPass> _materialRenderPass;
+	Rc<TransferQueue> _transferQueue;
+	Rc<MaterialCompiler> _materialQueue;
 
 	Vector<VkSampler> _immutableSamplers;
 	Vector<Rc<Sampler>> _samplers;
+	std::atomic<bool> _samplersCompiled = false;
 };
 
 }

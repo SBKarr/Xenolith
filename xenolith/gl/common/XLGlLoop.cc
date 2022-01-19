@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -26,6 +26,11 @@
 #include "XLDirector.h"
 
 namespace stappler::xenolith::gl {
+
+struct LootRenderQueueData : Ref {
+	Rc<RenderQueue> queue;
+	Map<const Attachment *, Rc<AttachmentInputData>> input;
+};
 
 struct Loop::Internal : memory::AllocPool {
 	Internal() {
@@ -223,10 +228,24 @@ bool Loop::worker() {
 					}
 					break;
 				case EventName::CompileResource:
-					_device->compileResource(*_queue, it->data.cast<Resource>());
+					_device->compileResource(*this, it->data.cast<Resource>(), move(it->callback));
 					break;
 				case EventName::CompileMaterials:
 					_device->compileMaterials(*this, it->data.cast<MaterialInputData>());
+					break;
+				case EventName::RunRenderQueue:
+					if (auto data = (LootRenderQueueData *)it->data.get()) {
+						auto frame = _device->makeFrame(*this, *data->queue, it->value.getInteger());
+						if (!data->input.empty()) {
+							frame->submitInput(move(data->input));
+						}
+						if (it->callback) {
+							frame->setCompleteCallback([cb = move(it->callback)] (FrameHandle &handle) {
+								cb(handle.isValid());
+							});
+						}
+						frame->update(true);
+					}
 					break;
 				case EventName::Exit:
 					data.exit = true;
@@ -294,6 +313,8 @@ void Loop::pushContextEvent(EventName event, Rc<Ref> && ref, data::Value && data
 		}
 
 		_currentContext->events->emplace_back(Event(event, move(ref), move(data), move(cb)));
+	} else {
+		pushEvent(event, move(ref), move(data), move(cb));
 	}
 }
 
@@ -322,28 +343,23 @@ void Loop::compileRenderQueue(const Rc<RenderQueue> &req, Function<void(bool)> &
 	_device->compileRenderQueue(*this, req, move(complete));
 }
 
-void Loop::scheduleSwapchainRenderQueue(const Rc<RenderQueue> &req, Function<void()> &&complete) {
-	/*if (_application->isMainThread()) {
-		_device->setSwapchainRenderQueue(Rc<RenderQueue>(req), move(complete));
-		if (_running.load()) {
-			pushEvent(Event::SwapChainForceRecreate, Rc<Ref>(), data::Value());
-		}
-	} else {
-		auto d = new Function<void()>(move(complete));
-		_application->performOnMainThread([this, req, complete, d] {
-			_device->setSwapchainRenderQueue(Rc<RenderQueue>(req), move(*d));
-			if (_running.load()) {
-				pushEvent(Event::SwapChainForceRecreate, Rc<Ref>(), data::Value());
-			}
-			delete d;
-		}, this);
-	}*/
+void Loop::compileImage(const Rc<DynamicImage> &image, Function<void(bool)> &&complete) {
+	_device->compileImage(*this, image, move(complete));
 }
 
-/*void Loop::reset(bool best) {
-	_device->reset(*_queue, best);
-	pushEvent(Event::SwapChainRecreated, nullptr, data::Value());
-}*/
+void Loop::runRenderQueue(const Rc<RenderQueue> &req, uint64_t gen, Function<void(bool)> &&complete) {
+	auto data = Rc<LootRenderQueueData>::alloc();
+	data->queue = req;
+	pushEvent(EventName::RunRenderQueue, move(data), data::Value(gen), move(complete));
+}
+
+void Loop::runRenderQueue(const Rc<RenderQueue> &req, Map<const Attachment *, Rc<AttachmentInputData>> &&input,
+		uint64_t gen, Function<void(bool)> &&complete) {
+	auto data = Rc<LootRenderQueueData>::alloc();
+	data->queue = req;
+	data->input = move(input);
+	pushEvent(EventName::RunRenderQueue, move(data), data::Value(gen), move(complete));
+}
 
 void Loop::end(bool success) {
 	pushEvent(EventName::Exit, nullptr, data::Value(success));

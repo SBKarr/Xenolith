@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -86,38 +86,20 @@ Rc<Shader> Device::addProgram(Rc<Shader> program) {
 	}
 }
 
-void Device::compileResource(thread::TaskQueue &q, const Rc<Resource> &req, Function<void(bool)> &&complete) {
+Rc<gl::FrameHandle> Device::makeFrame(gl::Loop &loop, gl::Swapchain &swapchain, gl::RenderQueue &queue, uint32_t gen, bool readyForSubmit) {
+	return Rc<gl::FrameHandle>::create(loop, swapchain, queue, gen, readyForSubmit);
+}
+
+Rc<gl::FrameHandle> Device::makeFrame(gl::Loop &loop, gl::RenderQueue &queue, uint32_t gen) {
+	return Rc<gl::FrameHandle>::create(loop, queue, gen);
+}
+
+void Device::compileResource(gl::Loop &, const Rc<Resource> &req, Function<void(bool)> &&complete) {
 	/**/
 }
 
 void Device::compileRenderQueue(gl::Loop &loop, const Rc<RenderQueue> &queue, Function<void(bool)> &&complete) {
-	if (!_started && !isSamplersCompiled() && queue->usesSamplers()) {
-		compileSamplers(*loop.getQueue());
-	}
-	/*if (queue) {
-		auto p = Rc<CompilationProcess>::alloc(this, queue, [this, queue, complete = move(complete)] (bool success) {
-			if (complete) {
-				complete(success);
-			}
-		});
-		q.perform(Rc<Task>::create([p, queue = Rc<thread::TaskQueue>(&q)] (const thread::Task &) -> bool {
-			p->runShaders(*queue);
-			return true;
-		}));
-		if (auto res = queue->getInternalResource()) {
-			compileResource(q, res, [p] (bool success) {
-				if (success) {
-					if (p->pipelinesInQueue.fetch_sub(1) == 1) {
-						p->complete();
-					}
-				} else {
-					p->fail();
-				}
-			});
-		}
-	} else if (complete) {
-		complete(false);
-	}*/
+
 }
 
 void Device::compileMaterials(gl::Loop &loop, Rc<MaterialInputData> &&) {
@@ -162,7 +144,18 @@ void Device::invalidateObjects() {
 				}
 			});
 		}*/
-		log::vtext("Gl-Device", "Object ", typeid(*it).name(), " was not destroyed before device destruction");
+		log::vtext("Gl-Device", "Object ", (void *)it, " (", typeid(*it).name(), ") was not destroyed before device destruction");
+		if (auto ref = dynamic_cast<const Ref *>(it)) {
+			log::vtext("Gl-Device", "Backtrace for ", (void *)it);
+			ref->foreachBacktrace([] (uint64_t id, Time time, const std::vector<std::string> &vec) {
+				StringStream stream;
+				stream << "[" << id << ":" << time.toHttp() << "]:\n";
+				for (auto &it : vec) {
+					stream << "\t" << it << "\n";
+				}
+				log::text("Gl-Device-Backtrace", stream.str());
+			});
+		}
 		it->invalidate();
 	}
 }

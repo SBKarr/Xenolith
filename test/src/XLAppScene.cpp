@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -35,6 +35,7 @@
 #include "XLVkMaterialRenderPass.h"
 
 #include "XLTestNetworkSprite.h"
+#include "XLFontLibrary.h"
 
 namespace stappler::xenolith::app {
 
@@ -80,12 +81,12 @@ static void AppScene_makeRenderQueue(gl::RenderQueue::Builder &builder, Extent2 
 
 	// Material input attachment - per-scene list of materials
 	auto materialInput = Rc<vk::MaterialVertexAttachment>::create("MaterialInput",
-		gl::BufferInfo(gl::BufferUsage::StorageBuffer)/*,
+		gl::BufferInfo(gl::BufferUsage::StorageBuffer),
 
 		// ... with predefined list of materials
 		Vector<Rc<gl::Material>>({
 			Rc<gl::Material>::create(materialPipeline, initImage)
-		})*/
+		})
 	);
 
 	// Vertex input attachment - per-frame vertex list
@@ -122,54 +123,74 @@ bool AppScene::init(Extent2 extent) {
 		return false;
 	}
 
-	_sprite = addChild(Rc<Sprite>::create("Xenolith.png"));
+	// _sprite = addChild(Rc<Sprite>::create("Xenolith.png"));
 
-	_node1 = addChild(Rc<Sprite>::create());
-	_node1->setColor(Color::Teal_400);
+	/*_node1 = addChild(Rc<Sprite>::create());
+	_node1->setColor(Color::Teal_400);*/
 
-	_node2 = addChild(Rc<test::NetworkTestSprite>::create());
+	//_node2 = addChild(Rc<test::NetworkTestSprite>::create());
 
 	scheduleUpdate();
 
 	return true;
 }
 
+void AppScene::onPresented(Director *dir) {
+	Scene::onPresented(dir);
+}
+
+void AppScene::onFinished(Director *dir) {
+	Scene::onFinished(dir);
+}
+
 void AppScene::update(const UpdateTime &time) {
 	Scene::update(time);
 
-	auto t = time.app % 1_usec;
+	auto t = time.app % 5_usec;
 
-	_sprite->setRotation(M_PI * 2.0 * (float(t) / 1_usec));
+	if (_sprite) {
+		_sprite->setRotation(M_PI * 2.0 * (float(t) / 5_usec));
+	}
 }
 
 void AppScene::onEnter(Scene *scene) {
 	Scene::onEnter(scene);
 	std::cout << "AppScene::onEnter\n";
-
 }
 
 void AppScene::onExit() {
 	std::cout << "AppScene::onExit\n";
-
-
-
 	Scene::onExit();
 }
 
 void AppScene::onContentSizeDirty() {
 	Scene::onContentSizeDirty();
 
+	if (_sprite) {
+		_sprite->setPosition(Vec2(_contentSize) / 2.0f);
+		_sprite->setAnchorPoint(Anchor::Middle);
+		_sprite->setContentSize(_contentSize / 2.0f);
+	}
+
+	if (_node1) {
+		_node1->setContentSize(Size(_contentSize.width / 2.0f, _contentSize.height / 4.0f));
+		_node1->setPosition(Vec2(_contentSize) / 2.0f - Vec2(0, _contentSize.height / 4.0f));
+		_node1->setAnchorPoint(Anchor::Middle);
+	}
+
+	if (_node2) {
+		_node2->setContentSize(Size(_contentSize.width / 2.0f, _contentSize.height / 4.0f));
+		_node2->setPosition(Vec2(_contentSize) / 2.0f + Vec2(0, _contentSize.height / 4.0f));
+		_node2->setAnchorPoint(Anchor::Middle);
+	}
+}
+
+void AppScene::addFontController(const Rc<font::FontController> &c) {
+	_sprite = addChild(Rc<Sprite>::create(Rc<Texture>(c->getTexture())));
+
 	_sprite->setPosition(Vec2(_contentSize) / 2.0f);
 	_sprite->setAnchorPoint(Anchor::Middle);
 	_sprite->setContentSize(_contentSize / 2.0f);
-
-	_node1->setContentSize(Size(_contentSize.width / 2.0f, _contentSize.height / 4.0f));
-	_node1->setPosition(Vec2(_contentSize) / 2.0f - Vec2(0, _contentSize.height / 4.0f));
-	_node1->setAnchorPoint(Anchor::Middle);
-
-	_node2->setContentSize(Size(_contentSize.width / 2.0f, _contentSize.height / 4.0f));
-	_node2->setPosition(Vec2(_contentSize) / 2.0f + Vec2(0, _contentSize.height / 4.0f));
-	_node2->setAnchorPoint(Anchor::Middle);
 }
 
 }

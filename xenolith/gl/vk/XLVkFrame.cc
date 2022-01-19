@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -26,8 +26,8 @@
 
 namespace stappler::xenolith::vk {
 
-bool FrameHandle::init(gl::Loop &loop, gl::Swapchain &swapchain, gl::RenderQueue &queue, uint64_t order, uint32_t gen, bool readyForSubmit) {
-	if (!gl::FrameHandle::init(loop, swapchain, queue, order, gen, readyForSubmit)) {
+bool FrameHandle::init(gl::Loop &loop, gl::Swapchain &swapchain, gl::RenderQueue &queue, uint32_t gen, bool readyForSubmit) {
+	if (!gl::FrameHandle::init(loop, swapchain, queue, gen, readyForSubmit)) {
 		return false;
 	}
 
@@ -35,8 +35,8 @@ bool FrameHandle::init(gl::Loop &loop, gl::Swapchain &swapchain, gl::RenderQueue
 	return true;
 }
 
-bool FrameHandle::init(gl::Loop &loop, gl::RenderQueue &queue, uint64_t order, uint32_t gen) {
-	if (!gl::FrameHandle::init(loop, queue, order, gen)) {
+bool FrameHandle::init(gl::Loop &loop, gl::RenderQueue &queue, uint32_t gen) {
+	if (!gl::FrameHandle::init(loop, queue, gen)) {
 		return false;
 	}
 

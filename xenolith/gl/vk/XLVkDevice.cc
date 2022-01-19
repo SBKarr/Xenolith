@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -29,9 +29,9 @@
 #include "XLGlLoop.h"
 #include "XLVkTextureSet.h"
 #include "XLVkRenderPassImpl.h"
-#include "XLVkTransferAttachment.h"
-#include "XLVkMaterialCompilationAttachment.h"
-#include "XLVkRenderQueueAttachment.h"
+#include "XLVkTransferQueue.h"
+#include "XLVkMaterialCompiler.h"
+#include "XLVkRenderQueueCompiler.h"
 
 namespace stappler::xenolith::vk {
 
@@ -79,6 +79,10 @@ Device::Device() { }
 
 Device::~Device() {
 	if (_vkInstance && _device) {
+		if (_renderQueueCompiler) {
+			_renderQueueCompiler = nullptr;
+		}
+
 		if (_materialQueue) {
 			_materialQueue = nullptr;
 		}
@@ -191,7 +195,8 @@ void Device::begin(const Application *app, thread::TaskQueue &q) {
 
 	gl::Device::begin(app, q);
 
-	_materialQueue = createMaterialQueue();
+	_materialQueue = Rc<MaterialCompiler>::create();
+	_transferQueue = Rc<TransferQueue>::create();
 }
 
 void Device::end(thread::TaskQueue &q) {
@@ -206,8 +211,9 @@ void Device::end(thread::TaskQueue &q) {
 
 	_finished = true;
 
-	_materialRenderPass->clearRequests();
+	_materialQueue->clearRequests();
 	_materialQueue = nullptr;
+	_transferQueue = nullptr;
 
 	for (auto &it : _fences) {
 		it->invalidate();
@@ -234,9 +240,8 @@ void Device::onLoopStarted(gl::Loop &loop) {
 	gl::Device::onLoopStarted(loop);
 	_textureSetLayout->initDefault(*this, loop);
 
-	compileRenderQueue(loop, _materialQueue, [&] (bool success) {
-		_materialQueue->setCompiled(success);
-	});
+	compileRenderQueue(loop, _materialQueue);
+	compileRenderQueue(loop, _transferQueue);
 }
 
 void Device::onLoopEnded(gl::Loop &loop) {
@@ -253,6 +258,24 @@ const DeviceQueueFamily *Device::getQueueFamily(QueueOperations ops) const {
 		if ((it.ops & ops) != QueueOperations::None) {
 			return &it;
 		}
+	}
+	return nullptr;
+}
+
+const DeviceQueueFamily *Device::getQueueFamily(gl::RenderPassType type) const {
+	switch (type) {
+	case gl::RenderPassType::Graphics:
+		return getQueueFamily(QueueOperations::Graphics);
+		break;
+	case gl::RenderPassType::Compute:
+		return getQueueFamily(QueueOperations::Compute);
+		break;
+	case gl::RenderPassType::Transfer:
+		return getQueueFamily(QueueOperations::Transfer);
+		break;
+	case gl::RenderPassType::Generic:
+		return nullptr;
+		break;
 	}
 	return nullptr;
 }
@@ -507,71 +530,49 @@ bool Device::supportsUpdateAfterBind(gl::DescriptorType type) const {
 	return false;
 }
 
-gl::ImageData Device::getEmptyImage() const {
-	return _textureSetLayout->getEmptyImage();
+Rc<gl::ImageObject> Device::getEmptyImageObject() const {
+	return _textureSetLayout->getEmptyImageObject();
 }
 
-gl::ImageData Device::getSolidImage() const {
-	return _textureSetLayout->getSolidImage();
+Rc<gl::ImageObject> Device::getSolidImageObject() const {
+	return _textureSetLayout->getSolidImageObject();
 }
 
-void Device::compileResource(thread::TaskQueue &queue, const Rc<gl::Resource> &req, Function<void(bool)> &&complete) {
-	/*if (_started) {
-		auto t = Rc<TransferResource>::alloc(move(complete));
-		queue.perform(Rc<Task>::create([this, req, t] (const thread::Task &) {
-			if (!t->init(_allocator, req) || !t->allocate() || !t->upload()) {
-				return false;
-			}
+Rc<gl::FrameHandle> Device::makeFrame(gl::Loop &loop, gl::Swapchain &swapchain, gl::RenderQueue &queue, uint32_t gen, bool readyForSubmit) {
+	return Rc<FrameHandle>::create(loop, swapchain, queue, gen, readyForSubmit);
+}
 
-			if (!t->isStagingRequired()) {
-				Application::getInstance()->performOnMainThread([t] {
-					t->compile();
-				});
-			}
-			return true;
-		}, [this, t] (const thread::Task &, bool success) {
-			if (!t->isStagingRequired()) {
-				return;
-			}
-		}, this));
-	} else {
-		// single-threaded mode
-		auto t = Rc<TransferResource>::create(_allocator, req, move(complete));
-		if (t && t->initialize()) {
-			if (!t->isStagingRequired()) {
-				t->compile();
-			} else if (auto q = getQueue(QueueOperations::Transfer)) {
-				auto pool = acquireCommandPool(q->getIndex());
-				auto fence = acquireFence(0);
+Rc<gl::FrameHandle> Device::makeFrame(gl::Loop &loop, gl::RenderQueue &queue, uint32_t gen) {
+	return Rc<FrameHandle>::create(loop, queue, gen);
+}
 
-				if (t->transfer(q, pool, fence)) {
-					releaseQueue(move(q));
-					fence->check(false); // wait until operation is completed
-					releaseCommandPool(move(pool));
-					releaseFence(move(fence));
-					t->compile();
-				} else {
-					releaseQueue(move(q));
-					releaseCommandPool(move(pool));
-					releaseFence(move(fence));
-					t->invalidate(*this);
-				}
-			}
-		}
-	}*/
+void Device::compileResource(gl::Loop &loop, const Rc<gl::Resource> &req, Function<void(bool)> &&complete) {
+	auto h = Rc<FrameHandle>::create(loop, *_transferQueue, 0);
+	auto res = Rc<TransferResource>::create(getAllocator(), req, move(complete));
+	_transferQueue->submitInput(*h, move(res));
+	h->update(true);
 }
 
 void Device::compileRenderQueue(gl::Loop &loop, const Rc<gl::RenderQueue> &req, Function<void(bool)> &&cb) {
-	auto h = Rc<FrameHandle>::create(loop, *_renderQueueCompiler, _renderQueueOrder ++, 0);
-	h->update(true);
-	h->setCompleteCallback([cb] (gl::FrameHandle &handle) {
-		cb(handle.isValid());
-	});
+	if (req->usesSamplers() && !_samplersCompiled.load()) {
+		loop.getQueue()->waitForAll();
+	}
+
+	auto h = Rc<FrameHandle>::create(loop, *_renderQueueCompiler, 0);
+	if (cb) {
+		h->setCompleteCallback([cb] (gl::FrameHandle &handle) {
+			cb(handle.isValid());
+		});
+	}
 
 	auto input = Rc<RenderQueueInput>::alloc();
 	input->queue = req;
+	_renderQueueCompiler->submitInput(*h, move(input));
+	h->update(true);
+}
 
-	h->submitInput(_renderQueueCompiler->getAttachment(), move(input));
+void Device::compileImage(gl::Loop &loop, const Rc<gl::DynamicImage> &image, Function<void(bool)> &&cb) {
+	_textureSetLayout->compileImage(*this, loop, image, move(cb));
 }
 
 void Device::compileSamplers(thread::TaskQueue &q, bool force) {
@@ -588,49 +589,46 @@ void Device::compileSamplers(thread::TaskQueue &q, bool force) {
 			(*ret)->setIndex(_samplers.size());
 			_immutableSamplers.emplace_back((*ret)->getSampler());
 			_samplers.emplace_back(move(*ret));
+			if (_samplers.size() == _samplersCount) {
+				_samplersCompiled = true;
+			}
 			delete ret;
 		}));
 	}
 	if (force) {
 		q.waitForAll();
 	}
-	_samplersCompiled = true;
 }
 
 void Device::runMaterialCompilationFrame(gl::Loop &loop, Rc<gl::MaterialInputData> &&req) {
-	auto attachment = req->attachment;
-	auto h = Rc<FrameHandle>::create(loop, *_materialQueue, _materialRenderPass->incrementOrder(), 0);
-	h->update(true);
-	h->setCompleteCallback([this, attachment] (gl::FrameHandle &handle) {
-		for (auto &it : handle.getOutputAttachments()) {
-			if (auto r = dynamic_cast<MaterialCompilationAttachmentHandle *>(it.get())) {
-				attachment->setMaterials(r->getOutputSet());
-			}
-		}
-		if (_materialRenderPass->hasRequest(attachment)) {
+	auto targetAttachment = req->attachment;
+	auto h = Rc<FrameHandle>::create(loop, *_materialQueue, 0);
+	h->setCompleteCallback([this, targetAttachment] (gl::FrameHandle &handle) {
+		if (_materialQueue->hasRequest(targetAttachment)) {
 			if (handle.getLoop()->isRunning()) {
-				auto req = _materialRenderPass->popRequest(attachment);
+				auto req = _materialQueue->popRequest(targetAttachment);
 				runMaterialCompilationFrame(*handle.getLoop(), move(req));
 			} else {
-				_materialRenderPass->clearRequests();
-				_materialRenderPass->dropInProgress(attachment);
+				_materialQueue->clearRequests();
+				_materialQueue->dropInProgress(targetAttachment);
 			}
 		} else {
-			_materialRenderPass->dropInProgress(attachment);
+			_materialQueue->dropInProgress(targetAttachment);
 		}
 	});
-	h->submitInput(_materialRenderPass->getMaterialAttachment(), move(req));
+	_materialQueue->submitInput(*h, move(req));
+	h->update(true);
 }
 
 void Device::compileMaterials(gl::Loop &loop, Rc<gl::MaterialInputData> &&req) {
 	if (_finished) {
 		return;
 	}
-	if (_materialRenderPass->inProgress(req->attachment)) {
-		_materialRenderPass->appendRequest(req->attachment, move(req->materials));
+	if (_materialQueue->inProgress(req->attachment)) {
+		_materialQueue->appendRequest(req->attachment, move(req));
 	} else {
 		auto attachment = req->attachment;
-		_materialRenderPass->setInProgress(attachment);
+		_materialQueue->setInProgress(attachment);
 		runMaterialCompilationFrame(loop, move(req));
 	}
 }
@@ -727,40 +725,6 @@ bool Device::setup(const Instance *instance, VkPhysicalDevice p, const Propertie
 #endif
 
 	return true;
-}
-
-Rc<gl::RenderQueue> Device::createTransferQueue() const {
-	gl::RenderQueue::Builder builder("Transfer", gl::RenderQueue::RenderOnDemand);
-
-	auto attachment = Rc<TransferAttachment>::create("TransferAttachment");
-	auto pass = Rc<TransferRenderPass>::create("TransferRenderPass");
-
-	builder.addRenderPass(pass);
-	builder.addPassInput(pass, 0, attachment);
-	builder.addPassOutput(pass, 0, attachment);
-	builder.addInput(attachment);
-	builder.addOutput(attachment);
-
-	return Rc<gl::RenderQueue>::create(move(builder));
-}
-
-Rc<gl::RenderQueue> Device::createMaterialQueue() {
-	gl::RenderQueue::Builder builder("Material", gl::RenderQueue::RenderOnDemand);
-
-	auto attachment = Rc<MaterialCompilationAttachment>::create("MaterialAttachment");
-	auto pass = Rc<MaterialCompilationRenderPass>::create("MaterialRenderPass");
-
-	attachment->setInputCallback([] (gl::FrameHandle &frame, const Rc<gl::AttachmentHandle> &a) { });
-
-	builder.addRenderPass(pass);
-	builder.addPassInput(pass, 0, attachment);
-	builder.addPassOutput(pass, 0, attachment);
-	builder.addInput(attachment);
-	builder.addOutput(attachment);
-
-	_materialRenderPass = pass;
-
-	return Rc<gl::RenderQueue>::create(move(builder));
 }
 
 }
