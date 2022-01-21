@@ -26,3 +26,4 @@ THE SOFTWARE.
 #include "XLNode.cc"
 #include "XLResourceComponent.cc"
 #include "XLSprite.cc"
+#include "XLLayer.cc"

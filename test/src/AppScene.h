@@ -25,6 +25,7 @@
 
 #include "XLScene.h"
 #include "XLSprite.h"
+#include "XLLayer.h"
 
 namespace stappler::xenolith::app {
 
@@ -46,9 +47,11 @@ public:
 	void addFontController(const Rc<font::FontController> &);
 
 protected:
+	Node *_layout = nullptr;
+	/*Layer *_layer = nullptr;
 	Sprite *_sprite = nullptr;
 	Sprite *_node1 = nullptr;
-	Sprite *_node2 = nullptr;
+	Sprite *_node2 = nullptr;*/
 };
 
 }

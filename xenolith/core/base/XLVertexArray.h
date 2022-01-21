@@ -57,6 +57,7 @@ public:
 
 	const Rc<gl::VertexData> &pop();
 
+	bool empty() const;
 	void clear();
 
 	// Quad is not valid after any other modifications, do not store this struct

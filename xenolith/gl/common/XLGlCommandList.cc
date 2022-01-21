@@ -52,14 +52,20 @@ bool CommandList::init(const Rc<PoolRef> &pool) {
 	return true;
 }
 
-void CommandList::pushVertexArray(const Rc<VertexData> &vert, const Mat4 &t, SpanView<int16_t> zPath, gl::MaterialId material) {
+void CommandList::pushVertexArray(const Rc<VertexData> &vert, const Mat4 &t, SpanView<int16_t> zPath, gl::MaterialId material, bool isSurface) {
 	_pool->perform([&] {
 		auto cmd = Command::create(_pool->getPool(), CommandType::VertexArray);
 		auto cmdData = (CmdVertexArray *)cmd->data;
 		cmdData->vertexes = vert;
 		cmdData->transform = t;
+
+		while (!zPath.empty() && zPath.back() == 0) {
+			zPath.pop_back();
+		}
+
 		cmdData->zPath = zPath.pdup(_pool->getPool());
 		cmdData->material = material;
+		cmdData->isSurface = isSurface;
 
 		addCommand(cmd);
 	});

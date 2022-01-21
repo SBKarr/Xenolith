@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,51 +20,48 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_GL_COMMON_XLGLCOMMANDLIST_H_
-#define XENOLITH_GL_COMMON_XLGLCOMMANDLIST_H_
+#include "XLDefine.h"
+#include "AppRootLayout.h"
 
-#include "XLGl.h"
+namespace stappler::xenolith::app {
 
-namespace stappler::xenolith::gl {
+bool RootLayout::init() {
+	if (!Node::init()) {
+		return false;
+	}
 
-enum class CommandType {
-	CommandGroup,
-	VertexArray,
-};
+	_background = addChild(Rc<Layer>::create());
+	_background->setColorMode(ColorMode(gl::ComponentMapping::R, gl::ComponentMapping::One));
 
-struct CmdVertexArray {
-	Mat4 transform = Mat4::IDENTITY;
-	gl::MaterialId material = 0;
-	Rc<VertexData> vertexes;
-	SpanView<int16_t> zPath;
-	bool isSurface = false;
-};
+	_logo = addChild(Rc<Sprite>::create("Xenolith.png"));
+	_logo->setOpacity(0.5f);
+	_logo->setContentSize(Size(308, 249));
 
-struct Command {
-	static Command *create(memory::pool_t *, CommandType t);
+	scheduleUpdate();
 
-	Command *next;
-	CommandType type;
-	void *data;
-};
-
-class CommandList : public gl::AttachmentInputData {
-public:
-	bool init(const Rc<PoolRef> &);
-
-	void pushVertexArray(const Rc<VertexData> &, const Mat4 &, SpanView<int16_t> zPath, gl::MaterialId material, bool isSurface);
-
-	const Command *getFirst() const { return _first; }
-	const Command *getLast() const { return _last; }
-
-protected:
-	void addCommand(Command *);
-
-	Rc<PoolRef> _pool;
-	Command *_first = nullptr;
-	Command *_last = nullptr;
-};
-
+	return true;
 }
 
-#endif /* XENOLITH_GL_COMMON_XLGLCOMMANDLIST_H_ */
+void RootLayout::onContentSizeDirty() {
+	Node::onContentSizeDirty();
+
+	_background->setAnchorPoint(Anchor::Middle);
+	_background->setPosition(_contentSize / 2.0f);
+	_background->setContentSize(_contentSize);
+
+	_logo->setAnchorPoint(Anchor::Middle);
+	_logo->setPosition(_contentSize / 2.0f);
+}
+
+void RootLayout::update(const UpdateTime &time) {
+	Node::update(time);
+
+	auto t = time.app % 5_usec;
+
+	if (_background) {
+		_background->setGradient(SimpleGradient(Color::Red_500, Color::Green_500,
+				Vec2::forAngle(M_PI * 2.0 * (float(t) / 5_usec))));
+	}
+}
+
+}

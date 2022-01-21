@@ -33,6 +33,7 @@
 namespace stappler::xenolith::font {
 
 FontController::~FontController() {
+	// image need to be finalized to remove cycled refs
 	_image->finalize();
 }
 

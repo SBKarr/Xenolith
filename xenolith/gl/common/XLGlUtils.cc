@@ -482,6 +482,13 @@ SpecializationInfo::SpecializationInfo(const ProgramData *data) : data(data) { }
 
 SpecializationInfo::SpecializationInfo(const ProgramData *data, Vector<PredefinedConstant> &&c) : data(data), constants(move(c)) { }
 
+bool PipelineInfo::isSolid() const {
+	if (material.depth.writeEnabled || !material.blend.enabled) {
+		return true;
+	}
+	return false;
+}
+
 String BufferInfo::description() const {
 	StringStream stream;
 
@@ -1077,6 +1084,7 @@ PixelFormat getImagePixelFormat(ImageFormat format) {
 
 	case ImageFormat::D16_UNORM:
 	case ImageFormat::D32_SFLOAT:
+	case ImageFormat::X8_D24_UNORM_PACK32:
 		return PixelFormat::D;
 		break;
 
@@ -1087,7 +1095,6 @@ PixelFormat getImagePixelFormat(ImageFormat format) {
 	case ImageFormat::D16_UNORM_S8_UINT:
 	case ImageFormat::D24_UNORM_S8_UINT:
 	case ImageFormat::D32_SFLOAT_S8_UINT:
-	case ImageFormat::X8_D24_UNORM_PACK32:
 		return PixelFormat::DS;
 		break;
 
@@ -1158,6 +1165,36 @@ PixelFormat getImagePixelFormat(ImageFormat format) {
 		break;
 	}
 	return PixelFormat::Unknown;
+}
+
+bool isStencilFormat(ImageFormat format) {
+	switch (format) {
+	case ImageFormat::S8_UINT:
+	case ImageFormat::D16_UNORM_S8_UINT:
+	case ImageFormat::D24_UNORM_S8_UINT:
+	case ImageFormat::D32_SFLOAT_S8_UINT:
+		return true;
+		break;
+	default:
+		break;
+	}
+	return false;
+}
+
+bool isDepthFormat(ImageFormat format) {
+	switch (format) {
+	case ImageFormat::D16_UNORM:
+	case ImageFormat::D32_SFLOAT:
+	case ImageFormat::D16_UNORM_S8_UINT:
+	case ImageFormat::D24_UNORM_S8_UINT:
+	case ImageFormat::D32_SFLOAT_S8_UINT:
+	case ImageFormat::X8_D24_UNORM_PACK32:
+		return true;
+		break;
+	default:
+		break;
+	}
+	return false;
 }
 
 }

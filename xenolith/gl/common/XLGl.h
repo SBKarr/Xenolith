@@ -150,8 +150,9 @@ struct SpecializationInfo {
 struct PipelineInfo : NamedMem {
 	memory::vector<SpecializationInfo> shaders;
 	DynamicState dynamicState = DynamicState::Default;
-	bool depthWriteEnabled = false;
-	bool depthTestEnabled = false;
+	PipelineMaterialInfo material;
+
+	bool isSolid() const;
 };
 
 struct PipelineData : PipelineInfo {
@@ -407,6 +408,8 @@ String getImageUsageDescription(ImageUsage fmt);
 String getProgramStageDescription(ProgramStage fmt);
 size_t getFormatBlockSize(ImageFormat format);
 PixelFormat getImagePixelFormat(ImageFormat format);
+bool isStencilFormat(ImageFormat format);
+bool isDepthFormat(ImageFormat format);
 
 }
 

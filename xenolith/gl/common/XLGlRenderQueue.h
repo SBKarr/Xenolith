@@ -244,6 +244,7 @@ protected:
 
 	bool setPipelineOption(PipelineData &f, DynamicState);
 	bool setPipelineOption(PipelineData &f, const Vector<SpecializationInfo> &);
+	bool setPipelineOption(PipelineData &f, const PipelineMaterialInfo &);
 
 	template <typename T>
 	bool setPipelineOptions(PipelineData &f, T && t) {

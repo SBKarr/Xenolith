@@ -63,6 +63,16 @@ public:
 	virtual uint64_t acquireMaterial(const MaterialInfo &, Vector<gl::MaterialImage> &&images);
 
 protected:
+	struct SubpassData {
+		gl::RenderSubpassData *subpass;
+		std::unordered_map<size_t, Vector<const gl::PipelineData *>> pipelines;
+	};
+
+	struct AttachmentData {
+		const gl::MaterialAttachment *attachment;
+		Vector<SubpassData> subasses;
+	};
+
 	virtual Rc<gl::RenderQueue> makeQueue(gl::RenderQueue::Builder &&);
 	virtual void readInitialMaterials();
 	virtual MaterialInfo getMaterialInfo(gl::MaterialType, const Rc<gl::Material> &) const;
@@ -73,10 +83,8 @@ protected:
 	// Search for pipeline, compatible with material
 	// Backward-search through RenderPass/Subppass, that uses material attachment provided
 	// Can be slow on complex RenderQueue
-	virtual const gl::PipelineData *getPipelineForMaterial(const gl::MaterialAttachment *, const MaterialInfo &) const;
-	virtual bool isPipelineMatch(const gl::PipelineData *, const MaterialInfo &) const;
-
-	const gl::MaterialAttachment *getAttachmentByType(gl::MaterialType) const;
+	virtual const gl::PipelineData *getPipelineForMaterial(const AttachmentData &, const MaterialInfo &) const;
+	virtual bool isPipelineMatch(const gl::PipelineInfo *, const MaterialInfo &) const;
 
 	void addPendingMaterial(const gl::MaterialAttachment *, Rc<gl::Material> &&);
 	void addMaterial(const MaterialInfo &, gl::MaterialId);
@@ -85,7 +93,7 @@ protected:
 	Director *_director = nullptr;
 	Rc<gl::RenderQueue> _queue;
 
-	Map<gl::MaterialType, const gl::MaterialAttachment *> _attachmentsByType;
+	Map<gl::MaterialType, AttachmentData> _attachmentsByType;
 	std::unordered_map<uint64_t, Vector<Pair<MaterialInfo, gl::MaterialId>>> _materials;
 
 	Map<const gl::MaterialAttachment *, Vector<Rc<gl::Material>>> _pendingMaterials;

@@ -41,6 +41,8 @@ public:
 
 	uint64_t getIndex() const;
 
+	bool hasAlpha() const;
+
 protected:
 	const gl::ImageData *_data = nullptr;
 	Rc<gl::Resource> _resource;

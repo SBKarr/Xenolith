@@ -66,6 +66,34 @@ uint64_t Texture::getIndex() const {
 	return 0;
 }
 
+bool Texture::hasAlpha() const {
+	if (_dynamic) {
+		auto fmt = gl::getImagePixelFormat(_dynamic->getInfo().format);
+		switch (fmt) {
+		case gl::PixelFormat::A:
+		case gl::PixelFormat::IA:
+		case gl::PixelFormat::RGBA:
+			return true;
+			break;
+		default:
+			break;
+		}
+		return false;
+	} else {
+		auto fmt = gl::getImagePixelFormat(_data->format);
+		switch (fmt) {
+		case gl::PixelFormat::A:
+		case gl::PixelFormat::IA:
+		case gl::PixelFormat::RGBA:
+			return true;
+			break;
+		default:
+			break;
+		}
+		return false;
+	}
+}
+
 Rc<ResourceCache> ResourceCache::getInstance() {
 	if (auto app = Application::getInstance()) {
 		return app->getResourceCache();

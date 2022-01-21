@@ -31,6 +31,7 @@ namespace stappler::xenolith {
 
 class Sprite : public Node {
 public:
+	Sprite();
 	virtual ~Sprite() { }
 
 	virtual bool init();
@@ -45,14 +46,23 @@ public:
 
 	virtual void onEnter(Scene *) override;
 
-	virtual void setColorMode(const ColorMode &mode);
+	virtual void setColorMode(const ColorMode &);
 	virtual const ColorMode &getColorMode() const { return _colorMode; }
+
+	virtual void setBlendInfo(const BlendInfo &);
+	virtual const BlendInfo &getBlendInfo() const { return _materialInfo.blend; }
+
+	virtual void setForceSolid(bool);
+	virtual bool isForceSolid() const { return _forceSolid; }
 
 protected:
 	virtual MaterialInfo getMaterialInfo() const;
 	virtual Vector<gl::MaterialImage> getMaterialImages() const;
 	virtual void updateColor() override;
+	virtual void updateVertexesColor();
 	virtual void updateVertexes();
+
+	virtual bool isSolidColor() const;
 
 	String _textureName;
 	Rc<Texture> _texture;
@@ -63,11 +73,17 @@ protected:
 	bool _rotated = false;
 	Rect _textureRect = Rect(0.0f, 0.0f, 1.0f, 1.0f);
 
+	bool _isSurface = false;
 	uint64_t _materialId = 0;
+
+	// mark sprite as unconditionally solid (so, alpha channel will be ignored)
+	// useful for draw optimization, solid nodes can be drown out of order
+	bool _forceSolid = false;
 	bool _materialDirty = true;
 
 	Color4F _tmpColor;
 	ColorMode _colorMode;
+	PipelineMaterialInfo _materialInfo;
 };
 
 }

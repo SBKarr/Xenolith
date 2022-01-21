@@ -20,8 +20,7 @@
  THE SOFTWARE.
  **/
 
-#include "XLAppScene.h"
-
+#include "AppScene.h"
 #include "XLAppSceneResource.cc"
 #include "XLDirector.h"
 #include "XLSprite.h"
@@ -34,7 +33,7 @@
 #include "XLVkBufferAttachment.h"
 #include "XLVkMaterialRenderPass.h"
 
-#include "XLTestNetworkSprite.h"
+#include "AppRootLayout.h"
 #include "XLFontLibrary.h"
 
 namespace stappler::xenolith::app {
@@ -54,13 +53,18 @@ static void AppScene_makeRenderQueue(gl::RenderQueue::Builder &builder, Extent2 
 	auto pass = Rc<vk::MaterialRenderPass>::create("SwapchainPass", gl::RenderOrderingHighest);
 	builder.addRenderPass(pass);
 
-
-	// pipeline for material-besed rendering
-	auto materialPipeline = builder.addPipeline(pass, 0, "Materials", Vector<gl::SpecializationInfo>({
+	auto shaderSpecInfo = Vector<gl::SpecializationInfo>({
 		// no specialization required for vertex shader
 		materialVert,
 		// specialization for fragment shader - use platform-dependent array sizes
 		gl::SpecializationInfo(materialFrag, { gl::PredefinedConstant::SamplersArraySize, gl::PredefinedConstant::TexturesArraySize })
+	});
+
+	// pipeline for material-besed rendering
+	auto materialPipeline = builder.addPipeline(pass, 0, "Solid", shaderSpecInfo);
+
+	builder.addPipeline(pass, 0, "Transparent", shaderSpecInfo, PipelineMaterialInfo({
+		BlendInfo(gl::BlendFactor::One, gl::BlendFactor::OneMinusSrcAlpha)
 	}));
 
 
@@ -123,6 +127,8 @@ bool AppScene::init(Extent2 extent) {
 		return false;
 	}
 
+	_layout = addChild(Rc<RootLayout>::create());
+
 	// _sprite = addChild(Rc<Sprite>::create("Xenolith.png"));
 
 	/*_node1 = addChild(Rc<Sprite>::create());
@@ -148,9 +154,9 @@ void AppScene::update(const UpdateTime &time) {
 
 	auto t = time.app % 5_usec;
 
-	if (_sprite) {
+	/*if (_sprite) {
 		_sprite->setRotation(M_PI * 2.0 * (float(t) / 5_usec));
-	}
+	}*/
 }
 
 void AppScene::onEnter(Scene *scene) {
@@ -166,7 +172,11 @@ void AppScene::onExit() {
 void AppScene::onContentSizeDirty() {
 	Scene::onContentSizeDirty();
 
-	if (_sprite) {
+	_layout->setAnchorPoint(Anchor::Middle);
+	_layout->setPosition(_contentSize / 2.0f);
+	_layout->setContentSize(_contentSize);
+
+	/*if (_sprite) {
 		_sprite->setPosition(Vec2(_contentSize) / 2.0f);
 		_sprite->setAnchorPoint(Anchor::Middle);
 		_sprite->setContentSize(_contentSize / 2.0f);
@@ -182,15 +192,15 @@ void AppScene::onContentSizeDirty() {
 		_node2->setContentSize(Size(_contentSize.width / 2.0f, _contentSize.height / 4.0f));
 		_node2->setPosition(Vec2(_contentSize) / 2.0f + Vec2(0, _contentSize.height / 4.0f));
 		_node2->setAnchorPoint(Anchor::Middle);
-	}
+	}*/
 }
 
 void AppScene::addFontController(const Rc<font::FontController> &c) {
-	_sprite = addChild(Rc<Sprite>::create(Rc<Texture>(c->getTexture())));
+	/*_sprite = addChild(Rc<Sprite>::create(Rc<Texture>(c->getTexture())));
 
 	_sprite->setPosition(Vec2(_contentSize) / 2.0f);
 	_sprite->setAnchorPoint(Anchor::Middle);
-	_sprite->setContentSize(_contentSize / 2.0f);
+	_sprite->setContentSize(_contentSize / 2.0f);*/
 }
 
 }

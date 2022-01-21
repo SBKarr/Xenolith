@@ -1201,6 +1201,12 @@ bool RenderQueue::Builder::setPipelineOption(PipelineData &f, const Vector<Speci
 	return true;
 }
 
+bool RenderQueue::Builder::setPipelineOption(PipelineData &f, const PipelineMaterialInfo &info) {
+	f.material = info;
+	f.material.normalize();
+	return true;
+}
+
 memory::pool_t *RenderQueue::Builder::getPool() const {
 	return _data->pool;
 }

@@ -140,56 +140,33 @@ uint64_t Scene::getMaterial(const MaterialInfo &info) const {
 	return 0;
 }
 
-/*uint64_t Scene::acquireMaterial(const MaterialInfo &info, const Vector<const gl::ImageData *> &images) {
-	if (auto a = getAttachmentByType(info.type)) {
-		auto pipeline = getPipelineForMaterial(a, info);
-		if (!pipeline) {
-			return 0;
-		}
+uint64_t Scene::acquireMaterial(const MaterialInfo &info, Vector<gl::MaterialImage> &&images) {
+	auto aIt = _attachmentsByType.find(info.type);
+	if (aIt == _attachmentsByType.end()) {
+		return 0;
+	}
 
-		Vector<gl::MaterialImage> imgs;
-		for (size_t idx = 0; idx < images.size(); ++ idx) {
-			if (images[idx] != nullptr) {
-				gl::MaterialImage image;
-				image.image = images[idx];
-				image.info = getImageViewForMaterial(info, idx, images[idx]);
-				image.view = nullptr;
-				image.sampler = info.samplers[idx];
-				imgs.emplace_back(move(image));
-			}
-		}
-		if (auto m = Rc<gl::Material>::create(pipeline, move(imgs), getDataForMaterial(a, info))) {
-			auto id = m->getId();
-			addPendingMaterial(a, move(m));
-			addMaterial(info, id);
-			return id;
+	auto &a = aIt->second;
+
+	auto pipeline = getPipelineForMaterial(a, info);
+	if (!pipeline) {
+		return 0;
+	}
+
+	for (size_t idx = 0; idx < images.size(); ++ idx) {
+		if (images[idx].image != nullptr) {
+			auto &image = images[idx];
+			image.info = getImageViewForMaterial(info, idx, images[idx].image);
+			image.view = nullptr;
+			image.sampler = info.samplers[idx];
 		}
 	}
-	return 0;
-}*/
 
-uint64_t Scene::acquireMaterial(const MaterialInfo &info, Vector<gl::MaterialImage> &&images) {
-	if (auto a = getAttachmentByType(info.type)) {
-		auto pipeline = getPipelineForMaterial(a, info);
-		if (!pipeline) {
-			return 0;
-		}
-
-		for (size_t idx = 0; idx < images.size(); ++ idx) {
-			if (images[idx].image != nullptr) {
-				auto &image = images[idx];
-				image.info = getImageViewForMaterial(info, idx, images[idx].image);
-				image.view = nullptr;
-				image.sampler = info.samplers[idx];
-			}
-		}
-
-		if (auto m = Rc<gl::Material>::create(pipeline, move(images), getDataForMaterial(a, info))) {
-			auto id = m->getId();
-			addPendingMaterial(a, move(m));
-			addMaterial(info, id);
-			return id;
-		}
+	if (auto m = Rc<gl::Material>::create(pipeline, move(images), getDataForMaterial(a.attachment, info))) {
+		auto id = m->getId();
+		addPendingMaterial(a.attachment, move(m));
+		addMaterial(info, id);
+		return id;
 	}
 	return 0;
 }
@@ -214,7 +191,40 @@ Rc<gl::RenderQueue> Scene::makeQueue(gl::RenderQueue::Builder &&builder) {
 void Scene::readInitialMaterials() {
 	for (auto &it : _queue->getAttachments()) {
 		if (auto a = dynamic_cast<gl::MaterialAttachment *>(it.get())) {
-			_attachmentsByType.emplace(a->getType(), a);
+			auto &v = _attachmentsByType.emplace(a->getType(), AttachmentData({a})).first->second;
+
+			auto renderPass = a->getLastRenderPass();
+			while (renderPass) {
+				auto &subpasses = renderPass->subpasses;
+
+				for (auto it = subpasses.rbegin(); it != subpasses.rend(); ++ it) {
+					// check if subpass has material attachment
+					bool isUsable = false;
+					for (auto &attachment : it->inputBuffers) {
+						if (attachment->getAttachment() == a) {
+							isUsable = true;
+							break;
+						}
+					}
+
+					if (!isUsable) {
+						break;
+					}
+
+					auto &sp = v.subasses.emplace_back(SubpassData({&(*it)}));
+
+					for (auto &pipeline : it->pipelines) {
+						auto hash = pipeline->material.hash();
+						auto it = sp.pipelines.find(hash);
+						if (it == sp.pipelines.end()) {
+							it = sp.pipelines.emplace(hash, Vector<const gl::PipelineData *>()).first;
+						}
+						it->second.emplace_back(pipeline);
+					}
+				}
+
+				renderPass = a->getPrevRenderPass(renderPass);
+			}
 			for (auto &m : a->getInitialMaterials()) {
 				addMaterial(getMaterialInfo(a->getType(), m), m->getId());
 			}
@@ -246,14 +256,10 @@ gl::ImageViewInfo Scene::getImageViewForMaterial(const MaterialInfo &info, uint3
 		switch (format) {
 		case gl::PixelFormat::Unknown: break;
 		case gl::PixelFormat::A:
-			ret.r = gl::ComponentMapping::R;
-			ret.g = gl::ComponentMapping::R;
-			ret.b = gl::ComponentMapping::R;
-			ret.a = gl::ComponentMapping::One;
-			/*ret.r = gl::ComponentMapping::One;
+			ret.r = gl::ComponentMapping::One;
 			ret.g = gl::ComponentMapping::One;
 			ret.b = gl::ComponentMapping::One;
-			ret.a = gl::ComponentMapping::R;*/
+			ret.a = gl::ComponentMapping::R;
 			break;
 		case gl::PixelFormat::IA:
 			ret.r = gl::ComponentMapping::B;
@@ -294,49 +300,24 @@ Bytes Scene::getDataForMaterial(const gl::MaterialAttachment *a, const MaterialI
 	return Bytes();
 }
 
-const gl::PipelineData *Scene::getPipelineForMaterial(const gl::MaterialAttachment *a, const MaterialInfo &info) const {
-	if (auto a = getAttachmentByType(info.type)) {
-		auto renderPass = a->getLastRenderPass();
-		while (renderPass) {
-			auto &subpasses = renderPass->subpasses;
-
-			for (auto it = subpasses.rbegin(); it != subpasses.rend(); ++ it) {
-				// check if subpass has material attachment
-				bool isUsable = false;
-				for (auto &attachment : it->inputBuffers) {
-					if (attachment->getAttachment() == a) {
-						isUsable = true;
-						break;
-					}
-				}
-
-				if (!isUsable) {
-					break;
-				}
-
-				for (auto &pipeline : it->pipelines) {
-					if (isPipelineMatch(pipeline, info)) {
-						return pipeline;
-					}
+const gl::PipelineData *Scene::getPipelineForMaterial(const AttachmentData &a, const MaterialInfo &info) const {
+	auto hash = info.pipeline.hash();
+	for (auto &it : a.subasses) {
+		auto hashIt = it.pipelines.find(hash);
+		if (hashIt != it.pipelines.end()) {
+			for (auto &pipeline : hashIt->second) {
+				if (pipeline->material == info.pipeline && isPipelineMatch(pipeline, info)) {
+					return pipeline;
 				}
 			}
-
-			renderPass = a->getPrevRenderPass(renderPass);
 		}
 	}
+	log::vtext("Scene", "No pipeline for attachment '", a.attachment->getName(), "': ", info.pipeline.data());
 	return nullptr;
 }
 
-bool Scene::isPipelineMatch(const gl::PipelineData *data, const MaterialInfo &info) const {
+bool Scene::isPipelineMatch(const gl::PipelineInfo *data, const MaterialInfo &info) const {
 	return true; // TODO: true match
-}
-
-const gl::MaterialAttachment *Scene::getAttachmentByType(gl::MaterialType type) const {
-	auto it = _attachmentsByType.find(type);
-	if (it != _attachmentsByType.end()) {
-		return it->second;
-	}
-	return nullptr;
 }
 
 void Scene::addPendingMaterial(const gl::MaterialAttachment *a, Rc<gl::Material> &&material) {

@@ -186,6 +186,10 @@ const Rc<gl::VertexData> &VertexArray::pop() {
 	return _data;
 }
 
+bool VertexArray::empty() const {
+	return _data->indexes.empty() || _data->data.empty();
+}
+
 void VertexArray::clear() {
 	if (_copyOnWrite) {
 		copy();

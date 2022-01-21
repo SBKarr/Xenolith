@@ -27,6 +27,10 @@
 
 namespace stappler::xenolith {
 
+Sprite::Sprite() {
+	_materialInfo.blend = BlendInfo(gl::BlendFactor::One, gl::BlendFactor::OneMinusSrcAlpha);
+}
+
 bool Sprite::init() {
 	return init(SolidTextureName);
 }
@@ -100,6 +104,11 @@ void Sprite::visit(RenderFrameInfo &info, NodeFlags parentFlags) {
 void Sprite::draw(RenderFrameInfo &frame, NodeFlags flags) {
 	if (_texture) {
 		if (_materialDirty) {
+			auto isSolid = isSolidColor();
+			if (bool(_materialInfo.blend.enabled) != !isSolid) {
+				_materialInfo.blend.enabled = isSolid ? 0 : 1;
+			}
+
 			auto info = getMaterialInfo();
 			_materialId = frame.scene->getMaterial(info);
 			if (_materialId == 0) {
@@ -110,7 +119,7 @@ void Sprite::draw(RenderFrameInfo &frame, NodeFlags flags) {
 			}
 			_materialDirty = false;
 		}
-		frame.commands->pushVertexArray(_vertexes.pop(), frame.transformStack.back(), frame.zPath, _materialId);
+		frame.commands->pushVertexArray(_vertexes.pop(), frame.transformStack.back(), frame.zPath, _materialId, _isSurface);
 	}
 }
 
@@ -135,11 +144,30 @@ void Sprite::setColorMode(const ColorMode &mode) {
 	}
 }
 
+void Sprite::setBlendInfo(const BlendInfo &info) {
+	if (_materialInfo.blend != info) {
+		_materialInfo.blend = info;
+		_materialDirty = true;
+	}
+}
+
+void Sprite::setForceSolid(bool val) {
+	if (_forceSolid != val) {
+		_forceSolid = val;
+		auto isSolid = isSolidColor();
+		if (bool(_materialInfo.blend.enabled) != !isSolid) {
+			_materialInfo.blend.enabled = isSolid ? 0 : 1;
+			_materialDirty = true;
+		}
+	}
+}
+
 MaterialInfo Sprite::getMaterialInfo() const {
 	MaterialInfo ret;
 	ret.type = gl::MaterialType::Basic2D;
 	ret.images[0] = _texture->getIndex();
 	ret.colorMode = _colorMode;
+	ret.pipeline = _materialInfo;
 	return ret;
 }
 
@@ -151,15 +179,28 @@ Vector<gl::MaterialImage> Sprite::getMaterialImages() const {
 
 void Sprite::updateColor() {
 	if (_tmpColor != _displayedColor) {
-		_vertexes.updateColor(_displayedColor);
+		updateVertexesColor();
 		if (_tmpColor.a != _displayedColor.a) {
-			if (_displayedColor.a == 1.0f || _tmpColor.a == 0.0f) {
-				// opaque/transparent material switch
-				_materialDirty = true;
+			if (_displayedColor.a == 1.0f || _tmpColor.a == 1.0f) {
+				if (isSolidColor()) {
+					if (_materialInfo.blend.enabled) {
+						_materialInfo.blend.enabled = 0;
+						_materialDirty = true;
+					}
+				} else {
+					if (!_materialInfo.blend.enabled) {
+						_materialInfo.blend.enabled = 1;
+						_materialDirty = true;
+					}
+				}
 			}
 		}
 		_tmpColor = _displayedColor;
 	}
+}
+
+void Sprite::updateVertexesColor() {
+	_vertexes.updateColor(_displayedColor);
 }
 
 void Sprite::updateVertexes() {
@@ -168,6 +209,38 @@ void Sprite::updateVertexes() {
 		.setGeometry(Vec4::ZERO, _contentSize)
 		.setTextureRect(_textureRect, 1.0f, 1.0f, _flippedX, _flippedY, _rotated)
 		.setColor(_displayedColor);
+}
+
+bool Sprite::isSolidColor() const {
+	if (_forceSolid) {
+		return true;
+	}
+	if (_displayedColor.a < 1.0f || !_texture) {
+		return false;
+	}
+	if (_colorMode.getMode() == ColorMode::Solid) {
+		if (_texture->hasAlpha()) {
+			return false;
+		}
+	} else {
+		auto alphaMapping = _colorMode.getA();
+		switch (alphaMapping) {
+		case gl::ComponentMapping::Identity:
+			if (_texture->hasAlpha()) {
+				return false;
+			}
+			break;
+		case gl::ComponentMapping::Zero:
+			return false;
+			break;
+		case gl::ComponentMapping::One:
+			break;
+		default:
+			return false;
+			break;
+		}
+	}
+	return true;
 }
 
 }

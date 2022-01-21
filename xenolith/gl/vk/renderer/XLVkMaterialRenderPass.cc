@@ -154,9 +154,17 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 
 	// fill write plan
 	MaterialWritePlan globalWritePlan;
-	std::unordered_map<gl::MaterialId, MaterialWritePlan> writePlan;
 
-	auto pushVertexData = [&] (const gl::CmdVertexArray *cmd) {
+	// write plan for objects, that do depth-write and can be drawn out of order
+	std::unordered_map<gl::MaterialId, MaterialWritePlan> solidWritePlan;
+
+	// write plan for objects without depth-write, that can be drawn out of order
+	std::unordered_map<gl::MaterialId, MaterialWritePlan> surfaceWritePlan;
+
+	// write plan for transparent objects, that should be drawn in order
+	std::map<SpanView<int16_t>, std::unordered_map<gl::MaterialId, MaterialWritePlan>> transparentWritePlan;
+
+	auto emplaceWritePlan = [&] (std::unordered_map<gl::MaterialId, MaterialWritePlan> &writePlan, const gl::CmdVertexArray *cmd) {
 		auto it = writePlan.find(cmd->material);
 		if (it == writePlan.end()) {
 			auto material = _materials->getMaterials()->getMaterialById(cmd->material);
@@ -179,6 +187,24 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 		}
 	};
 
+	auto pushVertexData = [&] (const gl::CmdVertexArray *cmd) {
+		auto material = _materials->getMaterials()->getMaterialById(cmd->material);
+		if (!material) {
+			return;
+		}
+		if (material->getPipeline()->isSolid()) {
+			emplaceWritePlan(solidWritePlan, cmd);
+		} else if (cmd->isSurface) {
+			emplaceWritePlan(surfaceWritePlan, cmd);
+		} else {
+			auto v = transparentWritePlan.find(cmd->zPath);
+			if (v == transparentWritePlan.end()) {
+				v = transparentWritePlan.emplace(cmd->zPath, std::unordered_map<gl::MaterialId, MaterialWritePlan>()).first;
+			}
+			emplaceWritePlan(v->second, cmd);
+		}
+	};
+
 	auto cmd = commands->getFirst();
 	while (cmd) {
 		switch (cmd->type) {
@@ -189,31 +215,6 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 			break;
 		}
 		cmd = cmd->next;
-	}
-
-	// optimize draw order, minimize switching pipeline, textureSet and descriptors
-	Vector<const Pair<const gl::MaterialId, MaterialWritePlan> *> drawOrder;
-
-	for (auto &it : writePlan) {
-		if (drawOrder.empty()) {
-			drawOrder.emplace_back(&it);
-		} else {
-			auto lb = std::lower_bound(drawOrder.begin(), drawOrder.end(), &it,
-					[] (const Pair<const gl::MaterialId, MaterialWritePlan> *l, const Pair<const gl::MaterialId, MaterialWritePlan> *r) {
-				if (l->second.material->getPipeline() != l->second.material->getPipeline()) {
-					return Pipeline::comparePipelineOrdering(*l->second.material->getPipeline(), *r->second.material->getPipeline());
-				} else if (l->second.material->getLayoutIndex() != r->second.material->getLayoutIndex()) {
-					return l->second.material->getLayoutIndex() < r->second.material->getLayoutIndex();
-				} else {
-					return l->first < r->first;
-				}
-			});
-			if (lb == drawOrder.end()) {
-				drawOrder.emplace_back(&it);
-			} else {
-				drawOrder.emplace(lb, &it);
-			}
-		}
 	}
 
 	if (globalWritePlan.vertexes == 0 || globalWritePlan.indexes == 0) {
@@ -233,48 +234,82 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 	uint32_t vertexOffset = 0;
 	uint32_t indexOffset = 0;
 
-	for (auto &it : drawOrder) {
-		uint32_t materialVertexes = 0;
-		uint32_t materialIndexes = 0;
+	auto drawWritePlan = [&] (std::unordered_map<gl::MaterialId, MaterialWritePlan> &writePlan) {
+		// optimize draw order, minimize switching pipeline, textureSet and descriptors
+		Vector<const Pair<const gl::MaterialId, MaterialWritePlan> *> drawOrder;
 
-		for (auto &cmd : it->second.commands) {
-			auto target = (gl::Vertex_V4F_V4F_T2F2U *)vertexesMap.ptr + vertexOffset;
-			memcpy(target, (uint8_t *)cmd->vertexes->data.data(),
-					cmd->vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U));
-
-			if (!isGpuTransform()) {
-				// pre-transform vertexes
-				auto transform = cmd->transform;
-
-				size_t idx = 0;
-				for (auto &v : cmd->vertexes->data) {
-					target[idx].pos = transform * v.pos;
-					target[idx].material = it->first;
-
-					if (target[idx].object && it->second.atlas) {
-						target[idx].tex = it->second.atlas->getObjectByName(target[idx].object);
+		for (auto &it : writePlan) {
+			if (drawOrder.empty()) {
+				drawOrder.emplace_back(&it);
+			} else {
+				auto lb = std::lower_bound(drawOrder.begin(), drawOrder.end(), &it,
+						[] (const Pair<const gl::MaterialId, MaterialWritePlan> *l, const Pair<const gl::MaterialId, MaterialWritePlan> *r) {
+					if (l->second.material->getPipeline() != l->second.material->getPipeline()) {
+						return Pipeline::comparePipelineOrdering(*l->second.material->getPipeline(), *r->second.material->getPipeline());
+					} else if (l->second.material->getLayoutIndex() != r->second.material->getLayoutIndex()) {
+						return l->second.material->getLayoutIndex() < r->second.material->getLayoutIndex();
+					} else {
+						return l->first < r->first;
 					}
-
-					++ idx;
-				}
-
-				auto indexTarget = (uint32_t *)indexesMap.ptr + indexOffset;
-
-				idx = 0;
-				for (auto &it : cmd->vertexes->indexes) {
-					indexTarget[idx] = it + vertexOffset;
-					++ idx;
+				});
+				if (lb == drawOrder.end()) {
+					drawOrder.emplace_back(&it);
+				} else {
+					drawOrder.emplace(lb, &it);
 				}
 			}
-
-			vertexOffset += cmd->vertexes->data.size();
-			indexOffset += cmd->vertexes->indexes.size();
-
-			materialVertexes += cmd->vertexes->data.size();
-			materialIndexes += cmd->vertexes->indexes.size();
 		}
 
-		_spans.emplace_back(gl::VertexSpan({ it->first, materialIndexes, 1, indexOffset - materialIndexes}));
+		for (auto &it : drawOrder) {
+			uint32_t materialVertexes = 0;
+			uint32_t materialIndexes = 0;
+
+			for (auto &cmd : it->second.commands) {
+				auto target = (gl::Vertex_V4F_V4F_T2F2U *)vertexesMap.ptr + vertexOffset;
+				memcpy(target, (uint8_t *)cmd->vertexes->data.data(),
+						cmd->vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U));
+
+				if (!isGpuTransform()) {
+					// pre-transform vertexes
+					auto transform = cmd->transform;
+
+					size_t idx = 0;
+					for (auto &v : cmd->vertexes->data) {
+						target[idx].pos = transform * v.pos;
+						target[idx].material = it->first;
+
+						if (target[idx].object && it->second.atlas) {
+							target[idx].tex = it->second.atlas->getObjectByName(target[idx].object);
+						}
+
+						++ idx;
+					}
+
+					auto indexTarget = (uint32_t *)indexesMap.ptr + indexOffset;
+
+					idx = 0;
+					for (auto &it : cmd->vertexes->indexes) {
+						indexTarget[idx] = it + vertexOffset;
+						++ idx;
+					}
+				}
+
+				vertexOffset += cmd->vertexes->data.size();
+				indexOffset += cmd->vertexes->indexes.size();
+
+				materialVertexes += cmd->vertexes->data.size();
+				materialIndexes += cmd->vertexes->indexes.size();
+			}
+
+			_spans.emplace_back(gl::VertexSpan({ it->first, materialIndexes, 1, indexOffset - materialIndexes}));
+		}
+	};
+
+	drawWritePlan(solidWritePlan);
+	drawWritePlan(surfaceWritePlan);
+
+	for (auto &it : transparentWritePlan) {
+		drawWritePlan(it.second);
 	}
 
 	_vertexes->unmap(vertexesMap, true);

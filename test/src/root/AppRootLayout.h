@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,51 +20,26 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_GL_COMMON_XLGLCOMMANDLIST_H_
-#define XENOLITH_GL_COMMON_XLGLCOMMANDLIST_H_
+#ifndef TEST_SRC_ROOT_APPROOTLAYOUT_H_
+#define TEST_SRC_ROOT_APPROOTLAYOUT_H_
 
-#include "XLGl.h"
+#include "XLLayer.h"
 
-namespace stappler::xenolith::gl {
+namespace stappler::xenolith::app {
 
-enum class CommandType {
-	CommandGroup,
-	VertexArray,
-};
-
-struct CmdVertexArray {
-	Mat4 transform = Mat4::IDENTITY;
-	gl::MaterialId material = 0;
-	Rc<VertexData> vertexes;
-	SpanView<int16_t> zPath;
-	bool isSurface = false;
-};
-
-struct Command {
-	static Command *create(memory::pool_t *, CommandType t);
-
-	Command *next;
-	CommandType type;
-	void *data;
-};
-
-class CommandList : public gl::AttachmentInputData {
+class RootLayout : public Node {
 public:
-	bool init(const Rc<PoolRef> &);
+	virtual bool init() override;
 
-	void pushVertexArray(const Rc<VertexData> &, const Mat4 &, SpanView<int16_t> zPath, gl::MaterialId material, bool isSurface);
+	virtual void onContentSizeDirty() override;
 
-	const Command *getFirst() const { return _first; }
-	const Command *getLast() const { return _last; }
+	virtual void update(const UpdateTime &) override;
 
 protected:
-	void addCommand(Command *);
-
-	Rc<PoolRef> _pool;
-	Command *_first = nullptr;
-	Command *_last = nullptr;
+	Layer *_background = nullptr;
+	Sprite *_logo = nullptr;
 };
 
 }
 
-#endif /* XENOLITH_GL_COMMON_XLGLCOMMANDLIST_H_ */
+#endif /* TEST_SRC_ROOT_APPROOTLAYOUT_H_ */

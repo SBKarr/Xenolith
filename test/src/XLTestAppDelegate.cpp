@@ -23,8 +23,9 @@
 #include "XLDefine.h"
 #include "XLDirector.h"
 #include "XLTestAppDelegate.h"
+
+#include "AppScene.h"
 #include "XLPlatform.h"
-#include "XLAppScene.h"
 #include "XLAppShaders.h"
 #include "XLDefaultShaders.h"
 #include "XLFontSourceSystem.h"

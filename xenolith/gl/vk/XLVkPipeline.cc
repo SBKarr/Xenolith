@@ -59,9 +59,14 @@ bool Shader::setup(Device &dev, const gl::ProgramData &programData, SpanView<uin
 }
 
 bool Pipeline::comparePipelineOrdering(const gl::PipelineInfo &l, const gl::PipelineInfo &r) {
-	if (l.depthWriteEnabled != r.depthWriteEnabled) {
-		if (l.depthWriteEnabled) {
-			return true;
+	if (l.material.depth.writeEnabled != r.material.depth.writeEnabled) {
+		if (l.material.depth.writeEnabled) {
+			return true; // pipelines with depth write comes first
+		}
+		return false;
+	} else if (l.material.blend.enabled != r.material.blend.enabled) {
+		if (!l.material.blend.enabled) {
+			return true; // pipelines without blending comes first
 		}
 		return false;
 	} else {
@@ -113,10 +118,8 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 	rasterizer.rasterizerDiscardEnable = VK_FALSE;
 	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 	rasterizer.lineWidth = 1.0f;
-	//rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
 	rasterizer.cullMode = VK_CULL_MODE_NONE;
 	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
-	//rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 	rasterizer.depthBiasEnable = VK_FALSE;
 	rasterizer.depthBiasConstantFactor = 0.0f; // Optional
 	rasterizer.depthBiasClamp = 0.0f; // Optional
@@ -132,22 +135,26 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 	multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
 	multisampling.alphaToOneEnable = VK_FALSE; // Optional
 
-	VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-	colorBlendAttachment.blendEnable = VK_FALSE;
-	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
-	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
-	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD; // Optional
-	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
-	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
-	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD; // Optional
+	Vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments;
+	for (size_t i = 0; i < pass.outputImages.size(); ++ i) {
+		colorBlendAttachments.emplace_back(VkPipelineColorBlendAttachmentState{
+			params.material.blend.isEnabled() ? VK_TRUE : VK_FALSE,
+			VkBlendFactor(params.material.blend.srcColor),
+			VkBlendFactor(params.material.blend.dstColor),
+			VkBlendOp(params.material.blend.opColor),
+			VkBlendFactor(params.material.blend.srcAlpha),
+			VkBlendFactor(params.material.blend.dstAlpha),
+			VkBlendOp(params.material.blend.opAlpha),
+			VkColorComponentFlags(params.material.blend.writeMask),
+		});
+	}
 
 	VkPipelineColorBlendStateCreateInfo colorBlending{};
 	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 	colorBlending.logicOpEnable = VK_FALSE;
 	colorBlending.logicOp = VK_LOGIC_OP_COPY; // Optional
-	colorBlending.attachmentCount = 1;
-	colorBlending.pAttachments = &colorBlendAttachment;
+	colorBlending.attachmentCount = colorBlendAttachments.size();
+	colorBlending.pAttachments = colorBlendAttachments.data();
 	colorBlending.blendConstants[0] = 0.0f; // Optional
 	colorBlending.blendConstants[1] = 0.0f; // Optional
 	colorBlending.blendConstants[2] = 0.0f; // Optional
@@ -219,6 +226,52 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 		shaderStages.emplace_back(info);
 	}
 
+	VkPipelineDepthStencilStateCreateInfo depthState;
+	depthState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+	depthState.pNext = nullptr;
+	depthState.flags = 0;
+	if (pass.depthStencil) {
+		if (gl::isDepthFormat(pass.depthStencil->getInfo().format)) {
+			depthState.depthTestEnable = params.material.depth.testEnabled ? VK_TRUE : VK_FALSE;
+			depthState.depthWriteEnable = params.material.depth.writeEnabled ? VK_TRUE : VK_FALSE;
+			depthState.depthCompareOp = VkCompareOp(params.material.depth.compare);
+
+			depthState.depthBoundsTestEnable = params.material.bounds.enabled ? VK_TRUE : VK_FALSE;
+			depthState.minDepthBounds = params.material.bounds.min;
+			depthState.maxDepthBounds = params.material.bounds.max;
+		} else {
+			depthState.depthTestEnable = VK_FALSE;
+			depthState.depthWriteEnable = VK_FALSE;
+			depthState.depthCompareOp = VkCompareOp(0);
+
+			depthState.depthBoundsTestEnable = VK_FALSE;
+			depthState.minDepthBounds = 0.0f;
+			depthState.maxDepthBounds = 0.0f;
+		}
+
+		if (gl::isStencilFormat(pass.depthStencil->getInfo().format)) {
+			depthState.stencilTestEnable = params.material.stencil ? VK_TRUE : VK_FALSE;
+
+			depthState.front.failOp = VkStencilOp(params.material.front.fail);
+			depthState.front.passOp = VkStencilOp(params.material.front.pass);
+			depthState.front.depthFailOp = VkStencilOp(params.material.front.depthFail);
+			depthState.front.compareOp = VkCompareOp(params.material.front.compare);
+			depthState.front.compareMask = params.material.front.compareMask;
+			depthState.front.writeMask = params.material.front.writeMask;
+			depthState.front.reference = params.material.front.reference;
+
+			depthState.back.failOp = VkStencilOp(params.material.back.fail);
+			depthState.back.passOp = VkStencilOp(params.material.back.pass);
+			depthState.back.depthFailOp = VkStencilOp(params.material.back.depthFail);
+			depthState.back.compareOp = VkCompareOp(params.material.back.compare);
+			depthState.back.compareMask = params.material.back.compareMask;
+			depthState.back.writeMask = params.material.back.writeMask;
+			depthState.back.reference = params.material.back.reference;
+		} else {
+			depthState.stencilTestEnable = VK_FALSE;
+		}
+	}
+
 	VkGraphicsPipelineCreateInfo pipelineInfo{};
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 	pipelineInfo.stageCount = shaderStages.size();
@@ -228,7 +281,7 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 	pipelineInfo.pViewportState = &viewportState;
 	pipelineInfo.pRasterizationState = &rasterizer;
 	pipelineInfo.pMultisampleState = &multisampling;
-	pipelineInfo.pDepthStencilState = nullptr; // Optional
+	pipelineInfo.pDepthStencilState = pass.depthStencil ? &depthState : nullptr; // Optional
 	pipelineInfo.pColorBlendState = &colorBlending;
 	pipelineInfo.pDynamicState = (dynamicStates.size() > 0) ? &dynamicState : nullptr; // Optional
 	pipelineInfo.layout = pass.renderPass->impl.cast<RenderPassImpl>()->getPipelineLayout();

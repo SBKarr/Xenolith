@@ -633,16 +633,58 @@ enum class SamplerAddressMode {
 };
 
 // VkCompareOp
-enum class CompareOp {
-    Never = 0,
-    Less = 1,
-    Equal = 2,
-    LessOrEqual = 3,
-    Greater = 4,
-    NotEqual = 5,
-    GreaterOrEqual = 6,
-    Always = 7,
+enum class CompareOp : uint8_t {
+	Never = 0,
+	Less = 1,
+	Equal = 2,
+	LessOrEqual = 3,
+	Greater = 4,
+	NotEqual = 5,
+	GreaterOrEqual = 6,
+	Always = 7,
 };
+
+enum class BlendFactor : uint8_t {
+	Zero = 0,
+	One = 1,
+	SrcColor = 2,
+	OneMinusSrcColor = 3,
+	DstColor = 4,
+	OneMinusDstColor = 5,
+	SrcAlpha = 6,
+	OneMinusSrcAlpha = 7,
+	DstAlpha = 8,
+	OneMinusDstAlpha = 9,
+};
+
+enum class BlendOp : uint8_t {
+	Add = 0,
+	Subtract = 1,
+	ReverseSubtract = 2,
+	Min = 3,
+	Max = 4,
+};
+
+enum class ColorComponentFlags {
+	R = 0x00000001,
+	G = 0x00000002,
+	B = 0x00000004,
+	A = 0x00000008,
+	All = 0x0000000F
+};
+
+enum class StencilOp : uint8_t {
+	Keep = 0,
+	Zero = 1,
+	Replace = 2,
+	IncrementAndClamp = 3,
+	DecrementAndClamp = 4,
+	Invert = 5,
+	InvertAndWrap = 6,
+	DecrementAndWrap = 7,
+};
+
+SP_DEFINE_ENUM_AS_MASK(ColorComponentFlags)
 
 enum class SwapchanCreationMode {
 	Best,

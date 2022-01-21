@@ -289,9 +289,6 @@ void RenderFontAttachmentHandle::writeAtlasData(gl::FrameHandle &handle) {
 			auto id = d.bufferImageHeight;
 			d.bufferImageHeight = 0;
 
-			std::cout << "(char) " << string::toUtf8(char16_t(id & 0xFFFF)) << " " << d.imageOffset.x << " : " << d.imageOffset.y << "   "
-					<< d.imageExtent.width << " : " << d.imageExtent.height << "\n";
-
 			const float x = float(d.imageOffset.x);
 			const float y = float(d.imageOffset.y);
 			const float w = float(d.imageExtent.width);
@@ -450,15 +447,6 @@ Vector<VkCommandBuffer> RenderFontRenderPassHandle::doPrepareCommands(gl::FrameH
 			0, nullptr,
 			0, nullptr,
 			1, &inputBarrier);
-
-	auto extent = _targetImage->getInfo().extent;
-	std::cout << "image: " << extent.width << " " << extent.height << " " << extent.depth << "\n";
-	for (auto &it : bufferData) {
-		std::cout << "copy:" << it.imageOffset.x << " " << it.imageOffset.y << " " << it.imageOffset.z << " - "
-				<< it.imageExtent.width << " " << it.imageExtent.height << " " << it.imageExtent.depth << " - "
-				<< it.bufferOffset
-				<< "\n";
-	}
 
 	table->vkCmdCopyBufferToImage(buf, _fontAttachment->getBuffer()->getBuffer(), _targetImage->getImage(),
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, bufferData.size(), bufferData.data());
