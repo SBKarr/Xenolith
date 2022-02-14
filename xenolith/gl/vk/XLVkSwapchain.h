@@ -75,48 +75,37 @@ public:
 
 	virtual ~Swapchain();
 
-	bool init(const gl::View *, Device &, VkSurfaceKHR, const Rc<gl::RenderQueue> &);
-
-	virtual void invalidateFrame(gl::FrameHandle &) override;
+	bool init(const gl::View *, Device &, Function<gl::SwapchainConfig(const gl::SurfaceInfo &)> &&, VkSurfaceKHR);
 
 	virtual bool recreateSwapchain(gl::Device &, gl::SwapchanCreationMode) override;
 	virtual void invalidate(gl::Device &) override;
 
-	bool createSwapchain(Device &, gl::PresentMode);
+	bool createSwapchain(Device &, gl::SwapchainConfig &&, gl::PresentMode);
 	void cleanupSwapchain(Device &);
 
 	gl::PresentMode getPresentMode() const { return _presentMode; }
 	VkSurfaceKHR getSurface() const { return _surface; }
 	VkSwapchainKHR getSwapchain() const { return _swapchain; }
-	gl::ImageInfo getSwapchainImageInfo() const;
+	gl::ImageInfo getSwapchainImageInfo(const gl::SwapchainConfig &cfg) const;
+	gl::ImageViewInfo getSwapchainImageViewInfo(const gl::ImageInfo &image) const;
 
 	virtual bool isBestPresentMode() const override;
-
-	const Rc<gl::RenderQueue> &getRenderQueue() const { return _renderQueue; }
 
 	Rc<SwapchainSync> acquireSwapchainSync(Device &, uint64_t);
 	void releaseSwapchainSync(Rc<SwapchainSync> &&);
 
+	bool present(gl::Loop &loop, Rc<Image> &&, VkImageLayout l);
+
+	Rc<Image> getImage(uint32_t) const;
+
 protected:
-	virtual Rc<gl::FrameHandle> makeFrame(gl::Loop &, bool readyForSubmit);
-	void buildAttachments(Device &device, gl::RenderQueue *, gl::RenderPassData *, const Vector<VkImage> &);
-	void updateAttachment(Device &device, const Rc<gl::Attachment> &);
-	void updateFramebuffer(Device &device, gl::RenderPassData *);
-
-	// returns <best, fast>
-	Pair<gl::PresentMode, gl::PresentMode> getPresentModes(const SurfaceInfo &) const;
-
-	VkSurfaceFormatKHR _format;
 	gl::PresentMode _presentMode = gl::PresentMode::Fifo;
-	gl::PresentMode _bestPresentMode = gl::PresentMode::Fifo;
-	gl::PresentMode _fastPresentMode = gl::PresentMode::Fifo;
-	SurfaceInfo _info;
 	VkSurfaceKHR _surface = VK_NULL_HANDLE;
 	VkSwapchainKHR _swapchain = VK_NULL_HANDLE;
 	VkSwapchainKHR _oldSwapchain = VK_NULL_HANDLE;
 
-	Function<void()> _onNextSwapchainRenderQueue;
 	Vector<Vector<Rc<SwapchainSync>>> _sems;
+	Vector<Rc<Image>> _images;
 };
 
 }

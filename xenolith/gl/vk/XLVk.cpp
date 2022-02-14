@@ -21,6 +21,7 @@ THE SOFTWARE.
 **/
 
 #include "XLDefine.h"
+#include "XLVk.h"
 
 #ifdef XL_VK_DEBUG
 #define XL_VK_LOG(...) log::vtext("Vk::Loop", __VA_ARGS__)
@@ -28,15 +29,12 @@ THE SOFTWARE.
 #define XL_VK_LOG(...)
 #endif
 
-#include "XLVkUtils.cc"
-#include "XLVkInstance.cc"
 #include "XLVkDeviceQueue.cc"
 #include "XLVkDevice.cc"
 #include "XLVkAllocator.cc"
 #include "XLVkBuffer.cc"
 #include "XLVkFramebuffer.cc"
 #include "XLVkSwapchain.cc"
-#include "XLVkInfo.cc"
 #include "XLVkPipeline.cc"
 #include "XLVkRenderPassImpl.cc"
 #include "XLVkSync.cc"
@@ -44,7 +42,7 @@ THE SOFTWARE.
 #include "XLVkObject.cc"
 #include "XLVkTextureSet.cc"
 #include "renderer/XLVkImageAttachment.cc"
-#include "renderer/XLVkBufferAttachment.cc"
+#include "renderer/XLVkAttachment.cc"
 #include "renderer/XLVkRenderPass.cc"
 #include "renderer/XLVkTransferQueue.cc"
 #include "renderer/XLVkMaterialCompiler.cc"

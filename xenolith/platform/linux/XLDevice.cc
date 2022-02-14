@@ -139,7 +139,9 @@ bool EventLoopLinux::run() {
 						if (d->second.isEventFd) {
 							auto evVal = d->second.view->popEvents();
 							if ((evVal & AppEvent::Terminate) != 0) {
-								d->second.view->close();
+								auto view = d->second.view;
+								view->close();
+								view = nullptr;
 								continue;
 							}
 							if ((evVal & AppEvent::SwapchainRecreationBest) != 0) {
@@ -157,7 +159,9 @@ bool EventLoopLinux::run() {
 						} else {
 							// socket has input
 							if (!d->second.view->poll()) {
-								d->second.view->close();
+								auto view = d->second.view;
+								view->close();
+								view = nullptr;
 								continue;
 							}
 						}
@@ -296,11 +300,18 @@ String _deviceIdentifier() {
 	}
 }
 
-uint64_t _clock() {
+uint64_t _clock(ClockType type) {
 	static clockid_t ClockSource = getClockSource();
 
 	struct timespec ts;
-	clock_gettime(ClockSource, &ts);
+	switch (type) {
+	case ClockType::Default: clock_gettime(ClockSource, &ts); break;
+	case ClockType::Monotonic: clock_gettime(CLOCK_MONOTONIC, &ts); break;
+	case ClockType::Realtime: clock_gettime(CLOCK_REALTIME, &ts); break;
+	case ClockType::Process: clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts); break;
+	case ClockType::Thread: clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts); break;
+	}
+
 	return (uint64_t) ts.tv_sec * (uint64_t) 1000'000 + (uint64_t) ts.tv_nsec / 1000;
 }
 

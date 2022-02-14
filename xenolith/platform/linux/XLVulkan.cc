@@ -29,18 +29,14 @@ THE SOFTWARE.
 
 namespace stappler::xenolith::platform::graphic {
 
-struct FunctionTable {
-	PFN_vkGetInstanceProcAddr pfnGetInstanceProcAddr = nullptr;
-	PFN_vkCreateInstance pfnCreateInstance = nullptr;
-	PFN_vkEnumerateInstanceLayerProperties pfnEnumerateInstanceLayerProperties = nullptr;
-	PFN_vkEnumerateInstanceExtensionProperties pfnEnumerateInstanceExtensionProperties = nullptr;
-	PFN_vkEnumerateInstanceVersion pfnEnumerateInstanceVersion = nullptr;
+struct FunctionTable : public vk::LoaderTable {
+	using LoaderTable::LoaderTable;
 
 	operator bool () const {
-		return pfnGetInstanceProcAddr != nullptr
-			&& pfnCreateInstance != nullptr
-			&& pfnEnumerateInstanceLayerProperties != nullptr
-			&& pfnEnumerateInstanceExtensionProperties != nullptr;
+		return vkGetInstanceProcAddr != nullptr
+			&& vkCreateInstance != nullptr
+			&& vkEnumerateInstanceExtensionProperties != nullptr
+			&& vkEnumerateInstanceLayerProperties != nullptr;
 	}
 };
 
@@ -70,29 +66,20 @@ Rc<gl::Instance> createInstance(Application *app) {
 		return nullptr;
 	}
 
-	FunctionTable table;
-	table.pfnGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)dlsym(handle, "vkGetInstanceProcAddr");
-	if (table.pfnGetInstanceProcAddr) {
-		table.pfnCreateInstance = (PFN_vkCreateInstance)
-			table.pfnGetInstanceProcAddr(NULL, "vkCreateInstance");
-
-		table.pfnEnumerateInstanceVersion = (PFN_vkEnumerateInstanceVersion)
-			table.pfnGetInstanceProcAddr(NULL, "vkEnumerateInstanceVersion");
-
-		table.pfnEnumerateInstanceLayerProperties = (PFN_vkEnumerateInstanceLayerProperties)
-			table.pfnGetInstanceProcAddr(NULL, "vkEnumerateInstanceLayerProperties");
-
-		table.pfnEnumerateInstanceExtensionProperties = (PFN_vkEnumerateInstanceExtensionProperties)
-			table.pfnGetInstanceProcAddr(NULL, "vkEnumerateInstanceExtensionProperties");
+	auto getInstanceProcAddr = (PFN_vkGetInstanceProcAddr)dlsym(handle, "vkGetInstanceProcAddr");
+	if (!getInstanceProcAddr) {
+		return nullptr;
 	}
+
+	FunctionTable table(getInstanceProcAddr);
 
 	if (!table) {
 		::dlclose(handle);
 		return nullptr;
 	}
 
-	if (table.pfnEnumerateInstanceVersion) {
-		table.pfnEnumerateInstanceVersion(&s_InstanceVersion);
+	if (table.vkEnumerateInstanceVersion) {
+		table.vkEnumerateInstanceVersion(&s_InstanceVersion);
 	} else {
 		s_InstanceVersion = VK_API_VERSION_1_0;
 	}
@@ -105,16 +92,16 @@ Rc<gl::Instance> createInstance(Application *app) {
 	}
 
     uint32_t layerCount = 0;
-    table.pfnEnumerateInstanceLayerProperties(&layerCount, nullptr);
+    table.vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
 
 	s_InstanceAvailableLayers.resize(layerCount);
-	table.pfnEnumerateInstanceLayerProperties(&layerCount, s_InstanceAvailableLayers.data());
+	table.vkEnumerateInstanceLayerProperties(&layerCount, s_InstanceAvailableLayers.data());
 
     uint32_t extensionCount = 0;
-    table.pfnEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
+    table.vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
 
     s_InstanceAvailableExtensions.resize(extensionCount);
-    table.pfnEnumerateInstanceExtensionProperties(nullptr, &extensionCount, s_InstanceAvailableExtensions.data());
+    table.vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, s_InstanceAvailableExtensions.data());
 
 	if constexpr (vk::s_enableValidationLayers) {
 #if DEBUG
@@ -276,13 +263,13 @@ Rc<gl::Instance> createInstance(Application *app) {
 		createInfo.ppEnabledLayerNames = vk::s_validationLayers;
 		createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
 
-		ret = table.pfnCreateInstance(&createInfo, nullptr, &instance);
+		ret = table.vkCreateInstance(&createInfo, nullptr, &instance);
 #endif
 	} else {
 		createInfo.enabledLayerCount = 0;
 		createInfo.pNext = nullptr;
 
-		ret = table.pfnCreateInstance(&createInfo, nullptr, &instance);
+		ret = table.vkCreateInstance(&createInfo, nullptr, &instance);
 	}
 
 	if (ret != VK_SUCCESS) {
@@ -290,7 +277,7 @@ Rc<gl::Instance> createInstance(Application *app) {
 		return nullptr;
 	}
 
-	auto vkInstance = Rc<vk::Instance>::alloc(instance, table.pfnGetInstanceProcAddr, targetVersion, move(enabledOptionals), [handle] {
+	auto vkInstance = Rc<vk::Instance>::alloc(instance, table.vkGetInstanceProcAddr, targetVersion, move(enabledOptionals), [handle] {
 		::dlclose(handle);
 	}, [surfaceType] (const vk::Instance *instance, VkPhysicalDevice device, uint32_t queueIdx) {
 		VkBool32 supports = false;

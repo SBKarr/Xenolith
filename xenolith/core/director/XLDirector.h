@@ -23,12 +23,12 @@
 #ifndef COMPONENTS_XENOLITH_CORE_DIRECTOR_XLDIRECTOR_H_
 #define COMPONENTS_XENOLITH_CORE_DIRECTOR_XLDIRECTOR_H_
 
+#include "XLGlFrameHandle.h"
 #include "XLGlCommandList.h"
 #include "XLEventHeader.h"
 #include "XLEventHandler.h"
 #include "XLResourceCache.h"
 #include "XLGlView.h"
-#include "XLGlFrame.h"
 
 namespace stappler::xenolith {
 
@@ -37,9 +37,10 @@ class Scheduler;
 
 class Director : public Ref, EventHandler {
 public:
+	virtual ~Director();
+
 	Director();
 
-	virtual ~Director();
 	virtual bool init(Application *, Rc<Scene> &&);
 
 	gl::View *getView() const { return _view; }
@@ -50,11 +51,12 @@ public:
 	const Rc<ResourceCache> &getResourceCache() const;
 	const Mat4 &getGeneralProjection() const { return _generalProjection; }
 
-	void update();
+	virtual gl::SwapchainConfig selectConfig(const gl::SurfaceInfo &) const;
 
-	// should return valid RenderQueue from initial scene
-	void begin(gl::View *view);
-	void end();
+	virtual void update();
+
+	virtual void begin(gl::View *view);
+	virtual void end();
 
 	Size getScreenSize() const;
 

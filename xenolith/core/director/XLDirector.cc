@@ -51,8 +51,23 @@ const Rc<ResourceCache> &Director::getResourceCache() const {
 	return _application->getResourceCache();
 }
 
+gl::SwapchainConfig Director::selectConfig(const gl::SurfaceInfo &info) const {
+	gl::SwapchainConfig ret;
+	ret.extent = info.currentExtent;
+	ret.imageCount = std::max(uint32_t(3), info.minImageCount);
+	ret.presentMode = info.presentModes.front();
+
+	ret.imageFormat = info.formats.front().first;
+	ret.colorSpace = info.formats.front().second;
+
+	ret.transfer = (info.supportedUsageFlags & gl::ImageUsage::TransferDst) != gl::ImageUsage::None;
+
+	return ret;
+}
+
 void Director::update() {
 	auto t = _application->getClock();
+	auto &size = _view->getScreenExtent();
 
 	if (_time.global) {
 		_time.delta = t - _time.global;
@@ -70,18 +85,20 @@ void Director::update() {
 
 	if (_nextScene) {
 		if (_scene) {
-			_scene->onExit();
+			_scene->onFinished(this);
 		}
 		_scene = _nextScene;
 
-		auto &size = _view->getScreenSize();
 		auto d = _view->getDensity();
 
-		_scene->setContentSize(size / d);
+		_scene->setContentSize(Size(size) / d);
 		_scene->onPresented(this);
 		_nextScene = nullptr;
 	}
 
+	log::vtext("Director", "FrameOffset: ", platform::device::_clock() - _view->getFrameTime());
+
+	_view->runFrame(_scene->getRenderQueue(), size);
 	_scheduler->update(_time);
 }
 
@@ -95,10 +112,10 @@ void Director::begin(gl::View *view) {
 
 	_sizeChangedEvent = onEventWithObject(gl::View::onScreenSize, view, [&] (const Event &) {
 		if (_scene) {
-			auto &size = _view->getScreenSize();
+			auto &size = _view->getScreenExtent();
 			auto d = _view->getDensity();
 
-			_scene->setContentSize(size / d);
+			_scene->setContentSize(Size(size) / d);
 
 			updateGeneralTransform();
 		}
@@ -107,11 +124,11 @@ void Director::begin(gl::View *view) {
 	updateGeneralTransform();
 
 	if (_nextScene) {
-		auto &size = _view->getScreenSize();
+		auto &size = _view->getScreenExtent();
 		auto d = _view->getDensity();
 
 		_scene = move(_nextScene);
-		_scene->setContentSize(size / d);
+		_scene->setContentSize(Size(size) / d);
 		_scene->onPresented(this);
 		_nextScene = nullptr;
 	}
@@ -119,7 +136,6 @@ void Director::begin(gl::View *view) {
 
 void Director::end() {
 	if (_scene) {
-		_scene->onExit();
 		_scene->onFinished(this);
 		_scene = nullptr;
 		_nextScene = nullptr;
@@ -128,7 +144,7 @@ void Director::end() {
 }
 
 Size Director::getScreenSize() const {
-	return _view->getScreenSize();
+	return _view->getScreenExtent();
 }
 
 void Director::runScene(Rc<Scene> &&scene) {
@@ -165,7 +181,7 @@ static inline int32_t sp_gcd (int16_t a, int16_t b) {
 
 void Director::updateGeneralTransform() {
 	auto d = _view->getDensity();
-	auto size = _view->getScreenSize() / d;
+	auto size = Size(_view->getScreenExtent()) / d;
 
 	Mat4 proj;
 	proj.scale(2.0f / size.width, -2.0f / size.height, -1.0);

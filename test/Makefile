@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+# Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-STAPPLER_ROOT ?= ../stappler
+STAPPLER_ROOT ?= ../../stappler
 
 LOCAL_OUTDIR := stappler-build
 LOCAL_EXECUTABLE := testapp

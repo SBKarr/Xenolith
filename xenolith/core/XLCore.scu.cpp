@@ -35,3 +35,32 @@ THE SOFTWARE.
 #include "XLScheduler.cc"
 
 //#include "XLStaticResource.cc"
+
+namespace stappler::xenolith::profiling {
+
+ProfileData begin(StringView tag, StringView variant, uint64_t limit) {
+	ProfileData ret;
+	ret.tag = tag;
+	ret.variant = variant;
+	ret.limit = limit;
+	ret.timestamp = platform::device::_clock(platform::device::Thread);
+	return ret;
+}
+
+void end(ProfileData &data) {
+	if (!data.limit) {
+		return;
+	}
+
+	auto dt = platform::device::_clock(platform::device::Thread) - data.timestamp;
+	if (dt > data.limit) {
+		log::vtext("Profiling", "[", data.tag , "] [", data.variant, "] limit exceeded: ", dt, " (from ", data.limit, ")");
+		store(data);
+	}
+}
+
+void store(ProfileData &data) {
+
+}
+
+}

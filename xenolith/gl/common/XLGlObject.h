@@ -99,11 +99,21 @@ protected:
 
 class Framebuffer : public Object {
 public:
+	static uint64_t getViewHash(SpanView<Rc<ImageView>>);
+	static uint64_t getViewHash(SpanView<uint64_t>);
+
 	virtual ~Framebuffer() { }
 
+	const Extent2 &getExtent() const { return _extent; }
+	const Vector<uint64_t> &getViewIds() const { return _viewIds; }
+
+	uint64_t getHash() const;
+
 protected:
+	Extent2 _extent;
+	Vector<uint64_t> _viewIds;
 	Rc<RenderPassImpl> _renderPass;
-	Vector<Rc<ImageView>> imageViews;
+	Vector<Rc<ImageView>> _imageViews;
 };
 
 class ImageAtlas : public Ref {
@@ -159,6 +169,8 @@ public:
 	uint32_t getSet() const { return _set; }
 	uint32_t getDescriptor() const { return _descriptor; }
 	uint64_t getIndex() const { return _index; }
+
+	Extent3 getExtent() const;
 
 protected:
 	ImageViewInfo _info;

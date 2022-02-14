@@ -52,13 +52,13 @@ bool MaterialVertexAttachment::init(StringView str, const gl::BufferInfo &info, 
 	}, sizeof(uint32_t) * 4, gl::MaterialType::Basic2D, move(initial));
 }
 
-Rc<gl::AttachmentHandle> MaterialVertexAttachment::makeFrameHandle(const gl::FrameHandle &handle) {
+Rc<gl::AttachmentHandle> MaterialVertexAttachment::makeFrameHandle(const gl::FrameQueue &handle) {
 	return Rc<MaterialVertexAttachmentHandle>::create(this, handle);
 }
 
 MaterialVertexAttachmentHandle::~MaterialVertexAttachmentHandle() { }
 
-bool MaterialVertexAttachmentHandle::init(const Rc<gl::Attachment> &a, const gl::FrameHandle &handle) {
+bool MaterialVertexAttachmentHandle::init(const Rc<gl::Attachment> &a, const gl::FrameQueue &handle) {
 	if (BufferAttachmentHandle::init(a, handle)) {
 		_materials = ((MaterialVertexAttachment *)a.get())->getMaterials();
 		return true;
@@ -93,36 +93,29 @@ bool VertexMaterialAttachment::init(StringView name, const gl::BufferInfo &info,
 	return false;
 }
 
-Rc<gl::AttachmentHandle> VertexMaterialAttachment::makeFrameHandle(const gl::FrameHandle &handle) {
+Rc<gl::AttachmentHandle> VertexMaterialAttachment::makeFrameHandle(const gl::FrameQueue &handle) {
 	return Rc<VertexMaterialAttachmentHandle>::create(this, handle);
 }
 
 VertexMaterialAttachmentHandle::~VertexMaterialAttachmentHandle() { }
 
-bool VertexMaterialAttachmentHandle::setup(gl::FrameHandle &handle) {
-	for (auto &it : handle.getRequiredAttachments()) {
-		if (it->getAttachment() == ((VertexMaterialAttachment *)_attachment.get())->getMaterials()) {
-			_materials = (const MaterialVertexAttachmentHandle *)it.get();
-			break;
-		}
+bool VertexMaterialAttachmentHandle::setup(gl::FrameQueue &handle, Function<void(bool)> &&cb) {
+	if (auto materials = handle.getAttachment(((VertexMaterialAttachment *)_attachment.get())->getMaterials())) {
+		_materials = (const MaterialVertexAttachmentHandle *)materials->handle.get();
 	}
 	return true;
 }
 
-bool VertexMaterialAttachmentHandle::submitInput(gl::FrameHandle &handle, Rc<gl::AttachmentInputData> &&data) {
+void VertexMaterialAttachmentHandle::submitInput(gl::FrameQueue &handle, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
 	if (auto d = data.cast<gl::CommandList>()) {
-		handle.performInQueue([this, d = move(d)] (gl::FrameHandle &handle) {
+		handle.getFrame().performInQueue([this, d = move(d)] (gl::FrameHandle &handle) {
 			return loadVertexes(handle, d);
-		}, [this] (gl::FrameHandle &handle, bool success) {
-			if (success) {
-				handle.setInputSubmitted(this);
-			} else {
-				handle.invalidate();
-			}
-		}, this);
-		return true;
+		}, [this, cb = move(cb)] (gl::FrameHandle &handle, bool success) {
+			cb(success);
+		}, this, "VertexMaterialAttachmentHandle::submitInput");
+	} else {
+		cb(false);
 	}
-	return false;
 }
 
 bool VertexMaterialAttachmentHandle::isDescriptorDirty(const gl::RenderPassHandle &, const gl::PipelineDescriptor &,
@@ -322,11 +315,12 @@ bool MaterialRenderPass::init(StringView name, gl::RenderOrdering ord, size_t su
 	return RenderPass::init(name, gl::RenderPassType::Graphics, ord, subpassCount);
 }
 
-Rc<gl::RenderPassHandle> MaterialRenderPass::makeFrameHandle(gl::RenderPassData *data, const gl::FrameHandle &handle) {
-	return Rc<MaterialRenderPassHandle>::create(*this, data, handle);
+Rc<gl::RenderPassHandle> MaterialRenderPass::makeFrameHandle(const gl::FrameQueue &handle) {
+	return Rc<MaterialRenderPassHandle>::create(*this, handle);
 }
 
-void MaterialRenderPass::prepare(gl::Device &) {
+void MaterialRenderPass::prepare(gl::Device &dev) {
+	RenderPass::prepare(dev);
 	for (auto &it : _data->descriptors) {
 		if (auto a = dynamic_cast<MaterialVertexAttachment *>(it->getAttachment())) {
 			_materials = a;
@@ -336,22 +330,25 @@ void MaterialRenderPass::prepare(gl::Device &) {
 	}
 }
 
-void MaterialRenderPassHandle::addRequiredAttachment(const gl::Attachment *a, const Rc<gl::AttachmentHandle> &h) {
-	RenderPassHandle::addRequiredAttachment(a, h);
-	if (h->getAttachment() == ((MaterialRenderPass *)_renderPass.get())->getMaterials()) {
-		_materialBuffer = (MaterialVertexAttachmentHandle *)h.get();
-	} else if (h->getAttachment() == ((MaterialRenderPass *)_renderPass.get())->getVertexes()) {
-		_vertexBuffer = (VertexMaterialAttachmentHandle *)h.get();
+bool MaterialRenderPassHandle::prepare(gl::FrameQueue &q, Function<void(bool)> &&cb) {
+	auto pass = (MaterialRenderPass *)_renderPass.get();
+
+	if (auto materialBuffer = q.getAttachment(pass->getMaterials())) {
+		_materialBuffer = (const MaterialVertexAttachmentHandle *)materialBuffer->handle.get();
 	}
+
+	if (auto vertexBuffer = q.getAttachment(pass->getVertexes())) {
+		_vertexBuffer = (const VertexMaterialAttachmentHandle *)vertexBuffer->handle.get();
+	}
+
+	return RenderPassHandle::prepare(q, move(cb));
 }
 
-Vector<VkCommandBuffer> MaterialRenderPassHandle::doPrepareCommands(gl::FrameHandle &handle) {
+Vector<VkCommandBuffer> MaterialRenderPassHandle::doPrepareCommands(gl::FrameHandle &) {
 	auto table = _device->getTable();
 	auto buf = _pool->allocBuffer(*_device);
 
-	auto index = (*_sync.swapchainSync.begin())->getImageIndex();
-	auto targetFb = _data->framebuffers[index].cast<Framebuffer>();
-	auto currentExtent = targetFb->getExtent();
+	auto currentExtent = getFramebuffer()->getExtent();
 
 	auto materials = _materialBuffer->getMaterials().get();
 
@@ -377,33 +374,23 @@ Vector<VkCommandBuffer> MaterialRenderPassHandle::doPrepareCommands(gl::FrameHan
 			outputImageBarriers.size(), outputImageBarriers.data());
 	}
 
-	VkRenderPassBeginInfo renderPassInfo { };
-	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	renderPassInfo.renderPass = _data->impl.cast<RenderPassImpl>()->getRenderPass();
-	renderPassInfo.framebuffer = targetFb->getFramebuffer();
-	renderPassInfo.renderArea.offset = { 0, 0 };
-	renderPassInfo.renderArea.extent = VkExtent2D{currentExtent.width, currentExtent.height};
-	VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
-	renderPassInfo.clearValueCount = 1;
-	renderPassInfo.pClearValues = &clearColor;
-	table->vkCmdBeginRenderPass(buf, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+	_data->impl.cast<RenderPassImpl>()->perform(*this, buf, [&] {
+		VkViewport viewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
+		table->vkCmdSetViewport(buf, 0, 1, &viewport);
 
-	VkViewport viewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
-	table->vkCmdSetViewport(buf, 0, 1, &viewport);
+		VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
+		table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
 
-	VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
-	table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
+		prepareMaterialCommands(materials, buf);
+	});
 
-	prepareMaterialCommands(materials, handle, buf);
-
-	table->vkCmdEndRenderPass(buf);
 	if (table->vkEndCommandBuffer(buf) == VK_SUCCESS) {
 		return Vector<VkCommandBuffer>{buf};
 	}
 	return Vector<VkCommandBuffer>();
 }
 
-void MaterialRenderPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, gl::FrameHandle &handle, VkCommandBuffer &buf) {
+void MaterialRenderPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, VkCommandBuffer &buf) {
 	if (!_vertexBuffer->getIndexes() || !_vertexBuffer->getVertexes()) {
 		return;
 	}

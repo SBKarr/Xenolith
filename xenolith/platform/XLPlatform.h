@@ -56,10 +56,18 @@ namespace network {
 }
 
 namespace device {
+	enum ClockType {
+		Default,
+		Monotonic,
+		Realtime,
+		Process,
+		Thread,
+	};
+
 	String _userAgent();
 	String _deviceIdentifier();
 
-	uint64_t _clock();
+	uint64_t _clock(ClockType = Default);
 
 	Rc<EventLoop> createEventLoop(Application *);
 }

@@ -29,21 +29,23 @@ Scene::~Scene() {
 	_queue = nullptr;
 }
 
-bool Scene::init(gl::RenderQueue::Builder &&builder) {
+bool Scene::init(Application *app, gl::RenderQueue::Builder &&builder) {
 	if (!Node::init()) {
 		return false;
 	}
 
+	_application = app;
 	_queue = makeQueue(move(builder));
 
 	return true;
 }
 
-bool Scene::init(gl::RenderQueue::Builder &&builder, Size size) {
+bool Scene::init(Application *app, gl::RenderQueue::Builder &&builder, Size size) {
 	if (!Node::init()) {
 		return false;
 	}
 
+	_application = app;
 	_queue = makeQueue(move(builder));
 	setContentSize(size);
 
@@ -78,22 +80,30 @@ void Scene::onPresented(Director *dir) {
 }
 
 void Scene::onFinished(Director *dir) {
+	onExit();
+
 	dir->getResourceCache()->removeResource(_queue->getInternalResource()->getName());
 	if (_director == dir) {
 		_director = nullptr;
 	}
 }
 
-void Scene::onFrameStarted(gl::FrameHandle &) {
-
+void Scene::onFrameStarted(gl::FrameRequest &req) {
+	req.setSceneId(retain());
 }
 
-void Scene::onFrameEnded(gl::FrameHandle &) {
-
+void Scene::onFrameEnded(gl::FrameRequest &req) {
+	release(req.getSceneId());
 }
 
-void Scene::on2dVertexInput(gl::FrameHandle &frame, const Rc<gl::AttachmentHandle> &attachment) {
-	_director->getApplication()->performOnMainThread([this, frame = Rc<gl::FrameHandle>(&frame), attachment = attachment] {
+void Scene::on2dVertexInput(gl::FrameQueue &frame, const Rc<gl::AttachmentHandle> &attachment, Function<void(bool)> &&cb) {
+	if (!_director) {
+		cb(false);
+		return;
+	}
+
+	_director->getApplication()->performOnMainThread(
+			[this, frame = Rc<gl::FrameQueue>(&frame), attachment = attachment, cb = move(cb)] () mutable {
 		RenderFrameInfo info;
 		info.director = _director;
 		info.scene = this;
@@ -105,7 +115,7 @@ void Scene::on2dVertexInput(gl::FrameHandle &frame, const Rc<gl::AttachmentHandl
 
 		render(info);
 
-		frame->submitInput(attachment, move(info.commands));
+		attachment->submitInput(*frame, move(info.commands), move(cb));
 
 		// submit material updates
 		if (!_pendingMaterials.empty()) {
@@ -118,14 +128,6 @@ void Scene::on2dVertexInput(gl::FrameHandle &frame, const Rc<gl::AttachmentHandl
 			_pendingMaterials.clear();
 		}
 	}, this);
-}
-
-void Scene::onQueueEnabled(const gl::Swapchain *) {
-	_refId = retain();
-}
-
-void Scene::onQueueDisabled() {
-	release(_refId);
 }
 
 uint64_t Scene::getMaterial(const MaterialInfo &info) const {
@@ -172,17 +174,11 @@ uint64_t Scene::acquireMaterial(const MaterialInfo &info, Vector<gl::MaterialIma
 }
 
 Rc<gl::RenderQueue> Scene::makeQueue(gl::RenderQueue::Builder &&builder) {
-	builder.setBeginCallback([this] (gl::FrameHandle &frame) {
+	builder.setBeginCallback([this] (gl::FrameRequest &frame) {
 		onFrameStarted(frame);
 	});
-	builder.setEndCallback([this] (gl::FrameHandle &frame) {
+	builder.setEndCallback([this] (gl::FrameRequest &frame) {
 		onFrameEnded(frame);
-	});
-	builder.setEnableCallback([this] (const gl::Swapchain *swapchain) {
-		onQueueEnabled(swapchain);
-	});
-	builder.setDisableCallback([this] () {
-		onQueueDisabled();
 	});
 
 	return Rc<gl::RenderQueue>::create(move(builder));
@@ -249,51 +245,7 @@ MaterialInfo Scene::getMaterialInfo(gl::MaterialType type, const Rc<gl::Material
 }
 
 gl::ImageViewInfo Scene::getImageViewForMaterial(const MaterialInfo &info, uint32_t idx, const gl::ImageData *image) const {
-	gl::ImageViewInfo ret;
-	switch (info.colorMode.getMode()) {
-	case ColorMode::Solid: {
-		auto format = gl::getImagePixelFormat(image->format);
-		switch (format) {
-		case gl::PixelFormat::Unknown: break;
-		case gl::PixelFormat::A:
-			ret.r = gl::ComponentMapping::One;
-			ret.g = gl::ComponentMapping::One;
-			ret.b = gl::ComponentMapping::One;
-			ret.a = gl::ComponentMapping::R;
-			break;
-		case gl::PixelFormat::IA:
-			ret.r = gl::ComponentMapping::B;
-			ret.g = gl::ComponentMapping::B;
-			ret.b = gl::ComponentMapping::B;
-			ret.a = gl::ComponentMapping::G;
-			break;
-		case gl::PixelFormat::RGB:
-			ret.r = gl::ComponentMapping::Identity;
-			ret.g = gl::ComponentMapping::Identity;
-			ret.b = gl::ComponentMapping::Identity;
-			ret.a = gl::ComponentMapping::One;
-			break;
-		case gl::PixelFormat::RGBA:
-		case gl::PixelFormat::D:
-		case gl::PixelFormat::DS:
-		case gl::PixelFormat::S:
-			ret.r = gl::ComponentMapping::Identity;
-			ret.g = gl::ComponentMapping::Identity;
-			ret.b = gl::ComponentMapping::Identity;
-			ret.a = gl::ComponentMapping::Identity;
-			break;
-		}
-
-		break;
-	}
-	case ColorMode::Custom:
-		ret.r = info.colorMode.getR();
-		ret.g = info.colorMode.getG();
-		ret.b = info.colorMode.getB();
-		ret.a = info.colorMode.getA();
-		break;
-	}
-	return ret;
+	return gl::ImageViewInfo(image->format, info.colorMode);
 }
 
 Bytes Scene::getDataForMaterial(const gl::MaterialAttachment *a, const MaterialInfo &) const {

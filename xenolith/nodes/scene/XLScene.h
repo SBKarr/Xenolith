@@ -34,8 +34,8 @@ class Scene : public Node {
 public:
 	virtual ~Scene();
 
-	virtual bool init(gl::RenderQueue::Builder &&);
-	virtual bool init(gl::RenderQueue::Builder &&, Size);
+	virtual bool init(Application *, gl::RenderQueue::Builder &&);
+	virtual bool init(Application *, gl::RenderQueue::Builder &&, Size);
 
 	virtual void render(RenderFrameInfo &info);
 
@@ -47,12 +47,9 @@ public:
 	virtual void onPresented(Director *);
 	virtual void onFinished(Director *);
 
-	virtual void onFrameStarted(gl::FrameHandle &); // called on GL thread;
-	virtual void onFrameEnded(gl::FrameHandle &); // called on GL thread;
-	virtual void on2dVertexInput(gl::FrameHandle &, const Rc<gl::AttachmentHandle> &); // called on GL thread;
-
-	virtual void onQueueEnabled(const gl::Swapchain *);
-	virtual void onQueueDisabled();
+	virtual void onFrameStarted(gl::FrameRequest &);
+	virtual void onFrameEnded(gl::FrameRequest &);
+	virtual void on2dVertexInput(gl::FrameQueue &, const Rc<gl::AttachmentHandle> &, Function<void(bool)> &&cb); // called on GL thread;
 
 	virtual uint64_t getMaterial(const MaterialInfo &) const;
 
@@ -89,7 +86,7 @@ protected:
 	void addPendingMaterial(const gl::MaterialAttachment *, Rc<gl::Material> &&);
 	void addMaterial(const MaterialInfo &, gl::MaterialId);
 
-	uint32_t _refId = 0;
+	Application *_application = nullptr;
 	Director *_director = nullptr;
 	Rc<gl::RenderQueue> _queue;
 

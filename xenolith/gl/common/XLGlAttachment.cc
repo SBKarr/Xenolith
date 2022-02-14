@@ -39,26 +39,28 @@ void Attachment::addUsage(AttachmentUsage usage, AttachmentOps ops) {
 	_ops |= ops;
 }
 
-void Attachment::setInputCallback(Function<void(FrameHandle &, const Rc<AttachmentHandle> &)> &&input) {
+void Attachment::setInputCallback(Function<void(FrameQueue &, const Rc<AttachmentHandle> &, Function<void(bool)> &&)> &&input) {
 	_inputCallback = move(input);
 }
 
-void Attachment::acquireInput(FrameHandle &frame, const Rc<AttachmentHandle> &a) {
+void Attachment::acquireInput(FrameQueue &frame, const Rc<AttachmentHandle> &a, Function<void(bool)> &&cb) {
 	if (_inputCallback) {
-		_inputCallback(frame, a);
+		_inputCallback(frame, a, move(cb));
 	} else {
 		log::vtext("Attachment", "Input callback for attachment is not defined: ", getName());
 	}
 }
 
-AttachmentDescriptor *Attachment::addDescriptor(RenderPassData *data) {
+AttachmentDescriptor *Attachment::addDescriptor(RenderPassData *data, FrameRenderPassState state) {
 	for (auto &it : _descriptors) {
 		if (it->getRenderPass() == data) {
+			it->setRequiredRenderPassState(state);
 			return it;
 		}
 	}
 
 	if (auto d = makeDescriptor(data)) {
+		d->setRequiredRenderPassState(state);
 		return _descriptors.emplace_back(d);
 	}
 
@@ -87,13 +89,9 @@ void Attachment::sortDescriptors(RenderQueue &queue, Device &dev) {
 	for (auto &it : _descriptors) {
 		it->sortRefs(queue, dev);
 	}
-
-	if (_type == gl::AttachmentType::SwapchainImage) {
-		_descriptors.back()->getRenderPass()->isPresentable = true;
-	}
 }
 
-Rc<AttachmentHandle> Attachment::makeFrameHandle(const FrameHandle &) {
+Rc<AttachmentHandle> Attachment::makeFrameHandle(const FrameQueue &) {
 	return nullptr;
 }
 
@@ -258,7 +256,7 @@ void AttachmentDescriptor::sortRefs(RenderQueue &queue, Device &dev) {
 				_descriptor.type = descriptor;
 			}
 		}
-	} else if (type == AttachmentType::Image || type == AttachmentType::SwapchainImage) {
+	} else if (type == AttachmentType::Image) {
 		bool isInputAttachment = false;
 		for (auto &usage : _refs) {
 			if ((usage->getUsage() & AttachmentUsage::Input) != AttachmentUsage::None) {
@@ -296,8 +294,8 @@ void BufferAttachment::clear() {
 	Attachment::clear();
 }
 
-BufferAttachmentDescriptor *BufferAttachment::addBufferDescriptor(RenderPassData *pass) {
-	return (BufferAttachmentDescriptor *)addDescriptor(pass);
+BufferAttachmentDescriptor *BufferAttachment::addBufferDescriptor(RenderPassData *pass, FrameRenderPassState state) {
+	return (BufferAttachmentDescriptor *)addDescriptor(pass, state);
 }
 
 Rc<AttachmentDescriptor> BufferAttachment::makeDescriptor(RenderPassData *pass) {
@@ -312,31 +310,34 @@ Rc<AttachmentRef> BufferAttachmentDescriptor::makeRef(uint32_t idx, AttachmentUs
 	return Rc<BufferAttachmentRef>::create(this, idx, usage);
 }
 
-bool ImageAttachment::init(StringView str, const ImageInfo &info, AttachmentLayout init,
-		AttachmentLayout fin, bool clear) {
+bool ImageAttachment::init(StringView str, const ImageInfo &info, AttachmentInfo &&a) {
 	if (Attachment::init(str, AttachmentType::Image)) {
-		_info = info;
-		_info.key = _name;
-		_initialLayout = init;
-		_finalLayout = fin;
-		_clearOnLoad = clear;
+		_imageInfo = info;
+		_imageInfo.key = _name;
+		_attachmentInfo = move(a);
 		return true;
 	}
 	return false;
 }
 
-void ImageAttachment::onSwapchainUpdate(const ImageInfo &info) {
-	if (_type == AttachmentType::SwapchainImage) {
-		_info = info;
-	}
+void ImageAttachment::addImageUsage(gl::ImageUsage usage) {
+	_imageInfo.usage |= usage;
 }
 
-ImageAttachmentDescriptor *ImageAttachment::addImageDescriptor(RenderPassData *data) {
-	return (ImageAttachmentDescriptor *)addDescriptor(data);
+ImageAttachmentDescriptor *ImageAttachment::addImageDescriptor(RenderPassData *data, FrameRenderPassState state) {
+	return (ImageAttachmentDescriptor *)addDescriptor(data, state);
 }
 
 bool ImageAttachment::isCompatible(const ImageInfo &image) const {
-	return _info.isCompatible(image);
+	return _imageInfo.isCompatible(image);
+}
+
+Extent3 ImageAttachment::getSizeForFrame(const FrameQueue &frame) const {
+	if (_attachmentInfo.frameSizeCallback) {
+		return _attachmentInfo.frameSizeCallback(frame);
+	} else {
+		return _imageInfo.extent;
+	}
 }
 
 Rc<AttachmentDescriptor> ImageAttachment::makeDescriptor(RenderPassData *pass) {
@@ -345,6 +346,7 @@ Rc<AttachmentDescriptor> ImageAttachment::makeDescriptor(RenderPassData *pass) {
 
 bool ImageAttachmentDescriptor::init(RenderPassData *pass, ImageAttachment *attachment) {
 	if (AttachmentDescriptor::init(pass, attachment)) {
+		_colorMode = attachment->getColorMode();
 		return true;
 	}
 	return false;
@@ -375,6 +377,10 @@ ImageAttachmentRef *ImageAttachmentDescriptor::addImageRef(uint32_t idx, Attachm
 	}
 
 	return nullptr;
+}
+
+ImageAttachment *ImageAttachmentDescriptor::getImageAttachment() const {
+	return (ImageAttachment *)getAttachment();
 }
 
 Rc<ImageAttachmentRef> ImageAttachmentDescriptor::makeImageRef(uint32_t idx, AttachmentUsage usage, AttachmentLayout layout) {
@@ -532,60 +538,11 @@ void ImageAttachmentRef::updateLayout() {
 	}
 }
 
-SwapchainAttachment::~SwapchainAttachment() { }
-
-bool SwapchainAttachment::init(StringView str, const ImageInfo &info, AttachmentLayout init,
-		AttachmentLayout fin, bool clear) {
-	if (Attachment::init(str, AttachmentType::SwapchainImage)) {
-		_info = info;
-		_info.key = _name;
-		_initialLayout = init;
-		_finalLayout = fin;
-		_clearOnLoad = clear;
-		return true;
-	}
-	return false;
-}
-
-bool SwapchainAttachment::acquireForFrame(gl::FrameHandle &frame) {
-	if (_owner) {
-		if (_next) {
-			_next->invalidate();
-		}
-		_next = &frame;
-		return false;
-	} else {
-		_owner = &frame;
-		return true;
-	}
-}
-
-bool SwapchainAttachment::releaseForFrame(gl::FrameHandle &frame) {
-	if (_owner.get() == &frame) {
-		if (_next) {
-			_owner = move(_next);
-			_next = nullptr;
-			_owner->getLoop()->pushEvent(gl::Loop::EventName::FrameUpdate, _owner);
-		} else {
-			_owner = nullptr;
-		}
-		return true;
-	} else if (_next.get() == &frame) {
-		_next = nullptr;
-		return true;
-	}
-	return false;
-}
-
-Rc<AttachmentDescriptor> SwapchainAttachment::makeDescriptor(RenderPassData *pass) {
-	return Rc<SwapchainAttachmentDescriptor>::create(pass, this);
-}
-
 bool GenericAttachment::init(StringView name) {
 	return Attachment::init(name, AttachmentType::Generic);
 }
 
-Rc<AttachmentHandle> GenericAttachment::makeFrameHandle(const FrameHandle &h) {
+Rc<AttachmentHandle> GenericAttachment::makeFrameHandle(const FrameQueue &h) {
 	return Rc<AttachmentHandle>::create(this, h);
 }
 
@@ -597,17 +554,21 @@ Rc<AttachmentRef> GenericAttachmentDescriptor::makeRef(uint32_t idx, AttachmentU
 	return Rc<GenericAttachmentRef>::create(this, idx, usage);
 }
 
-bool AttachmentHandle::init(const Rc<Attachment> &attachment, const FrameHandle &frame) {
+bool AttachmentHandle::init(const Rc<Attachment> &attachment, const FrameQueue &frame) {
 	_attachment = attachment;
 	return true;
 }
 
+void AttachmentHandle::setQueueData(FrameQueueAttachmentData &data) {
+	_queueData = &data;
+}
+
 // returns true for immediate setup, false if seyup job was scheduled
-bool AttachmentHandle::setup(FrameHandle &) {
+bool AttachmentHandle::setup(FrameQueue &, Function<void(bool)> &&) {
 	return true;
 }
 
-void AttachmentHandle::finalize(FrameHandle &, bool successful) {
+void AttachmentHandle::finalize(FrameQueue &, bool successful) {
 
 }
 
@@ -625,10 +586,6 @@ uint32_t AttachmentHandle::getDescriptorArraySize(const RenderPassHandle &, cons
 
 bool AttachmentHandle::isDescriptorDirty(const RenderPassHandle &, const PipelineDescriptor &, uint32_t, bool isExternal) const {
 	return false;
-}
-
-void AttachmentHandle::setReady(bool value) {
-	_ready = value;
 }
 
 }

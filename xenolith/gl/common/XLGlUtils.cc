@@ -408,6 +408,61 @@ StringView getDescriptorTypeName(DescriptorType type) {
 	return StringView("Unknown");
 }
 
+StringView getPresentModeName(PresentMode mode) {
+	switch (mode) {
+	case gl::PresentMode::Immediate: return "IMMEDIATE"; break;
+	case gl::PresentMode::Mailbox: return "MAILBOX"; break;
+	case gl::PresentMode::Fifo: return "FIFO"; break;
+	case gl::PresentMode::FifoRelaxed: return "FIFO_RELAXED"; break;
+	default: return "UNKNOWN"; break;
+	}
+	return StringView();
+}
+
+StringView getColorSpaceName(ColorSpace fmt) {
+	switch (fmt) {
+	case ColorSpace::SRGB_NONLINEAR_KHR: return StringView("SRGB_NONLINEAR_KHR"); break;
+	case ColorSpace::DISPLAY_P3_NONLINEAR_EXT: return StringView("DISPLAY_P3_NONLINEAR_EXT"); break;
+	case ColorSpace::EXTENDED_SRGB_LINEAR_EXT: return StringView("EXTENDED_SRGB_LINEAR_EXT"); break;
+	case ColorSpace::DISPLAY_P3_LINEAR_EXT: return StringView("DISPLAY_P3_LINEAR_EXT"); break;
+	case ColorSpace::DCI_P3_NONLINEAR_EXT: return StringView("DCI_P3_NONLINEAR_EXT"); break;
+	case ColorSpace::BT709_LINEAR_EXT: return StringView("BT709_LINEAR_EXT"); break;
+	case ColorSpace::BT709_NONLINEAR_EXT: return StringView("BT709_NONLINEAR_EXT"); break;
+	case ColorSpace::BT2020_LINEAR_EXT: return StringView("BT2020_LINEAR_EXT"); break;
+	case ColorSpace::HDR10_ST2084_EXT: return StringView("HDR10_ST2084_EXT"); break;
+	case ColorSpace::DOLBYVISION_EXT: return StringView("DOLBYVISION_EXT"); break;
+	case ColorSpace::HDR10_HLG_EXT: return StringView("HDR10_HLG_EXT"); break;
+	case ColorSpace::ADOBERGB_LINEAR_EXT: return StringView("ADOBERGB_LINEAR_EXT"); break;
+	case ColorSpace::ADOBERGB_NONLINEAR_EXT: return StringView("ADOBERGB_NONLINEAR_EXT"); break;
+	case ColorSpace::PASS_THROUGH_EXT: return StringView("PASS_THROUGH_EXT"); break;
+	case ColorSpace::EXTENDED_SRGB_NONLINEAR_EXT: return StringView("EXTENDED_SRGB_NONLINEAR_EXT"); break;
+	case ColorSpace::DISPLAY_NATIVE_AMD: return StringView("DISPLAY_NATIVE_AMD"); break;
+	}
+	return StringView();
+}
+
+String getCompositeAlphaFlagsDescription(CompositeAlphaFlags fmt) {
+	StringStream stream;
+	if ((fmt & CompositeAlphaFlags::Opaque) != CompositeAlphaFlags::None) { stream << " Opaque"; }
+	if ((fmt & CompositeAlphaFlags::Premultiplied) != CompositeAlphaFlags::None) { stream << " Premultiplied"; }
+	if ((fmt & CompositeAlphaFlags::Postmultiplied) != CompositeAlphaFlags::None) { stream << " Postmultiplied"; }
+	return stream.str();
+}
+
+String getSurfaceTransformFlagsDescription(SurfaceTransformFlags fmt) {
+	StringStream stream;
+	if ((fmt & SurfaceTransformFlags::Identity) != SurfaceTransformFlags::None) { stream << " Identity"; }
+	if ((fmt & SurfaceTransformFlags::Rotate90) != SurfaceTransformFlags::None) { stream << " Rotate90"; }
+	if ((fmt & SurfaceTransformFlags::Rotate180) != SurfaceTransformFlags::None) { stream << " Rotate180"; }
+	if ((fmt & SurfaceTransformFlags::Rotate270) != SurfaceTransformFlags::None) { stream << " Rotate270"; }
+	if ((fmt & SurfaceTransformFlags::Mirror) != SurfaceTransformFlags::None) { stream << " Mirror"; }
+	if ((fmt & SurfaceTransformFlags::MirrorRotate90) != SurfaceTransformFlags::None) { stream << " MirrorRotate90"; }
+	if ((fmt & SurfaceTransformFlags::MirrorRotate180) != SurfaceTransformFlags::None) { stream << " MirrorRotate180"; }
+	if ((fmt & SurfaceTransformFlags::MirrorRotate270) != SurfaceTransformFlags::None) { stream << " MirrorRotate270"; }
+	if ((fmt & SurfaceTransformFlags::Inherit) != SurfaceTransformFlags::None) { stream << " Inherit"; }
+	return stream.str();
+}
+
 String getImageUsageDescription(ImageUsage fmt) {
 	StringStream stream;
 	if ((fmt & ImageUsage::TransferSrc) != ImageUsage::None) { stream << " TransferSrc"; }
@@ -559,6 +614,70 @@ ImageData ImageData::make(Rc<ImageObject> &&obj) {
 	ret.image = move(obj);
 	ret.key = StringView(SolidTextureName);
 	return ret;
+}
+
+void ImageViewInfo::setup(const ImageInfo &value) {
+	format = value.format;
+	baseArrayLayer = BaseArrayLayer(0);
+	layerCount = value.arrayLayers;
+
+	switch (value.imageType) {
+	case gl::ImageType::Image1D:
+		type = gl::ImageViewType::ImageView1D;
+		break;
+	case gl::ImageType::Image2D:
+		type = gl::ImageViewType::ImageView2D;
+		break;
+	case gl::ImageType::Image3D:
+		type = gl::ImageViewType::ImageView3D;
+		break;
+	}
+}
+
+void ImageViewInfo::setup(ColorMode value) {
+	switch (value.getMode()) {
+	case ColorMode::Solid: {
+		auto f = gl::getImagePixelFormat(format);
+		switch (f) {
+		case gl::PixelFormat::Unknown: break;
+		case gl::PixelFormat::A:
+			r = gl::ComponentMapping::One;
+			g = gl::ComponentMapping::One;
+			b = gl::ComponentMapping::One;
+			a = gl::ComponentMapping::R;
+			break;
+		case gl::PixelFormat::IA:
+			r = gl::ComponentMapping::B;
+			g = gl::ComponentMapping::B;
+			b = gl::ComponentMapping::B;
+			a = gl::ComponentMapping::G;
+			break;
+		case gl::PixelFormat::RGB:
+			r = gl::ComponentMapping::Identity;
+			g = gl::ComponentMapping::Identity;
+			b = gl::ComponentMapping::Identity;
+			a = gl::ComponentMapping::One;
+			break;
+		case gl::PixelFormat::RGBA:
+		case gl::PixelFormat::D:
+		case gl::PixelFormat::DS:
+		case gl::PixelFormat::S:
+			r = gl::ComponentMapping::Identity;
+			g = gl::ComponentMapping::Identity;
+			b = gl::ComponentMapping::Identity;
+			a = gl::ComponentMapping::Identity;
+			break;
+		}
+
+		break;
+	}
+	case ColorMode::Custom:
+		r = value.getR();
+		g = value.getG();
+		b = value.getB();
+		a = value.getA();
+		break;
+	}
 }
 
 bool ImageViewInfo::isCompatible(const ImageInfo &info) const {
@@ -1195,6 +1314,88 @@ bool isDepthFormat(ImageFormat format) {
 		break;
 	}
 	return false;
+}
+
+String SwapchainConfig::description() const {
+	StringStream stream;
+	stream << "\nSurfaceInfo:\n";
+	stream << "\tPresentMode: " << getPresentModeName(presentMode);
+	if (presentModeFast != PresentMode::Unsupported) {
+		stream << " (" << getPresentModeName(presentModeFast) << ")";
+	}
+	stream << "\n";
+	stream << "\tSurface format: (" << getImageFormatName(imageFormat) << ":" << getColorSpaceName(colorSpace) << ")\n";
+	stream << "\tTransform:" << getSurfaceTransformFlagsDescription(transform) << "\n";
+	stream << "\tAlpha:" << getCompositeAlphaFlagsDescription(alpha) << "\n";
+	stream << "\tImage count: " << imageCount << "\n";
+	stream << "\tExtent: " << extent.width << "x" << extent.height << "\n";
+	return stream.str();
+}
+
+bool SurfaceInfo::isSupported(const SwapchainConfig &cfg) const {
+	if (std::find(presentModes.begin(), presentModes.end(), cfg.presentMode) == presentModes.end()) {
+		return false;
+	}
+
+	if (cfg.presentModeFast != PresentMode::Unsupported && std::find(presentModes.begin(), presentModes.end(),
+			cfg.presentModeFast) == presentModes.end()) {
+		return false;
+	}
+
+	if (std::find(formats.begin(), formats.end(), pair(cfg.imageFormat, cfg.colorSpace)) == formats.end()) {
+		return false;
+	}
+
+	if ((supportedCompositeAlpha & cfg.alpha) == CompositeAlphaFlags::None) {
+		return false;
+	}
+
+	if ((supportedTransforms & cfg.transform) == SurfaceTransformFlags::None) {
+		return false;
+	}
+
+	if (cfg.imageCount < minImageCount || cfg.imageCount > maxImageCount) {
+		return false;
+	}
+
+	if (cfg.extent.width < minImageExtent.width || cfg.extent.width > minImageExtent.width
+			|| cfg.extent.height < minImageExtent.height || cfg.extent.height > minImageExtent.height) {
+		return false;
+	}
+
+	if (cfg.transfer && (supportedUsageFlags & ImageUsage::TransferDst) == ImageUsage::None) {
+		return false;
+	}
+
+	return true;
+}
+
+String SurfaceInfo::description() const {
+	StringStream stream;
+	stream << "\nSurfaceInfo:\n";
+	stream << "\tImageCount: " << minImageCount << "-" << maxImageCount << "\n";
+	stream << "\tExtent: " << currentExtent.width << "x" << currentExtent.height
+			<< " (" << minImageExtent.width << "x" << minImageExtent.height
+			<< " - " << maxImageExtent.width << "x" << maxImageExtent.height << ")\n";
+	stream << "\tMax Layers: " << maxImageArrayLayers << "\n";
+
+	stream << "\tSupported transforms:" << getSurfaceTransformFlagsDescription(supportedTransforms) << "\n";
+	stream << "\tCurrent transforms:" << getSurfaceTransformFlagsDescription(currentTransform) << "\n";
+	stream << "\tSupported Alpha:" << getCompositeAlphaFlagsDescription(supportedCompositeAlpha) << "\n";
+	stream << "\tSupported Usage:" << getImageUsageDescription(supportedUsageFlags) << "\n";
+
+	stream << "\tSurface format:";
+	for (auto it : formats) {
+		stream << " (" << getImageFormatName(it.first) << ":" << getColorSpaceName(it.second) << ")";
+	}
+	stream << "\n";
+
+	stream << "\tPresent modes:";
+	for (auto &it : presentModes) {
+		stream << " " << getPresentModeName(it);
+	}
+	stream << "\n";
+	return stream.str();
 }
 
 }

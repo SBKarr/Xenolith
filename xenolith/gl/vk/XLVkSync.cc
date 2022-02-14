@@ -90,24 +90,28 @@ bool Fence::init(Device &dev) {
 	return false;
 }
 
-void Fence::addRelease(Function<void()> &&cb, Ref *ref) {
-	_release.emplace_back(ReleaseHandle({move(cb), ref}));
+void Fence::addRelease(Function<void(bool)> &&cb, Ref *ref, StringView tag) {
+	_release.emplace_back(ReleaseHandle({move(cb), ref, tag}));
 }
 
 bool Fence::check(bool lockfree) {
 	auto dev = ((Device *)_device);
 	enum VkResult status;
+
 	if (lockfree) {
 		status = dev->getTable()->vkGetFenceStatus(dev->getDevice(), _fence);
 	} else {
 		status = dev->getTable()->vkWaitForFences(dev->getDevice(), 1, &_fence, VK_TRUE, UINT64_MAX);
 	}
+
 	switch (status) {
 	case VK_SUCCESS:
 		_signaled = true;
 		for (auto &it : _release) {
 			if (it.callback) {
-				it.callback();
+				XL_PROFILE_BEGIN(fence, "vk::Fence::check", it.tag, 500);
+				it.callback(true);
+				XL_PROFILE_END(fence);
 			}
 		}
 		_release.clear();
@@ -126,7 +130,11 @@ bool Fence::check(bool lockfree) {
 void Fence::reset() {
 	if (!_release.empty()) {
 		for (auto &it : _release) {
-			it.callback();
+			if (it.callback) {
+				XL_PROFILE_BEGIN(fence, "vk::Fence::reset", it.tag, 500);
+				it.callback(false);
+				XL_PROFILE_END(fence);
+			}
 		}
 		_release.clear();
 	}

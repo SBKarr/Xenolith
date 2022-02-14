@@ -318,7 +318,10 @@ Allocator::MemNode Allocator::alloc(MemType *type, uint64_t in_size, bool persis
 		}
 
 		if (!ref->empty()) {
-			if (ref->size() == 1) {
+			auto node = ref->back();
+			ref->pop_back();
+
+			if (ref->empty()) {
 				// revert `last` value
 				do {
 					ref --;
@@ -327,18 +330,18 @@ Allocator::MemNode Allocator::alloc(MemType *type, uint64_t in_size, bool persis
 				type->last = max_index;
 			}
 
-			auto node = ref->back();
-			ref->pop_back();
-
 			type->current += node.index + (type->min - 1);
 			if (type->current > type->max) {
 				type->current = type->max;
 			}
 
-			if (persistent) {
+			if (persistent && !node.ptr) {
 				if (_device->getTable()->vkMapMemory(_device->getDevice(), node.mem, 0, node.size, 0, &node.ptr) != VK_SUCCESS) {
 					return MemNode();
 				}
+			} else if (!persistent && node.ptr) {
+				_device->getTable()->vkUnmapMemory(_device->getDevice(), node.mem);
+				node.ptr = nullptr;
 			}
 
 			return node;
@@ -366,10 +369,13 @@ Allocator::MemNode Allocator::alloc(MemType *type, uint64_t in_size, bool persis
 				type->current = type->max;
 			}
 
-			if (persistent) {
+			if (persistent && !node.ptr) {
 				if (_device->getTable()->vkMapMemory(_device->getDevice(), node.mem, 0, node.size, 0, &node.ptr) != VK_SUCCESS) {
 					return MemNode();
 				}
+			} else if (!persistent && node.ptr) {
+				_device->getTable()->vkUnmapMemory(_device->getDevice(), node.mem);
+				node.ptr = nullptr;
 			}
 
 			return node;
@@ -406,13 +412,6 @@ Allocator::MemNode Allocator::alloc(MemType *type, uint64_t in_size, bool persis
 }
 
 void Allocator::free(MemType *type, SpanView<MemNode> nodes) {
-	for (auto &it : nodes) {
-		if (it.ptr) {
-			_device->getTable()->vkUnmapMemory(_device->getDevice(), it.mem);
-			const_cast<MemNode &>(it).ptr = nullptr;
-		}
-	}
-
 	Vector<MemNode> freelist;
 
 	std::unique_lock<Mutex> lock(_mutex);
@@ -459,6 +458,10 @@ void Allocator::free(MemType *type, SpanView<MemNode> nodes) {
 	type->current = current_free_index;
 
 	for (const MemNode &it : freelist) {
+		if (it.ptr) {
+			_device->getTable()->vkUnmapMemory(_device->getDevice(), it.mem);
+			const_cast<MemNode &>(it).ptr = nullptr;
+		}
 		_device->getTable()->vkFreeMemory(_device->getDevice(), it.mem, nullptr);
 	}
 }

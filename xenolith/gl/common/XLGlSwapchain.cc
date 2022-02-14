@@ -21,24 +21,16 @@
  **/
 
 #include "XLGlSwapchain.h"
-#include "XLGlFrame.h"
+
+#include "XLGlFrameHandle.h"
 
 namespace stappler::xenolith::gl {
 
-Swapchain::~Swapchain() {
-	if (_renderQueue) {
-		_renderQueue->disable();
-	}
-	_renderQueue = nullptr;
-	_nextRenderQueue = nullptr;
-}
+Swapchain::~Swapchain() { }
 
-bool Swapchain::init(const View *view, const Rc<RenderQueue> &queue) {
+bool Swapchain::init(const View *view, Function<SwapchainConfig(const SurfaceInfo &)> &&cb) {
 	_view = view;
-	_renderQueue = queue;
-	if (_renderQueue) {
-		_renderQueue->enable(this);
-	}
+	_configCallback = move(cb);
 	return true;
 }
 
@@ -50,78 +42,9 @@ void Swapchain::invalidate(Device &) {
 
 }
 
-Rc<gl::FrameHandle> Swapchain::beginFrame(gl::Loop &loop, bool force) {
-	if (force) {
-		_frame = 0;
-	}
-
-	if (!canStartFrame()) {
-		scheduleNextFrame();
-		if (force) {
-			log::text("gl::Swapchain", "Forced frame failed");
-		}
-		return nullptr;
-	}
-
-	_nextFrameScheduled = false;
-	auto frame = makeFrame(loop, _frames.empty());
-	if (frame && frame->isValidFlag()) {
-		_view->pushEvent(AppEvent::Update);
-		frame->update(true);
-		if (frame->isValidFlag()) {
-			_frames.push_back(frame);
-			_frame = platform::device::_clock();
-			return frame;
-		}
-	}
-	if (force) {
-		log::text("gl::Swapchain", "Forced frame failed");
-	}
-	return nullptr;
-}
-
-void Swapchain::setFrameSubmitted(Rc<gl::FrameHandle> frame) {
-	auto it = _frames.begin();
-	while (it != _frames.end()) {
-		if ((*it) == frame) {
-			it = _frames.erase(it);
-		} else {
-			++ it;
-		}
-	}
-
-	for (auto &it : _frames) {
-		if (!it->isReadyForSubmit()) {
-			it->setReadyForSubmit(true);
-			break;
-		}
-	}
-
-	++ _submitted;
-
-	if (_nextFrameScheduled) {
-		frame->getLoop()->pushEvent(Loop::EventName::FrameTimeoutPassed, this);
-	}
-}
-
-void Swapchain::invalidateFrame(gl::FrameHandle &handle) {
-	handle.invalidate();
-	auto it = std::find(_frames.begin(), _frames.end(), &handle);
-	if (it != _frames.end()) {
-		_frames.erase(it);
-	}
-}
-
-bool Swapchain::isFrameValid(const gl::FrameHandle &handle) {
-	if (handle.getGen() == _gen && std::find(_frames.begin(), _frames.end(), &handle) != _frames.end()) {
-		return true;
-	}
-	return false;
-}
-
 void Swapchain::incrementGeneration(AppEvent::Value event) {
 	_valid = false;
-	if (_submitted == 0) {
+	/*if (_submitted == 0) {
 		log::text("gl::Swapchain", "Increment generation without submitted frames");
 	}
 	++ _gen;
@@ -136,43 +59,19 @@ void Swapchain::incrementGeneration(AppEvent::Value event) {
 	if (event) {
 		_view->pushEvent(event);
 	}
-	_submitted = 0;
+	_submitted = 0;*/
 }
 
 bool Swapchain::isResetRequired() {
-	if (_suboptimal > 0) {
+	/*if (_suboptimal > 0) {
 		-- _suboptimal;
 		if (_suboptimal == 0) {
 			if (!isBestPresentMode()) {
 				return true;
 			}
 		}
-	}
+	}*/
 	return false;
-}
-
-bool Swapchain::canStartFrame() const {
-	if (!_valid) {
-		return false;
-	}
-
-	if (_frames.size() >= 2) {
-		return false;
-	}
-
-	for (auto &it : _frames) {
-		if (!it->isSubmitted()) {
-			return false;
-		}
-	}
-
-	return true;
-}
-
-bool Swapchain::scheduleNextFrame() {
-	auto prev = _nextFrameScheduled;
-	_nextFrameScheduled = true;
-	return prev;
 }
 
 }

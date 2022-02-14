@@ -106,15 +106,6 @@ struct DeviceInfo {
 	String description() const;
 };
 
-struct SurfaceInfo {
-	VkSurfaceCapabilitiesKHR capabilities;
-	Vector<VkSurfaceFormatKHR> formats;
-	Vector<gl::PresentMode> presentModes;
-	VkSurfaceKHR surface;
-
-	String description() const;
-};
-
 }
 
 #endif /* XENOLITH_GL_VK_XLVKINFO_H_ */

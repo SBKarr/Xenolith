@@ -35,46 +35,6 @@
 
 namespace stappler::xenolith::vk {
 
-#ifdef XL_VK_HOOK_DEBUG
-static std::mutex hook_callLock;
-static DeviceCallTable *hook_origTable = nullptr;
-
-enum VkResult hook_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence) {
-	log::text("Vk-Hook", "vkQueueSubmit");
-	return hook_origTable->vkQueueSubmit(queue, submitCount, pSubmits, fence);
-}
-
-enum VkResult hook_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR* pPresentInfo) {
-	log::text("Vk-Hook", "vkQueuePresentKHR");
-	return hook_origTable->vkQueuePresentKHR(queue, pPresentInfo);
-}
-
-enum VkResult hook_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t* pImageIndex) {
-	log::text("Vk-Hook", "vkAcquireNextImageKHR");
-	return hook_origTable->vkAcquireNextImageKHR(device, swapchain, timeout, semaphore, fence, pImageIndex);
-}
-
-enum VkResult hook_vkBeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo* pBeginInfo) {
-	log::text("Vk-Hook", "vkBeginCommandBuffer");
-	return hook_origTable->vkBeginCommandBuffer(commandBuffer, pBeginInfo);
-}
-
-enum VkResult hook_vkEndCommandBuffer(VkCommandBuffer commandBuffer) {
-	log::text("Vk-Hook", "vkEndCommandBuffer");
-	return hook_origTable->vkEndCommandBuffer(commandBuffer);
-}
-
-enum VkResult hook_vkAllocateCommandBuffers(VkDevice device, const VkCommandBufferAllocateInfo* pAllocateInfo, VkCommandBuffer* pCommandBuffers) {
-	log::text("Vk-Hook", "vkAllocateCommandBuffers");
-	return hook_origTable->vkAllocateCommandBuffers(device, pAllocateInfo, pCommandBuffers);
-}
-
-enum VkResult hook_vkResetCommandPool(VkDevice device, VkCommandPool commandPool, VkCommandPoolResetFlags flags) {
-	log::text("Vk-Hook", "vkResetCommandPool");
-	return hook_origTable->vkResetCommandPool(device, commandPool, flags);
-}
-#endif
-
 Device::Device() { }
 
 Device::~Device() {
@@ -168,7 +128,7 @@ bool Device::init(const vk::Instance *inst, DeviceInfo && info, const Features &
 		it.queues.resize(it.count, VK_NULL_HANDLE);
 		it.pools.reserve(it.count);
 		for (size_t i = 0; i < it.count; ++ i) {
-			_table->vkGetDeviceQueue(_device, it.index, i, it.queues.data() + i);
+			getTable()->vkGetDeviceQueue(_device, it.index, i, it.queues.data() + i);
 			it.pools.emplace_back(Rc<CommandPool>::create(*this, it.index, it.preferred));
 		}
 	}
@@ -181,6 +141,45 @@ bool Device::init(const vk::Instance *inst, DeviceInfo && info, const Features &
 
 	_renderQueueCompiler = Rc<RenderQueueCompiler>::create(*this);
 
+	do {
+		VkFormatProperties properties;
+		_vkInstance->vkGetPhysicalDeviceFormatProperties(_info.device, VK_FORMAT_D16_UNORM, &properties);
+		_formats.emplace(VK_FORMAT_D16_UNORM, properties);
+		if ((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) {
+			_depthFormats.emplace_back(gl::ImageFormat(VK_FORMAT_D16_UNORM));
+		}
+
+		_vkInstance->vkGetPhysicalDeviceFormatProperties(_info.device, VK_FORMAT_X8_D24_UNORM_PACK32, &properties);
+		_formats.emplace(VK_FORMAT_X8_D24_UNORM_PACK32, properties);
+		if ((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) {
+			_depthFormats.emplace_back(gl::ImageFormat(VK_FORMAT_X8_D24_UNORM_PACK32));
+		}
+
+		_vkInstance->vkGetPhysicalDeviceFormatProperties(_info.device, VK_FORMAT_D32_SFLOAT, &properties);
+		_formats.emplace(VK_FORMAT_D32_SFLOAT, properties);
+		if ((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) {
+			_depthFormats.emplace_back(gl::ImageFormat(VK_FORMAT_D32_SFLOAT));
+		}
+
+		_vkInstance->vkGetPhysicalDeviceFormatProperties(_info.device, VK_FORMAT_S8_UINT, &properties);
+		_formats.emplace(VK_FORMAT_S8_UINT, properties);
+		if ((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) {
+			_depthFormats.emplace_back(gl::ImageFormat(VK_FORMAT_S8_UINT));
+		}
+
+		_vkInstance->vkGetPhysicalDeviceFormatProperties(_info.device, VK_FORMAT_D16_UNORM_S8_UINT, &properties);
+		_formats.emplace(VK_FORMAT_D16_UNORM_S8_UINT, properties);
+		if ((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) {
+			_depthFormats.emplace_back(gl::ImageFormat(VK_FORMAT_D16_UNORM_S8_UINT));
+		}
+
+		_vkInstance->vkGetPhysicalDeviceFormatProperties(_info.device, VK_FORMAT_D24_UNORM_S8_UINT, &properties);
+		_formats.emplace(VK_FORMAT_D24_UNORM_S8_UINT, properties);
+		if ((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) {
+			_depthFormats.emplace_back(gl::ImageFormat(VK_FORMAT_D24_UNORM_S8_UINT));
+		}
+	} while (0);
+
 	return true;
 }
 
@@ -190,7 +189,7 @@ VkPhysicalDevice Device::getPhysicalDevice() const {
 
 void Device::begin(const Application *app, thread::TaskQueue &q) {
 	if (!isSamplersCompiled()) {
-		compileSamplers(q, false);
+		compileSamplers(*app->getQueue(), true);
 	}
 
 	gl::Device::begin(app, q);
@@ -233,12 +232,14 @@ void Device::waitIdle() {
 		it->check(false);
 	}
 	_scheduled.clear();
-	_table->vkDeviceWaitIdle(_device);
+	getTable()->vkDeviceWaitIdle(_device);
 }
 
 void Device::onLoopStarted(gl::Loop &loop) {
 	gl::Device::onLoopStarted(loop);
 	_textureSetLayout->initDefault(*this, loop);
+
+	loop.getQueue()->waitForAll();
 
 	compileRenderQueue(loop, _materialQueue);
 	compileRenderQueue(loop, _transferQueue);
@@ -246,6 +247,15 @@ void Device::onLoopStarted(gl::Loop &loop) {
 
 void Device::onLoopEnded(gl::Loop &loop) {
 	gl::Device::onLoopEnded(loop);
+}
+
+const DeviceTable * Device::getTable() const {
+#if VK_HOOK_DEBUG
+	setDeviceHookThreadContext([] (void *, const char *name, PFN_vkVoidFunction) {
+		log::text("Vk-Call", name);
+	}, nullptr, _original, nullptr, (void *)this);
+#endif
+	return _table;
 }
 
 const DeviceQueueFamily *Device::getQueueFamily(QueueOperations ops) const {
@@ -431,15 +441,23 @@ Rc<CommandPool> Device::acquireCommandPool(uint32_t familyIndex) {
 	return nullptr;
 }
 
-void Device::releaseCommandPool(Rc<CommandPool> &&pool) {
+void Device::releaseCommandPool(gl::Loop &loop, Rc<CommandPool> &&pool) {
+	auto refId = retain();
+	loop.getQueue()->perform(Rc<Task>::create([this, pool] (const Task &) -> bool {
+		pool->reset(*this);
+		return true;
+	}, [this, pool, refId] (const Task &, bool success) {
+		if (success) {
+			_families[pool->getFamilyIdx()].pools.emplace_back(Rc<CommandPool>(pool));
+		}
+		release(refId);
+	}));
+}
+
+void Device::releaseCommandPoolUnsafe(Rc<CommandPool> &&pool) {
 	pool->reset(*this);
 
-	for (auto &it : _families) {
-		if ((it.preferred & pool->getClass()) != QueueOperations::None) {
-			it.pools.emplace_back(move(pool));
-			return;
-		}
-	}
+	_families[pool->getFamilyIdx()].pools.emplace_back(Rc<CommandPool>(pool));
 }
 
 Rc<Fence> Device::acquireFence(uint32_t v) {
@@ -476,7 +494,7 @@ void Device::scheduleFence(gl::Loop &loop, Rc<Fence> &&fence) {
 			return true;
 		}
 		return false;
-	});
+	}, "Device::scheduleFence");
 }
 
 static BytesView Device_emplaceConstant(Bytes &data, BytesView constant) {
@@ -538,18 +556,38 @@ Rc<gl::ImageObject> Device::getSolidImageObject() const {
 	return _textureSetLayout->getSolidImageObject();
 }
 
-Rc<gl::FrameHandle> Device::makeFrame(gl::Loop &loop, gl::Swapchain &swapchain, gl::RenderQueue &queue, uint32_t gen, bool readyForSubmit) {
-	return Rc<FrameHandle>::create(loop, swapchain, queue, gen, readyForSubmit);
+const Vector<gl::ImageFormat> &Device::getSupportedDepthStencilFormat() const {
+	return _depthFormats;
 }
 
-Rc<gl::FrameHandle> Device::makeFrame(gl::Loop &loop, gl::RenderQueue &queue, uint32_t gen) {
-	return Rc<FrameHandle>::create(loop, queue, gen);
+Rc<gl::FrameHandle> Device::makeFrame(gl::Loop &loop, Rc<gl::FrameRequest> &&req, uint64_t gen) {
+	return Rc<FrameHandle>::create(loop, move(req), gen);
+}
+
+Rc<gl::Framebuffer> Device::makeFramebuffer(const gl::RenderPassData *pass, SpanView<Rc<gl::ImageView>> views, Extent2 extent) {
+	return Rc<Framebuffer>::create(*this, ((RenderPassImpl *)pass->impl.get())->getRenderPass(), views, extent);
+}
+
+Rc<gl::ImageAttachmentObject> Device::makeImage(const gl::ImageAttachment *attachment, Extent3 extent) {
+	auto ret = Rc<gl::ImageAttachmentObject>::alloc();
+
+	auto imageInfo = attachment->getInfo();
+	ret->extent = imageInfo.extent = extent;
+
+	auto img = _allocator->spawnPersistent(AllocationUsage::DeviceLocal, imageInfo, false);
+
+	ret->image = img.get();
+
+	for (auto &desc : attachment->getDescriptors()) {
+		auto v = Rc<ImageView>::create(*this, *(gl::ImageAttachmentDescriptor *)desc.get(), img);
+		ret->views.emplace(desc->getRenderPass(), move(v));
+	}
+
+	return ret;
 }
 
 void Device::compileResource(gl::Loop &loop, const Rc<gl::Resource> &req, Function<void(bool)> &&complete) {
-	auto h = Rc<FrameHandle>::create(loop, *_transferQueue, 0);
-	auto res = Rc<TransferResource>::create(getAllocator(), req, move(complete));
-	_transferQueue->submitInput(*h, move(res));
+	auto h = makeFrame(loop, _transferQueue->makeRequest(Rc<TransferResource>::create(getAllocator(), req, move(complete))), 0);
 	h->update(true);
 }
 
@@ -558,16 +596,16 @@ void Device::compileRenderQueue(gl::Loop &loop, const Rc<gl::RenderQueue> &req, 
 		loop.getQueue()->waitForAll();
 	}
 
-	auto h = Rc<FrameHandle>::create(loop, *_renderQueueCompiler, 0);
+	auto input = Rc<RenderQueueInput>::alloc();
+	input->queue = req;
+
+	auto h = makeFrame(loop, _renderQueueCompiler->makeRequest(move(input)), 0);
 	if (cb) {
 		h->setCompleteCallback([cb] (gl::FrameHandle &handle) {
 			cb(handle.isValid());
 		});
 	}
 
-	auto input = Rc<RenderQueueInput>::alloc();
-	input->queue = req;
-	_renderQueueCompiler->submitInput(*h, move(input));
 	h->update(true);
 }
 
@@ -602,7 +640,8 @@ void Device::compileSamplers(thread::TaskQueue &q, bool force) {
 
 void Device::runMaterialCompilationFrame(gl::Loop &loop, Rc<gl::MaterialInputData> &&req) {
 	auto targetAttachment = req->attachment;
-	auto h = Rc<FrameHandle>::create(loop, *_materialQueue, 0);
+
+	auto h = makeFrame(loop, _materialQueue->makeRequest(move(req)), 0);
 	h->setCompleteCallback([this, targetAttachment] (gl::FrameHandle &handle) {
 		if (_materialQueue->hasRequest(targetAttachment)) {
 			if (handle.getLoop()->isRunning()) {
@@ -616,7 +655,6 @@ void Device::runMaterialCompilationFrame(gl::Loop &loop, Rc<gl::MaterialInputDat
 			_materialQueue->dropInProgress(targetAttachment);
 		}
 	});
-	_materialQueue->submitInput(*h, move(req));
 	h->update(true);
 }
 
@@ -702,26 +740,12 @@ bool Device::setup(const Instance *instance, VkPhysicalDevice p, const Propertie
 		return false;
 	}
 
-	auto table = new DeviceCallTable();
-	loadDeviceTable(instance, _device, table);
-
-	if (!table->vkGetImageMemoryRequirements2KHR && table->vkGetImageMemoryRequirements2) {
-		table->vkGetImageMemoryRequirements2KHR = table->vkGetImageMemoryRequirements2;
-	}
-	if (!table->vkGetBufferMemoryRequirements2KHR && table->vkGetBufferMemoryRequirements2) {
-		table->vkGetBufferMemoryRequirements2KHR = table->vkGetBufferMemoryRequirements2;
-	}
-	_table = table;
-
-#ifdef XL_VK_HOOK_DEBUG
-	hook_origTable = new DeviceCallTable(*_table);
-	table->vkQueueSubmit = hook_vkQueueSubmit;
-	table->vkQueuePresentKHR = hook_vkQueuePresentKHR;
-	table->vkAcquireNextImageKHR = hook_vkAcquireNextImageKHR;
-	table->vkBeginCommandBuffer = hook_vkBeginCommandBuffer;
-	table->vkEndCommandBuffer = hook_vkEndCommandBuffer;
-	table->vkAllocateCommandBuffers = hook_vkAllocateCommandBuffers;
-	table->vkResetCommandPool = hook_vkResetCommandPool;
+#if VK_HOOK_DEBUG
+	auto hookTable = new DeviceTable(DeviceTable::makeHooks());
+	_original = new DeviceTable(instance->vkGetDeviceProcAddr, _device);
+	_table = hookTable;
+#else
+	_table = new DeviceTable(instance->vkGetDeviceProcAddr, _device);
 #endif
 
 	return true;

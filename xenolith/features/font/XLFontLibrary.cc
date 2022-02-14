@@ -178,14 +178,14 @@ void FontLibrary::updateImage(const Rc<gl::DynamicImage> &image, Vector<Pair<Rc<
 		bmp.save(Bitmap::FileFormat::Png, toString(Time::now().toMicros(), ".png"));
 	};
 
-	Map<const gl::Attachment *, Rc<gl::AttachmentInputData>> queueInput;
+	auto req = Rc<gl::FrameRequest>::create(_queue);
 
 	for (auto &it : _queue->getInputAttachments()) {
-		queueInput.emplace(it, move(input));
+		req->addInput(it, move(input));
 		break;
 	}
 
-	_loop->runRenderQueue(_queue, move(queueInput));
+	_loop->runRenderQueue(move(req));
 }
 
 FT_Face FontLibrary::newFontFace(BytesView data) {

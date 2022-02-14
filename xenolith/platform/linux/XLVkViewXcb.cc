@@ -186,7 +186,7 @@ XcbView::XcbView(const Instance *inst, ViewImpl *v, StringView, URect rect) {
 
 	xcb_change_property( _connection, XCB_PROP_MODE_REPLACE, _window, _atoms[0], 4, 32, 1, &_atoms[1] );
 
-	v->setScreenSize(_width, _height);
+	v->setScreenExtent(Extent2(_width, _height));
 }
 
 XcbView::~XcbView() {
@@ -324,7 +324,7 @@ bool XcbView::poll() {
 			if (ev->width != _width || ev->height != _height) {
 				_width = ev->width; _height = ev->height;
 				_view->recreateSwapChain();
-				_view->setScreenSize(_width, _height);
+				_view->setScreenExtent(Extent2(_width, _height));
 			}
 			break;
 		}

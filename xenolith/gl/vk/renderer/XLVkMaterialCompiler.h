@@ -47,7 +47,7 @@ public:
 	Rc<gl::MaterialInputData> popRequest(const gl::MaterialAttachment *);
 	void clearRequests();
 
-	void submitInput(gl::FrameHandle &, Rc<gl::MaterialInputData> &&);
+	Rc<gl::FrameRequest> makeRequest(Rc<gl::MaterialInputData> &&);
 
 protected:
 	struct MaterialRequest {

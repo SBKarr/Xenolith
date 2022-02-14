@@ -29,6 +29,7 @@
 namespace stappler::xenolith::gl {
 
 struct RenderPassData;
+struct FrameCacheStorage;
 class Swapchain;
 
 /* RenderQueue/RenderGraph implementation notes:
@@ -106,13 +107,11 @@ struct RenderPassData : NamedMem {
 	memory::vector<PipelineDescriptor> extraDescriptors;
 
 	RenderOrdering ordering = RenderOrderingLowest;
-	bool isPresentable = false;
 	bool usesSamplers = false;
 	bool hasUpdateAfterBind = false;
 
 	Rc<RenderPass> renderPass;
 	Rc<RenderPassImpl> impl;
-	memory::vector<Rc<Framebuffer>> framebuffers;
 };
 
 class RenderQueue : public NamedRef {
@@ -133,10 +132,6 @@ public:
 	bool isCompiled() const;
 	void setCompiled(bool);
 
-	bool updateSwapchainInfo(const ImageInfo &);
-	const ImageInfo *getSwapchainImageInfo() const;
-
-	bool isPresentable() const;
 	bool isCompatible(const ImageInfo &) const;
 
 	virtual StringView getName() const override;
@@ -165,13 +160,16 @@ public:
 	// Prepare queue to be used on target device
 	bool prepare(Device &);
 
-	void beginFrame(gl::FrameHandle &);
-	void endFrame(gl::FrameHandle &);
+	void beginFrame(gl::FrameRequest &);
+	void endFrame(gl::FrameRequest &);
 
 	void enable(const Swapchain *);
 	void disable();
 
 	bool usesSamplers() const;
+
+	void addCacheStorage(FrameCacheStorage *) const;
+	void removeCacheStorage(const FrameCacheStorage *) const;
 
 protected:
 	QueueData *_data = nullptr;
@@ -186,18 +184,25 @@ public:
 
 	RenderPassData * addRenderPass(const Rc<RenderPass> &);
 
-	AttachmentRef *addPassInput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<BufferAttachment> &);
-	AttachmentRef *addPassOutput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<BufferAttachment> &);
+	AttachmentRef *addPassInput(const Rc<RenderPass> &, uint32_t subpassIdx,
+			const Rc<BufferAttachment> &, FrameRenderPassState = FrameRenderPassState::Initial);
+	AttachmentRef *addPassOutput(const Rc<RenderPass> &, uint32_t subpassIdx,
+			const Rc<BufferAttachment> &, FrameRenderPassState = FrameRenderPassState::Initial);
 
-	AttachmentRef *addPassInput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<GenericAttachment> &);
-	AttachmentRef *addPassOutput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<GenericAttachment> &);
+	AttachmentRef *addPassInput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<GenericAttachment> &,
+			FrameRenderPassState = FrameRenderPassState::Initial);
+	AttachmentRef *addPassOutput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<GenericAttachment> &,
+			FrameRenderPassState = FrameRenderPassState::Initial);
 
-	ImageAttachmentRef *addPassInput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<ImageAttachment> &);
-	ImageAttachmentRef *addPassOutput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<ImageAttachment> &);
+	ImageAttachmentRef *addPassInput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<ImageAttachment> &,
+			FrameRenderPassState = FrameRenderPassState::Initial);
+	ImageAttachmentRef *addPassOutput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<ImageAttachment> &,
+			FrameRenderPassState = FrameRenderPassState::Initial);
 	Pair<ImageAttachmentRef *, ImageAttachmentRef *> addPassResolve(const Rc<RenderPass> &, uint32_t subpassIdx,
-			const Rc<ImageAttachment> &color, const Rc<ImageAttachment> &resolve);
+			const Rc<ImageAttachment> &color, const Rc<ImageAttachment> &resolve, FrameRenderPassState = FrameRenderPassState::Initial);
 
-	ImageAttachmentRef *addPassDepthStencil(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<ImageAttachment> &);
+	ImageAttachmentRef *addPassDepthStencil(const Rc<RenderPass> &, uint32_t subpassIdx,
+			const Rc<ImageAttachment> &, FrameRenderPassState = FrameRenderPassState::Initial);
 
 	bool addSubpassDependency(const Rc<RenderPass> &, uint32_t srcSubpass, PipelineStage srcStage, AccessType srcAccess,
 			uint32_t dstSubpass, PipelineStage dstStage, AccessType dstAccess, bool byRegion = true);
@@ -232,8 +237,8 @@ public:
 	// external resources, that should be compiled when added
 	void addLinkedResource(const Rc<Resource> &);
 
-	void setBeginCallback(Function<void(gl::FrameHandle &)> &&);
-	void setEndCallback(Function<void(gl::FrameHandle &)> &&);
+	void setBeginCallback(Function<void(gl::FrameRequest &)> &&);
+	void setEndCallback(Function<void(gl::FrameRequest &)> &&);
 
 	void setEnableCallback(Function<void(const Swapchain *)> &&);
 	void setDisableCallback(Function<void()> &&);

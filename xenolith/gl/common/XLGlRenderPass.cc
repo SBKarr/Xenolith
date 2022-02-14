@@ -39,16 +39,19 @@ void RenderPass::invalidate() {
 
 }
 
-Rc<RenderPassHandle> RenderPass::makeFrameHandle(RenderPassData *data, const FrameHandle &handle) {
-	return Rc<RenderPassHandle>::create(*this, data, handle);
+Rc<RenderPassHandle> RenderPass::makeFrameHandle(const FrameQueue &handle) {
+	return Rc<RenderPassHandle>::create(*this, handle);
 }
 
-bool RenderPass::acquireForFrame(gl::FrameHandle &frame) {
+bool RenderPass::acquireForFrame(gl::FrameQueue &frame, Function<void(bool)> &&onAcquired) {
 	if (_owner) {
-		if (_next) {
-			_next->invalidate();
+		if (_next.queue) {
+			_next.acquired(false);
 		}
-		_next = &frame;
+		_next = FrameQueueWaiter{
+			&frame,
+			move(onAcquired)
+		};
 		return false;
 	} else {
 		_owner = &frame;
@@ -56,21 +59,33 @@ bool RenderPass::acquireForFrame(gl::FrameHandle &frame) {
 	}
 }
 
-bool RenderPass::releaseForFrame(gl::FrameHandle &frame) {
+bool RenderPass::releaseForFrame(gl::FrameQueue &frame) {
 	if (_owner.get() == &frame) {
-		if (_next) {
-			_owner = move(_next);
-			_next = nullptr;
-			_owner->getLoop()->pushEvent(Loop::EventName::FrameUpdate, _owner);
+		if (_next.queue) {
+			_owner = move(_next.queue);
+			_next.acquired(true);
+			_next.queue = nullptr;
+			_next.acquired = nullptr;
 		} else {
 			_owner = nullptr;
 		}
 		return true;
-	} else if (_next.get() == &frame) {
-		_next = nullptr;
+	} else if (_next.queue.get() == &frame) {
+		auto tmp = move(_next.acquired);
+		_next.queue = nullptr;
+		_next.acquired = nullptr;
+		tmp(false);
 		return true;
 	}
 	return false;
+}
+
+Extent2 RenderPass::getSizeForFrame(const FrameQueue &queue) const {
+	if (_frameSizeCallback) {
+		return _frameSizeCallback(queue);
+	} else {
+		return queue.getExtent();
+	}
 }
 
 void RenderPass::prepare(Device &device) {
@@ -79,82 +94,50 @@ void RenderPass::prepare(Device &device) {
 
 RenderPassHandle::~RenderPassHandle() { }
 
-bool RenderPassHandle::init(RenderPass &pass, RenderPassData *data, const FrameHandle &frame) {
+bool RenderPassHandle::init(RenderPass &pass, const FrameQueue &queue) {
 	_renderPass = &pass;
-	_data = data;
+	_data = pass.getData();
 	return true;
+}
+
+void RenderPassHandle::setQueueData(FrameQueueRenderPassData &data) {
+	_queueData = &data;
 }
 
 StringView RenderPassHandle::getName() const {
 	return _data->key;
 }
 
-void RenderPassHandle::buildRequirements(const FrameHandle &frame, const Vector<Rc<RenderPassHandle>> &passes,
-		const Vector<Rc<AttachmentHandle>> &attachments) {
-	for (auto &it : attachments) {
-		for (auto &a : _data->descriptors) {
-			if (it->getAttachment() == a->getAttachment()) {
-				addRequiredAttachment(a->getAttachment(), it);
-			}
-		}
-	}
-
-	for (auto &a : _attachments) {
-		auto &desc = a.first->getDescriptors();
-		auto it = desc.begin();
-		while (it != desc.end() && (*it)->getRenderPass() != _data) {
-			for (auto &pass : passes) {
-				if (pass->getData() == (*it)->getRenderPass()) {
-					_requiredPasses.emplace_back(pass);
-				}
-			}
-		}
-	}
-}
-
-bool RenderPassHandle::isReady() const {
-	bool ready = true;
-	for (auto &it : _requiredPasses) {
-		if (!it->isSubmitted()) {
-			ready = false;
-		}
-	}
-
-	for (auto &it : _attachments) {
-		if (!it.second->isReady()) {
-			ready = false;
-		}
-	}
-
-	return ready;
-}
-
-bool RenderPassHandle::isAvailable(const FrameHandle &handle) const {
-	return _isAsync || _renderPass->getOwner() == &handle;
-}
-
-bool RenderPassHandle::prepare(FrameHandle &) {
+bool RenderPassHandle::isAvailable(const FrameQueue &handle) const {
 	return true;
 }
 
-void RenderPassHandle::submit(FrameHandle &, Function<void(const Rc<RenderPassHandle> &)> &&) {
+bool RenderPassHandle::isSubmitted() const {
+	return toInt(_queueData->state) >= toInt(FrameRenderPassState::Submitted);
+}
+
+bool RenderPassHandle::isCompleted() const {
+	return toInt(_queueData->state) >= toInt(FrameRenderPassState::Complete);
+}
+
+bool RenderPassHandle::prepare(FrameQueue &, Function<void(bool)> &&) {
+	return true;
+}
+
+void RenderPassHandle::submit(FrameQueue &, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) {
 
 }
 
-void RenderPassHandle::finalize(FrameHandle &, bool successful) {
+void RenderPassHandle::finalize(FrameQueue &, bool successful) {
 
 }
 
 AttachmentHandle *RenderPassHandle::getAttachmentHandle(const Attachment *a) const {
-	auto it = _attachments.find(a);
-	if (it != _attachments.end()) {
-		return it->second;
+	auto it = _queueData->attachmentMap.find(a);
+	if (it != _queueData->attachmentMap.end()) {
+		return it->second->handle.get();
 	}
 	return nullptr;
-}
-
-void RenderPassHandle::addRequiredAttachment(const Attachment *a, const Rc<AttachmentHandle> &h) {
-	_attachments.emplace(a, h);
 }
 
 }

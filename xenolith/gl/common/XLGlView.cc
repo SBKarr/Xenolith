@@ -21,6 +21,7 @@
  **/
 
 #include "XLGlView.h"
+#include "XLGlLoop.h"
 #include "XLScene.h"
 
 namespace stappler::xenolith::gl {
@@ -36,9 +37,11 @@ View::View() {
 View::~View() { }
 
 bool View::init(const Rc<EventLoop> &ev, const Rc<gl::Loop> &loop) {
-	_glLoop = loop;
-	_eventLoop = ev;
+	if (!FrameEmitter::init(loop, 0 /* 1'000'000 / 60 */)) {
+		return false;
+	}
 
+	_eventLoop = ev;
 	return true;
 }
 
@@ -47,20 +50,14 @@ bool View::begin(const Rc<Director> &dir, Function<void()> &&cb) {
 	_onEnded = move(cb);
 	_eventLoop->addView(this);
 	_director->begin(this);
-
-	if (auto &scene = _director->getScene()) {
-		_swapchain = makeSwapchain(scene->getRenderQueue());
-		if (_swapchain) {
-			_glLoop->pushEvent(Loop::EventName::Update, _swapchain);
-			return true;
-		}
-	}
+	_director->update();
 	return true;
 }
 
 void View::end() {
-	_swapchain->invalidate(*_glLoop->getDevice());
-	_swapchain = nullptr;
+	_loop->performOnThread([this] {
+		invalidate();
+	}, this);
 
 	if (_onEnded) {
 		_onEnded();
@@ -72,11 +69,11 @@ void View::end() {
 }
 
 void View::reset(SwapchanCreationMode mode) {
-	if (_swapchain) {
+	/*if (_swapchain) {
 		_swapchain->recreateSwapchain(*_glLoop->getDevice(), mode);
 	}
 
-	_glLoop->pushEvent(Loop::EventName::SwapChainRecreated, _swapchain);
+	_glLoop->pushEvent(Loop::EventName::SwapChainRecreated, _swapchain);*/
 }
 
 void View::update() {
@@ -92,12 +89,12 @@ float View::getDensity() const {
 	return _density;
 }
 
-const Size & View::getScreenSize() const {
-	return _screenSize;
+const Extent2 & View::getScreenExtent() const {
+	return _screenExtent;
 }
 
-void View::setScreenSize(float width, float height) {
-	_screenSize = Size(width, height);
+void View::setScreenExtent(Extent2 e) {
+	_screenExtent = e;
 	onScreenSize(this);
 }
 
@@ -108,10 +105,6 @@ void View::handleTouchesMove(int num, intptr_t ids[], float xs[], float ys[]) { 
 void View::handleTouchesEnd(int num, intptr_t ids[], float xs[], float ys[]) { }
 
 void View::handleTouchesCancel(int num, intptr_t ids[], float xs[], float ys[]) { }
-
-void View::enableOffscreenContext() { }
-
-void View::disableOffscreenContext() { }
 
 void View::setClipboardString(StringView) { }
 
@@ -139,6 +132,18 @@ void View::pushEvent(AppEvent::Value events) const {
 
 AppEvent::Value View::popEvents() const {
 	return _events.exchange(AppEvent::None);
+}
+
+void View::acquireNextFrame() {
+	pushEvent(AppEvent::Update);
+}
+
+void View::runFrame(const Rc<gl::RenderQueue> &queue, Extent2 extent) {
+	submitNextFrame(Rc<FrameRequest>::create(queue, this, extent));
+}
+
+gl::SwapchainConfig View::selectConfig(const gl::SurfaceInfo &info) const {
+	return _director->selectConfig(info);
 }
 
 }

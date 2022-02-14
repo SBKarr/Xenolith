@@ -30,15 +30,15 @@ class TransferAttachment : public gl::GenericAttachment {
 public:
 	virtual ~TransferAttachment();
 
-	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameHandle &) override;
+	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameQueue &) override;
 };
 
 class TransferAttachmentHandle : public gl::AttachmentHandle {
 public:
 	virtual ~TransferAttachmentHandle();
 
-	virtual bool setup(gl::FrameHandle &) override;
-	virtual bool submitInput(gl::FrameHandle &, Rc<gl::AttachmentInputData> &&) override;
+	virtual bool setup(gl::FrameQueue &, Function<void(bool)> &&) override;
+	virtual void submitInput(gl::FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
 
 	const Rc<TransferResource> &getResource() const { return _resource; }
 
@@ -52,7 +52,14 @@ public:
 
 	virtual bool init(StringView);
 
-	virtual Rc<gl::RenderPassHandle> makeFrameHandle(gl::RenderPassData *, const gl::FrameHandle &);
+	virtual Rc<gl::RenderPassHandle> makeFrameHandle(const gl::FrameQueue &) override;
+
+	TransferAttachment *getAttachment() const { return _attachment; }
+
+protected:
+	virtual void prepare(gl::Device &) override;
+
+	TransferAttachment *_attachment = nullptr;
 };
 
 class TransferRenderPassHandle : public RenderPassHandle {
@@ -60,7 +67,7 @@ public:
 	virtual ~TransferRenderPassHandle();
 
 protected:
-	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &, uint32_t index);
+	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &) override;
 };
 
 
@@ -85,8 +92,10 @@ bool TransferQueue::init() {
 	return false;
 }
 
-void TransferQueue::submitInput(gl::FrameHandle &frame, Rc<TransferResource> &&input) {
-	frame.submitInput(_attachment, move(input), true);
+Rc<gl::FrameRequest> TransferQueue::makeRequest(Rc<TransferResource> &&req) {
+	auto ret = Rc<gl::FrameRequest>::create(this);
+	ret->addInput(_attachment, move(req));
+	return ret;
 }
 
 TransferResource::BufferAllocInfo::BufferAllocInfo(gl::BufferData *d) {
@@ -898,19 +907,19 @@ bool TransferResource::writeStaging(StagingBuffer &buffer) {
 
 TransferAttachment::~TransferAttachment() { }
 
-Rc<gl::AttachmentHandle> TransferAttachment::makeFrameHandle(const gl::FrameHandle &handle) {
+Rc<gl::AttachmentHandle> TransferAttachment::makeFrameHandle(const gl::FrameQueue &handle) {
 	return Rc<TransferAttachmentHandle>::create(this, handle);
 }
 
 TransferAttachmentHandle::~TransferAttachmentHandle() { }
 
-bool TransferAttachmentHandle::setup(gl::FrameHandle &handle) {
+bool TransferAttachmentHandle::setup(gl::FrameQueue &handle, Function<void(bool)> &&) {
 	return true;
 }
 
-bool TransferAttachmentHandle::submitInput(gl::FrameHandle &handle, Rc<gl::AttachmentInputData> &&data) {
+void TransferAttachmentHandle::submitInput(gl::FrameQueue &handle, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
 	_resource = data.cast<TransferResource>();
-	return true;
+	cb(true);
 }
 
 
@@ -920,18 +929,27 @@ bool TransferRenderPass::init(StringView name) {
 	return RenderPass::init(name, gl::RenderPassType::Transfer, gl::RenderOrdering(gl::RenderOrderingHighest.get() - 1), 1);
 }
 
-Rc<gl::RenderPassHandle> TransferRenderPass::makeFrameHandle(gl::RenderPassData *data, const gl::FrameHandle &handle) {
-	return Rc<TransferRenderPassHandle>::create(*this, data, handle);
+Rc<gl::RenderPassHandle> TransferRenderPass::makeFrameHandle(const gl::FrameQueue &handle) {
+	return Rc<TransferRenderPassHandle>::create(*this, handle);
 }
 
+void TransferRenderPass::prepare(gl::Device &dev) {
+	RenderPass::prepare(dev);
+	for (auto &it : _data->descriptors) {
+		if (auto a = dynamic_cast<TransferAttachment *>(it->getAttachment())) {
+			_attachment = a;
+		}
+	}
+}
 
 TransferRenderPassHandle::~TransferRenderPassHandle() { }
 
-Vector<VkCommandBuffer> TransferRenderPassHandle::doPrepareCommands(gl::FrameHandle &handle, uint32_t index) {
+Vector<VkCommandBuffer> TransferRenderPassHandle::doPrepareCommands(gl::FrameHandle &) {
+	auto pass = (TransferRenderPass *)_renderPass.get();
 	TransferAttachmentHandle *transfer;
-	for (auto &it : _attachments) {
-		if (auto v = dynamic_cast<TransferAttachmentHandle *>(it.second.get())) {
-			transfer = v;
+	for (auto &it : _queueData->attachments) {
+		if (it->handle->getAttachment() == pass->getAttachment()) {
+			transfer = (TransferAttachmentHandle *)it->handle.get();
 		}
 	}
 

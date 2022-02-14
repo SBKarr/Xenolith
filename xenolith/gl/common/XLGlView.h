@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -24,6 +24,8 @@
 #define XENOLITH_GL_COMMON_XLGLVIEW_H_
 
 #include "XLGl.h"
+#include "XLGlFrameEmitter.h"
+#include "XLGlSwapchain.h"
 
 namespace stappler::xenolith {
 
@@ -38,7 +40,7 @@ class Loop;
 class Instance;
 class Swapchain;
 
-class View : public Ref {
+class View : public FrameEmitter {
 public:
 	static EventHeader onClipboard;
 	static EventHeader onBackground;
@@ -65,16 +67,13 @@ public:
 	virtual int getDpi() const;
 	virtual float getDensity() const;
 
-	virtual const Size & getScreenSize() const;
-	virtual void setScreenSize(float width, float height);
+	virtual const Extent2 & getScreenExtent() const;
+	virtual void setScreenExtent(Extent2);
 
 	virtual void handleTouchesBegin(int num, intptr_t ids[], float xs[], float ys[]);
 	virtual void handleTouchesMove(int num, intptr_t ids[], float xs[], float ys[]);
 	virtual void handleTouchesEnd(int num, intptr_t ids[], float xs[], float ys[]);
 	virtual void handleTouchesCancel(int num, intptr_t ids[], float xs[], float ys[]);
-
-	virtual void enableOffscreenContext();
-	virtual void disableOffscreenContext();
 
 	virtual void setClipboardString(StringView);
 	virtual StringView getClipboardString() const;
@@ -89,10 +88,18 @@ public:
 	virtual void pushEvent(AppEvent::Value) const;
 	virtual AppEvent::Value popEvents() const;
 
-protected:
-	virtual Rc<gl::Swapchain> makeSwapchain(const Rc<gl::RenderQueue> &) const = 0;
+	virtual void runFrame(const Rc<gl::RenderQueue> &, Extent2);
 
-	Size _screenSize;
+	virtual gl::SwapchainConfig selectConfig(const gl::SurfaceInfo &) const;
+
+protected:
+	virtual void acquireNextFrame() override;
+
+	/*virtual bool isRetainTrackerEnabled() const {
+		return true;
+	}*/
+
+	Extent2 _screenExtent;
 
 	int _dpi = 96;
 	float _density = 1.0f;
@@ -107,9 +114,7 @@ protected:
 
 	Function<void()> _onEnded;
 	Rc<Director> _director;
-	Rc<gl::Loop> _glLoop;
 	Rc<EventLoop> _eventLoop;
-	Rc<Swapchain> _swapchain;
 };
 
 }

@@ -59,6 +59,7 @@ public:
     bool init(const Rc<EventLoop> &, const Rc<gl::Loop> &loop, StringView viewName, URect rect);
 
     virtual bool begin(const Rc<Director> &, Function<void()> &&) override;
+	virtual void end() override;
 
 	virtual bool isAvailableOnDevice(VkSurfaceKHR) const;
 	virtual void setIMEKeyboardState(bool open) override;
@@ -67,7 +68,7 @@ public:
 	virtual bool poll() override;
 	virtual void close() override;
 
-	virtual void setScreenSize(float width, float height) override;
+	virtual void setScreenExtent(Extent2) override;
 
 	virtual void setClipboardString(StringView) override;
 	virtual StringView getClipboardString() const override;
@@ -79,8 +80,6 @@ public:
 	void recreateSwapChain();
 
 protected:
-	virtual Rc<gl::Swapchain> makeSwapchain(const Rc<gl::RenderQueue> &) const override;
-
 	const vk::Instance *_vkInstance = nullptr;
 	vk::Device *_vkDevice = nullptr;
 	Rc<LinuxViewInterface> _view;

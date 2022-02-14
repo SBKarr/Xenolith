@@ -31,15 +31,15 @@ class RenderFontAttachment : public gl::GenericAttachment {
 public:
 	virtual ~RenderFontAttachment();
 
-	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameHandle &) override;
+	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameQueue &) override;
 };
 
 class RenderFontAttachmentHandle : public gl::AttachmentHandle {
 public:
 	virtual ~RenderFontAttachmentHandle();
 
-	virtual bool setup(gl::FrameHandle &handle) override;
-	virtual bool submitInput(gl::FrameHandle &, Rc<gl::AttachmentInputData> &&) override;
+	virtual bool setup(gl::FrameQueue &, Function<void(bool)> &&) override;
+	virtual void submitInput(gl::FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
 
 	Extent2 getImageExtent() const { return _imageExtent; }
 	const Rc<gl::RenderFontInput> &getInput() const { return _input; }
@@ -64,6 +64,7 @@ protected:
 	Vector<VkBufferImageCopy> _bufferData;
 	Extent2 _imageExtent;
 	Mutex _mutex;
+	Function<void(bool)> _onInput;
 };
 
 class RenderFontRenderPass : public RenderPass {
@@ -72,7 +73,7 @@ public:
 
 	virtual bool init(StringView);
 
-	virtual Rc<gl::RenderPassHandle> makeFrameHandle(gl::RenderPassData *, const gl::FrameHandle &) override;
+	virtual Rc<gl::RenderPassHandle> makeFrameHandle(const gl::FrameQueue &) override;
 
 	const RenderFontAttachment *getRenderFontAttachment() const {
 		return _fontAttachment;
@@ -88,14 +89,14 @@ class RenderFontRenderPassHandle : public RenderPassHandle {
 public:
 	virtual ~RenderFontRenderPassHandle();
 
-	virtual bool init(gl::RenderPass &, gl::RenderPassData *, const gl::FrameHandle &) override;
+	virtual bool init(gl::RenderPass &, const gl::FrameQueue &) override;
 
 	virtual QueueOperations getQueueOps() const override;
 
-	virtual void finalize(gl::FrameHandle &, bool successful)  override;
+	virtual bool prepare(gl::FrameQueue &, Function<void(bool)> &&) override;
+	virtual void finalize(gl::FrameQueue &, bool successful)  override;
 
 protected:
-	virtual void addRequiredAttachment(const gl::Attachment *a, const Rc<gl::AttachmentHandle> &h) override;
 	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &) override;
 
 	RenderFontAttachmentHandle *_fontAttachment = nullptr;
@@ -106,7 +107,7 @@ protected:
 
 RenderFontQueue::~RenderFontQueue() { }
 
-bool RenderFontQueue::init(StringView name, Function<void(gl::FrameHandle &, const Rc<gl::AttachmentHandle> &)> &&input) {
+bool RenderFontQueue::init(StringView name, Function<void(gl::FrameQueue &, const Rc<gl::AttachmentHandle> &, Function<void(bool)> &&)> &&input) {
 	gl::RenderQueue::Builder builder(name, gl::RenderQueue::RenderOnDemand);
 
 	auto attachment = Rc<RenderFontAttachment>::create("FontAttachment");
@@ -131,14 +132,14 @@ bool RenderFontQueue::init(StringView name, Function<void(gl::FrameHandle &, con
 
 RenderFontAttachment::~RenderFontAttachment() { }
 
-Rc<gl::AttachmentHandle> RenderFontAttachment::makeFrameHandle(const gl::FrameHandle &handle) {
+Rc<gl::AttachmentHandle> RenderFontAttachment::makeFrameHandle(const gl::FrameQueue &handle) {
 	return Rc<RenderFontAttachmentHandle>::create(this, handle);
 }
 
 RenderFontAttachmentHandle::~RenderFontAttachmentHandle() { }
 
-bool RenderFontAttachmentHandle::setup(gl::FrameHandle &handle) {
-	auto dev = (Device *)handle.getDevice();
+bool RenderFontAttachmentHandle::setup(gl::FrameQueue &handle, Function<void(bool)> &&) {
+	auto dev = (Device *)handle.getFrame().getDevice();
 	_optimalTextureAlignment = std::max(dev->getInfo().properties.device10.properties.limits.optimalBufferCopyOffsetAlignment, VkDeviceSize(4));
 	_optimalRowAlignment = std::max(dev->getInfo().properties.device10.properties.limits.optimalBufferCopyRowPitchAlignment, VkDeviceSize(4));
 	return true;
@@ -179,12 +180,12 @@ static Extent2 RenderFontAttachmentHandle_buildTextureData(SpanView<VkBufferImag
 	return layout::emplaceChars(iface, span, totalSquare);
 }
 
-bool RenderFontAttachmentHandle::submitInput(gl::FrameHandle &handle, Rc<gl::AttachmentInputData> &&data) {
+void RenderFontAttachmentHandle::submitInput(gl::FrameQueue &handle, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
 	if (auto d = data.cast<gl::RenderFontInput>()) {
 		_counter = d->requests.size();
 		_input = d;
 
-		auto &frame = static_cast<FrameHandle &>(handle);
+		auto &frame = static_cast<FrameHandle &>(handle.getFrame());
 		auto &memPool =  frame.getMemPool();
 
 		_frontBuffer = memPool->spawn(AllocationUsage::HostTransitionSource, gl::BufferInfo(
@@ -200,8 +201,9 @@ bool RenderFontAttachmentHandle::submitInput(gl::FrameHandle &handle, Rc<gl::Att
 		_bufferData.resize(totalCount + 1);
 
 		size_t offset = 0;
+		_onInput = move(cb);
 		for (auto &it : _input->requests) {
-			handle.performInQueue([this, req = &it, target = _bufferData.data() + offset] (gl::FrameHandle &) -> bool {
+			handle.getFrame().performInQueue([this, req = &it, target = _bufferData.data() + offset] (gl::FrameHandle &) -> bool {
 				writeBufferData(*req, target);
 				return true;
 			}, [this] (gl::FrameHandle &handle, bool success) {
@@ -213,12 +215,12 @@ bool RenderFontAttachmentHandle::submitInput(gl::FrameHandle &handle, Rc<gl::Att
 				} else {
 					handle.invalidate();
 				}
-			});
+			}, nullptr, "RenderFontAttachmentHandle::submitInput");
 			offset += it.second.size();
 		}
-		return true;
+	} else {
+		cb(false);
 	}
-	return false;
 }
 
 void RenderFontAttachmentHandle::writeBufferData(gl::RenderFontInput::FontRequest &req, VkBufferImageCopy *target) {
@@ -258,7 +260,6 @@ void RenderFontAttachmentHandle::writeBufferData(gl::RenderFontInput::FontReques
 
 void RenderFontAttachmentHandle::writeAtlasData(gl::FrameHandle &handle) {
 	handle.performInQueue([this] (gl::FrameHandle &) -> bool {
-
 		// write single white pixel for underlines
 		uint32_t offset = nextBufferOffset(1);
 		if (offset + 1 <= Allocator::PageSize * 2) {
@@ -311,12 +312,9 @@ void RenderFontAttachmentHandle::writeAtlasData(gl::FrameHandle &handle) {
 
 		return true;
 	}, [this] (gl::FrameHandle &handle, bool success) {
-		if (success) {
-			handle.setInputSubmitted(this);
-		} else {
-			handle.invalidate();
-		}
-	});
+		_onInput(success);
+		_onInput = nullptr;
+	}, nullptr, "RenderFontAttachmentHandle::writeAtlasData");
 }
 
 uint32_t RenderFontAttachmentHandle::nextBufferOffset(size_t blockSize) {
@@ -334,8 +332,8 @@ bool RenderFontRenderPass::init(StringView name) {
 	return false;
 }
 
-Rc<gl::RenderPassHandle> RenderFontRenderPass::makeFrameHandle(gl::RenderPassData *data, const gl::FrameHandle &handle) {
-	return Rc<RenderFontRenderPassHandle>::create(*this, data, handle);
+Rc<gl::RenderPassHandle> RenderFontRenderPass::makeFrameHandle(const gl::FrameQueue &handle) {
+	return Rc<RenderFontRenderPassHandle>::create(*this, handle);
 }
 
 void RenderFontRenderPass::prepare(gl::Device &) {
@@ -348,14 +346,14 @@ void RenderFontRenderPass::prepare(gl::Device &) {
 
 RenderFontRenderPassHandle::~RenderFontRenderPassHandle() { }
 
-bool RenderFontRenderPassHandle::init(gl::RenderPass &pass, gl::RenderPassData *data, const gl::FrameHandle &handle) {
-	if (!RenderPassHandle::init(pass, data, handle)) {
+bool RenderFontRenderPassHandle::init(gl::RenderPass &pass, const gl::FrameQueue &handle) {
+	if (!RenderPassHandle::init(pass, handle)) {
 		return false;
 	}
 
 	_queueOps = ((RenderPass *)_renderPass.get())->getQueueOps();
 
-	auto dev = (Device *)handle.getDevice();
+	auto dev = (Device *)handle.getFrame().getDevice();
 	auto q = dev->getQueueFamily(_queueOps);
 	if (q->transferGranularity.width > 1 || q->transferGranularity.height > 1) {
 		_queueOps = QueueOperations::Graphics;
@@ -383,7 +381,15 @@ QueueOperations RenderFontRenderPassHandle::getQueueOps() const {
 	return _queueOps;
 }
 
-void RenderFontRenderPassHandle::finalize(gl::FrameHandle &handle, bool successful) {
+
+bool RenderFontRenderPassHandle::prepare(gl::FrameQueue &handle, Function<void(bool)> &&cb) {
+	if (auto a = handle.getAttachment(((RenderFontRenderPass *)_renderPass.get())->getRenderFontAttachment())) {
+		_fontAttachment = (RenderFontAttachmentHandle *)a->handle.get();
+	}
+	return RenderPassHandle::prepare(handle, move(cb));
+}
+
+void RenderFontRenderPassHandle::finalize(gl::FrameQueue &handle, bool successful) {
 	RenderPassHandle::finalize(handle, successful);
 
 	if (!successful) {
@@ -397,13 +403,6 @@ void RenderFontRenderPassHandle::finalize(gl::FrameHandle &handle, bool successf
 		auto region = _outBuffer->map(0, _outBuffer->getSize(), true);
 		input->output(_targetImage->getInfo(), BytesView(region.ptr, region.size));
 		_outBuffer->unmap(region);
-	}
-}
-
-void RenderFontRenderPassHandle::addRequiredAttachment(const gl::Attachment *a, const Rc<gl::AttachmentHandle> &h) {
-	RenderPassHandle::addRequiredAttachment(a, h);
-	if (a == ((RenderFontRenderPass *)_renderPass.get())->getRenderFontAttachment()) {
-		_fontAttachment = (RenderFontAttachmentHandle *)h.get();
 	}
 }
 

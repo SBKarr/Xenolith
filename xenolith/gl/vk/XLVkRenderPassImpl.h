@@ -49,6 +49,12 @@ public:
 
 	VkDescriptorSet getDescriptorSet(uint32_t) const;
 
+	// if async is true - update descriptors with updateAfterBind flag
+	// 			   false - without updateAfterBindFlag
+	virtual bool writeDescriptors(const RenderPassHandle &, bool async) const;
+
+	virtual void perform(const RenderPassHandle &, VkCommandBuffer buf, const Callback<void()> &);
+
 protected:
 	bool initGraphicsPass(Device &dev, gl::RenderPassData &);
 	bool initComputePass(Device &dev, gl::RenderPassData &);
@@ -63,6 +69,8 @@ protected:
 	Vector<VkSubpassDependency> _subpassDependencies;
 	Vector<VkSubpassDescription> _subpasses;
 	PassData *_data = nullptr;
+
+	Vector<VkClearValue> _clearValues;
 };
 
 }

@@ -24,19 +24,29 @@
 
 namespace stappler::xenolith::vk {
 
-bool Framebuffer::init(Device &dev, VkRenderPass renderPass, const Vector<VkImageView> &imageViews, Extent2 extent) {
+bool Framebuffer::init(Device &dev, VkRenderPass renderPass, SpanView<Rc<gl::ImageView>> imageViews, Extent2 extent) {
+	Vector<VkImageView> views; views.reserve(imageViews.size());
+	_viewIds.reserve(imageViews.size());
+	_imageViews.reserve(imageViews.size());
+
+	for (auto &it : imageViews) {
+		views.emplace_back(((ImageView *)it.get())->getImageView());
+		_viewIds.emplace_back(it->getIndex());
+		_imageViews.emplace_back(it);
+	}
+
 	VkFramebufferCreateInfo framebufferInfo { };
 	framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 	framebufferInfo.renderPass = renderPass;
-	framebufferInfo.attachmentCount = imageViews.size();
-	framebufferInfo.pAttachments = imageViews.data();
+	framebufferInfo.attachmentCount = views.size();
+	framebufferInfo.pAttachments = views.data();
 	framebufferInfo.width = extent.width;
 	framebufferInfo.height = extent.height;
 	framebufferInfo.layers = 1;
 
 	if (dev.getTable()->vkCreateFramebuffer(dev.getDevice(), &framebufferInfo, nullptr, &_framebuffer) == VK_SUCCESS) {
 		_extent = extent;
-		return gl::Object::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+		return gl::Framebuffer::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
 			auto d = ((Device *)dev);
 			d->getTable()->vkDestroyFramebuffer(d->getDevice(), (VkFramebuffer)ptr, nullptr);
 		}, gl::ObjectType::Framebuffer, _framebuffer);

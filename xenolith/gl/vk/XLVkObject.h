@@ -37,8 +37,7 @@ public:
 	VkDeviceMemory getMemory() const { return _memory; }
 
 protected:
-
-	virtual bool isRetainTrackerEnabled() const { return true; }
+	// virtual bool isRetainTrackerEnabled() const { return true; }
 
 	VkDeviceMemory _memory = VK_NULL_HANDLE;
 };
@@ -61,7 +60,7 @@ public:
 	void dropPendingBarrier();
 
 protected:
-	virtual bool isRetainTrackerEnabled() const { return true; }
+	// virtual bool isRetainTrackerEnabled() const { return true; }
 
 	Rc<DeviceMemory> _memory;
 	VkImage _image = VK_NULL_HANDLE;

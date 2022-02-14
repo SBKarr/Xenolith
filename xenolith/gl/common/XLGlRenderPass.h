@@ -51,13 +51,15 @@ public:
 	virtual size_t getSubpassCount() const { return _subpassCount; }
 	virtual RenderPassType getType() const { return _type; }
 
-	virtual Rc<RenderPassHandle> makeFrameHandle(RenderPassData *, const FrameHandle &);
+	virtual Rc<RenderPassHandle> makeFrameHandle(const FrameQueue &);
 
-	const Rc<gl::FrameHandle> &getOwner() const { return _owner; }
-	bool acquireForFrame(gl::FrameHandle &);
-	bool releaseForFrame(gl::FrameHandle &);
+	const Rc<gl::FrameQueue> &getOwner() const { return _owner; }
+	bool acquireForFrame(gl::FrameQueue &, Function<void(bool)> &&onAcquired);
+	bool releaseForFrame(gl::FrameQueue &);
 
 	const RenderPassData *getData() const { return _data; }
+
+	virtual Extent2 getSizeForFrame(const FrameQueue &) const;
 
 protected:
 	friend class RenderQueue;
@@ -70,8 +72,14 @@ protected:
 	RenderPassType _type = RenderPassType::Graphics;
 	RenderOrdering _ordering = RenderOrderingLowest;
 
-	Rc<gl::FrameHandle> _owner;
-	Rc<gl::FrameHandle> _next;
+	struct FrameQueueWaiter {
+		Rc<gl::FrameQueue> queue;
+		Function<void(bool)> acquired;
+	};
+
+	Rc<gl::FrameQueue> _owner;
+	FrameQueueWaiter _next;
+	Function<Extent2(const FrameQueue &)> _frameSizeCallback;
 	const RenderPassData *_data = nullptr;
 };
 
@@ -79,44 +87,34 @@ class RenderPassHandle : public NamedRef {
 public:
 	virtual ~RenderPassHandle();
 
-	virtual bool init(RenderPass &, RenderPassData *, const FrameHandle &);
+	virtual bool init(RenderPass &, const FrameQueue &);
+	virtual void setQueueData(FrameQueueRenderPassData &);
 
 	virtual StringView getName() const override;
 
-	virtual void buildRequirements(const FrameHandle &, const Vector<Rc<RenderPassHandle>> &, const Vector<Rc<AttachmentHandle>> &);
-
-	virtual RenderPassData *getData() const { return _data; }
+	virtual const RenderPassData *getData() const { return _data; }
 	virtual const Rc<RenderPass> &getRenderPass() const { return _renderPass; }
+	virtual const Rc<Framebuffer> &getFramebuffer() const { return _queueData->framebuffer; }
 
-	virtual bool isReady() const;
-	virtual bool isAvailable(const FrameHandle &) const;
+	virtual bool isAvailable(const FrameQueue &) const;
 	virtual bool isAsync() const { return _isAsync; }
 
-	virtual bool isSubmitted() const { return _submitted; }
-	virtual void setSubmitted(bool value) { _submitted = value; }
+	virtual bool isSubmitted() const;
+	virtual bool isCompleted() const;
 
-	virtual bool isCompleted() const { return _completed; }
-	virtual void setCompleted(bool value) { _completed = value; }
-
-	// if submit is true - do run + submit in one call
-	virtual bool prepare(FrameHandle &);
-	virtual void submit(FrameHandle &, Function<void(const Rc<gl::RenderPassHandle> &)> &&);
+	virtual bool prepare(FrameQueue &, Function<void(bool)> &&);
+	virtual void submit(FrameQueue &, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete);
 
 	// after submit
-	virtual void finalize(FrameHandle &, bool successful);
+	virtual void finalize(FrameQueue &, bool successful);
 
 	virtual AttachmentHandle *getAttachmentHandle(const Attachment *) const;
 
 protected:
-	virtual void addRequiredAttachment(const Attachment *, const Rc<AttachmentHandle> &);
-
 	bool _isAsync = false; // async passes can be submitted before previous frame submits all passes
-	bool _submitted = false;
-	bool _completed = false;
 	Rc<RenderPass> _renderPass;
-	RenderPassData *_data = nullptr;
-	Map<const gl::Attachment *, Rc<AttachmentHandle>> _attachments;
-	Vector<Rc<RenderPassHandle>> _requiredPasses;
+	const RenderPassData *_data = nullptr;
+	FrameQueueRenderPassData *_queueData = nullptr;
 };
 
 }

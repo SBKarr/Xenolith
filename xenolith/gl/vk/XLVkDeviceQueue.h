@@ -26,6 +26,8 @@
 
 #include "XLVkInstance.h"
 #include "XLGlDevice.h"
+#include "XLGlLoop.h"
+#include "XLGlFrameHandle.h"
 
 namespace stappler::xenolith::vk {
 

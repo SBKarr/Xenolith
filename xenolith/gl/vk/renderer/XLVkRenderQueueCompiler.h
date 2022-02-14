@@ -42,7 +42,7 @@ public:
 
 	bool init(Device &);
 
-	void submitInput(gl::FrameHandle &, Rc<RenderQueueInput> &&);
+	Rc<gl::FrameRequest> makeRequest(Rc<RenderQueueInput> &&);
 
 protected:
 	RenderQueueAttachment *_attachment;

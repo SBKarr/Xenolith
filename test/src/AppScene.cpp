@@ -21,6 +21,8 @@
  **/
 
 #include "AppScene.h"
+
+#include "XLVkAttachment.h"
 #include "XLAppSceneResource.cc"
 #include "XLDirector.h"
 #include "XLSprite.h"
@@ -30,7 +32,6 @@
 #include "XLDefaultShaders.h"
 
 #include "XLVkImageAttachment.h"
-#include "XLVkBufferAttachment.h"
 #include "XLVkMaterialRenderPass.h"
 
 #include "AppRootLayout.h"
@@ -38,16 +39,15 @@
 
 namespace stappler::xenolith::app {
 
-static void AppScene_makeRenderQueue(gl::RenderQueue::Builder &builder, Extent2 extent,
-		Function<void(gl::FrameHandle &, const Rc<gl::AttachmentHandle> &)> && cb) {
+static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder &builder, Extent2 extent,
+		Function<void(gl::FrameQueue &, const Rc<gl::AttachmentHandle> &, Function<void(bool)> &&)> && cb) {
 	// acquire platform-specific swapchain image format
 	// extent will be resized automatically to screen size
-	gl::ImageInfo info(extent, gl::ImageUsage::ColorAttachment, platform::graphic::getCommonFormat());
+	gl::ImageInfo info(extent, gl::ForceImageUsage(gl::ImageUsage::ColorAttachment), platform::graphic::getCommonFormat());
 
 	// load shaders by ref - do not copy content into engine
 	auto materialFrag = builder.addProgramByRef("Loader_MaterialVert", xenolith::shaders::MaterialVert);
 	auto materialVert = builder.addProgramByRef("Loader_MaterialFrag", xenolith::shaders::MaterialFrag);
-
 
 	// render-to-swapchain RenderPass
 	auto pass = Rc<vk::MaterialRenderPass>::create("SwapchainPass", gl::RenderOrderingHighest);
@@ -67,7 +67,6 @@ static void AppScene_makeRenderQueue(gl::RenderQueue::Builder &builder, Extent2 
 		BlendInfo(gl::BlendFactor::One, gl::BlendFactor::OneMinusSrcAlpha)
 	}));
 
-
 	// define internal resources (images and buffers)
 	gl::Resource::Builder resourceBuilder("LoaderResources");
 	auto initImage = resourceBuilder.addImage("Xenolith.png",
@@ -76,9 +75,17 @@ static void AppScene_makeRenderQueue(gl::RenderQueue::Builder &builder, Extent2 
 
 	builder.setInternalResource(Rc<gl::Resource>::create(move(resourceBuilder)));
 
-	// output attachment - swapchain
-	auto out = Rc<vk::SwapchainAttachment>::create("Swapchain", move(info),
-			gl::AttachmentLayout::Undefined, gl::AttachmentLayout::PresentSrc);
+	// output attachment
+	vk::OutputImageAttachment::AttachmentInfo attachmentInfo;
+	attachmentInfo.initialLayout = gl::AttachmentLayout::Undefined;
+	attachmentInfo.finalLayout = gl::AttachmentLayout::TransferSrcOptimal;
+	attachmentInfo.clearOnLoad = true;
+	attachmentInfo.clearColor = Color4F::BLACK;
+	attachmentInfo.frameSizeCallback = [] (const gl::FrameQueue &frame) {
+		return Extent3(frame.getExtent());
+	};
+
+	auto out = Rc<vk::OutputImageAttachment>::create("Output", move(info), move(attachmentInfo));
 
 	// Engine-defined samplers as input attachment
 	auto samplers = Rc<gl::SamplersAttachment>::create("Samplers");
@@ -115,15 +122,16 @@ static void AppScene_makeRenderQueue(gl::RenderQueue::Builder &builder, Extent2 
 			0, gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::ColorAttachmentWrite, false);*/
 }
 
-bool AppScene::init(Extent2 extent) {
+bool AppScene::init(Application *app, Extent2 extent) {
 	// build presentation RenderQueue
 	gl::RenderQueue::Builder builder("Loader", gl::RenderQueue::Continuous);
 
-	AppScene_makeRenderQueue(builder, extent, [this] (gl::FrameHandle &frame, const Rc<gl::AttachmentHandle> &a) {
-		on2dVertexInput(frame, a);
+	AppScene_makeRenderQueue(app, builder, extent, [this] (gl::FrameQueue &frame, const Rc<gl::AttachmentHandle> &a,
+			Function<void(bool)> &&cb) {
+		on2dVertexInput(frame, a, move(cb));
 	});
 
-	if (!Scene::init(move(builder))) {
+	if (!Scene::init(app, move(builder))) {
 		return false;
 	}
 
@@ -152,9 +160,9 @@ void AppScene::onFinished(Director *dir) {
 void AppScene::update(const UpdateTime &time) {
 	Scene::update(time);
 
-	auto t = time.app % 5_usec;
+	/*auto t = time.app % 5_usec;
 
-	/*if (_sprite) {
+	if (_sprite) {
 		_sprite->setRotation(M_PI * 2.0 * (float(t) / 5_usec));
 	}*/
 }

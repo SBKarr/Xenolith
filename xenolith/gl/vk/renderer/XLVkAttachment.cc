@@ -20,7 +20,7 @@
  THE SOFTWARE.
  **/
 
-#include "XLVkBufferAttachment.h"
+#include "XLVkAttachment.h"
 #include "XLVkFrame.h"
 #include "XLVkDevice.h"
 
@@ -34,13 +34,13 @@ VertexBufferAttachment::~VertexBufferAttachment() {
 
 }
 
-Rc<gl::AttachmentHandle> VertexBufferAttachment::makeFrameHandle(const gl::FrameHandle &frame) {
+Rc<gl::AttachmentHandle> VertexBufferAttachment::makeFrameHandle(const gl::FrameQueue &frame) {
 	return Rc<VertexBufferAttachmentHandle>::create(this, frame);
 }
 
 VertexBufferAttachmentHandle::~VertexBufferAttachmentHandle() {
 	if (_pool) {
-		_device->releaseCommandPool(move(_pool));
+		_device->releaseCommandPoolUnsafe(move(_pool));
 		_pool = nullptr;
 	}
 
@@ -55,47 +55,16 @@ VertexBufferAttachmentHandle::~VertexBufferAttachmentHandle() {
 	}
 }
 
-bool VertexBufferAttachmentHandle::submitInput(gl::FrameHandle &handle, Rc<gl::AttachmentInputData> &&data) {
+void VertexBufferAttachmentHandle::submitInput(gl::FrameQueue &q, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
 	if (auto d = data.cast<gl::VertexData>()) {
-		handle.performInQueue([this, d = move(d)] (gl::FrameHandle &handle) {
+		q.getFrame().performInQueue([this, d = move(d)] (gl::FrameHandle &handle) {
 			return loadVertexes(handle, d);
-		}, [this] (gl::FrameHandle &handle, bool success) {
-			if (success) {
-				handle.setInputSubmitted(this);
-			} else {
-				handle.invalidate();
-			}
-		}, this);
-		/*handle.performOnGlThread([this, d = move(d)] (gl::FrameHandle &handle) {
-			_device = (Device *)handle.getDevice();
-			_device->acquireQueue(QueueOperations::Graphics, handle, [this, d] (gl::FrameHandle &frame, const Rc<DeviceQueue> &queue) {
-				_transferQueue = queue;
-				_fence = _device->acquireFence(frame.getOrder());
-				_pool = _device->acquireCommandPool(QueueOperations::Graphics);
-
-				frame.performInQueue([this, d] (gl::FrameHandle &handle) {
-					return loadVertexes(handle, d);
-				}, [this] (gl::FrameHandle &handle, bool success) {
-					if (_transferQueue) {
-						_device->releaseQueue(move(_transferQueue));
-						_transferQueue = nullptr;
-					}
-					if (success) {
-						_device->scheduleFence(*handle.getLoop(), move(_fence));
-						handle.setInputSubmitted(this);
-					} else {
-						_device->releaseFence(move(_fence));
-						handle.invalidate();
-					}
-					_fence = nullptr;
-				}, this);
-			}, [this] (gl::FrameHandle &frame) {
-				frame.invalidate();
-			}, this);
-		});*/
-		return true;
+		}, [this, cb = move(cb)] (gl::FrameHandle &handle, bool success) {
+			cb(success);
+		}, this, "VertexBufferAttachmentHandle::submitInput");
+	} else {
+		cb(false);
 	}
-	return false;
 }
 
 bool VertexBufferAttachmentHandle::isDescriptorDirty(const gl::RenderPassHandle &, const gl::PipelineDescriptor &,
@@ -109,22 +78,6 @@ bool VertexBufferAttachmentHandle::writeDescriptor(const RenderPassHandle &, con
 	info.offset = 0;
 	info.range = _vertexes->getSize();
 	return true;
-}
-
-void VertexBufferAttachmentHandle::writeVertexes(gl::FrameHandle &fhandle) {
-	auto handle = dynamic_cast<FrameHandle *>(&fhandle);
-	if (!handle) {
-		return;
-	}
-
-	/*_vertexes = handle->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(gl::BufferUsage::StorageBuffer, _data->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
-	_vertexes->setData(BytesView((uint8_t *)_data->data.data(), _data->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
-
-
-	_indexes = handle->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(gl::ForceBufferUsage(gl::BufferUsage::IndexBuffer), _data->indexes.size() * sizeof(uint32_t)));
-	_indexes->setData(BytesView((uint8_t *)_data->indexes.data(), _data->indexes.size() * sizeof(uint32_t)));*/
 }
 
 bool VertexBufferAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, const Rc<gl::VertexData> &vertexes) {

@@ -22,6 +22,8 @@
 
 #include "XLVkDevice.h"
 #include "XLVkRenderPassImpl.h"
+#include "XLVkAttachment.h"
+#include <forward_list>
 
 namespace stappler::xenolith::vk {
 
@@ -71,12 +73,211 @@ VkDescriptorSet RenderPassImpl::getDescriptorSet(uint32_t idx) const {
 	return _data->sets[idx];
 }
 
+bool RenderPassImpl::writeDescriptors(const RenderPassHandle &handle, bool async) const {
+	auto dev = (Device *)_device;
+	auto table = dev->getTable();
+	auto data = handle.getData();
+
+	std::forward_list<Vector<VkDescriptorImageInfo>> images;
+	std::forward_list<Vector<VkDescriptorBufferInfo>> buffers;
+	std::forward_list<Vector<VkBufferView>> views;
+
+	Vector<VkWriteDescriptorSet> writes;
+
+	auto writeDescriptor = [&] (VkDescriptorSet set, const gl::PipelineDescriptor &desc, uint32_t currentDescriptor, bool external) {
+		auto a = handle.getAttachmentHandle(desc.attachment);
+		if (!a) {
+			return false;
+		}
+
+		Vector<VkDescriptorImageInfo> *localImages = nullptr;
+		Vector<VkDescriptorBufferInfo> *localBuffers = nullptr;
+		Vector<VkBufferView> *localViews = nullptr;
+
+		VkWriteDescriptorSet writeData;
+		writeData.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		writeData.pNext = nullptr;
+		writeData.dstSet = set;
+		writeData.dstBinding = currentDescriptor;
+		writeData.dstArrayElement = 0;
+		writeData.descriptorCount = 0;
+		writeData.descriptorType = VkDescriptorType(desc.type);
+		writeData.pImageInfo = VK_NULL_HANDLE;
+		writeData.pBufferInfo = VK_NULL_HANDLE;
+		writeData.pTexelBufferView = VK_NULL_HANDLE;
+
+		auto c = a->getDescriptorArraySize(handle, desc, external);
+		for (uint32_t i = 0; i < c; ++ i) {
+			if (a->isDescriptorDirty(handle, desc, i, external)) {
+				switch (desc.type) {
+				case gl::DescriptorType::Sampler:
+				case gl::DescriptorType::CombinedImageSampler:
+				case gl::DescriptorType::SampledImage:
+				case gl::DescriptorType::StorageImage:
+				case gl::DescriptorType::InputAttachment:
+					if (!localImages) {
+						localImages = &images.emplace_front(Vector<VkDescriptorImageInfo>());
+					}
+					if (localImages) {
+						auto &dst = localImages->emplace_back(VkDescriptorImageInfo());
+						auto h = (ImageAttachmentHandle *)a;
+						if (!h->writeDescriptor(handle, desc, i, external, dst)) {
+							return false;
+						}
+					}
+					break;
+				case gl::DescriptorType::StorageTexelBuffer:
+				case gl::DescriptorType::UniformTexelBuffer:
+					if (!localViews) {
+						localViews = &views.emplace_front(Vector<VkBufferView>());
+					}
+					if (localViews) {
+						auto h = (TexelAttachmentHandle *)a;
+						if (auto v = h->getDescriptor(handle, desc, i, external)) {
+							localViews->emplace_back(v);
+						} else {
+							return false;
+						}
+					}
+					break;
+				case gl::DescriptorType::UniformBuffer:
+				case gl::DescriptorType::StorageBuffer:
+				case gl::DescriptorType::UniformBufferDynamic:
+				case gl::DescriptorType::StorageBufferDynamic:
+					if (!localBuffers) {
+						localBuffers = &buffers.emplace_front(Vector<VkDescriptorBufferInfo>());
+					}
+					if (localBuffers) {
+						auto &dst = localBuffers->emplace_back(VkDescriptorBufferInfo());
+						auto h = (BufferAttachmentHandle *)a;
+						if (!h->writeDescriptor(handle, desc, i, external, dst)) {
+							return false;
+						}
+					}
+					break;
+				case gl::DescriptorType::Unknown:
+					break;
+				}
+				++ writeData.descriptorCount;
+			} else {
+				if (writeData.descriptorCount > 0) {
+					if (localImages) {
+						writeData.pImageInfo = localImages->data();
+					}
+					if (localBuffers) {
+						writeData.pBufferInfo = localBuffers->data();
+					}
+					if (localViews) {
+						writeData.pTexelBufferView = localViews->data();
+					}
+
+					writes.emplace_back(move(writeData));
+
+					writeData.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+					writeData.pNext = nullptr;
+					writeData.dstSet = set;
+					writeData.dstBinding = currentDescriptor;
+					writeData.descriptorCount = 0;
+					writeData.descriptorType = VkDescriptorType(desc.type);
+					writeData.pImageInfo = VK_NULL_HANDLE;
+					writeData.pBufferInfo = VK_NULL_HANDLE;
+					writeData.pTexelBufferView = VK_NULL_HANDLE;
+
+					localImages = nullptr;
+					localBuffers = nullptr;
+					localViews = nullptr;
+				}
+
+				writeData.dstArrayElement = i + 1;
+			}
+		}
+
+		if (writeData.descriptorCount > 0) {
+			if (localImages) {
+				writeData.pImageInfo = localImages->data();
+			}
+			if (localBuffers) {
+				writeData.pBufferInfo = localBuffers->data();
+			}
+			if (localViews) {
+				writeData.pTexelBufferView = localViews->data();
+			}
+
+			writes.emplace_back(move(writeData));
+		}
+		return true;
+	};
+
+	uint32_t currentSet = 0;
+	if (!data->queueDescriptors.empty()) {
+		auto set = getDescriptorSet(currentSet);
+		uint32_t currentDescriptor = 0;
+		for (auto &it : data->queueDescriptors) {
+			if (it->updateAfterBind != async) {
+				continue;
+			}
+			if (!writeDescriptor(set, *it, currentDescriptor, false)) {
+				return false;
+			}
+			++ currentDescriptor;
+		}
+		++ currentSet;
+	}
+
+	if (!data->extraDescriptors.empty()) {
+		auto set = getDescriptorSet(currentSet);
+		uint32_t currentDescriptor = 0;
+		for (auto &it : data->extraDescriptors) {
+			if (it.updateAfterBind != async) {
+				continue;
+			}
+			if (!writeDescriptor(set, it, currentDescriptor, true)) {
+				return false;
+			}
+			++ currentDescriptor;
+		}
+		++ currentSet;
+	}
+
+	if (writes.empty()) {
+		return true;
+	}
+
+	table->vkUpdateDescriptorSets(dev->getDevice(), writes.size(), writes.data(), 0, nullptr);
+	return true;
+}
+
+void RenderPassImpl::perform(const RenderPassHandle &handle, VkCommandBuffer buf, const Callback<void()> &cb) {
+	if (auto pass = getRenderPass()) {
+		auto dev = (Device *)_device;
+		auto table = dev->getTable();
+
+		auto fb = (Framebuffer *)handle.getFramebuffer().get();
+		auto currentExtent = fb->getExtent();
+
+		VkRenderPassBeginInfo renderPassInfo { };
+		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		renderPassInfo.renderPass = pass;
+		renderPassInfo.framebuffer = fb->getFramebuffer();
+		renderPassInfo.renderArea.offset = { 0, 0 };
+		renderPassInfo.renderArea.extent = VkExtent2D{currentExtent.width, currentExtent.height};
+		renderPassInfo.clearValueCount = _clearValues.size();
+		renderPassInfo.pClearValues = _clearValues.data();
+		table->vkCmdBeginRenderPass(buf, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+		cb();
+
+		table->vkCmdEndRenderPass(buf);
+	} else {
+		cb();
+	}
+}
+
 bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
 	PassData pass;
 
 	size_t attachmentReferences = 0;
 	for (auto &it : data.descriptors) {
-		attachmentReferences += it->getRefs().size();
 		if (!gl::isImageAttachmentType(it->getAttachment()->getType())) {
 			continue;
 		}
@@ -105,6 +306,15 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
 
 		it->setIndex(_attachmentDescriptions.size());
 		_attachmentDescriptions.emplace_back(attachment);
+
+		if (imageDesc->getLoadOp() == gl::AttachmentLoadOp::Clear) {
+			auto c = ((gl::ImageAttachment *)imageDesc->getAttachment())->getClearColor();
+			_clearValues.emplace_back(VkClearValue{c.r, c.g, c.b, c.a});
+		} else {
+			_clearValues.emplace_back(VkClearValue{0.0f, 0.0f, 0.0f, 1.0f});
+		}
+
+		attachmentReferences += it->getRefs().size();
 
 		if (data.subpasses.size() > 3 && it->getRefs().size() < data.subpasses.size()) {
 			size_t initialSubpass = it->getRefs().front()->getSubpass();

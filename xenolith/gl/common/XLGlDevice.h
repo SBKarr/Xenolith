@@ -25,6 +25,7 @@
 
 #include "XLGlRenderQueue.h"
 #include "XLGlMaterial.h"
+#include "XLGlFrameEmitter.h"
 #include "XLEventHeader.h"
 #include <deque>
 
@@ -73,11 +74,15 @@ public:
 	virtual Rc<gl::ImageObject> getEmptyImageObject() const = 0;
 	virtual Rc<gl::ImageObject> getSolidImageObject() const = 0;
 
+	virtual const Vector<ImageFormat> &getSupportedDepthStencilFormat() const = 0;
+
+	virtual Rc<gl::FrameHandle> makeFrame(gl::Loop &, Rc<gl::FrameRequest> &&, uint64_t gen);
+
+	virtual Rc<Framebuffer> makeFramebuffer(const gl::RenderPassData *, SpanView<Rc<gl::ImageView>>, Extent2);
+	virtual Rc<ImageAttachmentObject> makeImage(const gl::ImageAttachment *, Extent3);
+
 protected:
 	friend class Loop;
-
-	virtual Rc<gl::FrameHandle> makeFrame(gl::Loop &, gl::Swapchain &swapchain, gl::RenderQueue &, uint32_t gen, bool readyForSubmit = false);
-	virtual Rc<gl::FrameHandle> makeFrame(gl::Loop &, gl::RenderQueue &, uint32_t gen);
 
 	virtual void compileResource(gl::Loop &loop, const Rc<Resource> &req, Function<void(bool)> && = nullptr);
 	virtual void compileRenderQueue(gl::Loop &loop, const Rc<RenderQueue> &req, Function<void(bool)> &&);

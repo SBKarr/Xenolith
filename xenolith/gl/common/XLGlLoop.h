@@ -42,10 +42,7 @@ public:
 		SwapChainRecreated, // swapchain was recreated by view
 		SwapChainForceRecreate, // force engine to recreate swapchain with best params
 		FrameUpdate,
-		FrameSubmitted,
 		FrameInvalidated,
-		FrameTimeoutPassed,
-		UpdateFrameInterval, // view wants us to update frame interval
 		CompileResource,
 		CompileMaterials,
 		RunRenderQueue,
@@ -64,15 +61,17 @@ public:
 
 	struct Context final {
 		memory::vector<Event> *events;
+		Loop *loop;
 	};
 
 	struct Timer final {
-		Timer(uint64_t interval, Function<bool(Context &)> &&cb)
-		: interval(interval), callback(move(cb)) { }
+		Timer(uint64_t interval, Function<bool(Context &)> &&cb, StringView t)
+		: interval(interval), callback(move(cb)), tag(t) { }
 
 		uint64_t interval;
 		uint64_t value = 0;
 		Function<bool(Context &)> callback; // return true if timer is complete and should be removed
+		StringView tag;
 	};
 
 	Loop(Application *, const Rc<Device> &);
@@ -84,8 +83,9 @@ public:
 	void pushEvent(EventName, Rc<Ref> && = Rc<Ref>(), data::Value && = data::Value(), Function<void(bool)> && = nullptr);
 	void pushContextEvent(EventName, Rc<Ref> && = Rc<Ref>(), data::Value && = data::Value(), Function<void(bool)> && = nullptr);
 
-	void schedule(Function<bool(Context &)> &&);
-	void schedule(Function<bool(Context &)> &&, uint64_t);
+	// callback should return true to end spinning
+	void schedule(Function<bool(Context &)> &&, StringView);
+	void schedule(Function<bool(Context &)> &&, uint64_t, StringView);
 
 	void begin();
 	void end(bool success = true);
@@ -98,9 +98,7 @@ public:
 	uint64_t getClock() const { return _clock; }
 	bool isRunning() const { return _running.load(); }
 
-	void performOnThread(const Function<void()> &func, Ref *target = nullptr);
-
-	void setInterval(const Rc<Swapchain> &, uint64_t iv);
+	void performOnThread(const Function<void()> &func, Ref *target = nullptr, bool immediate = false);
 
 	void recreateSwapChain(const Rc<Swapchain> &ref) {
 		pushEvent(EventName::SwapChainDeprecated, ref.get(), data::Value());
@@ -121,11 +119,7 @@ public:
 	void compileImage(const Rc<DynamicImage> &, Function<void(bool)> && = nullptr);
 
 	// run frame with RenderQueue
-	void runRenderQueue(const Rc<RenderQueue> &req,
-			uint64_t gen = 0, Function<void(bool)> && = nullptr);
-
-	void runRenderQueue(const Rc<RenderQueue> &req, Map<const Attachment *, Rc<AttachmentInputData>> &&,
-			uint64_t gen = 0, Function<void(bool)> && = nullptr);
+	void runRenderQueue(Rc<FrameRequest> &&req, uint64_t gen = 0, Function<void(bool)> && = nullptr);
 
 	bool isOnThread() const;
 
@@ -136,7 +130,13 @@ protected:
 
 	virtual bool pollEvents(std::unique_lock<std::mutex> &lock, PresentationData &data, Context &context);
 
-	void runTimers(uint64_t dt, Context &t);
+	uint32_t runTimers(uint64_t dt, Context &t);
+
+	static StringView getEventName(EventName);
+
+	/*virtual bool isRetainTrackerEnabled() const {
+		return true;
+	}*/
 
 	Context *_currentContext = nullptr;
 

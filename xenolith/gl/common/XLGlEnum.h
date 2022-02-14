@@ -379,13 +379,41 @@ enum class ImageFormat {
 	A4B4G4R4_UNORM_PACK16_EXT = 1000340001,
 };
 
+// VkColorSpaceKHR
+enum class ColorSpace {
+	SRGB_NONLINEAR_KHR = 0,
+	DISPLAY_P3_NONLINEAR_EXT = 1000104001,
+	EXTENDED_SRGB_LINEAR_EXT = 1000104002,
+	DISPLAY_P3_LINEAR_EXT = 1000104003,
+	DCI_P3_NONLINEAR_EXT = 1000104004,
+	BT709_LINEAR_EXT = 1000104005,
+	BT709_NONLINEAR_EXT = 1000104006,
+	BT2020_LINEAR_EXT = 1000104007,
+	HDR10_ST2084_EXT = 1000104008,
+	DOLBYVISION_EXT = 1000104009,
+	HDR10_HLG_EXT = 1000104010,
+	ADOBERGB_LINEAR_EXT = 1000104011,
+	ADOBERGB_NONLINEAR_EXT = 1000104012,
+	PASS_THROUGH_EXT = 1000104013,
+	EXTENDED_SRGB_NONLINEAR_EXT = 1000104014,
+	DISPLAY_NATIVE_AMD = 1000213000,
+};
+
+// VkCompositeAlphaFlagBitsKHR
+enum class CompositeAlphaFlags {
+	None = 0,
+	Opaque = 0x00000001,
+	Premultiplied = 0x00000002,
+	Postmultiplied = 0x00000004,
+};
+
+SP_DEFINE_ENUM_AS_MASK(CompositeAlphaFlags)
 
 // mapping to VkImageTiling
 enum class ImageTiling {
 	Optimal = 0,
 	Linear = 1,
 };
-
 
 // mapping to VkImageUsageFlagBits
 enum class ImageUsage {
@@ -537,22 +565,27 @@ enum class AttachmentLayout : uint32_t {
 };
 
 enum class AttachmentType {
-	SwapchainImage,
 	Image,
 	Buffer,
 	Generic
 };
 
-enum class RenderPassType {
-	Graphics,
-	Compute,
-	Transfer,
-	Generic
+enum class AttachmentStorageType {
+	// Implementation-defined transient memory storage (if supported)
+	Transient,
+
+	// Attachment data stored in per-frame memory
+	FrameStateless,
+
+	// Attachment stored in independent, but persistent memory
+	ObjectStateless,
+
+	// Attachment has a persistent state
+	Stateful,
 };
 
 static inline bool isImageAttachmentType(AttachmentType t) {
 	switch (t) {
-	case AttachmentType::SwapchainImage:
 	case AttachmentType::Image:
 		return true;
 		break;
@@ -562,6 +595,13 @@ static inline bool isImageAttachmentType(AttachmentType t) {
 	}
 	return false;
 }
+
+enum class RenderPassType {
+	Graphics,
+	Compute,
+	Transfer,
+	Generic
+};
 
 // read-write operations on attachment within passes
 enum class AttachmentOps {
@@ -701,6 +741,21 @@ enum class MaterialType {
 	Basic2D,
 	Basic3D
 };
+
+enum class SurfaceTransformFlags {
+	None,
+    Identity = 0x00000001,
+    Rotate90 = 0x00000002,
+    Rotate180 = 0x00000004,
+    Rotate270 = 0x00000008,
+    Mirror = 0x00000010,
+	MirrorRotate90 = 0x00000020,
+	MirrorRotate180 = 0x00000040,
+	MirrorRotate270 = 0x00000080,
+    Inherit = 0x00000100,
+};
+
+SP_DEFINE_ENUM_AS_MASK(SurfaceTransformFlags)
 
 }
 

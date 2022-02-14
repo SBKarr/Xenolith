@@ -85,15 +85,16 @@ public:
 	uint32_t getFrame() const { return _frame; }
 
 	// function will be called and ref will be released on fence's signal
-	void addRelease(Function<void()> &&, Ref * = nullptr);
+	void addRelease(Function<void(bool)> &&, Ref *, StringView tag);
 
 	bool check(bool lockfree = true);
 	void reset();
 
 protected:
 	struct ReleaseHandle {
-		Function<void()> callback;
+		Function<void(bool)> callback;
 		Rc<Ref> ref;
+		StringView tag;
 	};
 
 	uint32_t _frame = 0;

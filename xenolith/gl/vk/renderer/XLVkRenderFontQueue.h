@@ -33,7 +33,7 @@ class RenderFontQueue : public gl::RenderQueue {
 public:
 	virtual ~RenderFontQueue();
 
-	bool init(StringView name, Function<void(gl::FrameHandle &, const Rc<gl::AttachmentHandle> &)> && = nullptr);
+	bool init(StringView name, Function<void(gl::FrameQueue &, const Rc<gl::AttachmentHandle> &, Function<void(bool)> &&)> && = nullptr);
 
 	RenderFontAttachment *getAttachment() const { return _attachment; }
 

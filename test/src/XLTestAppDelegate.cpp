@@ -48,7 +48,7 @@ bool AppDelegate::onFinishLaunching() {
 }
 
 bool AppDelegate::onMainLoop() {
-	auto scene = Rc<AppScene>::create(Extent2(1024, 768));
+	auto scene = Rc<AppScene>::create(this, Extent2(1024, 768));
 
 	_glLoop->compileRenderQueue(scene->getRenderQueue(), [&] (bool success) {
 		performOnMainThread([&] {
@@ -73,13 +73,13 @@ void AppDelegate::update(uint64_t dt) {
 }
 
 void AppDelegate::runMainView(Rc<AppScene> &&scene) {
-	_fontLibrary = Rc<font::FontLibrary>::create(_glLoop, Rc<vk::RenderFontQueue>::create("FontQueue"));
+	/*_fontLibrary = Rc<font::FontLibrary>::create(_glLoop, Rc<vk::RenderFontQueue>::create("FontQueue"));
 	_fontLibrary->acquireController("AppFont", [this, scene] (Rc<font::FontController> &&c) {
 		_fontMainController = move(c);
 		log::text("App", "AppFont created");
 		runFontTest();
 		scene->addFontController(_fontMainController);
-	});
+	});*/
 
 	auto dir = Rc<Director>::create(this, move(scene));
 
@@ -92,7 +92,7 @@ void AppDelegate::runMainView(Rc<AppScene> &&scene) {
 }
 
 void AppDelegate::runFontTest() {
-	auto query = Rc<gl::RenderFontInput>::alloc();
+	/*auto query = Rc<gl::RenderFontInput>::alloc();
 
 	Vector<char16_t> chars;
 	chars::CharGroup<char16_t, CharGroupId::Numbers>::foreach([&] (char16_t c) {
@@ -108,7 +108,7 @@ void AppDelegate::runFontTest() {
 	_fontMainController->updateTexture({
 		pair(monoFace, chars),
 		pair(regularFace, chars)
-	});
+	});*/
 }
 
 }

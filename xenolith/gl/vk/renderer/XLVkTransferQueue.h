@@ -133,7 +133,7 @@ public:
 
 	bool init();
 
-	void submitInput(gl::FrameHandle &, Rc<TransferResource> &&);
+	Rc<gl::FrameRequest> makeRequest(Rc<TransferResource> &&);
 
 protected:
 	TransferAttachment *_attachment = nullptr;

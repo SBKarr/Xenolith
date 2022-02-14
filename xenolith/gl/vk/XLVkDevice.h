@@ -60,7 +60,7 @@ public:
 	virtual void onLoopEnded(gl::Loop &) override;
 
 	const DeviceInfo & getInfo() const { return _info; }
-	const DeviceCallTable * getTable() const { return _table; }
+	const DeviceTable * getTable() const;
 	const Rc<Allocator> & getAllocator() const { return _allocator; }
 
 	const DeviceQueueFamily *getQueueFamily(QueueOperations) const;
@@ -88,7 +88,8 @@ public:
 
 	Rc<CommandPool> acquireCommandPool(QueueOperations, uint32_t = 0);
 	Rc<CommandPool> acquireCommandPool(uint32_t familyIndex);
-	void releaseCommandPool(Rc<CommandPool> &&);
+	void releaseCommandPool(gl::Loop &, Rc<CommandPool> &&);
+	void releaseCommandPoolUnsafe(Rc<CommandPool> &&);
 
 	Rc<Fence> acquireFence(uint32_t);
 	void releaseFence(Rc<Fence> &&);
@@ -105,11 +106,15 @@ public:
 	virtual Rc<gl::ImageObject> getEmptyImageObject() const override;
 	virtual Rc<gl::ImageObject> getSolidImageObject() const override;
 
+	const Vector<gl::ImageFormat> &getSupportedDepthStencilFormat() const override;
+
+	virtual Rc<gl::FrameHandle> makeFrame(gl::Loop &, Rc<gl::FrameRequest> &&, uint64_t gen) override;
+
+	virtual Rc<gl::Framebuffer> makeFramebuffer(const gl::RenderPassData *, SpanView<Rc<gl::ImageView>>, Extent2) override;
+	virtual Rc<gl::ImageAttachmentObject> makeImage(const gl::ImageAttachment *, Extent3) override;
+
 private:
 	friend class DeviceQueue;
-
-	virtual Rc<gl::FrameHandle> makeFrame(gl::Loop &, gl::Swapchain &swapchain, gl::RenderQueue &, uint32_t gen, bool readyForSubmit = false) override;
-	virtual Rc<gl::FrameHandle> makeFrame(gl::Loop &, gl::RenderQueue &, uint32_t gen) override;
 
 	virtual void compileResource(gl::Loop &loop, const Rc<gl::Resource> &req, Function<void(bool)> &&) override;
 	virtual void compileRenderQueue(gl::Loop &loop, const Rc<gl::RenderQueue> &req, Function<void(bool)> && = Function<void(bool)>()) override;
@@ -123,7 +128,10 @@ private:
 			const Vector<DeviceQueueFamily> &queueFamilies, Features &features, const Vector<const char *> &requiredExtension);
 
 	const vk::Instance *_vkInstance = nullptr;
-	const DeviceCallTable *_table = nullptr;
+	const DeviceTable *_table = nullptr;
+#if DEBUG
+	const DeviceTable *_original = nullptr;
+#endif
 	VkDevice _device = VK_NULL_HANDLE;
 
 	DeviceInfo _info;
@@ -145,6 +153,10 @@ private:
 	Vector<VkSampler> _immutableSamplers;
 	Vector<Rc<Sampler>> _samplers;
 	std::atomic<bool> _samplersCompiled = false;
+
+	Mutex _formatMutex;
+	Vector<gl::ImageFormat> _depthFormats;
+	std::unordered_map<VkFormat, VkFormatProperties> _formats;
 };
 
 }

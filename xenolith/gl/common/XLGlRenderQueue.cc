@@ -21,6 +21,7 @@
  **/
 
 #include "XLGlRenderQueue.h"
+#include "XLGlFrameEmitter.h"
 
 namespace stappler::xenolith::gl {
 
@@ -34,13 +35,15 @@ struct RenderQueue::QueueData : NamedMem {
 	HashTable<ProgramData *> programs;
 	HashTable<PipelineData *> pipelines;
 	HashTable<Rc<Resource>> linked;
-	Function<void(gl::FrameHandle &)> beginCallback;
-	Function<void(gl::FrameHandle &)> endCallback;
+	Function<void(gl::FrameRequest &)> beginCallback;
+	Function<void(gl::FrameRequest &)> endCallback;
 	Function<void(const Swapchain *)> enableCallback;
 	Function<void()> disableCallback;
 	Rc<Resource> resource;
 	bool compiled = false;
 	uint64_t order = 0;
+
+	Set<FrameCacheStorage *> frameCache;
 
 	void clear() {
 		for (auto &it : programs) {
@@ -48,7 +51,6 @@ struct RenderQueue::QueueData : NamedMem {
 		}
 
 		for (auto &it : passes) {
-			it->framebuffers.clear();
 			for (auto &desc : it->descriptors) {
 				desc->clear();
 			}
@@ -66,6 +68,12 @@ struct RenderQueue::QueueData : NamedMem {
 
 		for (auto &it : attachments) {
 			it->clear();
+		}
+
+		auto tmpCache = move(frameCache);
+		frameCache.clear();
+		for (auto &it : tmpCache) {
+			it->invalidate();
 		}
 
 		if (resource) {
@@ -364,6 +372,29 @@ static void RenderQueue_buildLoadStore(RenderQueue::QueueData *data) {
 
 static void RenderQueue_buildDescriptors(RenderQueue::QueueData *data, Device &dev) {
 	for (auto &pass : data->passes) {
+		for (auto &subpass : pass->subpasses) {
+			for (auto a : subpass.outputImages) {
+				if (isImageAttachmentType(a->getAttachment()->getType())) {
+					((ImageAttachment *)a->getAttachment())->addImageUsage(ImageUsage::ColorAttachment);
+				}
+			}
+			for (auto a : subpass.resolveImages) {
+				if (isImageAttachmentType(a->getAttachment()->getType())) {
+					((ImageAttachment *)a->getAttachment())->addImageUsage(ImageUsage::ColorAttachment);
+				}
+			}
+			for (auto a : subpass.inputImages) {
+				if (isImageAttachmentType(a->getAttachment()->getType())) {
+					((ImageAttachment *)a->getAttachment())->addImageUsage(ImageUsage::InputAttachment);
+				}
+			}
+			if (subpass.depthStencil) {
+				if (isImageAttachmentType(subpass.depthStencil->getAttachment()->getType())) {
+					((ImageAttachment *)subpass.depthStencil->getAttachment())->addImageUsage(ImageUsage::DepthStencilAttachment);
+				}
+			}
+		}
+
 		for (auto &attachment : pass->descriptors) {
 			auto &desc = attachment->getDescriptor();
 			if (desc.type != DescriptorType::Unknown) {
@@ -374,6 +405,38 @@ static void RenderQueue_buildDescriptors(RenderQueue::QueueData *data, Device &d
 				pass->queueDescriptors.emplace_back(&desc);
 				if (desc.type == DescriptorType::Sampler) {
 					pass->usesSamplers = true;
+				}
+			}
+
+			if (isImageAttachmentType(attachment->getAttachment()->getType())) {
+				auto desc = (ImageAttachmentDescriptor *)attachment;
+				switch (desc->getFinalLayout()) {
+				case AttachmentLayout::Undefined:
+				case AttachmentLayout::General:
+				case AttachmentLayout::ShaderReadOnlyOptimal:
+				case AttachmentLayout::Preinitialized:
+				case AttachmentLayout::PresentSrc:
+				case AttachmentLayout::Ignored:
+					break;
+				case AttachmentLayout::ColorAttachmentOptimal:
+					desc->getImageAttachment()->addImageUsage(gl::ImageUsage::ColorAttachment);
+					break;
+				case AttachmentLayout::TransferSrcOptimal:
+					desc->getImageAttachment()->addImageUsage(gl::ImageUsage::TransferSrc);
+					break;
+				case AttachmentLayout::TransferDstOptimal:
+					desc->getImageAttachment()->addImageUsage(gl::ImageUsage::TransferDst);
+					break;
+				case AttachmentLayout::DepthStencilAttachmentOptimal:
+				case AttachmentLayout::DepthStencilReadOnlyOptimal:
+				case AttachmentLayout::DepthReadOnlyStencilAttachmentOptimal:
+				case AttachmentLayout::DepthAttachmentStencilReadOnlyOptimal:
+				case AttachmentLayout::DepthAttachmentOptimal:
+				case AttachmentLayout::DepthReadOnlyOptimal:
+				case AttachmentLayout::StencilAttachmentOptimal:
+				case AttachmentLayout::StencilReadOnlyOptimal:
+					desc->getImageAttachment()->addImageUsage(gl::ImageUsage::DepthStencilAttachment);
+					break;
 				}
 			}
 		}
@@ -416,35 +479,6 @@ bool RenderQueue::isCompiled() const {
 
 void RenderQueue::setCompiled(bool value) {
 	_data->compiled = value;
-}
-
-bool RenderQueue::updateSwapchainInfo(const ImageInfo &info) {
-	if (_data && _data->output.size() == 1) {
-		auto out = _data->output.front();
-		if (isImageAttachmentType(out->getType())) {
-			if (out->isCompatible(info)) {
-				for (auto &it : _data->attachments) {
-					it->onSwapchainUpdate(info);
-				}
-				return true;
-			}
-		}
-	}
-	return false;
-}
-
-const ImageInfo *RenderQueue::getSwapchainImageInfo() const {
-	if (_data && _data->output.size() == 1) {
-		auto out = _data->output.front();
-		if (out->getType() == AttachmentType::SwapchainImage) {
-			return &((SwapchainAttachment *)out)->getInfo();
-		}
-	}
-	return nullptr;
-}
-
-bool RenderQueue::isPresentable() const {
-	return _data && _data->output.size() == 1 && _data->output.front()->getType() == AttachmentType::SwapchainImage;
 }
 
 bool RenderQueue::isCompatible(const ImageInfo &info) const {
@@ -564,13 +598,13 @@ bool RenderQueue::prepare(Device &dev) {
 	return true;
 }
 
-void RenderQueue::beginFrame(gl::FrameHandle &frame) {
+void RenderQueue::beginFrame(gl::FrameRequest &frame) {
 	if (_data->beginCallback) {
 		_data->beginCallback(frame);
 	}
 }
 
-void RenderQueue::endFrame(gl::FrameHandle &frame) {
+void RenderQueue::endFrame(gl::FrameRequest &frame) {
 	if (_data->endCallback) {
 		_data->endCallback(frame);
 	}
@@ -595,6 +629,17 @@ bool RenderQueue::usesSamplers() const {
 		}
 	}
 	return false;
+}
+
+void RenderQueue::addCacheStorage(FrameCacheStorage *storage) const {
+	_data->frameCache.emplace(storage);
+}
+
+void RenderQueue::removeCacheStorage(const FrameCacheStorage *storage) const {
+	auto it = _data->frameCache.find(storage);
+	if (it != _data->frameCache.end()) {
+		_data->frameCache.erase(it);
+	}
 }
 
 RenderQueue::Builder::Builder(StringView name, Mode mode) {
@@ -666,7 +711,7 @@ inline T * emplaceAttachment(RenderPassData *pass, T *val) {
 }
 
 AttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p, uint32_t subpassIdx,
-		const Rc<BufferAttachment> &attachment) {
+		const Rc<BufferAttachment> &attachment, FrameRenderPassState state) {
 	auto pass = getPassData(p);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
@@ -684,7 +729,7 @@ AttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p, uint3
 		attachment->setIndex(_data->attachments.size() - 1);
 	}
 
-	auto desc = emplaceAttachment(pass, attachment->addBufferDescriptor(pass));
+	auto desc = emplaceAttachment(pass, attachment->addBufferDescriptor(pass, state));
 	if (auto ref = desc->addBufferRef(subpassIdx, AttachmentUsage::Input)) {
 		pass->subpasses[subpassIdx].inputBuffers.emplace_back(ref);
 		return ref;
@@ -695,7 +740,7 @@ AttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p, uint3
 }
 
 AttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p, uint32_t subpassIdx,
-		const Rc<BufferAttachment> &attachment) {
+		const Rc<BufferAttachment> &attachment, FrameRenderPassState state) {
 	auto pass = getPassData(p);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
@@ -713,7 +758,7 @@ AttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p, uint
 		attachment->setIndex(_data->attachments.size() - 1);
 	}
 
-	auto desc = emplaceAttachment(pass, attachment->addBufferDescriptor(pass));
+	auto desc = emplaceAttachment(pass, attachment->addBufferDescriptor(pass, state));
 	if (auto ref = desc->addBufferRef(subpassIdx, AttachmentUsage::Output)) {
 		pass->subpasses[subpassIdx].outputBuffers.emplace_back(ref);
 		return ref;
@@ -724,7 +769,7 @@ AttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p, uint
 }
 
 AttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p, uint32_t subpassIdx,
-		const Rc<GenericAttachment> &attachment) {
+		const Rc<GenericAttachment> &attachment, FrameRenderPassState state) {
 	auto pass = getPassData(p);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
@@ -742,7 +787,7 @@ AttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p, uint3
 		attachment->setIndex(_data->attachments.size() - 1);
 	}
 
-	auto desc = emplaceAttachment(pass, attachment->addDescriptor(pass));
+	auto desc = emplaceAttachment(pass, attachment->addDescriptor(pass, state));
 	if (auto ref = desc->addRef(subpassIdx, AttachmentUsage::Input)) {
 		pass->subpasses[subpassIdx].inputGenerics.emplace_back(ref);
 		return ref;
@@ -753,7 +798,7 @@ AttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p, uint3
 }
 
 AttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p, uint32_t subpassIdx,
-		const Rc<GenericAttachment> &attachment) {
+		const Rc<GenericAttachment> &attachment, FrameRenderPassState state) {
 	auto pass = getPassData(p);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
@@ -771,7 +816,7 @@ AttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p, uint
 		attachment->setIndex(_data->attachments.size() - 1);
 	}
 
-	auto desc = emplaceAttachment(pass, attachment->addDescriptor(pass));
+	auto desc = emplaceAttachment(pass, attachment->addDescriptor(pass, state));
 	if (auto ref = desc->addRef(subpassIdx, AttachmentUsage::Output)) {
 		pass->subpasses[subpassIdx].outputGenerics.emplace_back(ref);
 		return ref;
@@ -782,7 +827,7 @@ AttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p, uint
 }
 
 ImageAttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p, uint32_t subpassIdx,
-		const Rc<ImageAttachment> &attachment) {
+		const Rc<ImageAttachment> &attachment, FrameRenderPassState state) {
 	auto pass = getPassData(p);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
@@ -799,7 +844,7 @@ ImageAttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p, 
 	if (emplaced) {
 		attachment->setIndex(_data->attachments.size() - 1);
 	}
-	auto desc = emplaceAttachment(pass, attachment->addImageDescriptor(pass));
+	auto desc = emplaceAttachment(pass, attachment->addImageDescriptor(pass, state));
 	if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::Input, AttachmentLayout::Ignored)) {
 		pass->subpasses[subpassIdx].inputImages.emplace_back(ref);
 		return ref;
@@ -810,7 +855,7 @@ ImageAttachmentRef *RenderQueue::Builder::addPassInput(const Rc<RenderPass> &p, 
 }
 
 ImageAttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p, uint32_t subpassIdx,
-		const Rc<ImageAttachment> &attachment) {
+		const Rc<ImageAttachment> &attachment, FrameRenderPassState state) {
 	auto pass = getPassData(p);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
@@ -827,7 +872,7 @@ ImageAttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p,
 	if (emplaced) {
 		attachment->setIndex(_data->attachments.size() - 1);
 	}
-	auto desc = emplaceAttachment(pass, attachment->addImageDescriptor(pass));
+	auto desc = emplaceAttachment(pass, attachment->addImageDescriptor(pass, state));
 	if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::Output, AttachmentLayout::Ignored)) {
 		pass->subpasses[subpassIdx].outputImages.emplace_back(ref);
 		return ref;
@@ -838,7 +883,7 @@ ImageAttachmentRef *RenderQueue::Builder::addPassOutput(const Rc<RenderPass> &p,
 }
 
 Pair<ImageAttachmentRef *, ImageAttachmentRef *> RenderQueue::Builder::addPassResolve(const Rc<RenderPass> &p,
-		uint32_t subpassIdx, const Rc<ImageAttachment> &color, const Rc<ImageAttachment> &resolve) {
+		uint32_t subpassIdx, const Rc<ImageAttachment> &color, const Rc<ImageAttachment> &resolve, FrameRenderPassState state) {
 	auto pass = getPassData(p);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
@@ -852,7 +897,6 @@ Pair<ImageAttachmentRef *, ImageAttachmentRef *> RenderQueue::Builder::addPassRe
 	}
 
 	switch (color->getType()) {
-	case AttachmentType::SwapchainImage:
 	case AttachmentType::Buffer:
 	case AttachmentType::Generic:
 		log::vtext("Gl-Error", "Attachment '", color->getName(), "' can not be resolved output attachment for pass '", pass->key ,"'");
@@ -876,8 +920,8 @@ Pair<ImageAttachmentRef *, ImageAttachmentRef *> RenderQueue::Builder::addPassRe
 		resolve->setIndex(_data->attachments.size() - 1);
 	}
 
-	auto colorDesc = emplaceAttachment(pass, color->addImageDescriptor(pass));
-	auto resolveDesc = emplaceAttachment(pass, resolve->addImageDescriptor(pass));
+	auto colorDesc = emplaceAttachment(pass, color->addImageDescriptor(pass, state));
+	auto resolveDesc = emplaceAttachment(pass, resolve->addImageDescriptor(pass, state));
 
 	if (subpass_attachment_exists(pass->subpasses[subpassIdx].outputImages, colorDesc)) {
 		log::vtext("Gl-Error", "Attachment '", color->getName(), "' is already added to subpass '", pass->key ,"' output");
@@ -906,7 +950,7 @@ Pair<ImageAttachmentRef *, ImageAttachmentRef *> RenderQueue::Builder::addPassRe
 }
 
 ImageAttachmentRef * RenderQueue::Builder::addPassDepthStencil(const Rc<RenderPass> &p,
-		uint32_t subpassIdx, const Rc<ImageAttachment> &attachment) {
+		uint32_t subpassIdx, const Rc<ImageAttachment> &attachment, FrameRenderPassState state) {
 	auto pass = getPassData(p);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
@@ -920,7 +964,6 @@ ImageAttachmentRef * RenderQueue::Builder::addPassDepthStencil(const Rc<RenderPa
 	}
 
 	switch (attachment->getType()) {
-	case AttachmentType::SwapchainImage:
 	case AttachmentType::Buffer:
 	case AttachmentType::Generic:
 		log::vtext("Gl-Error", "Attachment '", attachment->getName(), "' can not be depth/stencil attachment for pass '", pass->key ,"'");
@@ -940,7 +983,7 @@ ImageAttachmentRef * RenderQueue::Builder::addPassDepthStencil(const Rc<RenderPa
 		attachment->setIndex(_data->attachments.size() - 1);
 	}
 
-	auto desc = emplaceAttachment(pass, attachment->addImageDescriptor(pass));
+	auto desc = emplaceAttachment(pass, attachment->addImageDescriptor(pass, state));
 	if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::DepthStencil, AttachmentLayout::Ignored)) {
 		pass->subpasses[subpassIdx].depthStencil = ref;
 		return ref;
@@ -1118,11 +1161,11 @@ void RenderQueue::Builder::addLinkedResource(const Rc<Resource> &res) {
 	_data->linked.emplace(res);
 }
 
-void RenderQueue::Builder::setBeginCallback(Function<void(gl::FrameHandle &)> &&cb) {
+void RenderQueue::Builder::setBeginCallback(Function<void(gl::FrameRequest &)> &&cb) {
 	_data->beginCallback = move(cb);
 }
 
-void RenderQueue::Builder::setEndCallback(Function<void(gl::FrameHandle &)> &&cb) {
+void RenderQueue::Builder::setEndCallback(Function<void(gl::FrameRequest &)> &&cb) {
 	_data->endCallback = move(cb);
 }
 

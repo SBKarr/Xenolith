@@ -21,13 +21,13 @@
  **/
 
 #include "XLGlDevice.h"
-#include "XLGlFrame.h"
 #include "XLGlLoop.h"
 #include "XLGlRenderQueue.h"
 #include "XLGlObject.h"
-#include "XLGlFrame.h"
 #include "XLApplication.h"
 #include "SPThreadTaskQueue.h"
+#include "XLGlFrameHandle.h"
+#include "XLGlFrameHandle.h"
 
 namespace stappler::xenolith::gl {
 
@@ -86,12 +86,16 @@ Rc<Shader> Device::addProgram(Rc<Shader> program) {
 	}
 }
 
-Rc<gl::FrameHandle> Device::makeFrame(gl::Loop &loop, gl::Swapchain &swapchain, gl::RenderQueue &queue, uint32_t gen, bool readyForSubmit) {
-	return Rc<gl::FrameHandle>::create(loop, swapchain, queue, gen, readyForSubmit);
+Rc<gl::FrameHandle> Device::makeFrame(gl::Loop &loop, Rc<gl::FrameRequest> &&req, uint64_t gen) {
+	return Rc<gl::FrameHandle>::create(loop, move(req), gen);
 }
 
-Rc<gl::FrameHandle> Device::makeFrame(gl::Loop &loop, gl::RenderQueue &queue, uint32_t gen) {
-	return Rc<gl::FrameHandle>::create(loop, queue, gen);
+Rc<Framebuffer> Device::makeFramebuffer(const gl::RenderPassData *, SpanView<Rc<gl::ImageView>>, Extent2) {
+	return nullptr;
+}
+
+Rc<ImageAttachmentObject> Device::makeImage(const gl::ImageAttachment *, Extent3) {
+	return nullptr;
 }
 
 void Device::compileResource(gl::Loop &, const Rc<Resource> &req, Function<void(bool)> &&complete) {

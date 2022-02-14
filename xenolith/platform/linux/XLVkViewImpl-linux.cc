@@ -75,6 +75,24 @@ bool ViewImpl::begin(const Rc<Director> &director, Function<void()> &&cb) {
 	return View::begin(director, move(cb));
 }
 
+void ViewImpl::end() {
+	View::end();
+
+	if (_surface) {
+		_vkInstance->vkDestroySurfaceKHR(_vkInstance->getInstance(), _surface, nullptr);
+		_surface = VK_NULL_HANDLE;
+	}
+
+	/*foreachBacktrace([] (uint64_t id, Time time, const std::vector<std::string> &vec) {
+		StringStream stream;
+		stream << "[" << id << ":" << time.toHttp() << "]:\n";
+		for (auto &it : vec) {
+			stream << "\t" << it << "\n";
+		}
+		log::text("Gl-View-Backtrace", stream.str());
+	});*/
+}
+
 bool ViewImpl::isAvailableOnDevice(VkSurfaceKHR surface) const {
 	VkBool32 ret = VK_FALSE;
 	if (_vkDevice->getInstance()->vkGetPhysicalDeviceSurfaceSupportKHR(_vkDevice->getPhysicalDevice(),
@@ -88,8 +106,8 @@ void ViewImpl::setIMEKeyboardState(bool open) {
 
 }
 
-void ViewImpl::setScreenSize(float width, float height) {
-	View::setScreenSize(width, height);
+void ViewImpl::setScreenExtent(Extent2 e) {
+	View::setScreenExtent(e);
 }
 
 void ViewImpl::setClipboardString(StringView str) {
@@ -101,7 +119,7 @@ StringView ViewImpl::getClipboardString() const {
 }
 
 void ViewImpl::recreateSwapChain() {
-	_glLoop->recreateSwapChain(_swapchain);
+	// _glLoop->recreateSwapChain(_swapchain);
 }
 
 void ViewImpl::pushEvent(AppEvent::Value val) const {
@@ -120,10 +138,6 @@ bool ViewImpl::poll() {
 
 void ViewImpl::close() {
 	end();
-}
-
-Rc<gl::Swapchain> ViewImpl::makeSwapchain(const Rc<gl::RenderQueue> &queue) const {
-	return Rc<Swapchain>::create(this, *_vkDevice, _surface, queue);
 }
 
 }

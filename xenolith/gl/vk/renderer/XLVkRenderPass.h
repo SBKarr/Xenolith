@@ -35,6 +35,9 @@ class Swapchain;
 class CommandPool;
 class DeviceQueue;
 class SwapchainAttachmentHandle;
+class Framebuffer;
+class VertexBufferAttachment;
+class VertexBufferAttachmentHandle;
 
 class RenderPass : public gl::RenderPass {
 public:
@@ -45,7 +48,7 @@ public:
 
 	QueueOperations getQueueOps() const { return _queueOps; }
 
-	virtual Rc<gl::RenderPassHandle> makeFrameHandle(gl::RenderPassData *, const gl::FrameHandle &);
+	virtual Rc<gl::RenderPassHandle> makeFrameHandle(const gl::FrameQueue &) override;
 
 protected:
 	QueueOperations _queueOps = QueueOperations::Graphics;
@@ -57,30 +60,22 @@ public:
 		Vector<Rc<gl::AttachmentHandle>> waitAttachment;
 		Vector<VkSemaphore> waitSem;
 		Vector<VkPipelineStageFlags> waitStages;
-		Vector<Rc<SwapchainSync>> waitSwapchainSync;
 		Vector<VkSemaphore> signalSem;
 		Vector<Rc<gl::AttachmentHandle>> signalAttachment;
-		Vector<Rc<SwapchainSync>> signalSwapchainSync;
-		Set<Rc<SwapchainSync>> swapchainSync;
 	};
 
 	virtual ~RenderPassHandle();
 	virtual void invalidate();
 
-	virtual bool prepare(gl::FrameHandle &) override;
-	virtual void submit(gl::FrameHandle &, Function<void(const Rc<gl::RenderPassHandle> &)> &&) override;
-	virtual void finalize(gl::FrameHandle &, bool) override;
+	virtual bool prepare(gl::FrameQueue &, Function<void(bool)> &&) override;
+	virtual void submit(gl::FrameQueue &, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) override;
+	virtual void finalize(gl::FrameQueue &, bool) override;
 
 	virtual QueueOperations getQueueOps() const;
 
 protected:
-	// if async is true - update descriptors with updateAfterBind flag
-	// 			   false - without updateAfterBindFlag
-	virtual bool doPrepareDescriptors(gl::FrameHandle &, bool async);
 	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &);
-	virtual bool doSubmit(gl::FrameHandle &);
-
-	virtual bool present(gl::FrameHandle &);
+	virtual bool doSubmit();
 
 	struct MaterialBuffers {
 		Rc<DeviceBuffer> stagingBuffer;
@@ -93,18 +88,16 @@ protected:
 
 	virtual Sync makeSyncInfo();
 
-	bool _isSyncValid = true;
+	Function<void(bool)> _onPrepared;
+	bool _valid = true;
 	bool _commandsReady = false;
 	bool _descriptorsReady = false;
 
 	Device *_device = nullptr;
-	Swapchain *_swapchain = nullptr;
 	Rc<Fence> _fence;
 	Rc<CommandPool> _pool;
 	Rc<DeviceQueue> _queue;
 	Vector<VkCommandBuffer> _buffers;
-
-	Rc<SwapchainAttachmentHandle> _presentAttachment;
 	Sync _sync;
 };
 
@@ -114,19 +107,25 @@ public:
 
 	virtual bool init(StringView, gl::RenderOrdering, size_t subpassCount = 1);
 
-	virtual Rc<gl::RenderPassHandle> makeFrameHandle(gl::RenderPassData *, const gl::FrameHandle &);
-};
+	virtual Rc<gl::RenderPassHandle> makeFrameHandle(const gl::FrameQueue &) override;
 
-class VertexBufferAttachmentHandle;
+	const VertexBufferAttachment *getVertexes() const { return _vertexes; }
+
+protected:
+	virtual void prepare(gl::Device &) override;
+
+	const VertexBufferAttachment *_vertexes = nullptr;
+};
 
 class VertexRenderPassHandle : public RenderPassHandle {
 public:
 	virtual ~VertexRenderPassHandle();
 
+	virtual bool prepare(gl::FrameQueue &, Function<void(bool)> &&) override;
+
 protected:
-	virtual void addRequiredAttachment(const gl::Attachment *, const Rc<gl::AttachmentHandle> &);
 	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &) override;
-	virtual bool doSubmit(gl::FrameHandle &) override;
+	virtual bool doSubmit() override;
 
 	VertexBufferAttachmentHandle *_mainBuffer;
 };

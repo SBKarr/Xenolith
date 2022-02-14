@@ -27,11 +27,6 @@
 
 namespace stappler::xenolith::gl {
 
-struct LootRenderQueueData : Ref {
-	Rc<RenderQueue> queue;
-	Map<const Attachment *, Rc<AttachmentInputData>> input;
-};
-
 struct Loop::Internal : memory::AllocPool {
 	Internal() {
 		auto p = memory::pool::acquire();
@@ -66,6 +61,10 @@ struct PresentationData {
 	uint64_t updateInterval = config::PresentationSchedulerInterval;
 	uint64_t lastUpdate = 0;
 	bool exit = false;
+
+	uint32_t events = 0;
+	uint32_t timers = 0;
+	uint32_t tasks = 0;
 };
 
 Loop::Loop(Application *app, const Rc<Device> &dev)
@@ -78,7 +77,9 @@ Loop::Loop(Application *app, const Rc<Device> &dev)
 }
 
 Loop::~Loop() {
-
+	if (_device) {
+		_device = nullptr;
+	}
 }
 
 void Loop::threadInit() {
@@ -99,11 +100,11 @@ void Loop::threadInit() {
 bool Loop::worker() {
 	PresentationData data;
 
-	auto invalidateSwapchain = [&] (Swapchain *swapchain, AppEvent::Value event) {
+	/*auto invalidateSwapchain = [&] (Swapchain *swapchain, AppEvent::Value event) {
 		if (swapchain->isValid()) {
 			swapchain->incrementGeneration(event);
 		}
-	};
+	};*/
 
 	_running.store(true);
 
@@ -124,141 +125,147 @@ bool Loop::worker() {
 		bool timerPassed = false;
 		do {
 			++ _clock;
+
+			XL_PROFILE_BEGIN(loop, "gl::Loop", "loop", 1000);
+
+			data.events = 0;
+			data.timers = 0;
+			data.tasks = 0;
+
 			Context context;
 			context.events = _internal->events;
+			context.loop = this;
 			_internal->events = _internal->eventsSwap;
 			_internal->eventsSwap = context.events;
 
+			XL_PROFILE_BEGIN(poll, "gl::Loop::Poll", "poll", 500);
 			timerPassed = pollEvents(lock, data, context);
+			XL_PROFILE_END(poll)
 
 			_currentContext = &context;
 
-			_queue->update();
+			XL_PROFILE_BEGIN(queue, "gl::Loop::Queue", "queue", 500);
+			_queue->update(&data.tasks);
+			XL_PROFILE_END(queue)
 
-			uint64_t now = 0;
+			//uint64_t now = 0;
 			if (timerPassed) {
-				now = platform::device::_clock();
-				auto dt = now - data.last;
-				runTimers(dt, context);
-				data.last = now;
+				//now = platform::device::_clock();
+				auto dt = data.now - data.last;
+				XL_PROFILE_BEGIN(timers, "gl::Loop::Timers", "timers", 500);
+				data.timers += runTimers(dt, context);
+				XL_PROFILE_END(timers)
+				data.last = data.now;
 				// log::vtext("Dt", data.updateInterval, " - ", dt);
 			}
 
-			auto &events = *context.events;
-			auto it = events.begin();
-			while (it != events.end()) {
+			memory::vector<Event> *tmpEvents = nullptr;
+			do {
 				memory::pool::context<memory::pool_t *> ctx(pool);
-				switch (it->event) {
-				case EventName::Update:
-					if (auto s = (Swapchain *)it->data.get()) {
-						s->beginFrame(*this);
-					} else {
-						log::text("gl::Loop", "Event::Update without swapchain");
-					}
-					break;
-				case EventName::SwapChainDeprecated:
-					if (auto s = (Swapchain *)it->data.get()) {
-						invalidateSwapchain(s, AppEvent::SwapchainRecreation);
-					} else {
-						log::text("gl::Loop", "Event::SwapChainDeprecated without swapchain");
-					}
-					break;
-				case EventName::SwapChainRecreated:
-					if (auto s = (Swapchain *)it->data.get()) {
-						s->beginFrame(*this, true);
-					} else {
-						log::text("gl::Loop", "Event::SwapChainRecreated without swapchain");
-					}
-					break;
-				case EventName::SwapChainForceRecreate:
-					if (auto s = (Swapchain *)it->data.get()) {
-						invalidateSwapchain(s, AppEvent::SwapchainRecreationBest);
-					} else {
-						log::text("gl::Loop", "Event::SwapChainForceRecreate without swapchain");
-					}
-					break;
-				case EventName::FrameUpdate:
-					if (auto frame = it->data.cast<FrameHandle>()) {
-						frame->update();
-					} else {
-						log::text("gl::Loop", "Event::FrameUpdate without frame");
-					}
-					break;
-				case EventName::FrameSubmitted:
-				case EventName::FrameInvalidated:
-					if (auto s = (Swapchain *)it->data.get()) {
-						if (s->isResetRequired()) {
-							pushEvent(EventName::SwapChainForceRecreate, s);
-						} else if (s->isValid()) {
-							auto frameInterval = s->getFrameInterval();
-							if (frameInterval == 0) {
-								s->beginFrame(*this);
-							} else {
-								if (now == 0) {
-									now = platform::device::_clock();
-								}
-								auto timeFromFrame = (now - s->getFrameTime());
-								if (timeFromFrame >= frameInterval) {
-									s->beginFrame(*this);
-								} else {
-									schedule([this, s = it->data] (Context &context) {
-										context.events->emplace_back(EventName::FrameTimeoutPassed, s.get(), data::Value());
-										return true;
-									}, frameInterval - timeFromFrame);
-								}
+				tmpEvents = new (pool) memory::vector<Event>;
+			} while (0);
+
+			auto nextEvents = tmpEvents;
+			auto origEvents = context.events;
+			while (!context.events->empty()) {
+				memory::pool::context<memory::pool_t *> ctx(pool);
+
+				// swap array to correctly handle extra context events
+				auto events = context.events;
+				context.events = nextEvents;
+				nextEvents = events;
+
+				auto it = events->begin();
+				while (it != events->end()) {
+					++ data.events;
+
+					XL_PROFILE_BEGIN(events, "gl::Loop::Event", getEventName(it->event), 500);
+
+					switch (it->event) {
+					case EventName::Update:
+						if (auto s = (FrameEmitter *)it->data.get()) {
+							s->acquireNextFrame();
+						} else {
+							log::text("gl::Loop", "Event::Update without FrameEmitter");
+						}
+						break;
+					case EventName::SwapChainDeprecated:
+						/*if (auto s = (Swapchain *)it->data.get()) {
+							invalidateSwapchain(s, AppEvent::SwapchainRecreation);
+						} else {
+							log::text("gl::Loop", "Event::SwapChainDeprecated without swapchain");
+						}*/
+						break;
+					case EventName::SwapChainRecreated:
+						/*if (auto s = (Swapchain *)it->data.get()) {
+							s->beginFrame(*this, true);
+						} else {
+							log::text("gl::Loop", "Event::SwapChainRecreated without swapchain");
+						}*/
+						break;
+					case EventName::SwapChainForceRecreate:
+						/*if (auto s = (Swapchain *)it->data.get()) {
+							invalidateSwapchain(s, AppEvent::SwapchainRecreationBest);
+						} else {
+							log::text("gl::Loop", "Event::SwapChainForceRecreate without swapchain");
+						}*/
+						break;
+					case EventName::FrameUpdate:
+						if (auto frame = it->data.cast<FrameHandle>()) {
+							frame->update();
+						} else {
+							log::text("gl::Loop", "Event::FrameUpdate without frame");
+						}
+						break;
+					case EventName::FrameInvalidated:
+						if (auto frame = it->data.cast<FrameHandle>()) {
+							frame->invalidate();
+						} else {
+							log::text("gl::Loop", "Event::FrameInvalidated without frame");
+						}
+						break;
+					case EventName::CompileResource:
+						_device->compileResource(*this, it->data.cast<Resource>(), move(it->callback));
+						break;
+					case EventName::CompileMaterials:
+						_device->compileMaterials(*this, it->data.cast<MaterialInputData>());
+						break;
+					case EventName::RunRenderQueue:
+						if (auto data = (FrameRequest *)it->data.get()) {
+							auto frame = _device->makeFrame(*this, data, it->value.getInteger());
+							if (it->callback) {
+								frame->setCompleteCallback([cb = move(it->callback)] (FrameHandle &handle) {
+									cb(handle.isValid());
+								});
 							}
+							frame->update(true);
 						}
-					} else {
-						log::text("gl::Loop", "Event::FrameSubmitted without swapchain");
+						break;
+					case EventName::Exit:
+						data.exit = true;
+						break;
 					}
-					break;
-				case EventName::FrameTimeoutPassed:
-					if (auto s = (Swapchain *)it->data.get()) {
-						s->beginFrame(*this);
-					} else {
-						log::text("gl::Loop", "Event::FrameTimeoutPassed without swapchain");
-					}
-					break;
-				case EventName::UpdateFrameInterval:
-					if (auto s = (Swapchain *)it->data.get()) {
-					// view want us to change frame interval
-						s->setFrameInterval(it->value.getInteger());
-					} else {
-						log::text("gl::Loop", "Event::UpdateFrameInterval without swapchain");
-					}
-					break;
-				case EventName::CompileResource:
-					_device->compileResource(*this, it->data.cast<Resource>(), move(it->callback));
-					break;
-				case EventName::CompileMaterials:
-					_device->compileMaterials(*this, it->data.cast<MaterialInputData>());
-					break;
-				case EventName::RunRenderQueue:
-					if (auto data = (LootRenderQueueData *)it->data.get()) {
-						auto frame = _device->makeFrame(*this, *data->queue, it->value.getInteger());
-						if (!data->input.empty()) {
-							frame->submitInput(move(data->input));
-						}
-						if (it->callback) {
-							frame->setCompleteCallback([cb = move(it->callback)] (FrameHandle &handle) {
-								cb(handle.isValid());
-							});
-						}
-						frame->update(true);
-					}
-					break;
-				case EventName::Exit:
-					data.exit = true;
-					break;
+
+					XL_PROFILE_END(events)
+
+					++ it;
 				}
-				++ it;
+
+				events->clear();
 			}
 
+
+			context.events = origEvents;
 			_currentContext = nullptr;
-			events.clear();
+			context.events->clear();
+			XL_PROFILE_BEGIN(autorelease, "gl::Loop::Autorelease", "autorelease", 500);
 			_internal->autorelease->clear();
+			XL_PROFILE_END(autorelease)
+
+			XL_PROFILE_END(loop)
 			memory::pool::clear(pool);
 		} while (0);
+		// log::vtext("gl::Loop", "Clock: ", platform::device::_clock() - data.now, "(", data.events, ", ", data.timers, ", ", data.tasks, ")");
 		lock.lock();
 	}
 
@@ -291,6 +298,21 @@ bool Loop::worker() {
 	memory::pool::destroy(_pool);
 	memory::pool::terminate();
 
+	/*if (FrameHandle::GetActiveFramesCount() > 0) {
+		log::vtext("gl::Loop", "Not all frames ended with loop, ", FrameHandle::GetActiveFramesCount(), " remains");
+	}
+
+	log::vtext("gl::Loop", "refcount: ", getReferenceCount());
+
+	foreachBacktrace([] (uint64_t id, Time time, const std::vector<std::string> &vec) {
+		StringStream stream;
+		stream << "[" << id << ":" << time.toHttp() << "]:\n";
+		for (auto &it : vec) {
+			stream << "\t" << it << "\n";
+		}
+		log::text("Gl-Loop-Backtrace", stream.str());
+	});*/
+
 	return false;
 }
 
@@ -318,17 +340,17 @@ void Loop::pushContextEvent(EventName event, Rc<Ref> && ref, data::Value && data
 	}
 }
 
-void Loop::schedule(Function<bool(Context &)> &&cb) {
+void Loop::schedule(Function<bool(Context &)> &&cb, StringView tag) {
 	XL_ASSERT(isOnThread(), "Gl-Loop: schedule should be called in GL thread");
 	if (_running.load()) {
-		_internal->timers->emplace_back(0, move(cb));
+		_internal->timers->emplace_back(0, move(cb), tag);
 	}
 }
 
-void Loop::schedule(Function<bool(Context &)> &&cb, uint64_t delay) {
+void Loop::schedule(Function<bool(Context &)> &&cb, uint64_t delay, StringView tag) {
 	XL_ASSERT(isOnThread(), "Gl-Loop: schedule should be called in GL thread");
 	if (_running.load()) {
-		_internal->timers->emplace_back(delay, move(cb));
+		_internal->timers->emplace_back(delay, move(cb), tag);
 	}
 }
 
@@ -347,18 +369,8 @@ void Loop::compileImage(const Rc<DynamicImage> &image, Function<void(bool)> &&co
 	_device->compileImage(*this, image, move(complete));
 }
 
-void Loop::runRenderQueue(const Rc<RenderQueue> &req, uint64_t gen, Function<void(bool)> &&complete) {
-	auto data = Rc<LootRenderQueueData>::alloc();
-	data->queue = req;
-	pushEvent(EventName::RunRenderQueue, move(data), data::Value(gen), move(complete));
-}
-
-void Loop::runRenderQueue(const Rc<RenderQueue> &req, Map<const Attachment *, Rc<AttachmentInputData>> &&input,
-		uint64_t gen, Function<void(bool)> &&complete) {
-	auto data = Rc<LootRenderQueueData>::alloc();
-	data->queue = req;
-	data->input = move(input);
-	pushEvent(EventName::RunRenderQueue, move(data), data::Value(gen), move(complete));
+void Loop::runRenderQueue(Rc<FrameRequest> &&req, uint64_t gen, Function<void(bool)> &&complete) {
+	pushEvent(EventName::RunRenderQueue, move(req), data::Value(gen), move(complete));
 }
 
 void Loop::end(bool success) {
@@ -370,14 +382,17 @@ const Instance *Loop::getInstance() const {
 	return _application->getGlInstance();
 }
 
-void Loop::performOnThread(const Function<void()> &func, Ref *target) {
+void Loop::performOnThread(const Function<void()> &func, Ref *target, bool immediate) {
+	if (immediate) {
+		if (isOnThread()) {
+			func();
+			return;
+		}
+	}
+
 	_queue->onMainThread(Rc<thread::Task>::create([func] (const thread::Task &, bool success) {
 		if (success) { func(); }
 	}, target));
-}
-
-void Loop::setInterval(const Rc<Swapchain> &ref, uint64_t iv) {
-	pushEvent(EventName::UpdateFrameInterval, ref.get(), data::Value(iv));
 }
 
 bool Loop::isOnThread() const {
@@ -429,16 +444,24 @@ bool Loop::pollEvents(std::unique_lock<std::mutex> &lock, PresentationData &data
 	return timerPassed;
 }
 
-void Loop::runTimers(uint64_t dt, Context &t) {
+uint32_t Loop::runTimers(uint64_t dt, Context &t) {
+	uint32_t ret = 0;
 	auto timers = _internal->timers;
 	_internal->timers = _internal->reschedule;
 
 	auto it = timers->begin();
 	while (it != timers->end()) {
+		++ ret;
 		if (it->interval) {
 			it->value += dt;
 			if (it->value > it->interval) {
+
+				XL_PROFILE_BEGIN(timers, "gl::Loop::Timers", it->tag, 1000);
+
 				auto ret = it->callback(t);
+
+				XL_PROFILE_END(timers);
+
 				if (!ret) {
 					it->value -= it->interval;
 				} else {
@@ -448,7 +471,12 @@ void Loop::runTimers(uint64_t dt, Context &t) {
 			}
 			++ it;
 		} else {
+			XL_PROFILE_BEGIN(timers, "gl::Loop::Timers", it->tag, 1000);
+
 			auto ret = it->callback(t);
+
+			XL_PROFILE_END(timers);
+
 			if (ret) {
 				it = timers->erase(it);
 			} else {
@@ -464,6 +492,23 @@ void Loop::runTimers(uint64_t dt, Context &t) {
 		_internal->timers->clear();
 	}
 	_internal->timers = timers;
+	return ret;
+}
+
+StringView Loop::getEventName(EventName event) {
+	switch (event) {
+	case EventName::Update: return StringView("EventName::Update"); break;
+	case EventName::SwapChainDeprecated: return StringView("EventName::SwapChainDeprecated"); break;
+	case EventName::SwapChainRecreated: return StringView("EventName::SwapChainRecreated"); break;
+	case EventName::SwapChainForceRecreate: return StringView("EventName::SwapChainForceRecreate"); break;
+	case EventName::FrameUpdate: return StringView("EventName::FrameUpdate"); break;
+	case EventName::FrameInvalidated: return StringView("EventName::FrameInvalidated"); break;
+	case EventName::CompileResource: return StringView("EventName::CompileResource"); break;
+	case EventName::CompileMaterials: return StringView("EventName::CompileMaterials"); break;
+	case EventName::RunRenderQueue: return StringView("EventName::RunRenderQueue"); break;
+	case EventName::Exit: return StringView("EventName::Exit"); break;
+	}
+	return StringView();
 }
 
 }

@@ -20,8 +20,8 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_GL_VK_RENDERER_XLVKBUFFERATTACHMENT_H_
-#define XENOLITH_GL_VK_RENDERER_XLVKBUFFERATTACHMENT_H_
+#ifndef XENOLITH_GL_VK_RENDERER_XLVKATTACHMENT_H_
+#define XENOLITH_GL_VK_RENDERER_XLVKATTACHMENT_H_
 
 #include "XLVkFramebuffer.h"
 #include "XLVkSync.h"
@@ -46,6 +46,14 @@ public:
 			uint32_t, bool, VkDescriptorBufferInfo &) { return false; }
 };
 
+class ImageAttachmentHandle : public gl::AttachmentHandle {
+public:
+	virtual ~ImageAttachmentHandle();
+
+	virtual bool writeDescriptor(const RenderPassHandle &, const gl::PipelineDescriptor &,
+			uint32_t, bool, VkDescriptorImageInfo &) { return false; }
+};
+
 class TexelAttachmentHandle : public gl::AttachmentHandle {
 public:
 	virtual ~TexelAttachmentHandle();
@@ -59,14 +67,14 @@ public:
 	virtual ~VertexBufferAttachment();
 
 protected:
-	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameHandle &) override;
+	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameQueue &) override;
 };
 
 class VertexBufferAttachmentHandle : public BufferAttachmentHandle {
 public:
 	virtual ~VertexBufferAttachmentHandle();
 
-	virtual bool submitInput(gl::FrameHandle &, Rc<gl::AttachmentInputData> &&) override;
+	virtual void submitInput(gl::FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
 
 	virtual bool isDescriptorDirty(const gl::RenderPassHandle &, const gl::PipelineDescriptor &,
 			uint32_t, bool isExternal) const override;
@@ -76,8 +84,6 @@ public:
 
 	const Rc<DeviceBuffer> &getVertexes() const { return _vertexes; }
 	const Rc<DeviceBuffer> &getIndexes() const { return _indexes; }
-
-	virtual void writeVertexes(gl::FrameHandle &fhandle);
 
 protected:
 	virtual bool loadVertexes(gl::FrameHandle &, const Rc<gl::VertexData> &);
@@ -98,4 +104,4 @@ protected:
 
 }
 
-#endif /* XENOLITH_GL_VK_RENDERER_XLVKBUFFERATTACHMENT_H_ */
+#endif /* XENOLITH_GL_VK_RENDERER_XLVKATTACHMENT_H_ */

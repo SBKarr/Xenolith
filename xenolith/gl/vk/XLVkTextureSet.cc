@@ -114,9 +114,9 @@ void TextureSetLayout::initDefault(Device &dev, gl::Loop &loop) {
 		auto fence = device->acquireFence(0);
 		auto pool = device->acquireCommandPool(QueueOperations::Graphics);
 
-		fence->addRelease([dev = device, pool] {
-			dev->releaseCommandPool(Rc<CommandPool>(pool));
-		});
+		fence->addRelease([dev = device, pool, loop = Rc<gl::Loop>(&loop)] (bool) {
+			dev->releaseCommandPool(*loop, Rc<CommandPool>(pool));
+		}, this, "TextureSetLayout::initDefault releaseCommandPool");
 
 		loop.getQueue()->perform(Rc<thread::Task>::create([this, loop = Rc<gl::Loop>(&loop), pool, queue, fence] (const thread::Task &) -> bool {
 			auto device = (Device *)loop->getDevice().get();
@@ -206,10 +206,10 @@ void TextureSetLayout::compileImage(Device &dev, gl::Loop &loop, const Rc<gl::Dy
 				auto fence = device->acquireFence(0);
 				auto pool = device->acquireCommandPool(QueueOperations::Transfer);
 
-				fence->addRelease([dev = device, pool, transferBuffer] {
-					dev->releaseCommandPool(Rc<CommandPool>(pool));
+				fence->addRelease([dev = device, pool, transferBuffer, loop = &loop] (bool) {
+					dev->releaseCommandPool(*loop, Rc<CommandPool>(pool));
 					transferBuffer->dropPendingBarrier(); // hold reference while commands is active
-				});
+				}, this, "TextureSetLayout::compileImage transferBuffer->dropPendingBarrier");
 
 				loop.getQueue()->perform(Rc<thread::Task>::create([this, loop = &loop, pool, queue, fence, transferBuffer, resultImage] (const thread::Task &) -> bool {
 					auto device = (Device *)loop->getDevice().get();

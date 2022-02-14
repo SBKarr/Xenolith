@@ -93,8 +93,8 @@ public:
 		VkMemoryType type;
 		uint64_t min = 2; // in PageSize
 		uint64_t last = 0; // largest used index into free
-		uint64_t max = 0; // Pages to preserve, 0 - do not preserve
-		uint64_t current = 0; // current allocated size in BOUNDARY_SIZE
+		uint64_t max = 20; // Pages to preserve, 0 - do not preserve
+		uint64_t current = 20; // current allocated size in BOUNDARY_SIZE
 		std::array<Vector<MemNode>, MaxIndex> buf;
 
 		bool isDeviceLocal() const { return (type.propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0; }
@@ -126,8 +126,6 @@ public:
 	const Vector<MemHeap> &getMemHeaps() const { return _memHeaps; }
 	Device *getDevice() const { return _device; }
 
-	// mem::Allocator *getHeap(uint32_t typeFilter);
-
 	bool hasBudgetFeature() const { return _hasBudget; }
 	bool hasMemReq2Feature() const { return _hasMemReq2; }
 	bool hasDedicatedFeature() const { return _hasDedicated; }
@@ -152,11 +150,6 @@ protected:
 
 	MemNode alloc(MemType *, uint64_t, bool persistent = false);
 	void free(MemType *, SpanView<MemNode>);
-
-	// bool requestTransfer(Rc<Buffer>, void *data, uint32_t size, uint32_t offset);
-
-	// AllocatorHeapBlock allocateBlock(uint32_t, uint32_t);
-	// Vector<Rc<TransferGeneration>> getTransfers();
 
 	Mutex _mutex;
 	VkPhysicalDevice _physicalDevice = VK_NULL_HANDLE;

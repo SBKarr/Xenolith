@@ -34,6 +34,9 @@
 #define XL_FRAME_LOG(...)
 #endif
 
+#define XL_FRAME_PROFILE(fn, tag, max) \
+	do { XL_PROFILE_BEGIN(frame, "gl::FrameHandle", tag, max); fn; XL_PROFILE_END(frame); } while (0);
+
 #include "XLGlDevice.cc"
 #include "XLGlCommandList.cc"
 #include "XLGlLoop.cc"
@@ -44,7 +47,9 @@
 #include "XLGlRenderQueue.cc"
 #include "XLGlMaterial.cc"
 #include "XLGlInstance.cc"
-#include "XLGlFrame.cc"
+#include "XLGlFrameEmitter.cc"
+#include "XLGlFrameHandle.cc"
+#include "XLGlFrameQueue.cc"
 #include "XLGlRenderPass.cc"
 #include "XLGlUtils.cc"
 #include "XLGlSwapchain.cc"

@@ -190,8 +190,15 @@ bool Application::onFinishLaunching() {
 
 	_instance = platform::graphic::createInstance(this);
 
-	if (!_instance || !_instance->hasDevices()) {
+	if (!_instance) {
 		_instance = nullptr;
+		log::text("Application", "Fail to create vulkan instance");
+		return false;
+	}
+
+	if (!_instance->hasDevices()) {
+		_instance = nullptr;
+		log::text("Application", "No devices for presentation found");
 		return false;
 	}
 

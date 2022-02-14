@@ -23,8 +23,8 @@
 #ifndef XENOLITH_GL_VK_XLVKFRAME_H_
 #define XENOLITH_GL_VK_XLVKFRAME_H_
 
+#include "../common/XLGlFrameHandle.h"
 #include "XLVkAllocator.h"
-#include "XLGlFrame.h"
 
 namespace stappler::xenolith::vk {
 
@@ -32,16 +32,11 @@ class FrameHandle : public gl::FrameHandle {
 public:
 	virtual ~FrameHandle() { }
 
-	bool init(gl::Loop &, gl::Swapchain &swapchain, gl::RenderQueue &, uint32_t gen, bool readyForSubmit = false);
-	bool init(gl::Loop &, gl::RenderQueue &, uint32_t gen);
+	bool init(gl::Loop &, Rc<gl::FrameRequest> &&, uint64_t gen);
 
 	const Rc<DeviceMemoryPool> &getMemPool() const { return _memPool; }
 
-	Rc<SwapchainSync> acquireSwapchainSync();
-	void invalidateSwapchain();
-
 protected:
-	Rc<SwapchainSync> _swapchainSync;
 	Rc<DeviceMemoryPool> _memPool;
 };
 

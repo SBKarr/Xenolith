@@ -46,6 +46,29 @@ class CommandList;
 class Material;
 class MaterialAttachment;
 class DynamicImage;
+struct ImageAttachmentObject;
+
+class FrameEmitter;
+class FrameHandle;
+class FrameQueue;
+class FrameRequest;
+
+struct RenderPassData;
+
+class Attachment;
+class AttachmentDescriptor;
+class AttachmentRef;
+
+class BufferAttachment;
+class BufferAttachmentDescriptor;
+class BufferAttachmentRef;
+
+class ImageAttachment;
+class ImageAttachmentDescriptor;
+class ImageAttachmentRef;
+
+class AttachmentHandle;
+class RenderPassHandle;
 
 using MaterialId = uint32_t;
 
@@ -309,6 +332,7 @@ struct ImageViewInfo {
 		define(std::forward<Args>(args)...);
 	}
 
+	void setup(const ImageInfo &value);
 	void setup(ImageViewType value) { type = value; }
 	void setup(ImageFormat value) { format = value; }
 	void setup(ArrayLayers value) { layerCount = value; }
@@ -317,6 +341,7 @@ struct ImageViewInfo {
 	void setup(ComponentMappingG value) { g = value.get(); }
 	void setup(ComponentMappingB value) { b = value.get(); }
 	void setup(ComponentMappingA value) { a = value.get(); }
+	void setup(ColorMode value);
 
 	template <typename T>
 	void define(T && t) {
@@ -404,6 +429,10 @@ StringView getImageFormatName(ImageFormat fmt);
 StringView getImageTilingName(ImageTiling type);
 StringView getComponentMappingName(ComponentMapping);
 StringView getDescriptorTypeName(DescriptorType);
+StringView getPresentModeName(PresentMode);
+StringView getColorSpaceName(ColorSpace);
+String getCompositeAlphaFlagsDescription(CompositeAlphaFlags);
+String getSurfaceTransformFlagsDescription(SurfaceTransformFlags);
 String getImageUsageDescription(ImageUsage fmt);
 String getProgramStageDescription(ProgramStage fmt);
 size_t getFormatBlockSize(ImageFormat format);

@@ -26,37 +26,13 @@
 
 namespace stappler::xenolith::vk {
 
-bool FrameHandle::init(gl::Loop &loop, gl::Swapchain &swapchain, gl::RenderQueue &queue, uint32_t gen, bool readyForSubmit) {
-	if (!gl::FrameHandle::init(loop, swapchain, queue, gen, readyForSubmit)) {
+bool FrameHandle::init(gl::Loop &loop, Rc<gl::FrameRequest> &&req, uint64_t gen) {
+	if (!gl::FrameHandle::init(loop, move(req), gen)) {
 		return false;
 	}
 
-	_memPool = Rc<DeviceMemoryPool>::create(((Device *)_device)->getAllocator(), true);
+	_memPool = Rc<DeviceMemoryPool>::create(((Device *)_device)->getAllocator(), _request->isPersistentMapping());
 	return true;
-}
-
-bool FrameHandle::init(gl::Loop &loop, gl::RenderQueue &queue, uint32_t gen) {
-	if (!gl::FrameHandle::init(loop, queue, gen)) {
-		return false;
-	}
-
-	_memPool = Rc<DeviceMemoryPool>::create(((Device *)_device)->getAllocator(), true);
-	return true;
-}
-
-Rc<SwapchainSync> FrameHandle::acquireSwapchainSync() {
-	if (!_swapchainSync) {
-		_swapchainSync = ((Swapchain *)_swapchain)->acquireSwapchainSync(*((Device *)_device), _order);
-	}
-	return _swapchainSync;
-}
-
-void FrameHandle::invalidateSwapchain() {
-	if (_swapchainSync) {
-		_swapchainSync->lock();
-		_swapchainSync->setSwapchainValid(false);
-		_swapchainSync->unlock();
-	}
 }
 
 }

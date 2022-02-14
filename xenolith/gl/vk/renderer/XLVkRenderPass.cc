@@ -21,12 +21,12 @@
  **/
 
 #include "XLVkRenderPass.h"
+
+#include "XLGlFrameHandle.h"
 #include "XLVkRenderPassImpl.h"
 #include "XLVkImageAttachment.h"
 #include "XLVkDevice.h"
-#include "XLGlFrame.h"
 #include "XLGlLoop.h"
-#include <forward_list>
 
 namespace stappler::xenolith::vk {
 
@@ -53,8 +53,8 @@ bool RenderPass::init(StringView name, gl::RenderPassType type, gl::RenderOrderi
 
 void RenderPass::invalidate() { }
 
-Rc<gl::RenderPassHandle> RenderPass::makeFrameHandle(gl::RenderPassData *data, const gl::FrameHandle &handle) {
-	return Rc<RenderPassHandle>::create(*this, data, handle);
+Rc<gl::RenderPassHandle> RenderPass::makeFrameHandle(const gl::FrameQueue &handle) {
+	return Rc<RenderPassHandle>::create(*this, handle);
 }
 
 RenderPassHandle::~RenderPassHandle() {
@@ -63,7 +63,7 @@ RenderPassHandle::~RenderPassHandle() {
 
 void RenderPassHandle::invalidate() {
 	if (_pool) {
-		_device->releaseCommandPool(move(_pool));
+		_device->releaseCommandPoolUnsafe(move(_pool));
 		_pool = nullptr;
 	}
 
@@ -84,56 +84,42 @@ void RenderPassHandle::invalidate() {
 	_sync.signalAttachment.clear();
 }
 
-bool RenderPassHandle::prepare(gl::FrameHandle &frame) {
-	_device = (Device *)frame.getDevice();
-	_swapchain = (Swapchain *)frame.getSwapchain();
+bool RenderPassHandle::prepare(gl::FrameQueue &q, Function<void(bool)> &&cb) {
+	_onPrepared = move(cb);
+	_device = (Device *)q.getFrame().getDevice();
 	_pool = _device->acquireCommandPool(getQueueOps());
 	if (!_pool) {
 		invalidate();
 		return false;
 	}
 
-	if (_data->isPresentable) {
-		for (auto &it : _attachments) {
-			if (it.first->getType() == gl::AttachmentType::SwapchainImage) {
-				if (auto d = it.second.cast<SwapchainAttachmentHandle>()) {
-					_presentAttachment = d;
-				}
-			}
-		}
-	}
-
 	_sync = makeSyncInfo();
-	for (auto &it : _sync.swapchainSync) {
-		if (it->getImageIndex() == maxOf<uint32_t>()) {
-			return false;
-		}
-	}
 
 	// If updateAfterBind feature supported for all renderpass bindings
 	// - we can use separate thread to update them
 	// (ordering of bind|update is not defined in this case)
 
 	if (_data->hasUpdateAfterBind) {
-		frame.performInQueue([this] (gl::FrameHandle &frame) {
-			return doPrepareDescriptors(frame, true);
+		q.getFrame().performInQueue([this] (gl::FrameHandle &frame) {
+			return ((RenderPassImpl *)_data->impl.get())->writeDescriptors(*this, true);
 		}, [this] (gl::FrameHandle &frame, bool success) {
-			if (success) {
-				_descriptorsReady = true;
-				if (_commandsReady && _descriptorsReady) {
-					frame.setRenderPassPrepared(this);
-				}
-			} else {
+			if (!success) {
+				_valid = false;
 				log::vtext("VK-Error", "Fail to doPrepareDescriptors");
-				frame.invalidate();
+			}
+
+			_descriptorsReady = true;
+			if (_commandsReady && _descriptorsReady) {
+				_onPrepared(_valid);
+				_onPrepared = nullptr;
 			}
 		}, this, "RenderPass::doPrepareDescriptors");
 	} else {
 		_descriptorsReady = true;
 	}
 
-	frame.performInQueue([this] (gl::FrameHandle &frame) {
-		if (!doPrepareDescriptors(frame, false)) {
+	q.getFrame().performInQueue([this] (gl::FrameHandle &frame) {
+		if (!((RenderPassImpl *)_data->impl.get())->writeDescriptors(*this, false)) {
 			return false;
 		}
 
@@ -143,88 +129,60 @@ bool RenderPassHandle::prepare(gl::FrameHandle &frame) {
 			return true;
 		}
 		return false;
-	}, [this] (gl::FrameHandle &frame, bool success) {
-		if (success) {
-			_commandsReady = true;
-			if (_commandsReady && _descriptorsReady) {
-				frame.setRenderPassPrepared(this);
-			}
-		} else {
+	}, [this, cb] (gl::FrameHandle &frame, bool success) {
+		if (!success) {
 			log::vtext("VK-Error", "Fail to doPrepareCommands");
-			frame.invalidate();
+			_valid = false;
+		}
+
+		_commandsReady = true;
+		if (_commandsReady && _descriptorsReady) {
+			_onPrepared(_valid);
+			_onPrepared = nullptr;
 		}
 	}, this, "RenderPass::doPrepareCommands");
 	return false;
 }
 
-void RenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl::RenderPassHandle> &)> &&func) {
-	Rc<gl::FrameHandle> f = &frame; // capture frame ref
+void RenderPassHandle::submit(gl::FrameQueue &q, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) {
+	Rc<gl::FrameHandle> f = &q.getFrame(); // capture frame ref
 
-	_fence = _device->acquireFence(frame.getOrder());
-	_fence->addRelease([dev = _device, pool = move(_pool)] {
-		dev->releaseCommandPool(Rc<CommandPool>(pool));
-	});
-	_fence->addRelease([func = move(func), pass = Rc<gl::RenderPassHandle>(this)] {
-		func(pass);
-	});
+	_fence = _device->acquireFence(q.getFrame().getOrder());
+	_fence->addRelease([dev = _device, pool = move(_pool), loop = q.getLoop()] (bool success) {
+		dev->releaseCommandPool(*loop, Rc<CommandPool>(pool));
+	}, nullptr, "RenderPassHandle::submit dev->releaseCommandPool");
+	_fence->addRelease([func = move(onComplete)] (bool success) {
+		func(success);
+	}, nullptr, "RenderPassHandle::submit onComplete");
 
 	_pool = nullptr;
-	for (auto &it : _sync.swapchainSync) {
-		_fence->addRelease([dev = _swapchain, sync = it] {
-			dev->releaseSwapchainSync(Rc<SwapchainSync>(sync));
-		});
-	}
 
 	auto ops = getQueueOps();
 
-	_device->acquireQueue(ops, frame, [this] (gl::FrameHandle &frame, const Rc<DeviceQueue> &queue) {
+	_device->acquireQueue(ops, *f.get(), [this, onSubmited = move(onSubmited)]  (gl::FrameHandle &frame, const Rc<DeviceQueue> &queue) mutable {
 		_queue = queue;
 
 		frame.performInQueue([this] (gl::FrameHandle &frame) {
-			for (auto &it : _sync.swapchainSync) {
-				it->lock();
-				if (!it->isSwapchainValid()) {
-					_isSyncValid = false;
-				}
-			}
-
-			if (!_isSyncValid || !doSubmit(frame)) {
-				for (auto &it : _sync.swapchainSync) {
-					it->unlock();
-				}
+			if (!doSubmit()) {
 				return false;
 			}
-
-			if (_presentAttachment) {
-				if ((_queue->getOps() & QueueOperations::Present) != QueueOperations::None) {
-					present(frame);
-				} else {
-					// TODO - present on another queue
-				}
-			}
-
-			for (auto &it : _sync.swapchainSync) {
-				it->unlock();
-			}
 			return true;
-		}, [this] (gl::FrameHandle &frame, bool success) {
+		}, [this, onSubmited = move(onSubmited)] (gl::FrameHandle &frame, bool success) {
 			if (_queue) {
 				_device->releaseQueue(move(_queue));
 				_queue = nullptr;
 			}
 			if (success) {
+				onSubmited(true);
 				_device->scheduleFence(*frame.getLoop(), move(_fence));
 				_fence = nullptr;
-				frame.setRenderPassSubmitted(this);
 				invalidate();
 			} else {
-				if (_isSyncValid) {
-					log::vtext("VK-Error", "Fail to vkQueueSubmit");
-				}
+				log::vtext("VK-Error", "Fail to vkQueueSubmit");
 				_device->releaseFence(move(_fence));
 				_fence = nullptr;
+				onSubmited(false);
 				invalidate();
-				frame.invalidate();
 			}
 		}, this, "RenderPass::submit");
 	}, [this] (gl::FrameHandle &frame) {
@@ -232,199 +190,23 @@ void RenderPassHandle::submit(gl::FrameHandle &frame, Function<void(const Rc<gl:
 	}, this);
 }
 
-void RenderPassHandle::finalize(gl::FrameHandle &, bool success) {
-	if (!_commandsReady && !success && _swapchain) {
+void RenderPassHandle::finalize(gl::FrameQueue &, bool success) {
+	/*if (!_commandsReady && !success && _swapchain) {
 		for (auto &it : _sync.swapchainSync) {
 			_swapchain->releaseSwapchainSync(Rc<SwapchainSync>(it));
 		}
-	}
+	}*/
 }
 
 QueueOperations RenderPassHandle::getQueueOps() const {
 	return ((RenderPass *)_renderPass.get())->getQueueOps();
 }
 
-bool RenderPassHandle::doPrepareDescriptors(gl::FrameHandle &frame, bool async) {
-	auto table = _device->getTable();
-	auto pass = (RenderPassImpl *)_data->impl.get();
-
-	std::forward_list<Vector<VkDescriptorImageInfo>> images;
-	std::forward_list<Vector<VkDescriptorBufferInfo>> buffers;
-	std::forward_list<Vector<VkBufferView>> views;
-
-	Vector<VkWriteDescriptorSet> writes;
-
-	auto writeDescriptor = [&] (VkDescriptorSet set, const gl::PipelineDescriptor &desc, uint32_t currentDescriptor, bool external) {
-		auto a = getAttachmentHandle(desc.attachment);
-		if (!a) {
-			return false;
-		}
-
-		Vector<VkDescriptorImageInfo> *localImages = nullptr;
-		Vector<VkDescriptorBufferInfo> *localBuffers = nullptr;
-		Vector<VkBufferView> *localViews = nullptr;
-
-		VkWriteDescriptorSet writeData;
-		writeData.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writeData.pNext = nullptr;
-		writeData.dstSet = set;
-		writeData.dstBinding = currentDescriptor;
-		writeData.dstArrayElement = 0;
-		writeData.descriptorCount = 0;
-		writeData.descriptorType = VkDescriptorType(desc.type);
-		writeData.pImageInfo = VK_NULL_HANDLE;
-		writeData.pBufferInfo = VK_NULL_HANDLE;
-		writeData.pTexelBufferView = VK_NULL_HANDLE;
-
-		auto c = a->getDescriptorArraySize(*this, desc, external);
-		for (uint32_t i = 0; i < c; ++ i) {
-			if (a->isDescriptorDirty(*this, desc, i, external)) {
-				switch (desc.type) {
-				case gl::DescriptorType::Sampler:
-				case gl::DescriptorType::CombinedImageSampler:
-				case gl::DescriptorType::SampledImage:
-				case gl::DescriptorType::StorageImage:
-				case gl::DescriptorType::InputAttachment:
-					if (!localImages) {
-						localImages = &images.emplace_front(Vector<VkDescriptorImageInfo>());
-					}
-					if (localImages) {
-						auto &dst = localImages->emplace_back(VkDescriptorImageInfo());
-						auto h = (ImageAttachmentHandle *)a;
-						if (!h->writeDescriptor(*this, desc, i, external, dst)) {
-							return false;
-						}
-					}
-					break;
-				case gl::DescriptorType::StorageTexelBuffer:
-				case gl::DescriptorType::UniformTexelBuffer:
-					if (!localViews) {
-						localViews = &views.emplace_front(Vector<VkBufferView>());
-					}
-					if (localViews) {
-						auto h = (TexelAttachmentHandle *)a;
-						if (auto v = h->getDescriptor(*this, desc, i, external)) {
-							localViews->emplace_back(v);
-						} else {
-							return false;
-						}
-					}
-					break;
-				case gl::DescriptorType::UniformBuffer:
-				case gl::DescriptorType::StorageBuffer:
-				case gl::DescriptorType::UniformBufferDynamic:
-				case gl::DescriptorType::StorageBufferDynamic:
-					if (!localBuffers) {
-						localBuffers = &buffers.emplace_front(Vector<VkDescriptorBufferInfo>());
-					}
-					if (localBuffers) {
-						auto &dst = localBuffers->emplace_back(VkDescriptorBufferInfo());
-						auto h = (BufferAttachmentHandle *)a;
-						if (!h->writeDescriptor(*this, desc, i, external, dst)) {
-							return false;
-						}
-					}
-					break;
-				case gl::DescriptorType::Unknown:
-					break;
-				}
-				++ writeData.descriptorCount;
-			} else {
-				if (writeData.descriptorCount > 0) {
-					if (localImages) {
-						writeData.pImageInfo = localImages->data();
-					}
-					if (localBuffers) {
-						writeData.pBufferInfo = localBuffers->data();
-					}
-					if (localViews) {
-						writeData.pTexelBufferView = localViews->data();
-					}
-
-					writes.emplace_back(move(writeData));
-
-					writeData.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-					writeData.pNext = nullptr;
-					writeData.dstSet = set;
-					writeData.dstBinding = currentDescriptor;
-					writeData.descriptorCount = 0;
-					writeData.descriptorType = VkDescriptorType(desc.type);
-					writeData.pImageInfo = VK_NULL_HANDLE;
-					writeData.pBufferInfo = VK_NULL_HANDLE;
-					writeData.pTexelBufferView = VK_NULL_HANDLE;
-
-					localImages = nullptr;
-					localBuffers = nullptr;
-					localViews = nullptr;
-				}
-
-				writeData.dstArrayElement = i + 1;
-			}
-		}
-
-		if (writeData.descriptorCount > 0) {
-			if (localImages) {
-				writeData.pImageInfo = localImages->data();
-			}
-			if (localBuffers) {
-				writeData.pBufferInfo = localBuffers->data();
-			}
-			if (localViews) {
-				writeData.pTexelBufferView = localViews->data();
-			}
-
-			writes.emplace_back(move(writeData));
-		}
-		return true;
-	};
-
-	uint32_t currentSet = 0;
-	if (!_data->queueDescriptors.empty()) {
-		auto set = pass->getDescriptorSet(currentSet);
-		uint32_t currentDescriptor = 0;
-		for (auto &it : _data->queueDescriptors) {
-			if (it->updateAfterBind != async) {
-				continue;
-			}
-			if (!writeDescriptor(set, *it, currentDescriptor, false)) {
-				return false;
-			}
-			++ currentDescriptor;
-		}
-		++ currentSet;
-	}
-
-	if (!_data->extraDescriptors.empty()) {
-		auto set = pass->getDescriptorSet(currentSet);
-		uint32_t currentDescriptor = 0;
-		for (auto &it : _data->extraDescriptors) {
-			if (it.updateAfterBind != async) {
-				continue;
-			}
-			if (!writeDescriptor(set, it, currentDescriptor, true)) {
-				return false;
-			}
-			++ currentDescriptor;
-		}
-		++ currentSet;
-	}
-
-	if (writes.empty()) {
-		return true;
-	}
-
-	table->vkUpdateDescriptorSets(_device->getDevice(), writes.size(), writes.data(), 0, nullptr);
-	return true;
-}
-
-Vector<VkCommandBuffer> RenderPassHandle::doPrepareCommands(gl::FrameHandle &frame) {
+Vector<VkCommandBuffer> RenderPassHandle::doPrepareCommands(gl::FrameHandle &) {
 	auto table = _device->getTable();
 	auto buf = _pool->allocBuffer(*_device);
 
-	auto index = (*_sync.swapchainSync.begin())->getImageIndex();
-
-	auto targetFb = _data->framebuffers[index].cast<Framebuffer>();
-	auto currentExtent = targetFb->getExtent();
+	auto currentExtent = getFramebuffer()->getExtent();
 
 	VkCommandBufferBeginInfo beginInfo { };
 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -435,35 +217,26 @@ Vector<VkCommandBuffer> RenderPassHandle::doPrepareCommands(gl::FrameHandle &fra
 		return Vector<VkCommandBuffer>();
 	}
 
-	VkRenderPassBeginInfo renderPassInfo { };
-	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	renderPassInfo.renderPass = _data->impl.cast<RenderPassImpl>()->getRenderPass();
-	renderPassInfo.framebuffer = targetFb->getFramebuffer();
-	renderPassInfo.renderArea.offset = { 0, 0 };
-	renderPassInfo.renderArea.extent = VkExtent2D{currentExtent.width, currentExtent.height};
-	VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
-	renderPassInfo.clearValueCount = 1;
-	renderPassInfo.pClearValues = &clearColor;
-	table->vkCmdBeginRenderPass(buf, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+	_data->impl.cast<RenderPassImpl>()->perform(*this, buf, [&] {
+		VkViewport viewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
+		table->vkCmdSetViewport(buf, 0, 1, &viewport);
 
-	VkViewport viewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
-	table->vkCmdSetViewport(buf, 0, 1, &viewport);
+		VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
+		table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
 
-	VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
-	table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
+		auto pipeline = _data->subpasses[0].pipelines.get(StringView("Default"));
 
-	auto pipeline = _data->subpasses[0].pipelines.get(StringView("Default"));
+		table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, ((Pipeline *)pipeline->pipeline.get())->getPipeline());
+		table->vkCmdDraw(buf, 3, 1, 0, 0);
+	});
 
-	table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, ((Pipeline *)pipeline->pipeline.get())->getPipeline());
-	table->vkCmdDraw(buf, 3, 1, 0, 0);
-	table->vkCmdEndRenderPass(buf);
 	if (table->vkEndCommandBuffer(buf) == VK_SUCCESS) {
 		return Vector<VkCommandBuffer>{buf};
 	}
 	return Vector<VkCommandBuffer>();
 }
 
-bool RenderPassHandle::doSubmit(gl::FrameHandle &) {
+bool RenderPassHandle::doSubmit() {
 	auto table = _device->getTable();
 	VkSubmitInfo submitInfo{};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -479,71 +252,15 @@ bool RenderPassHandle::doSubmit(gl::FrameHandle &) {
 	if (table->vkQueueSubmit(_queue->getQueue(), 1, &submitInfo, _fence->getFence()) == VK_SUCCESS) {
 		// mark semaphores
 
-		for (auto &it : _sync.waitSwapchainSync) {
+		/*for (auto &it : _sync.waitSwapchainSync) {
 			it->getImageReady()->setSignaled(false);
 		}
 		for (auto &it : _sync.signalSwapchainSync) {
 			it->getRenderFinished()->setSignaled(true);
-		}
+		}*/
 
 		return true;
 	}
-	return false;
-}
-
-bool RenderPassHandle::present(gl::FrameHandle &frame) {
-	auto table = _device->getTable();
-
-	Vector<VkSemaphore> presentSem;
-
-	for (auto &it : _sync.signalSwapchainSync) {
-		presentSem.emplace_back(it->getRenderFinished()->getSemaphore());
-	}
-
-	VkPresentInfoKHR presentInfo{};
-	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-
-	presentInfo.waitSemaphoreCount = presentSem.size();
-	presentInfo.pWaitSemaphores = presentSem.data();
-
-	Vector<uint32_t> indexes;
-	for (auto &it : _sync.swapchainSync) {
-		auto idx = it->getImageIndex();
-		if (idx != maxOf<uint32_t>()) {
-			indexes.emplace_back(idx);
-		} else {
-			return false;
-		}
-	}
-
-	VkSwapchainKHR swapChains[] = {_presentAttachment->getSwapchain()->getSwapchain()};
-	presentInfo.swapchainCount = 1;
-	presentInfo.pSwapchains = swapChains;
-	presentInfo.pImageIndices = indexes.data();
-	presentInfo.pResults = nullptr; // Optional
-
-	// auto t = platform::device::_clock();
-	auto result = table->vkQueuePresentKHR(_queue->getQueue(), &presentInfo);
-	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-		frame.performOnGlThread([this] (gl::FrameHandle &frame) {
-			frame.getLoop()->pushContextEvent(gl::Loop::EventName::SwapChainDeprecated, frame.getSwapchain());
-			frame.invalidate();
-		});
-	} else if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
-		for (auto &it : _sync.signalSwapchainSync) {
-			it->getRenderFinished()->setSignaled(false);
-		}
-		for (auto &it : _sync.swapchainSync) {
-			it->clearImageIndex();
-		}
-		return true;
-	} else {
-		log::vtext("VK-Error", "Fail to vkQueuePresentKHR: ", result);
-		frame.performOnGlThread([this] (gl::FrameHandle &frame) {
-			frame.invalidate();
-		});
-	}
-
 	return false;
 }
 
@@ -563,7 +280,7 @@ RenderPassHandle::MaterialBuffers RenderPassHandle::updateMaterials(gl::FrameHan
 
 			target->set = Rc<gl::TextureSet>(layout->acquireSet(*dev));
 			target->set->write(*target);
-		}, this);
+		}, this, "RenderPassHandle::updateMaterials");
 	}
 
 	auto &bufferInfo = data->getInfo();
@@ -594,32 +311,6 @@ RenderPassHandle::MaterialBuffers RenderPassHandle::updateMaterials(gl::FrameHan
 
 RenderPassHandle::Sync RenderPassHandle::makeSyncInfo() {
 	Sync sync;
-	for (auto &it : _attachments) {
-		if (it.first->getType() == gl::AttachmentType::SwapchainImage) {
-			if (auto d = it.second.cast<SwapchainAttachmentHandle>()) {
-				auto firstPass = it.first->getFirstRenderPass();
-				auto lastPass = it.first->getLastRenderPass();
-
-				auto dSync = (lastPass == _data) ? d->acquireSync() : d->getSync();
-
-				if (firstPass == _data) {
-					// swapchain to wait before submit
-					sync.waitAttachment.emplace_back(it.second);
-					sync.waitSem.emplace_back(dSync->getImageReady()->getSemaphore());
-					sync.waitStages.emplace_back(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-					sync.swapchainSync.emplace(sync.waitSwapchainSync.emplace_back(dSync));
-				}
-
-				if (lastPass == _data) {
-					// swapchain to signal after submit
-					sync.signalSem.emplace_back(dSync->getRenderFinished()->getUnsignalled());
-					sync.signalAttachment.emplace_back(it.second);
-					sync.swapchainSync.emplace(sync.signalSwapchainSync.emplace_back(dSync));
-				}
-			}
-		}
-	}
-
 	return sync;
 }
 
@@ -630,30 +321,33 @@ bool VertexRenderPass::init(StringView name, gl::RenderOrdering ordering, size_t
 	return RenderPass::init(name, gl::RenderPassType::Graphics, ordering, subpassCount);
 }
 
-Rc<gl::RenderPassHandle> VertexRenderPass::makeFrameHandle(gl::RenderPassData *data, const gl::FrameHandle &handle) {
-	return Rc<VertexRenderPassHandle>::create(*this, data, handle);
+Rc<gl::RenderPassHandle> VertexRenderPass::makeFrameHandle(const gl::FrameQueue &handle) {
+	return Rc<VertexRenderPassHandle>::create(*this, handle);
 }
 
-VertexRenderPassHandle::~VertexRenderPassHandle() { }
-
-void VertexRenderPassHandle::addRequiredAttachment(const gl::Attachment *a, const Rc<gl::AttachmentHandle> &h) {
-	RenderPassHandle::addRequiredAttachment(a, h);
-	if (h->isInput()) {
-		if (auto b = dynamic_cast<VertexBufferAttachmentHandle *>(h.get())) {
-			_mainBuffer = b;
+void VertexRenderPass::prepare(gl::Device &dev) {
+	RenderPass::prepare(dev);
+	for (auto &it : _data->descriptors) {
+		if (auto a = dynamic_cast<VertexBufferAttachment *>(it->getAttachment())) {
+			_vertexes = a;
 		}
 	}
 }
 
-Vector<VkCommandBuffer> VertexRenderPassHandle::doPrepareCommands(gl::FrameHandle &handle) {
+VertexRenderPassHandle::~VertexRenderPassHandle() { }
+
+bool VertexRenderPassHandle::prepare(gl::FrameQueue &queue, Function<void(bool)> &&cb) {
+	if (auto vertexes = queue.getAttachment(((VertexRenderPass *)_renderPass.get())->getVertexes())) {
+		_mainBuffer = (VertexBufferAttachmentHandle *)vertexes->handle.get();
+	}
+	return prepare(queue, move(cb));
+}
+
+Vector<VkCommandBuffer> VertexRenderPassHandle::doPrepareCommands(gl::FrameHandle &) {
 	auto table = _device->getTable();
 	auto buf = _pool->allocBuffer(*_device);
 	auto pass = (RenderPassImpl *)_data->impl.get();
-
-	auto index = (*_sync.swapchainSync.begin())->getImageIndex();
-
-	auto targetFb = _data->framebuffers[index].cast<Framebuffer>();
-	auto currentExtent = targetFb->getExtent();
+	auto currentExtent = getFramebuffer()->getExtent();
 
 	VkCommandBufferBeginInfo beginInfo { };
 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -664,10 +358,12 @@ Vector<VkCommandBuffer> VertexRenderPassHandle::doPrepareCommands(gl::FrameHandl
 		return Vector<VkCommandBuffer>();
 	}
 
+	auto fb = (Framebuffer *)getFramebuffer().get();
+
 	VkRenderPassBeginInfo renderPassInfo { };
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 	renderPassInfo.renderPass = _data->impl.cast<RenderPassImpl>()->getRenderPass();
-	renderPassInfo.framebuffer = targetFb->getFramebuffer();
+	renderPassInfo.framebuffer = fb->getFramebuffer();
 	renderPassInfo.renderArea.offset = { 0, 0 };
 	renderPassInfo.renderArea.extent = VkExtent2D{currentExtent.width, currentExtent.height};
 	VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -699,9 +395,8 @@ Vector<VkCommandBuffer> VertexRenderPassHandle::doPrepareCommands(gl::FrameHandl
 	return Vector<VkCommandBuffer>();
 }
 
-bool VertexRenderPassHandle::doSubmit(gl::FrameHandle &handle) {
-	_mainBuffer->writeVertexes(handle);
-	return RenderPassHandle::doSubmit(handle);
+bool VertexRenderPassHandle::doSubmit() {
+	return RenderPassHandle::doSubmit();
 }
 
 }

@@ -31,15 +31,15 @@ class MaterialCompilationAttachment : public gl::GenericAttachment {
 public:
 	virtual ~MaterialCompilationAttachment();
 
-	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameHandle &) override;
+	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameQueue &) override;
 };
 
 class MaterialCompilationAttachmentHandle : public gl::AttachmentHandle {
 public:
 	virtual ~MaterialCompilationAttachmentHandle();
 
-	virtual bool setup(gl::FrameHandle &handle) override;
-	virtual bool submitInput(gl::FrameHandle &, Rc<gl::AttachmentInputData> &&) override;
+	virtual bool setup(gl::FrameQueue &handle, Function<void(bool)> &&) override;
+	virtual void submitInput(gl::FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
 
 	virtual const Rc<gl::MaterialInputData> &getInputData() const { return _inputData; }
 	virtual const Rc<gl::MaterialSet> &getOriginalSet() const { return _originalSet; }
@@ -55,7 +55,7 @@ public:
 
 	virtual bool init(StringView);
 
-	virtual Rc<gl::RenderPassHandle> makeFrameHandle(gl::RenderPassData *, const gl::FrameHandle &) override;
+	virtual Rc<gl::RenderPassHandle> makeFrameHandle(const gl::FrameQueue &) override;
 
 	const MaterialCompilationAttachment *getMaterialAttachment() const {
 		return _materialAttachment;
@@ -71,11 +71,10 @@ class MaterialCompilationRenderPassHandle : public RenderPassHandle {
 public:
 	virtual ~MaterialCompilationRenderPassHandle();
 
-	virtual bool prepare(gl::FrameHandle &frame) override;
-	virtual void finalize(gl::FrameHandle &, bool successful) override;
+	virtual bool prepare(gl::FrameQueue &, Function<void(bool)> &&) override;
+	virtual void finalize(gl::FrameQueue &, bool successful) override;
 
 protected:
-	virtual void addRequiredAttachment(const gl::Attachment *a, const Rc<gl::AttachmentHandle> &h) override;
 	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &) override;
 
 	Rc<gl::MaterialSet> _outputData;
@@ -152,13 +151,14 @@ void MaterialCompiler::appendRequest(const gl::MaterialAttachment *a, Rc<gl::Mat
 	}
 
 	for (auto &m : req->materialsToAddOrUpdate) {
-		auto iit = it->second.materials.find(m->getId());
+		auto materialId = m->getId();
+		auto iit = it->second.materials.find(materialId);
 		if (iit == it->second.materials.end()) {
-			it->second.materials.emplace(m->getId(), move(m));
+			it->second.materials.emplace(materialId, move(m));
 		} else {
 			iit->second = move(m);
 		}
-		auto v = it->second.remove.find(m->getId());
+		auto v = it->second.remove.find(materialId);
 		if (v != it->second.remove.end()) {
 			it->second.remove.erase(v);
 		}
@@ -193,32 +193,34 @@ void MaterialCompiler::clearRequests() {
 	_requests.clear();
 }
 
-void MaterialCompiler::submitInput(gl::FrameHandle &frame, Rc<gl::MaterialInputData> &&input) {
-	frame.submitInput(_attachment, move(input), true);
+Rc<gl::FrameRequest> MaterialCompiler::makeRequest(Rc<gl::MaterialInputData> &&input) {
+	auto req = Rc<gl::FrameRequest>::create(this);
+	req->addInput(_attachment, move(input));
+	return req;
 }
 
 MaterialCompilationAttachment::~MaterialCompilationAttachment() { }
 
-Rc<gl::AttachmentHandle> MaterialCompilationAttachment::makeFrameHandle(const gl::FrameHandle &handle) {
+Rc<gl::AttachmentHandle> MaterialCompilationAttachment::makeFrameHandle(const gl::FrameQueue &handle) {
 	return Rc<MaterialCompilationAttachmentHandle>::create(this, handle);
 }
 
 MaterialCompilationAttachmentHandle::~MaterialCompilationAttachmentHandle() { }
 
-bool MaterialCompilationAttachmentHandle::setup(gl::FrameHandle &handle) {
+bool MaterialCompilationAttachmentHandle::setup(gl::FrameQueue &handle, Function<void(bool)> &&cb) {
 	return true;
 }
 
-bool MaterialCompilationAttachmentHandle::submitInput(gl::FrameHandle &handle, Rc<gl::AttachmentInputData> &&data) {
+void MaterialCompilationAttachmentHandle::submitInput(gl::FrameQueue &handle, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
 	if (auto d = data.cast<gl::MaterialInputData>()) {
-		handle.performOnGlThread([this, d = move(d)] (gl::FrameHandle &handle) {
+		handle.getFrame().performOnGlThread([this, d = move(d), cb = move(cb)] (gl::FrameHandle &handle) {
 			_inputData = d;
 			_originalSet = _inputData->attachment->getMaterials();
-			handle.setInputSubmitted(this);
-		}, this);
-		return true;
+			cb(true);
+		}, this, true, "MaterialCompilationAttachmentHandle::submitInput");
+	} else {
+		cb(false);
 	}
-	return false;
 }
 
 MaterialCompilationRenderPass::~MaterialCompilationRenderPass() { }
@@ -231,8 +233,8 @@ bool MaterialCompilationRenderPass::init(StringView name) {
 	return false;
 }
 
-Rc<gl::RenderPassHandle> MaterialCompilationRenderPass::makeFrameHandle(gl::RenderPassData *data, const gl::FrameHandle &handle) {
-	return Rc<MaterialCompilationRenderPassHandle>::create(*this, data, handle);
+Rc<gl::RenderPassHandle> MaterialCompilationRenderPass::makeFrameHandle(const gl::FrameQueue &handle) {
+	return Rc<MaterialCompilationRenderPassHandle>::create(*this, handle);
 }
 
 void MaterialCompilationRenderPass::prepare(gl::Device &) {
@@ -245,24 +247,21 @@ void MaterialCompilationRenderPass::prepare(gl::Device &) {
 
 MaterialCompilationRenderPassHandle::~MaterialCompilationRenderPassHandle() { }
 
+bool MaterialCompilationRenderPassHandle::prepare(gl::FrameQueue &frame, Function<void(bool)> &&cb) {
+	if (auto a = frame.getAttachment(((MaterialCompilationRenderPass *)_renderPass.get())->getMaterialAttachment())) {
+		_materialAttachment = (MaterialCompilationAttachmentHandle *)a->handle.get();
+	}
 
-bool MaterialCompilationRenderPassHandle::prepare(gl::FrameHandle &frame) {
 	auto &originalData = _materialAttachment->getOriginalSet();
 	auto &inputData = _materialAttachment->getInputData();
 	_outputData = inputData->attachment->cloneSet(originalData);
-	return RenderPassHandle::prepare(frame);
+
+	return RenderPassHandle::prepare(frame, move(cb));
 }
 
-void MaterialCompilationRenderPassHandle::finalize(gl::FrameHandle &handle, bool successful) {
+void MaterialCompilationRenderPassHandle::finalize(gl::FrameQueue &handle, bool successful) {
 	RenderPassHandle::finalize(handle, successful);
 	_materialAttachment->getInputData()->attachment->setMaterials(_outputData);
-}
-
-void MaterialCompilationRenderPassHandle::addRequiredAttachment(const gl::Attachment *a, const Rc<gl::AttachmentHandle> &h) {
-	RenderPassHandle::addRequiredAttachment(a, h);
-	if (a == ((MaterialCompilationRenderPass *)_renderPass.get())->getMaterialAttachment()) {
-		_materialAttachment = (MaterialCompilationAttachmentHandle *)h.get();
-	}
 }
 
 Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(gl::FrameHandle &handle) {
@@ -338,7 +337,7 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(g
 			data->setBuffer(move(*tmpBuffer), move(*tmpOrder));
 			delete tmpBuffer;
 			delete tmpOrder;
-		});
+		}, nullptr, true, "MaterialCompilationRenderPassHandle::doPrepareCommands");
 		return Vector<VkCommandBuffer>{buf};
 	}
 	return Vector<VkCommandBuffer>();

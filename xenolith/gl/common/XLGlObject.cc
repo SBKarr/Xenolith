@@ -54,6 +54,22 @@ Object::~Object() {
 	invalidate();
 }
 
+uint64_t Framebuffer::getViewHash(SpanView<Rc<ImageView>> views) {
+	Vector<uint64_t> ids; ids.reserve(views.size());
+	for (auto &it : views) {
+		ids.emplace_back(it->getIndex());
+	}
+	return getViewHash(ids);
+}
+
+uint64_t Framebuffer::getViewHash(SpanView<uint64_t> ids) {
+	return hash::hash64((const char *)ids.data(), ids.size() * sizeof(uint64_t));
+}
+
+uint64_t Framebuffer::getHash() const {
+	return hash::hash64((const char *)_viewIds.data(), _viewIds.size() * sizeof(uint64_t));
+}
+
 static std::atomic<uint64_t> s_ImageViewCurrentIndex = 1;
 
 bool ImageAtlas::init(size_t count) {
@@ -110,6 +126,10 @@ bool ImageView::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr) 
 		return true;
 	}
 	return false;
+}
+
+Extent3 ImageView::getExtent() const {
+	return _image->getInfo().extent;
 }
 
 void TextureSet::write(const MaterialLayout &set) {
