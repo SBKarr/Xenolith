@@ -362,6 +362,8 @@ gl::SurfaceInfo Instance::getSurfaceOptions(VkSurfaceKHR surface, VkPhysicalDevi
 	ret.minImageExtent = Extent2(caps.minImageExtent.width, caps.minImageExtent.height);
 	ret.maxImageExtent = Extent2(caps.maxImageExtent.width, caps.maxImageExtent.height);
 	ret.maxImageArrayLayers = caps.maxImageArrayLayers;
+	ret.supportedTransforms = gl::SurfaceTransformFlags(caps.supportedTransforms);
+	ret.currentTransform = gl::SurfaceTransformFlags(caps.currentTransform);
 	ret.supportedCompositeAlpha = gl::CompositeAlphaFlags(caps.supportedCompositeAlpha);
 	ret.supportedUsageFlags = gl::ImageUsage(caps.supportedUsageFlags);
 	return ret;

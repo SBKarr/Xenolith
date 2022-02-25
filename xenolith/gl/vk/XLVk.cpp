@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include "XLVkBuffer.cc"
 #include "XLVkFramebuffer.cc"
 #include "XLVkSwapchain.cc"
+#include "XLVkSwapchainSync.cc"
 #include "XLVkPipeline.cc"
 #include "XLVkRenderPassImpl.cc"
 #include "XLVkSync.cc"

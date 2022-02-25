@@ -36,6 +36,104 @@ bool DeviceQueue::init(Device &device, VkQueue queue, uint32_t index, QueueOpera
 	return true;
 }
 
+bool DeviceQueue::submit(const gl::FrameSync &sync, Fence &fence, SpanView<VkCommandBuffer> buffers) {
+	Vector<VkSemaphore> waitSem;
+	Vector<VkPipelineStageFlags> waitStages;
+	Vector<VkSemaphore> signalSem;
+
+	for (auto &it : sync.waitAttachments) {
+		auto sem = ((Semaphore *)it.semaphore.get())->getSemaphore();
+
+		if (!it.semaphore->isWaited()) {
+			waitSem.emplace_back(sem);
+			waitStages.emplace_back(VkPipelineStageFlags(it.stages));
+		}
+	}
+
+	for (auto &it : sync.signalAttachments) {
+		auto sem = ((Semaphore *)it.semaphore.get())->getSemaphore();
+
+		signalSem.emplace_back(sem);
+	}
+
+	VkSubmitInfo submitInfo{};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.pNext = nullptr;
+	submitInfo.waitSemaphoreCount = waitSem.size();
+	submitInfo.pWaitSemaphores = waitSem.data();
+	submitInfo.pWaitDstStageMask = waitStages.data();
+	submitInfo.commandBufferCount = buffers.size();
+	submitInfo.pCommandBuffers = buffers.data();
+	submitInfo.signalSemaphoreCount = signalSem.size();
+	submitInfo.pSignalSemaphores = signalSem.data();
+
+	log::vtext("Vk-Queue-Submit", (uintptr_t)_queue);
+
+	VkResult result = VK_ERROR_UNKNOWN;
+	_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+		result = table.vkQueueSubmit(_queue, 1, &submitInfo, fence.getFence());
+	});
+
+	if (result == VK_SUCCESS) {
+		// mark semaphores
+
+		fence.setArmed(*this);
+
+		for (auto &it : sync.waitAttachments) {
+			it.semaphore->setWaited(true);
+		}
+
+		for (auto &it : sync.signalAttachments) {
+			it.semaphore->setSignaled(true);
+		}
+
+		return true;
+	}
+	return false;
+}
+
+bool DeviceQueue::submit(Fence &fence, SpanView<VkCommandBuffer> buffers) {
+	VkSubmitInfo submitInfo{};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.pNext = nullptr;
+	submitInfo.waitSemaphoreCount = 0;
+	submitInfo.pWaitSemaphores = nullptr;
+	submitInfo.pWaitDstStageMask = nullptr;
+	submitInfo.commandBufferCount = buffers.size();
+	submitInfo.pCommandBuffers = buffers.data();
+	submitInfo.signalSemaphoreCount = 0;
+	submitInfo.pSignalSemaphores = nullptr;
+
+	VkResult result = VK_ERROR_UNKNOWN;
+	_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+		result = table.vkQueueSubmit(_queue, 1, &submitInfo, fence.getFence());
+	});
+
+	if (result == VK_SUCCESS) {
+		fence.setArmed(*this);
+		return true;
+	}
+	return false;
+}
+
+void DeviceQueue::waitIdle() {
+	_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+		table.vkQueueWaitIdle(_queue);
+	});
+}
+
+uint32_t DeviceQueue::getActiveFencesCount() {
+	return _nfences.load();
+}
+
+void DeviceQueue::retainFence(const Fence &fence) {
+	++ _nfences;
+}
+
+void DeviceQueue::releaseFence(const Fence &fence) {
+	-- _nfences;
+}
+
 CommandPool::~CommandPool() {
 	if (_commandPool) {
 		log::vtext("VK-Error", "CommandPool was not destroyed");

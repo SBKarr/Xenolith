@@ -55,7 +55,7 @@ gl::SwapchainConfig Director::selectConfig(const gl::SurfaceInfo &info) const {
 	gl::SwapchainConfig ret;
 	ret.extent = info.currentExtent;
 	ret.imageCount = std::max(uint32_t(3), info.minImageCount);
-	ret.presentMode = info.presentModes.front();
+	ret.presentMode = gl::PresentMode::Immediate; // info.presentModes.front();
 
 	ret.imageFormat = info.formats.front().first;
 	ret.colorSpace = info.formats.front().second;
@@ -96,7 +96,7 @@ void Director::update() {
 		_nextScene = nullptr;
 	}
 
-	log::vtext("Director", "FrameOffset: ", platform::device::_clock() - _view->getFrameTime());
+	// log::vtext("Director", "FrameOffset: ", platform::device::_clock() - _view->getFrameTime());
 
 	_view->runFrame(_scene->getRenderQueue(), size);
 	_scheduler->update(_time);

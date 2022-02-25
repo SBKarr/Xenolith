@@ -68,7 +68,7 @@ void RenderPassHandle::invalidate() {
 	}
 
 	if (_fence) {
-		_device->releaseFence(move(_fence));
+		_device->releaseFenceUnsafe(move(_fence));
 		_fence = nullptr;
 	}
 
@@ -77,11 +77,7 @@ void RenderPassHandle::invalidate() {
 		_queue = nullptr;
 	}
 
-	_sync.waitAttachment.clear();
-	_sync.waitSem.clear();
-	_sync.waitStages.clear();
-	_sync.signalSem.clear();
-	_sync.signalAttachment.clear();
+	_sync = nullptr;
 }
 
 bool RenderPassHandle::prepare(gl::FrameQueue &q, Function<void(bool)> &&cb) {
@@ -92,8 +88,6 @@ bool RenderPassHandle::prepare(gl::FrameQueue &q, Function<void(bool)> &&cb) {
 		invalidate();
 		return false;
 	}
-
-	_sync = makeSyncInfo();
 
 	// If updateAfterBind feature supported for all renderpass bindings
 	// - we can use separate thread to update them
@@ -144,7 +138,7 @@ bool RenderPassHandle::prepare(gl::FrameQueue &q, Function<void(bool)> &&cb) {
 	return false;
 }
 
-void RenderPassHandle::submit(gl::FrameQueue &q, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) {
+void RenderPassHandle::submit(gl::FrameQueue &q, Rc<gl::FrameSync> &&sync, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) {
 	Rc<gl::FrameHandle> f = &q.getFrame(); // capture frame ref
 
 	_fence = _device->acquireFence(q.getFrame().getOrder());
@@ -156,6 +150,7 @@ void RenderPassHandle::submit(gl::FrameQueue &q, Function<void(bool)> &&onSubmit
 	}, nullptr, "RenderPassHandle::submit onComplete");
 
 	_pool = nullptr;
+	_sync = move(sync);
 
 	auto ops = getQueueOps();
 
@@ -179,13 +174,15 @@ void RenderPassHandle::submit(gl::FrameQueue &q, Function<void(bool)> &&onSubmit
 				invalidate();
 			} else {
 				log::vtext("VK-Error", "Fail to vkQueueSubmit");
-				_device->releaseFence(move(_fence));
+				_device->releaseFence(*frame.getLoop(), move(_fence));
 				_fence = nullptr;
 				onSubmited(false);
 				invalidate();
 			}
+			_sync = nullptr;
 		}, this, "RenderPass::submit");
 	}, [this] (gl::FrameHandle &frame) {
+		_sync = nullptr;
 		invalidate();
 	}, this);
 }
@@ -237,31 +234,7 @@ Vector<VkCommandBuffer> RenderPassHandle::doPrepareCommands(gl::FrameHandle &) {
 }
 
 bool RenderPassHandle::doSubmit() {
-	auto table = _device->getTable();
-	VkSubmitInfo submitInfo{};
-	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submitInfo.pNext = nullptr;
-	submitInfo.waitSemaphoreCount = _sync.waitSem.size();
-	submitInfo.pWaitSemaphores = _sync.waitSem.data();
-	submitInfo.pWaitDstStageMask = _sync.waitStages.data();
-	submitInfo.commandBufferCount = _buffers.size();
-	submitInfo.pCommandBuffers = _buffers.data();
-	submitInfo.signalSemaphoreCount = _sync.signalSem.size();
-	submitInfo.pSignalSemaphores = _sync.signalSem.data();
-
-	if (table->vkQueueSubmit(_queue->getQueue(), 1, &submitInfo, _fence->getFence()) == VK_SUCCESS) {
-		// mark semaphores
-
-		/*for (auto &it : _sync.waitSwapchainSync) {
-			it->getImageReady()->setSignaled(false);
-		}
-		for (auto &it : _sync.signalSwapchainSync) {
-			it->getRenderFinished()->setSignaled(true);
-		}*/
-
-		return true;
-	}
-	return false;
+	return _queue->submit(*_sync, *_fence, _buffers);
 }
 
 RenderPassHandle::MaterialBuffers RenderPassHandle::updateMaterials(gl::FrameHandle &iframe, const Rc<gl::MaterialSet> &data,
@@ -307,11 +280,6 @@ RenderPassHandle::MaterialBuffers RenderPassHandle::updateMaterials(gl::FrameHan
 
 	ret.stagingBuffer->unmap(mapped);
 	return ret;
-}
-
-RenderPassHandle::Sync RenderPassHandle::makeSyncInfo() {
-	Sync sync;
-	return sync;
 }
 
 

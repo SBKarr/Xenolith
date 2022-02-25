@@ -29,7 +29,9 @@ bool DeviceMemory::init(Device &dev, VkDeviceMemory memory) {
 
 	return gl::Object::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
 		auto d = ((Device *)dev);
-		d->getTable()->vkFreeMemory(d->getDevice(), (VkDeviceMemory)ptr, nullptr);
+		d->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+			table.vkFreeMemory(device, (VkDeviceMemory)ptr, nullptr);
+		});
 	}, gl::ObjectType::DeviceMemory, _memory);
 }
 
@@ -383,6 +385,117 @@ bool Sampler::init(Device &dev, const gl::SamplerInfo &info) {
 		}, gl::ObjectType::Sampler, _sampler);
 	}
 	return false;
+}
+
+bool SwapchainHandle::init(Device &dev, const gl::SwapchainConfig &cfg, gl::ImageInfo &&swapchainImageInfo,
+		gl::PresentMode presentMode, VkSurfaceKHR surface, uint32_t families[2], Function<void()> &&cb, SwapchainHandle *old) {
+	VkSwapchainCreateInfoKHR swapChainCreateInfo = { };
+	swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	swapChainCreateInfo.surface = surface;
+	swapChainCreateInfo.minImageCount = cfg.imageCount;
+	swapChainCreateInfo.imageFormat = VkFormat(swapchainImageInfo.format);
+	swapChainCreateInfo.imageColorSpace = VkColorSpaceKHR(cfg.colorSpace);
+	swapChainCreateInfo.imageExtent = VkExtent2D({swapchainImageInfo.extent.width, swapchainImageInfo.extent.height});
+	swapChainCreateInfo.imageArrayLayers = swapchainImageInfo.arrayLayers.get();
+	swapChainCreateInfo.imageUsage = VkImageUsageFlags(swapchainImageInfo.usage);
+
+	if (families[0] != families[1]) {
+		swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+		swapChainCreateInfo.queueFamilyIndexCount = 2;
+		swapChainCreateInfo.pQueueFamilyIndices = families;
+	} else {
+		swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	}
+
+	swapChainCreateInfo.preTransform = VkSurfaceTransformFlagBitsKHR(cfg.transform);
+	swapChainCreateInfo.compositeAlpha = VkCompositeAlphaFlagBitsKHR(cfg.alpha);
+	swapChainCreateInfo.presentMode = getVkPresentMode(presentMode);
+	swapChainCreateInfo.clipped = (cfg.clipped ? VK_TRUE : VK_FALSE);
+
+	if (old) {
+		swapChainCreateInfo.oldSwapchain = old->getSwapchain();
+	} else {
+		swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
+	}
+
+	VkResult result = VK_ERROR_UNKNOWN;
+	dev.makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+		result = table.vkCreateSwapchainKHR(device, &swapChainCreateInfo, nullptr, &_swapchain);
+	});
+	if (result == VK_SUCCESS) {
+		Vector<VkImage> swapchainImages;
+
+		uint32_t imageCount = 0;
+		dev.getTable()->vkGetSwapchainImagesKHR(dev.getDevice(), _swapchain, &imageCount, nullptr);
+		swapchainImages.resize(imageCount);
+		dev.getTable()->vkGetSwapchainImagesKHR(dev.getDevice(), _swapchain, &imageCount, swapchainImages.data());
+
+		_images.reserve(imageCount);
+		for (auto &it : swapchainImages) {
+			_images.emplace_back(Rc<Image>::create(dev, it, swapchainImageInfo));
+		}
+
+		_presentMode = presentMode;
+		_imageInfo = move(swapchainImageInfo);
+		_config = move(cfg);
+		_rebuildCallback = move(cb);
+
+		return gl::Object::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+			auto d = ((Device *)dev);
+			d->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+				table.vkDestroySwapchainKHR(device, (VkSwapchainKHR)ptr, nullptr);
+			});
+		}, gl::ObjectType::Swapchain, _swapchain);
+	}
+	return false;
+}
+
+bool SwapchainHandle::isDeprecated() {
+	std::unique_lock<Mutex> lock(_mutex);
+	return _deprecated;
+}
+
+Rc<Image> SwapchainHandle::getImage(uint32_t i) const {
+	if (i < _images.size()) {
+		return _images[i];
+	}
+	return nullptr;
+}
+
+bool SwapchainHandle::deprecate(bool invalidate) {
+	std::unique_lock<Mutex> lock(_mutex);
+
+	auto tmp = _deprecated;
+	_deprecated = true;
+	if (!invalidate) {
+		if (!tmp && _inUse == 0 && _rebuildCallback) {
+			_rebuildCallback();
+			_rebuildCallback = nullptr;
+		}
+	} else {
+		_rebuildCallback = nullptr;
+	}
+	return !tmp;
+}
+
+bool SwapchainHandle::retainUsage() {
+	std::unique_lock<Mutex> lock(_mutex);
+
+	if (!_deprecated) {
+		++ _inUse;
+		return true;
+	}
+	return false;
+}
+
+void SwapchainHandle::releaseUsage() {
+	std::unique_lock<Mutex> lock(_mutex);
+
+	-- _inUse;
+	if (_inUse == 0 && _deprecated && _rebuildCallback) {
+		_rebuildCallback();
+		_rebuildCallback = nullptr;
+	}
 }
 
 }

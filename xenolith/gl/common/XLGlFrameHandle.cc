@@ -246,6 +246,13 @@ void FrameHandle::onRequiredTaskCompleted(StringView tag) {
 	tryComplete();
 }
 
+void FrameHandle::onOutputAttachment(FrameQueueAttachmentData &data) {
+	if (_request->onOutputReady(*_loop, data)) {
+		data.image = nullptr;
+		data.state = FrameAttachmentState::Detached;
+	}
+}
+
 void FrameHandle::onQueueInvalidated(FrameQueue &) {
 	++ _queuesCompleted;
 
@@ -264,7 +271,7 @@ void FrameHandle::onComplete() {
 	if (!_completed && _valid) {
 		_timeEnd = platform::device::_clock(platform::device::Process);
 		if (auto e = getEmitter()) {
-			log::vtext("gl::FrameHandle", "FrameTime:         ", e->getFrameTime(), "   ", _timeEnd - _timeStart, " mks");
+			XL_FRAME_LOG("FrameTime:         ", e->getFrameTime(), "   ", _timeEnd - _timeStart, " mks");
 		}
 		_completed = true;
 

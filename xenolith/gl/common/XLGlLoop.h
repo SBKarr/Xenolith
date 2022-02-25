@@ -38,9 +38,6 @@ public:
 
 	enum class EventName {
 		Update, // force-update
-		SwapChainDeprecated, // swapchain was deprecated by view
-		SwapChainRecreated, // swapchain was recreated by view
-		SwapChainForceRecreate, // force engine to recreate swapchain with best params
 		FrameUpdate,
 		FrameInvalidated,
 		CompileResource,
@@ -98,11 +95,7 @@ public:
 	uint64_t getClock() const { return _clock; }
 	bool isRunning() const { return _running.load(); }
 
-	void performOnThread(const Function<void()> &func, Ref *target = nullptr, bool immediate = false);
-
-	void recreateSwapChain(const Rc<Swapchain> &ref) {
-		pushEvent(EventName::SwapChainDeprecated, ref.get(), data::Value());
-	}
+	void performOnThread(Function<void()> &&func, Ref *target = nullptr, bool immediate = false);
 
 	void compileResource(const Rc<Resource> &req) {
 		pushEvent(EventName::CompileResource, req.get(), data::Value());
@@ -128,15 +121,11 @@ public:
 protected:
 	struct Internal;
 
-	virtual bool pollEvents(std::unique_lock<std::mutex> &lock, PresentationData &data, Context &context);
+	virtual bool pollEvents(PresentationData &data);
 
 	uint32_t runTimers(uint64_t dt, Context &t);
 
 	static StringView getEventName(EventName);
-
-	/*virtual bool isRetainTrackerEnabled() const {
-		return true;
-	}*/
 
 	Context *_currentContext = nullptr;
 
@@ -151,8 +140,6 @@ protected:
 	Internal *_internal = nullptr;
 
 	std::atomic<bool> _running = false;
-	std::mutex _mutex;
-	std::condition_variable _cond;
 
 	Rc<thread::TaskQueue> _queue;
 	uint64_t _clock = 0;

@@ -418,6 +418,8 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
 
 	_subpassDependencies.reserve(data.dependencies.size());
 
+	//  TODO: deal with internal dependencies through AttachmentDependencyInfo
+
 	for (auto &it : data.dependencies) {
 		VkSubpassDependency dependency{};
 		dependency.srcSubpass = (it.srcSubpass == gl::RenderSubpassDependency::External) ? VK_SUBPASS_EXTERNAL : it.srcSubpass;

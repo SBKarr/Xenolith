@@ -26,138 +26,6 @@
 
 namespace stappler::xenolith::gl {
 
-bool FrameCacheStorage::init(Device *dev, const FrameEmitter *e, const RenderQueue *q) {
-	device = dev;
-	emitter = e;
-	queue = q;
-
-	queue->addCacheStorage(this);
-
-	for (auto &it : queue->getPasses()) {
-		passes.emplace(it, FrameCacheRenderPass{it});
-	}
-	for (auto &it : queue->getAttachments()) {
-		if (it->getType() == AttachmentType::Image) {
-			auto imgAttachment = (ImageAttachment *)it.get();
-			images.emplace(imgAttachment, FrameCacheImageAttachment{imgAttachment});
-		}
-	}
-	return true;
-}
-
-void FrameCacheStorage::invalidate() {
-	_invalidateMutex.lock();
-	passes.clear();
-	images.clear();
-	if (queue) {
-		queue->removeCacheStorage(this);
-		queue = nullptr;
-	}
-	if (emitter) {
-		const_cast<FrameEmitter *>(emitter)->removeCacheStorage(this);
-		emitter = nullptr;
-	}
-	_invalidateMutex.unlock();
-}
-
-void FrameCacheStorage::reset(const RenderPassData *p, Extent2 e) {
-	auto it = passes.find(p);
-	if (it == passes.end()) {
-		return;
-	}
-
-	if (it->second.extent == e) {
-		return;
-	}
-
-	it->second.extent = e;
-	it->second.framebuffers.clear();
-}
-
-Rc<Framebuffer> FrameCacheStorage::acquireFramebuffer(const Loop &, const RenderPassData *p, SpanView<Rc<ImageView>> views) {
-	auto passIt = passes.find(p);
-	if (passIt == passes.end()) {
-		return nullptr;
-	}
-
-	Vector<uint64_t> ids; ids.reserve(views.size());
-	for (auto &it : views) {
-		ids.emplace_back(it->getIndex());
-	}
-
-	auto hash = Framebuffer::getViewHash(ids);
-
-	auto range = passIt->second.framebuffers.equal_range(hash);
-	auto it = range.first;
-	while (it != range.second) {
-		if ((*it).second->getViewIds() == ids) {
-			auto ret = move((*it).second);
-			passIt->second.framebuffers.erase(it);
-			return ret;
-		}
-		++ it;
-	}
-
-	return device->makeFramebuffer(p, views, passIt->second.extent);
-}
-
-void FrameCacheStorage::releaseFramebuffer(const RenderPassData *p, Rc<Framebuffer> &&fb) {
-	auto passIt = passes.find(p);
-	if (passIt == passes.end()) {
-		return;
-	}
-
-	if (fb->getExtent() != passIt->second.extent) {
-		return;
-	}
-
-	auto hash = fb->getHash();
-	passIt->second.framebuffers.emplace(hash, move(fb));
-}
-
-void FrameCacheStorage::reset(const ImageAttachment *a, Extent3 e) {
-	auto imageIt = images.find(a);
-	if (imageIt == images.end()) {
-		return;
-	}
-
-	if (imageIt->second.extent == e) {
-		return;
-	}
-
-	imageIt->second.images.clear();
-	imageIt->second.extent = e;
-}
-
-Rc<ImageAttachmentObject> FrameCacheStorage::acquireImage(const Loop &, const ImageAttachment *a) {
-	auto imageIt = images.find(a);
-	if (imageIt == images.end()) {
-		return nullptr;
-	}
-
-	if (!imageIt->second.images.empty()) {
-		auto ret = move(imageIt->second.images.back());
-		imageIt->second.images.pop_back();
-		return ret;
-	} else {
-		return device->makeImage(a, imageIt->second.extent);
-	}
-}
-
-void FrameCacheStorage::releaseImage(const ImageAttachment *a, Rc<ImageAttachmentObject> &&image) {
-	auto imageIt = images.find(a);
-	if (imageIt == images.end()) {
-		return;
-	}
-
-	if (image->extent != imageIt->second.extent) {
-		return;
-	}
-
-	imageIt->second.images.emplace_back(move(image));
-}
-
-
 FrameRequest::~FrameRequest() {
 	if (_queue) {
 		_queue->endFrame(*this);
@@ -196,6 +64,24 @@ void FrameRequest::acquireInput(Map<const Attachment *, Rc<AttachmentInputData>>
 	_input.clear();
 }
 
+bool FrameRequest::onOutputReady(gl::Loop &loop, FrameQueueAttachmentData &data) const {
+	if (data.handle->getAttachment() == _swapchainAttachment) {
+		auto v = Rc<Swapchain::PresentTask>::alloc(_cache, (const gl::ImageAttachment *)data.handle->getAttachment().get(), data.image);
+		if (_swapchain->present(loop, v)) {
+			return true;
+		}
+	}
+
+	auto it = _output.find(data.handle->getAttachment());
+	if (it != _output.end()) {
+		if (it->second(_cache, data)) {
+			return true;
+		}
+		return false;
+	}
+	return false;
+}
+
 void FrameRequest::finalize() {
 	if (_cache) {
 		_cache = nullptr;
@@ -203,6 +89,26 @@ void FrameRequest::finalize() {
 	if (_emitter) {
 		_emitter = nullptr;
 	}
+}
+
+bool FrameRequest::bindSwapchain(const Rc<Swapchain> &swapchain) {
+	for (auto &it : _queue->getOutputAttachments()) {
+		if (it->getType() == AttachmentType::Image && it->isCompatible(swapchain->getSwapchainImageInfo())) {
+			_swapchainAttachment = it;
+			_swapchain = swapchain;
+			return true;
+		}
+	}
+	return false;
+}
+
+bool FrameRequest::bindSwapchain(const Attachment *a, const Rc<Swapchain> &swapchain) {
+	if (a->isCompatible(swapchain->getSwapchainImageInfo())) {
+		_swapchainAttachment = a;
+		_swapchain = swapchain;
+		return true;
+	}
+	return false;
 }
 
 FrameEmitter::~FrameEmitter() { }
@@ -229,7 +135,7 @@ void FrameEmitter::invalidate() {
 }
 
 void FrameEmitter::setFrameSubmitted(gl::FrameHandle &frame) {
-	log::vtext("gl::FrameEmitter", "FrameTime:        ", _frame, "   ", platform::device::_clock() - _frame, " mks");
+	XL_FRAME_EMITTER_LOG("FrameTime:        ", _frame, "   ", platform::device::_clock() - _frame, " mks");
 
 	auto it = _frames.begin();
 	while (it != _frames.end()) {
@@ -269,7 +175,7 @@ bool FrameEmitter::isFrameValid(const gl::FrameHandle &frame) {
 }
 
 void FrameEmitter::removeCacheStorage(const FrameCacheStorage *storage) {
-	auto it = _frameCache.find(storage->queue);
+	auto it = _frameCache.find(storage->getQueue());
 	if (it != _frameCache.end()) {
 		_frameCache.erase(it);
 	}
@@ -277,23 +183,33 @@ void FrameEmitter::removeCacheStorage(const FrameCacheStorage *storage) {
 
 void FrameEmitter::acquireNextFrame() { }
 
+void FrameEmitter::dropFrameTimeout() {
+	_loop->performOnThread([this] {
+		if (!_frameTimeoutPassed) {
+			++ _order; // increment timeout timeline
+			onFrameTimeout(_order);
+		}
+	}, this, true);
+}
+
 void FrameEmitter::onFrameEmitted(gl::FrameHandle &) { }
 
 void FrameEmitter::onFrameSubmitted(gl::FrameHandle &) { }
 
 void FrameEmitter::onFrameComplete(gl::FrameHandle &) { }
 
-void FrameEmitter::onFrameTimeout() {
-	_frameTimeoutPassed = true;
-	onFrameRequest(true);
+void FrameEmitter::onFrameTimeout(uint64_t order) {
+	if (order == _order) {
+		_frameTimeoutPassed = true;
+		onFrameRequest(true);
+	}
 }
 
 void FrameEmitter::onFrameRequest(bool timeout) {
 	if (canStartFrame()) {
 		auto next = platform::device::_clock();
 		if (_frame) {
-			log::vtext("gl::FrameEmitter",
-					timeout ? "FrameRequest [T]: " : "FrameRequest [S]: ", _frame, "   ",
+			XL_FRAME_EMITTER_LOG(timeout ? "FrameRequest [T]: " : "FrameRequest [S]: ", _frame, "   ",
 					next - _frame, " mks");
 		}
 		_frame = next;
@@ -351,13 +267,12 @@ void FrameEmitter::scheduleNextFrame(Rc<FrameRequest> &&req) {
 void FrameEmitter::scheduleFrameTimeout() {
 	if (_valid && _frameInterval && _frameTimeoutPassed) {
 		_frameTimeoutPassed = false;
-		auto id = retain();
+		++ _order;
 		auto t = platform::device::_clock();
-		_loop->schedule([this, id, t] (Loop::Context &ctx) {
-			auto dt = platform::device::_clock() - t;
-			log::vtext("gl::FrameEmitter", "TimeoutPassed:    ", _frame, "   ", platform::device::_clock() - _frame, " (", dt, ") mks");
-			onFrameTimeout();
-			release(id);
+		_loop->schedule([this, t, guard = Rc<FrameEmitter>(this), idx = _order] (Loop::Context &ctx) {
+			XL_FRAME_EMITTER_LOG("TimeoutPassed:    ", _frame, "   ", platform::device::_clock() - _frame, " (",
+					platform::device::_clock() - t, ") mks");
+			guard->onFrameTimeout(idx);
 			return true; // end spinning
 		}, _frameInterval, "FrameEmitter::scheduleFrameTimeout");
 	}
@@ -377,9 +292,8 @@ Rc<gl::FrameHandle> FrameEmitter::submitNextFrame(Rc<FrameRequest> &&req) {
 
 		auto t = platform::device::_clock();
 		_loop->performOnThread([this, t, frame] () mutable {
-			auto dt = platform::device::_clock() - t;
-			log::vtext("gl::View", "Sync: ", dt, " mks");
-			log::vtext("gl::FrameEmitter", "SubmitNextFrame:  ", _frame, "   ", platform::device::_clock() - _frame, " mks");
+			XL_FRAME_EMITTER_LOG("Sync: ", platform::device::_clock() - t, " mks");
+			XL_FRAME_EMITTER_LOG("SubmitNextFrame:  ", _frame, "   ", platform::device::_clock() - _frame, " mks");
 
 			_nextFrameAcquired = false;
 			onFrameEmitted(*frame);

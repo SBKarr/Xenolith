@@ -100,6 +100,17 @@ struct FrameQueueAttachmentData {
 	bool waitForResult = false;
 };
 
+struct FrameSyncAttachment {
+	const AttachmentHandle *attachment;
+	Rc<Semaphore> semaphore;
+	PipelineStage stages = PipelineStage::None;
+};
+
+struct FrameSync : public Ref {
+	Vector<FrameSyncAttachment> waitAttachments;
+	Vector<FrameSyncAttachment> signalAttachments;
+};
+
 class FrameQueue final : public Ref {
 public:
 	virtual ~FrameQueue();
@@ -146,6 +157,9 @@ protected:
 	void onRenderPassSubmission(FrameQueueRenderPassData &);
 	void onRenderPassSubmitted(FrameQueueRenderPassData &);
 	void onRenderPassComplete(FrameQueueRenderPassData &);
+
+	Rc<FrameSync> makeRenderPassSync(FrameQueueRenderPassData &) const;
+	PipelineStage getWaitStageForAttachment(FrameQueueRenderPassData &data, const gl::AttachmentHandle *handle) const;
 
 	void onComplete();
 	void onFinalized();

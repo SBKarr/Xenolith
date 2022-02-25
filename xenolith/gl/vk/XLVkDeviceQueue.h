@@ -35,6 +35,7 @@ class Device;
 class DeviceQueue;
 class CommandPool;
 class Semaphore;
+class Fence;
 
 struct DeviceQueueFamily {
 	struct Waiter {
@@ -61,16 +62,25 @@ struct DeviceQueueFamily {
 	QueueOperations preferred = QueueOperations::None;
 	QueueOperations ops = QueueOperations::None;
 	VkExtent3D transferGranularity;
-	Vector<VkQueue> queues;
+	Vector<Rc<DeviceQueue>> queues;
 	Vector<Rc<CommandPool>> pools;
 	Vector<Waiter> waiters;
 };
 
-class DeviceQueue : public Ref {
+class DeviceQueue final : public Ref {
 public:
 	virtual ~DeviceQueue();
 
 	virtual bool init(Device &, VkQueue, uint32_t, QueueOperations);
+
+	bool submit(const gl::FrameSync &, Fence &, SpanView<VkCommandBuffer>);
+	bool submit(Fence &, SpanView<VkCommandBuffer>);
+
+	void waitIdle();
+
+	uint32_t getActiveFencesCount();
+	void retainFence(const Fence &);
+	void releaseFence(const Fence &);
 
 	uint32_t getIndex() const { return _index; }
 	VkQueue getQueue() const { return _queue; }
@@ -81,6 +91,7 @@ protected:
 	uint32_t _index;
 	QueueOperations _ops = QueueOperations::None;
 	VkQueue _queue;
+	std::atomic<uint32_t> _nfences;
 };
 
 enum class BufferLevel {

@@ -67,7 +67,7 @@ void Device::defineSamplers(Vector<SamplerInfo> &&info) {
 void Device::invalidateFrame(FrameHandle &frame) { }
 
 Rc<Shader> Device::getProgram(StringView name) {
-	std::unique_lock<Mutex> lock(_mutex);
+	std::unique_lock<Mutex> lock(_shaderMutex);
 	auto it = _shaders.find(name);
 	if (it != _shaders.end()) {
 		return it->second;
@@ -76,7 +76,7 @@ Rc<Shader> Device::getProgram(StringView name) {
 }
 
 Rc<Shader> Device::addProgram(Rc<Shader> program) {
-	std::unique_lock<Mutex> lock(_mutex);
+	std::unique_lock<Mutex> lock(_shaderMutex);
 	auto it = _shaders.find(program->getName());
 	if (it == _shaders.end()) {
 		_shaders.emplace(program->getName().str(), program);
@@ -98,6 +98,10 @@ Rc<ImageAttachmentObject> Device::makeImage(const gl::ImageAttachment *, Extent3
 	return nullptr;
 }
 
+Rc<Semaphore> Device::makeSemaphore() {
+	return nullptr;
+}
+
 void Device::compileResource(gl::Loop &, const Rc<Resource> &req, Function<void(bool)> &&complete) {
 	/**/
 }
@@ -111,15 +115,17 @@ void Device::compileMaterials(gl::Loop &loop, Rc<MaterialInputData> &&) {
 }
 
 void Device::addObject(ObjectInterface *obj) {
+	std::unique_lock<Mutex> lock(_objectMutex);
 	_objects.emplace(obj);
 }
 
 void Device::removeObject(ObjectInterface *obj) {
+	std::unique_lock<Mutex> lock(_objectMutex);
 	_objects.erase(obj);
 }
 
-void Device::onLoopStarted(gl::Loop &) {
-
+void Device::onLoopStarted(gl::Loop &loop) {
+	_loopThreadId = loop.getThreadId();
 }
 
 void Device::onLoopEnded(gl::Loop &) {
@@ -138,16 +144,6 @@ void Device::invalidateObjects() {
 	auto objs = std::move(_objects);
 	_objects.clear();
 	for (auto &it : objs) {
-		/*if (auto obj = dynamic_cast<ImageObject *>(it)) {
-			obj->foreachBacktrace([&] (uint64_t idx, Time, const std::vector<std::string> &bt) {
-				std::cout << "[" << idx << "] Object\n";
-				size_t i = 0;
-				for (auto &it : bt) {
-					std::cout << "\t[" << i << "] " << it << "\n";
-					++ i;
-				}
-			});
-		}*/
 		log::vtext("Gl-Device", "Object ", (void *)it, " (", typeid(*it).name(), ") was not destroyed before device destruction");
 		if (auto ref = dynamic_cast<const Ref *>(it)) {
 			log::vtext("Gl-Device", "Backtrace for ", (void *)it);

@@ -26,6 +26,15 @@
 
 namespace stappler::xenolith::vk {
 
+FrameHandle::~FrameHandle() {
+	/*if (_loop) {
+		_loop->getQueue()->perform([pool = move(_memPool)] () mutable {
+			pool = nullptr;
+		});
+	}*/
+	_memPool = nullptr;
+}
+
 bool FrameHandle::init(gl::Loop &loop, Rc<gl::FrameRequest> &&req, uint64_t gen) {
 	if (!gl::FrameHandle::init(loop, move(req), gen)) {
 		return false;

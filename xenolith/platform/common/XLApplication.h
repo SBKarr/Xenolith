@@ -175,7 +175,6 @@ public: // Threading, Events
 	void sleep(uint64_t);
 	uint64_t getClock() const;
 
-
 	/* device information */
 
 	/* device/OS specific user agent, that used by default browser */
@@ -226,6 +225,7 @@ public: // Threading, Events
 	const Rc<ResourceCache> &getResourceCache() const { return _resourceCache; }
 	const Rc<storage::Server> &getStorageServer() const { return _storageServer; }
 	const Rc<network::Controller> &getNetworkController() const { return _networkController; }
+	const Rc<EventLoop> &getEventLoop() const { return _loop; }
 
 protected:
 	uint64_t _clockStart = 0;

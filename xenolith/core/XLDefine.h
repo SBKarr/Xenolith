@@ -142,11 +142,11 @@ struct DepthInfo {
 	DepthInfo(bool write, bool test, gl::CompareOp compareOp)
 	: writeEnabled(write ? 1 : 0), testEnabled(test ? 1 : 0), compare(toInt(compareOp)) { }
 
-	bool operator==(const BlendInfo &other) const {
+	bool operator==(const DepthInfo &other) const {
 		return memcmp(this, &other, sizeof(BlendInfo)) == 0;
 	}
 
-	bool operator!=(const BlendInfo &other) const {
+	bool operator!=(const DepthInfo &other) const {
 		return memcmp(this, &other, sizeof(BlendInfo)) != 0;
 	}
 };
@@ -155,6 +155,14 @@ struct DepthBounds {
 	bool enabled = false;
 	float min = 0.0f;
 	float max = 0.0f;
+
+	bool operator==(const DepthBounds &other) const {
+		return enabled == other.enabled && (!enabled || (min == other.min && max == other.max));
+	}
+
+	bool operator!=(const DepthBounds &other) const {
+		return enabled != other.enabled || (enabled && (min != other.min || max != other.max));
+	}
 };
 
 struct StencilInfo {
@@ -165,6 +173,16 @@ struct StencilInfo {
 	uint32_t compareMask = 0;
 	uint32_t writeMask = 0;
 	uint32_t reference = 0;
+
+	friend bool operator==(const StencilInfo &l, const StencilInfo &r) {
+		return l.fail == r.fail && l.pass == r.pass && l.depthFail == r.depthFail && l.compare == r.compare
+				&& l.compareMask == r.compareMask && l.writeMask == r.writeMask && l.reference == r.reference;
+	}
+
+	friend bool operator!=(const StencilInfo &l, const StencilInfo &r) {
+		return l.fail != r.fail || l.pass != r.pass || l.depthFail != r.depthFail || l.compare != r.compare
+				|| l.compareMask != r.compareMask || l.writeMask != r.writeMask || l.reference != r.reference;
+	}
 };
 
 struct PipelineMaterialInfo {
@@ -176,47 +194,64 @@ struct PipelineMaterialInfo {
 	StencilInfo back;
 
 	size_t hash() const {
-		auto tmp = *this; tmp.normalize();
+		auto tmp = normalize();
 		return hash::hashSize((const char *)&tmp, sizeof(PipelineMaterialInfo));
 	}
 
 	bool operator==(const PipelineMaterialInfo &other) const {
-		auto tmp1 = *this; tmp1.normalize();
-		auto tmp2 = other; tmp2.normalize();
-		return memcmp(&tmp1, &tmp2, sizeof(PipelineMaterialInfo)) == 0;
+		auto tmp1 = normalize();
+		auto tmp2 = other.normalize();
+		return tmp1.blend == tmp2.blend && tmp1.depth == tmp2.depth && tmp1.bounds == tmp2.bounds
+				&& tmp1.stencil == tmp2.stencil && (!tmp1.stencil || (tmp1.front == tmp2.front && tmp1.back == tmp2.back));
 	}
 
 	bool operator!=(const PipelineMaterialInfo &other) const {
-		auto tmp1 = *this; tmp1.normalize();
-		auto tmp2 = other; tmp2.normalize();
-		return memcmp(&tmp1, &tmp2, sizeof(PipelineMaterialInfo)) != 0;
+		auto tmp1 = normalize();
+		auto tmp2 = other.normalize();
+		return tmp1.blend != tmp2.blend || tmp1.depth != tmp2.depth || tmp1.bounds != tmp2.bounds
+				|| tmp1.stencil != tmp2.stencil || (tmp1.stencil && (tmp1.front != tmp2.front || tmp1.back != tmp2.back));
 	}
 
 	String data() const {
-		auto tmp = *this; tmp.normalize();
+		auto tmp = normalize();
 		return base16::encode(BytesView((const uint8_t *)&tmp, sizeof(PipelineMaterialInfo)));
 	}
 
-	void normalize() {
-		if (!blend.isEnabled()) {
-			blend = BlendInfo();
+	String description() const {
+		StringStream stream;
+		stream << "{" << blend.enabled << "," << blend.srcColor << "," << blend.dstColor << "," << blend.opColor << ","
+				<< blend.srcAlpha << "," << blend.dstAlpha << "," << blend.opAlpha << "," << blend.writeMask
+				<< "},{" << depth.writeEnabled << "," << depth.testEnabled << "," << depth.compare
+				<< "},{" << bounds.enabled << "," << bounds.min << "," << bounds.max
+				<< "},{" << stencil << "}";
+		return stream.str();
+	}
+
+	PipelineMaterialInfo normalize() const {
+		PipelineMaterialInfo ret;
+		memset(&ret, 0, sizeof(PipelineMaterialInfo));
+
+		if (blend.isEnabled()) {
+			ret.blend = blend;
 		}
-		if (!depth.testEnabled) {
-			depth.compare = 0;
-		} else {
-			depth.testEnabled = 1;
+		if (depth.testEnabled) {
+			ret.depth.testEnabled = 1;
+			ret.depth.compare = depth.compare;
 		}
 		if (depth.writeEnabled) {
-			depth.writeEnabled = 1;
+			ret.depth.writeEnabled = 1;
 		}
-		if (!bounds.enabled) {
-			bounds.min = 0.0f;
-			bounds.max = 0.0f;
+		if (bounds.enabled) {
+			ret.bounds.enabled = true;
+			ret.bounds.min = bounds.min;
+			ret.bounds.max = bounds.max;
 		}
-		if (!stencil) {
-			front = StencilInfo();
-			back = StencilInfo();
+		if (stencil) {
+			ret.stencil = true;
+			ret.front = front;
+			ret.back = back;
 		}
+		return ret;
 	}
 };
 

@@ -138,18 +138,7 @@ void TextureSetLayout::initDefault(Device &dev, gl::Loop &loop) {
 				return false;
 			}
 
-			VkSubmitInfo submitInfo{};
-			submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-			submitInfo.pNext = nullptr;
-			submitInfo.waitSemaphoreCount = 0;
-			submitInfo.pWaitSemaphores = nullptr;
-			submitInfo.pWaitDstStageMask = nullptr;
-			submitInfo.commandBufferCount = 1;
-			submitInfo.pCommandBuffers = &buf;
-			submitInfo.signalSemaphoreCount = 0;
-			submitInfo.pSignalSemaphores = nullptr;
-
-			if (table->vkQueueSubmit(queue->getQueue(), 1, &submitInfo, fence->getFence()) == VK_SUCCESS) {
+			if (queue->submit(*fence, makeSpanView(&buf, 1))) {
 				return true;
 			}
 			return false;
@@ -161,7 +150,7 @@ void TextureSetLayout::initDefault(Device &dev, gl::Loop &loop) {
 			if (success) {
 				device->scheduleFence(*loop, Rc<Fence>(fence));
 			} else {
-				device->releaseFence(Rc<Fence>(fence));
+				device->releaseFence(*loop, Rc<Fence>(fence));
 			}
 		}, this));
 	}, [this] (gl::Loop &) { }, this);
@@ -231,18 +220,7 @@ void TextureSetLayout::compileImage(Device &dev, gl::Loop &loop, const Rc<gl::Dy
 						return false;
 					}
 
-					VkSubmitInfo submitInfo{};
-					submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-					submitInfo.pNext = nullptr;
-					submitInfo.waitSemaphoreCount = 0;
-					submitInfo.pWaitSemaphores = nullptr;
-					submitInfo.pWaitDstStageMask = nullptr;
-					submitInfo.commandBufferCount = 1;
-					submitInfo.pCommandBuffers = &buf;
-					submitInfo.signalSemaphoreCount = 0;
-					submitInfo.pSignalSemaphores = nullptr;
-
-					if (table->vkQueueSubmit(queue->getQueue(), 1, &submitInfo, fence->getFence()) == VK_SUCCESS) {
+					if (queue->submit(*fence, makeSpanView(&buf, 1))) {
 						return true;
 					}
 					return false;
@@ -257,7 +235,7 @@ void TextureSetLayout::compileImage(Device &dev, gl::Loop &loop, const Rc<gl::Dy
 						device->scheduleFence(*loop, Rc<Fence>(fence));
 					} else {
 						(*tmp)(false);
-						device->releaseFence(Rc<Fence>(fence));
+						device->releaseFence(*loop, Rc<Fence>(fence));
 					}
 					delete image;
 					delete tmp;

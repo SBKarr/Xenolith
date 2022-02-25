@@ -28,6 +28,90 @@
 
 namespace stappler::xenolith::vk {
 
+void Swapchain_writeImageTransfer(Device &dev, VkCommandBuffer buf, const Rc<Image> &sourceImage, const Rc<Image> &targetImage,
+		VkImageLayout sourceLayout, VkFilter filter) {
+	auto table = dev.getTable();
+
+	VkCommandBufferBeginInfo beginInfo { };
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	beginInfo.pInheritanceInfo = nullptr;
+
+	if (table->vkBeginCommandBuffer(buf, &beginInfo) != VK_SUCCESS) {
+		return;
+	}
+
+	auto sourceExtent = sourceImage->getInfo().extent;
+	auto targetExtent = targetImage->getInfo().extent;
+
+	Vector<VkImageMemoryBarrier> inputImageBarriers;
+	inputImageBarriers.emplace_back(VkImageMemoryBarrier{
+		VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
+		VK_ACCESS_MEMORY_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+		targetImage->getImage(), VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
+	});
+
+	Vector<VkImageMemoryBarrier> outputImageBarriers;
+	outputImageBarriers.emplace_back(VkImageMemoryBarrier{
+		VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
+		VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+		targetImage->getImage(), VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
+	});
+
+	if (sourceLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+		inputImageBarriers.emplace_back(VkImageMemoryBarrier{
+			VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
+			VK_ACCESS_MEMORY_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+			sourceLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+			targetImage->getImage(), VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
+		});
+	}
+
+	if (!inputImageBarriers.empty()) {
+		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+			0, nullptr,
+			0, nullptr,
+			inputImageBarriers.size(), inputImageBarriers.data());
+	}
+
+	if (sourceExtent == targetExtent) {
+		VkImageCopy copy{
+			VkImageSubresourceLayers{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+			VkOffset3D{0, 0, 0},
+			VkImageSubresourceLayers{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+			VkOffset3D{0, 0, 0},
+			VkExtent3D{targetExtent.width, targetExtent.height, targetExtent.depth}
+		};
+
+		table->vkCmdCopyImage(buf, sourceImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				targetImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+	} else {
+		VkImageBlit blit{
+			VkImageSubresourceLayers{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+			{ VkOffset3D{0, 0, 0}, VkOffset3D{int32_t(sourceExtent.width), int32_t(sourceExtent.height), int32_t(sourceExtent.depth)} },
+			VkImageSubresourceLayers{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+			{ VkOffset3D{0, 0, 0}, VkOffset3D{int32_t(targetExtent.width), int32_t(targetExtent.height), int32_t(targetExtent.depth)} },
+		};
+
+		table->vkCmdBlitImage(buf, sourceImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				targetImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, filter);
+	}
+
+	if (!outputImageBarriers.empty()) {
+		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
+			0, nullptr,
+			0, nullptr,
+			outputImageBarriers.size(), outputImageBarriers.data());
+	}
+
+	table->vkEndCommandBuffer(buf);
+}
+
 struct SwapchainPresentFrame : public Ref {
 	Rc<gl::Loop> loop;
 	Rc<Device> device;
@@ -37,24 +121,35 @@ struct SwapchainPresentFrame : public Ref {
 	Rc<Fence> fence;  // always released automatically
 	Rc<CommandPool> pool;  // need to be released in invalidate
 	Vector<VkCommandBuffer> buffers;
-	QueueOperations ops = QueueOperations::Graphics;
+	QueueOperations ops = QueueOperations::Present;
 	uint64_t order = 0;
 
 	VkImageLayout sourceLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	VkFilter filter = VK_FILTER_NEAREST;
+	VkResult result = VK_SUCCESS;
 
+	Rc<Swapchain::PresentTask> sourceObject;
 	Rc<Image> sourceImage;
 	Rc<Image> targetImage;
+	gl::FrameSync frameSync;
 
 	bool imageAcquired = false;
 	bool commandsReady = false;
 	bool valid = true;
+	bool releaseQueue = true;
 
 	// depends on output mode
-	VkPipelineStageFlags waitStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	gl::PipelineStage waitStages = gl::PipelineStage::Transfer;
+
+	Function<void(VkResult)> onComplete;
 
 	SwapchainPresentFrame(gl::Loop &l, const Rc<Swapchain> &s, uint64_t order)
 	: loop(&l), device((Device *)l.getDevice().get()), swapchain(s), order(order) { }
+
+	SwapchainPresentFrame(gl::Loop &l, const Rc<Swapchain> &s, uint64_t order,
+			Function<void(VkResult)> &&onComplete, const Rc<DeviceQueue> &queue)
+	: loop(&l), device((Device *)l.getDevice().get()), swapchain(s), queue(queue), order(order),
+	  onComplete(move(onComplete)) { }
 
 	virtual ~SwapchainPresentFrame() {
 		invalidate();
@@ -62,8 +157,14 @@ struct SwapchainPresentFrame : public Ref {
 
 	void invalidate() {
 		if (valid) {
+			if (result == VK_SUCCESS) {
+				result = VK_ERROR_UNKNOWN;
+			}
+			if (onComplete) {
+				onComplete(result);
+				onComplete = nullptr;
+			}
 			if (sync) {
-				swapchain->releaseSwapchainSync(move(sync));
 				sync = nullptr;
 			}
 			if (pool) {
@@ -78,12 +179,18 @@ struct SwapchainPresentFrame : public Ref {
 		}
 	}
 
-	void run(Rc<Image> &&source, VkImageLayout l = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VkFilter f = VK_FILTER_NEAREST) {
-		sourceImage = move(source);
+	void run(const Rc<Swapchain::PresentTask> &source, VkImageLayout l = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VkFilter f = VK_FILTER_NEAREST) {
+		sourceImage = (Image *)source->object->image.get();
 		sourceLayout = l;
 		filter = f;
 
-		acquireQueue();
+		sourceObject = source;
+
+		if (!queue) {
+			acquireQueue();
+		} else {
+			releaseQueue = false;
+		}
 		acquireImage();
 	}
 
@@ -100,11 +207,15 @@ struct SwapchainPresentFrame : public Ref {
 	}
 
 	void acquireImage() {
-		sync = swapchain->acquireSwapchainSync(*device, order);
-		VkResult result = sync->acquireImage(*device, *swapchain);
+		sync = swapchain->acquireSwapchainSync(*device);
+		if (!sync) {
+			invalidate();
+			return;
+		}
+		VkResult result = sync->acquireImage(*device);
 		switch (result) {
 		case VK_ERROR_OUT_OF_DATE_KHR:
-			loop->recreateSwapChain(swapchain);
+			this->result = result;
 			invalidate();
 			break;
 		case VK_SUCCESS: // acquired successfully
@@ -123,12 +234,11 @@ struct SwapchainPresentFrame : public Ref {
 					return true;
 				}
 
-				VkResult result = sync->acquireImage(*device, *swapchain);
+				VkResult result = sync->acquireImage(*device);
 				switch (result) {
 				case VK_ERROR_OUT_OF_DATE_KHR:
+					this->result = result;
 					// push swapchain invalidation
-					XL_VK_LOG("vkAcquireNextImageKHR: VK_ERROR_OUT_OF_DATE_KHR");
-					ctx.events->emplace_back(gl::Loop::EventName::SwapChainDeprecated, swapchain, data::Value());
 					invalidate();
 					release(linkId);
 					return true; // end spinning
@@ -145,6 +255,7 @@ struct SwapchainPresentFrame : public Ref {
 					return false; // continue spinning
 					break;
 				default:
+					this->result = result;
 					invalidate();
 					release(linkId);
 					return true; // end spinning
@@ -162,14 +273,19 @@ struct SwapchainPresentFrame : public Ref {
 	}
 
 	void prepareCommands() {
+		if (!valid) {
+			return;
+		}
+
 		pool = device->acquireCommandPool(ops);
 		loop->getQueue()->perform(Rc<Task>::create([this] (const Task &) {
-			auto buf = pool->allocBuffer(*device);
-
-			writeImageTransfer(buf);
-
-			buffers.emplace_back(buf);
-			return true;
+			if (targetImage) {
+				auto buf = pool->allocBuffer(*device);
+				Swapchain_writeImageTransfer(*device, buf, sourceImage, targetImage, sourceLayout, filter);
+				buffers.emplace_back(buf);
+				return true;
+			}
+			return false;
 		}, [this] (const Task &, bool success) {
 			if (success) {
 				onCommandsReady();
@@ -187,13 +303,13 @@ struct SwapchainPresentFrame : public Ref {
 	}
 
 	void onImageAcquired() {
-		if (!imageAcquired) {
+		imageAcquired = true;
+		if (!targetImage) {
+			targetImage = sync->getImage();
 			prepareCommands();
 		}
-		imageAcquired = true;
-		targetImage = swapchain->getImage(sync->getImageIndex());
 		if (!targetImage) {
-
+			invalidate();
 		} else if (queue && imageAcquired && commandsReady && valid) {
 			perform();
 		}
@@ -207,6 +323,10 @@ struct SwapchainPresentFrame : public Ref {
 	}
 
 	void perform() {
+		if (!valid) {
+			return;
+		}
+
 		fence = device->acquireFence(order);
 		fence->addRelease([device = device, pool = move(pool), loop = loop] (bool success) {
 			device->releaseCommandPool(*loop, Rc<CommandPool>(pool));
@@ -214,176 +334,41 @@ struct SwapchainPresentFrame : public Ref {
 		pool = nullptr;
 
 		loop->getQueue()->perform(Rc<Task>::create([this] (const Task &) {
-			bool swapchainValid = true;
-			sync->lock();
-			if (sync->isSwapchainValid()) {
-				swapchainValid = false;
-			}
 
-			if (!swapchainValid || !submit()) {
-				sync->unlock();
-				return false;
-			}
+			sourceObject->object->rearmSemaphores(*device);
 
-			present();
-			sync->unlock();
-			return true;
+			frameSync.waitAttachments.emplace_back(gl::FrameSyncAttachment{nullptr, sourceObject->object->waitSem, gl::PipelineStage::Transfer});
+			frameSync.signalAttachments.emplace_back(gl::FrameSyncAttachment{nullptr, sourceObject->object->signalSem});
+
+			result = sync->submitWithPresent(*device, *queue, frameSync, *fence, buffers, waitStages);
+			if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
+				return true;
+			}
+			return false;
 		}, [this] (const Task &, bool success) {
 			if (queue) {
-				device->releaseQueue(move(queue));
+				if (releaseQueue) {
+					device->releaseQueue(move(queue));
+				}
 				queue = nullptr;
 			}
 			if (success) {
-				fence->addRelease([swapchain = swapchain, sync = move(sync)] (bool success) {
-					swapchain->releaseSwapchainSync(Rc<SwapchainSync>(sync));
-				}, nullptr, "Swapchain::perform releaseSwapchainSync");
+				swapchain->setPresentSync(move(sync));
 				sync = nullptr;
 
 				device->scheduleFence(*loop, move(fence));
 				fence = nullptr;
 				invalidate();
 			} else {
-				device->releaseFence(move(fence));
+				device->scheduleFence(*loop, move(fence));
 				fence = nullptr;
 				invalidate();
 			}
+			if (onComplete) {
+				onComplete(result);
+				onComplete = nullptr;
+			}
 		}, this));
-	}
-
-	void writeImageTransfer(VkCommandBuffer buf) {
-		auto table = device->getTable();
-
-		auto sourceExtent = sourceImage->getInfo().extent;
-		auto targetExtent = targetImage->getInfo().extent;
-
-		Vector<VkImageMemoryBarrier> inputImageBarriers;
-		inputImageBarriers.emplace_back(VkImageMemoryBarrier{
-			VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
-			VK_ACCESS_MEMORY_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-			targetImage->getImage(), VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
-		});
-
-		Vector<VkImageMemoryBarrier> outputImageBarriers;
-		outputImageBarriers.emplace_back(VkImageMemoryBarrier{
-			VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
-			VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT,
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-			targetImage->getImage(), VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
-		});
-
-		if (sourceLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
-			inputImageBarriers.emplace_back(VkImageMemoryBarrier{
-				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
-				VK_ACCESS_MEMORY_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-				sourceLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-				VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-				targetImage->getImage(), VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
-			});
-		}
-
-		if (!inputImageBarriers.empty()) {
-			table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-				0, nullptr,
-				0, nullptr,
-				inputImageBarriers.size(), inputImageBarriers.data());
-		}
-
-		if (sourceExtent == targetExtent) {
-			VkImageCopy copy{
-				VkImageSubresourceLayers{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-				VkOffset3D{0, 0, 0},
-				VkImageSubresourceLayers{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-				VkOffset3D{0, 0, 0},
-				VkExtent3D{targetExtent.width, targetExtent.height, targetExtent.depth}
-			};
-
-			table->vkCmdCopyImage(buf, sourceImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-					targetImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
-		} else {
-			VkImageBlit blit{
-				VkImageSubresourceLayers{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-				{ VkOffset3D{0, 0, 0}, VkOffset3D{int32_t(sourceExtent.width), int32_t(sourceExtent.height), int32_t(sourceExtent.depth)} },
-				VkImageSubresourceLayers{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-				{ VkOffset3D{0, 0, 0}, VkOffset3D{int32_t(targetExtent.width), int32_t(targetExtent.height), int32_t(targetExtent.depth)} },
-			};
-
-			table->vkCmdBlitImage(buf, sourceImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-					targetImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, filter);
-		}
-
-		if (!outputImageBarriers.empty()) {
-			table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
-				0, nullptr,
-				0, nullptr,
-				outputImageBarriers.size(), outputImageBarriers.data());
-		}
-	}
-
-	bool submit() {
-		auto table = device->getTable();
-
-		auto imageReadySem = sync->getImageReady()->getSemaphore();
-		auto presentSem = sync->getRenderFinished()->getSemaphore();
-
-		VkSubmitInfo submitInfo{};
-		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		submitInfo.pNext = nullptr;
-		submitInfo.waitSemaphoreCount = 1;
-		submitInfo.pWaitSemaphores = &imageReadySem;
-		submitInfo.pWaitDstStageMask = &waitStages;
-		submitInfo.commandBufferCount = buffers.size();
-		submitInfo.pCommandBuffers = buffers.data();
-		submitInfo.signalSemaphoreCount = 1;
-		submitInfo.pSignalSemaphores = &presentSem;
-
-		if (table->vkQueueSubmit(queue->getQueue(), 1, &submitInfo, fence->getFence()) == VK_SUCCESS) {
-			// mark semaphores
-			sync->getImageReady()->setSignaled(false);
-			sync->getRenderFinished()->setSignaled(true);
-			return true;
-		}
-		return false;
-	}
-
-	bool present() {
-		auto table = device->getTable();
-
-		auto swapchainObj = swapchain->getSwapchain();
-		auto presentSem = sync->getRenderFinished()->getSemaphore();
-		auto imageIndex = sync->getImageIndex();
-
-		VkPresentInfoKHR presentInfo{};
-		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-
-		presentInfo.waitSemaphoreCount = 1;
-		presentInfo.pWaitSemaphores = &presentSem;
-
-		presentInfo.swapchainCount = 1;
-		presentInfo.pSwapchains = &swapchainObj;
-		presentInfo.pImageIndices = &imageIndex;
-		presentInfo.pResults = nullptr; // Optional
-
-		// auto t = platform::device::_clock();
-		auto result = table->vkQueuePresentKHR(queue->getQueue(), &presentInfo);
-		if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-			loop->performOnThread([this] () {
-				loop->pushContextEvent(gl::Loop::EventName::SwapChainDeprecated, swapchain);
-				invalidate();
-			}, this);
-		} else if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
-			sync->getRenderFinished()->setSignaled(false);
-			sync->clearImageIndex();
-			return true;
-		} else {
-			log::vtext("VK-Error", "Fail to vkQueuePresentKHR: ", result);
-			loop->performOnThread([this] () {
-				invalidate();
-			});
-		}
-		return false;
 	}
 };
 
@@ -398,83 +383,13 @@ static VkPresentModeKHR getVkPresentMode(gl::PresentMode presentMode) {
 	return VkPresentModeKHR(0);
 }
 
-SwapchainSync::~SwapchainSync() { }
-
-bool SwapchainSync::init(Device &dev, uint32_t idx, uint64_t gen) {
-	_frameIndex = idx;
-	_imageReady = Rc<Semaphore>::create(dev);
-	_renderFinished = Rc<Semaphore>::create(dev);
-	_gen = gen;
-	return true;
-}
-
-void SwapchainSync::reset(uint64_t gen) {
-	_swapchainValid = true;
-	if (gen != _gen) {
-		_imageIndex = maxOf<uint32_t>();
-		_imageReady->reset();
-	} else {
-		if (_imageIndex == maxOf<uint32_t>()) {
-			_imageReady->reset();
-		}
-	}
-	_renderFinished->reset();
-}
-
-void SwapchainSync::invalidate() {
-	_imageReady->invalidate();
-	_imageReady = nullptr;
-	_renderFinished->invalidate();
-	_renderFinished = nullptr;
-}
-
-void SwapchainSync::lock() {
-	_mutex.lock();
-}
-
-void SwapchainSync::unlock() {
-	_mutex.unlock();
-}
-
-VkResult SwapchainSync::acquireImage(Device &dev, Swapchain &swapchain) {
-	VkResult result = VK_ERROR_UNKNOWN;
-	_mutex.lock();
-	if (_imageIndex != maxOf<uint32_t>()) {
-		_mutex.unlock();
-		return VK_SUCCESS;
-	}
-	if (_swapchainValid) {
-		result = dev.getTable()->vkAcquireNextImageKHR(dev.getDevice(), swapchain.getSwapchain(),
-				0, _imageReady->getUnsignalled(), VK_NULL_HANDLE, &_imageIndex);
-	}
-	_mutex.unlock();
-	switch (result) {
-	case VK_SUCCESS:
-	case VK_SUBOPTIMAL_KHR:
-		_imageReady->setSignaled(true);
-		break;
-	default:
-		break;
-	}
-	return result;
-}
-
-void SwapchainSync::clearImageIndex() {
-	_imageIndex = maxOf<uint32_t>();
-}
-
 Swapchain::~Swapchain() {
-	for (auto &it : _sems) {
-		for (auto &iit : it) {
-			iit->invalidate();
-		}
-	}
-	_sems.clear();
+	_syncs.clear();
 }
 
-bool Swapchain::init(const gl::View *view, Device &device, Function<gl::SwapchainConfig(const gl::SurfaceInfo &)> &&cb, VkSurfaceKHR surface) {
+bool Swapchain::init(gl::View *view, Device &device, VkSurfaceKHR surface) {
 	auto info = device.getInstance()->getSurfaceOptions(surface, device.getPhysicalDevice());
-	auto cfg = cb(info);
+	auto cfg = view->selectConfig(info);
 
 	if (!info.isSupported(cfg)) {
 		log::vtext("Vk-Error", "Presentation with config ", cfg.description(), " is not supported for ", info.description());
@@ -482,17 +397,17 @@ bool Swapchain::init(const gl::View *view, Device &device, Function<gl::Swapchai
 	}
 
 	if constexpr (s_printVkInfo) {
-		Application::getInstance()->perform([instance = device.getInstance(), surface, dev = device.getPhysicalDevice()] (const Task &) {
-			log::vtext("Vk-Info", "Surface info:", instance->getSurfaceOptions(surface, dev).description());
+		Application::getInstance()->perform([info] (const Task &) {
+			log::vtext("Vk-Info", "Surface info:", info.description());
 			return true;
 		}, nullptr, this);
 	}
 
-	if (gl::Swapchain::init(view, move(cb))) {
+	if (gl::Swapchain::init(view)) {
 		auto presentMode = cfg.presentMode;
+		_surface = surface;
+		_device = &device;
 		if (createSwapchain(device, move(cfg), presentMode)) {
-			_surface = surface;
-			_sems.resize(FramesInFlight);
 			return true;
 		}
 	}
@@ -505,7 +420,7 @@ bool Swapchain::recreateSwapchain(gl::Device &idevice, gl::SwapchanCreationMode 
 	XL_VK_LOG("RecreateSwapChain: ", (mode == gl::SwapchanCreationMode::Best) ? "Best" : "Fast");
 
 	auto info = device.getInstance()->getSurfaceOptions(_surface, device.getPhysicalDevice());
-	auto cfg = _configCallback(info);
+	auto cfg = _view->selectConfig(info);
 
 	if (!info.isSupported(cfg)) {
 		log::vtext("Vk-Error", "Presentation with config ", cfg.description(), " is not supported for ", info.description());
@@ -516,12 +431,6 @@ bool Swapchain::recreateSwapchain(gl::Device &idevice, gl::SwapchanCreationMode 
 		return false;
 	}
 
-	if (_swapchain) {
-		cleanupSwapchain(device);
-	} else {
-		device.getTable()->vkDeviceWaitIdle(device.getDevice());
-	}
-
 	if (mode == gl::SwapchanCreationMode::Best && cfg.presentModeFast != gl::PresentMode::Unsupported) {
 		return createSwapchain(device, move(cfg), cfg.presentModeFast);
 	} else {
@@ -530,163 +439,178 @@ bool Swapchain::recreateSwapchain(gl::Device &idevice, gl::SwapchanCreationMode 
 }
 
 bool Swapchain::createSwapchain(Device &device, gl::SwapchainConfig &&cfg, gl::PresentMode presentMode) {
-	auto table = device.getTable();
-
-	auto swapchainImageInfo = getSwapchainImageInfo(cfg);
-
-	VkSwapchainCreateInfoKHR swapChainCreateInfo = { };
-	swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-	swapChainCreateInfo.surface = _surface;
-	swapChainCreateInfo.minImageCount = cfg.imageCount;
-	swapChainCreateInfo.imageFormat = VkFormat(swapchainImageInfo.format);
-	swapChainCreateInfo.imageColorSpace = VkColorSpaceKHR(cfg.colorSpace);
-	swapChainCreateInfo.imageExtent = VkExtent2D({swapchainImageInfo.extent.width, swapchainImageInfo.extent.height});
-	swapChainCreateInfo.imageArrayLayers = swapchainImageInfo.arrayLayers.get();
-	swapChainCreateInfo.imageUsage = VkImageUsageFlags(swapchainImageInfo.usage);
-
 	auto &devInfo = device.getInfo();
 
+	auto swapchainImageInfo = getSwapchainImageInfo(cfg);
 	uint32_t queueFamilyIndices[] = { devInfo.graphicsFamily.index, devInfo.presentFamily.index };
 
-	if (devInfo.graphicsFamily.index != devInfo.presentFamily.index) {
-		swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-		swapChainCreateInfo.queueFamilyIndexCount = 2;
-		swapChainCreateInfo.pQueueFamilyIndices = queueFamilyIndices;
-	} else {
-		swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	}
+	do {
+		std::unique_lock<Mutex> lock(_swapchainMutex);
 
-	swapChainCreateInfo.preTransform = VkSurfaceTransformFlagBitsKHR(cfg.transform);
-	swapChainCreateInfo.compositeAlpha = VkCompositeAlphaFlagBitsKHR(cfg.alpha);
-	swapChainCreateInfo.presentMode = getVkPresentMode(presentMode);
-	swapChainCreateInfo.clipped = (cfg.clipped ? VK_TRUE : VK_FALSE);
+		/*if (!_presentQueue) {
+			_presentQueue = device.tryAcquireQueueSync(QueueOperations::Present);
+		}
 
-	if (_oldSwapchain) {
-		swapChainCreateInfo.oldSwapchain = _oldSwapchain;
-	} else {
-		swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
-	}
+		auto v = _presentQueue->getActiveFencesCount();
+		if (v > 0) {
+			log::vtext("Swapchain" "getActiveFencesCount: ", v);
+		}*/
 
-	swapChainCreateInfo.imageExtent = device.getInstance()->getSurfaceExtent(_surface, device.getPhysicalDevice());
+		//_presentQueue->waitIdle();
 
-	if (table->vkCreateSwapchainKHR(device.getDevice(), &swapChainCreateInfo, nullptr, &_swapchain) != VK_SUCCESS) {
-		return false;
-	}
+		auto oldSwapchain = move(_swapchain);
 
-	swapchainImageInfo.extent = Extent3(swapChainCreateInfo.imageExtent.width, swapChainCreateInfo.imageExtent.height, 1);
+		_swapchain = Rc<SwapchainHandle>::create(device, cfg, move(swapchainImageInfo), presentMode,
+				_surface, queueFamilyIndices, [this] {
+			_view->pushEvent(AppEvent::SwapchainRecreation);
+		}, oldSwapchain.get());
 
-	if (_oldSwapchain) {
-		table->vkDestroySwapchainKHR(device.getDevice(), _oldSwapchain, nullptr);
-		_oldSwapchain = VK_NULL_HANDLE;
-	}
+		_config = move(cfg);
 
-	Vector<VkImage> swapchainImages;
+		++ _gen;
 
-	uint32_t imageCount = 0;
-	table->vkGetSwapchainImagesKHR(device.getDevice(), _swapchain, &imageCount, nullptr);
-	swapchainImages.resize(imageCount);
-	table->vkGetSwapchainImagesKHR(device.getDevice(), _swapchain, &imageCount, swapchainImages.data());
+		Rc<PresentTask> task;
+		_presentCurrentMutex.lock();
+		if (_presentCurrent) {
+			task = _presentCurrent;
+		}
+		_presentCurrentMutex.unlock();
 
-	_config = move(cfg);
-	_presentMode = presentMode;
-	_valid = true;
+		if (task) {
+			presentImmediate(task);
+		}
+	} while (0);
+
 	return true;
-}
-
-void Swapchain::cleanupSwapchain(Device &device) {
-	_images.clear();
-
-	device.getTable()->vkDeviceWaitIdle(device.getDevice());
-
-	if (_swapchain) {
-		_oldSwapchain = _swapchain;
-		_swapchain = VK_NULL_HANDLE;
-	}
 }
 
 void Swapchain::invalidate(gl::Device &idevice) {
 	auto &device = dynamic_cast<Device &>(idevice);
 
-	incrementGeneration(0); // wait idle
-
 	if (_swapchain) {
-		cleanupSwapchain(device);
-	}
-
-	if (_oldSwapchain) {
-		device.getTable()->vkDestroySwapchainKHR(device.getDevice(), _oldSwapchain, nullptr);
-		_oldSwapchain = VK_NULL_HANDLE;
+		_swapchain->deprecate(true);
+		_swapchain = nullptr;
 	}
 
 	if (_surface) {
 		auto i = device.getInstance();
-		i->vkDestroySurfaceKHR(i->getInstance(), _surface, nullptr);
 		device.getTable()->vkDeviceWaitIdle(device.getDevice());
+		i->vkDestroySurfaceKHR(i->getInstance(), _surface, nullptr);
 		_surface = VK_NULL_HANDLE;
 	}
 }
 
-gl::ImageInfo Swapchain::getSwapchainImageInfo(const gl::SwapchainConfig &cfg) const {
-	gl::ImageInfo swapchainImageInfo;
-	swapchainImageInfo.format = cfg.imageFormat;
-	swapchainImageInfo.flags = gl::ImageFlags::None;
-	swapchainImageInfo.imageType = gl::ImageType::Image2D;
-	swapchainImageInfo.extent = Extent3(cfg.extent.width, cfg.extent.height, 1);
-	swapchainImageInfo.arrayLayers = gl::ArrayLayers( 1 );
-	swapchainImageInfo.usage = gl::ImageUsage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-	if (cfg.transfer) {
-		swapchainImageInfo.usage |= gl::ImageUsage::TransferDst;
-	}
-	return swapchainImageInfo;
-}
-
-gl::ImageViewInfo Swapchain::getSwapchainImageViewInfo(const gl::ImageInfo &image) const {
-	gl::ImageViewInfo info;
-	switch (image.imageType) {
-	case gl::ImageType::Image1D:
-		info.type = gl::ImageViewType::ImageView1D;
-		break;
-	case gl::ImageType::Image2D:
-		info.type = gl::ImageViewType::ImageView2D;
-		break;
-	case gl::ImageType::Image3D:
-		info.type = gl::ImageViewType::ImageView3D;
-		break;
-	}
-
-	return image.getViewInfo(info);
-}
-
-bool Swapchain::isBestPresentMode() const {
-	return _presentMode == _config.presentMode;
-}
-
-Rc<SwapchainSync> Swapchain::acquireSwapchainSync(Device &dev, uint64_t idx) {
-	idx = idx % FramesInFlight;
-	auto &v = _sems.at(idx);
-	if (!v.empty()) {
-		auto ret = v.back();
-		v.pop_back();
-		ret->reset(_gen);
-		return ret;
-	}
-	return Rc<SwapchainSync>::create(dev, idx, _gen);
-}
-
-void Swapchain::releaseSwapchainSync(Rc<SwapchainSync> &&ref) {
-	if (!_sems.empty()) {
-		_sems.at(ref->getFrameIndex() % FramesInFlight).emplace_back(move(ref));
-	}
-}
-
-bool Swapchain::present(gl::Loop &loop, Rc<Image> &&image, VkImageLayout l) {
-	if (!_config.transfer) {
+bool Swapchain::present(gl::Loop &loop, const Rc<PresentTask> &presentTask) {
+	std::unique_lock<Mutex> lock(_swapchainMutex);
+	if (!_config.transfer || !_swapchain) {
 		return false;
 	}
 
+	lock.unlock();
+
+	if (_presentScheduled) {
+		_presentPending = presentTask;
+		return true;
+	}
+
+	VkFilter filter = VK_FILTER_NEAREST;
+	if (!isImagePresentable(*presentTask->object->image, filter)) {
+		return false;
+	}
+
+	if (presentTask->order < _order) {
+		return false;
+	}
+
+	_presentCurrentMutex.lock();
+	if (presentTask != _presentCurrent) {
+		_presentCurrent = presentTask;
+	}
+	_presentCurrentMutex.unlock();
+
+	++ _order;
+	presentTask->order = _order;
+
+	_presentScheduled = true;
+	auto frame = Rc<SwapchainPresentFrame>::alloc(loop, this, _order,
+			[this, loop = &loop, presentTask] (VkResult res) mutable {
+		onPresentComplete(*loop, res, presentTask);
+	}, _presentQueue);
+
+	frame->run(presentTask, VkImageLayout(presentTask->attachment->getFinalLayout()), filter);
+	return true;
+}
+
+void Swapchain::deprecate() {
+	std::unique_lock<Mutex> lock(_swapchainMutex);
+	_swapchain->deprecate();
+}
+
+bool Swapchain::isBestPresentMode() const {
+	std::unique_lock<Mutex> swapchainLock(_swapchainMutex);
+	return _swapchain && _swapchain->getPresentMode() == _config.presentMode;
+}
+
+Rc<SwapchainSync> Swapchain::acquireSwapchainSync(Device &dev, bool lock) {
+	std::unique_lock<Mutex> swapchainLock;
+	if (lock) {
+		swapchainLock = std::unique_lock<Mutex>(_swapchainMutex);
+	}
+
+	auto swapchain = _swapchain;
+	if (!swapchain->retainUsage()) {
+		return nullptr;
+	}
+
+	if (!_syncs.empty()) {
+		auto ret = _syncs.back();
+		_syncs.pop_back();
+		ret->reset(dev, swapchain, _gen);
+		return ret;
+	}
+	return Rc<SwapchainSync>::create(dev, swapchain, &_swapchainMutex, _gen, [this] (Rc<SwapchainSync> &&sync) {
+		releaseSync(move(sync));
+	});
+}
+
+void Swapchain::releaseSync(Rc<SwapchainSync> &&ref) {
+	if (_view->getLoop()->isOnThread()) {
+		_syncs.emplace_back(move(ref));
+	} else {
+		_view->getLoop()->performOnThread([this, ref = move(ref)] () mutable {
+			_syncs.emplace_back(move(ref));
+		}, this);
+	}
+}
+
+void Swapchain::setPresentSync(Rc<SwapchainSync> &&sync) {
+	std::unique_lock<Mutex> lock(_presentCurrentMutex);
+	Rc<SwapchainSync> tmp;
+	if (_presentedSync) {
+		tmp = move(_presentedSync);
+	}
+	_presentedSync = move(sync);
+	lock.unlock();
+	if (tmp) {
+		tmp->setPresentationEnded(true);
+	}
+}
+
+void Swapchain::onPresentComplete(gl::Loop &loop, VkResult res, const Rc<PresentTask> &task) {
+	_presentScheduled = false;
+	if (res == VK_ERROR_OUT_OF_DATE_KHR) {
+		_presentPending = nullptr;
+	} else if (_presentPending) {
+		auto tmp = move(_presentPending);
+		_presentPending = nullptr;
+		present(loop, tmp);
+	}
+}
+
+bool Swapchain::isImagePresentable(const gl::ImageObject &image, VkFilter &filter) const {
 	auto dev = (Device *)_device;
 
-	auto &sourceImageInfo = image->getInfo();
+	auto &sourceImageInfo = image.getInfo();
 	if (sourceImageInfo.extent.depth != 1 || sourceImageInfo.format != _config.imageFormat
 			|| (sourceImageInfo.usage & gl::ImageUsage::TransferSrc) == gl::ImageUsage::None) {
 		log::text("Swapchain", "Image can not be presented on swapchain");
@@ -694,14 +618,13 @@ bool Swapchain::present(gl::Loop &loop, Rc<Image> &&image, VkImageLayout l) {
 	}
 
 	VkFormatProperties sourceProps;
+	VkFormatProperties targetProps;
+
 	dev->getInstance()->vkGetPhysicalDeviceFormatProperties(dev->getInfo().device,
 			VkFormat(sourceImageInfo.format), &sourceProps);
-
-	VkFormatProperties targetProps;
 	dev->getInstance()->vkGetPhysicalDeviceFormatProperties(dev->getInfo().device,
 			VkFormat(_config.imageFormat), &targetProps);
 
-	VkFilter filter = VK_FILTER_NEAREST;
 	if (_config.extent.width == sourceImageInfo.extent.width && _config.extent.height == sourceImageInfo.extent.height) {
 		if ((targetProps.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) == 0) {
 			return false;
@@ -740,18 +663,99 @@ bool Swapchain::present(gl::Loop &loop, Rc<Image> &&image, VkImageLayout l) {
 		}
 	}
 
-	auto frame = Rc<SwapchainPresentFrame>::alloc(loop, this, _order ++);
-
-	frame->run(move(image), l, filter);
-
 	return true;
 }
 
-Rc<Image> Swapchain::getImage(uint32_t i) const {
-	if (i < _images.size()) {
-		return _images[i];
+bool Swapchain::presentImmediate(const Rc<PresentTask> &task) {
+	auto ops = QueueOperations::Present;
+	auto dev = (Device *)_device;
+
+	VkFilter filter;
+	if (!isImagePresentable(*task->object->image, filter)) {
+		return false;
 	}
-	return nullptr;
+
+	Rc<DeviceQueue> queue;
+	Rc<SwapchainSync> sync;
+	Rc<CommandPool> pool;
+	Rc<Fence> fence;
+
+	Rc<Image> sourceImage = (Image *)task->object->image.get();
+	Rc<Image> targetImage;
+
+	Vector<VkCommandBuffer> buffers;
+	gl::PipelineStage waitStages = gl::PipelineStage::Transfer;
+
+	auto cleanup = [&] {
+		if (fence) {
+			dev->releaseFenceUnsafe(move(fence));
+			fence = nullptr;
+		}
+		if (pool) {
+			dev->releaseCommandPoolUnsafe(move(pool));
+			pool = nullptr;
+		}
+		if (sync) {
+			sync = nullptr;
+		}
+		if (queue) {
+			dev->releaseQueue(move(queue));
+			queue = nullptr;
+		}
+		return false;
+	};
+
+	queue = dev->tryAcquireQueueSync(ops);
+	if (!queue) {
+		return cleanup();
+	}
+
+	sync = acquireSwapchainSync(*dev, false);
+	VkResult result = sync->acquireImage(*dev);
+	if (result != VK_SUCCESS) {
+		return cleanup();
+	}
+
+	targetImage = sync->getImage();
+
+	pool = dev->acquireCommandPool(ops);
+	fence = dev->acquireFence(0);
+
+	auto buf = pool->allocBuffer(*dev);
+
+	Swapchain_writeImageTransfer(*dev, buf, sourceImage, targetImage, VkImageLayout(task->attachment->getFinalLayout()), filter);
+
+	buffers.emplace_back(buf);
+
+	gl::FrameSync frameSync;
+	task->object->rearmSemaphores(*dev);
+
+	frameSync.waitAttachments.emplace_back(gl::FrameSyncAttachment{nullptr, task->object->waitSem, gl::PipelineStage::Transfer});
+	frameSync.signalAttachments.emplace_back(gl::FrameSyncAttachment{nullptr, task->object->signalSem});
+
+	result = sync->submitWithPresent(*dev, *queue, frameSync, *fence, buffers, waitStages);
+	if (queue) {
+		dev->releaseQueue(move(queue));
+		queue = nullptr;
+	}
+	if (result == VK_SUCCESS) {
+		setPresentSync(move(sync));
+		fence->check(false);
+		dev->releaseFenceUnsafe(move(fence));
+		dev->releaseCommandPoolUnsafe(move(pool));
+		return true;
+	} else {
+		if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+			fence->check(false);
+
+			dev->releaseFenceUnsafe(move(fence));
+			fence = nullptr;
+
+			dev->releaseCommandPoolUnsafe(move(pool));
+			pool = nullptr;
+		}
+		return cleanup();
+	}
 }
 
 }

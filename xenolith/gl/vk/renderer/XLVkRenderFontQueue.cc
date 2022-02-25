@@ -118,8 +118,8 @@ bool RenderFontQueue::init(StringView name, Function<void(gl::FrameQueue &, cons
 	}
 
 	builder.addRenderPass(pass);
-	builder.addPassInput(pass, 0, attachment);
-	builder.addPassOutput(pass, 0, attachment);
+	builder.addPassInput(pass, 0, attachment, gl::AttachmentDependencyInfo());
+	builder.addPassOutput(pass, 0, attachment, gl::AttachmentDependencyInfo());
 	builder.addInput(attachment);
 	builder.addOutput(attachment);
 

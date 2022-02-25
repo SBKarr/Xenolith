@@ -124,7 +124,7 @@ bool RenderPassHandle::prepare(FrameQueue &, Function<void(bool)> &&) {
 	return true;
 }
 
-void RenderPassHandle::submit(FrameQueue &, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) {
+void RenderPassHandle::submit(FrameQueue &, Rc<FrameSync> &&, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) {
 
 }
 

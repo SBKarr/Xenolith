@@ -106,10 +106,19 @@ static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder 
 	vertexInput->setInputCallback(move(cb));
 
 	// define pass input-output
-	builder.addPassInput(pass, 0, samplers); // 0
-	builder.addPassInput(pass, 0, vertexInput); // 1
-	builder.addPassInput(pass, 0, materialInput); // 2
-	builder.addPassOutput(pass, 0, out);
+	builder.addPassInput(pass, 0, samplers, gl::AttachmentDependencyInfo()); // 0
+	builder.addPassInput(pass, 0, vertexInput, gl::AttachmentDependencyInfo()); // 1
+	builder.addPassInput(pass, 0, materialInput, gl::AttachmentDependencyInfo()); // 2
+	builder.addPassOutput(pass, 0, out, gl::AttachmentDependencyInfo{
+		// first used as color attachment to output colors
+		gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::ColorAttachmentWrite,
+
+		// last used the same way (the only usage for this attachment)
+		gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::ColorAttachmentWrite,
+
+		// can be reused after RenderPass is submitted
+		gl::FrameRenderPassState::Submitted,
+	});
 
 	// define global input-output
 	// samplers and materialInput are persistent between frames, only vertexes should be provided before rendering started

@@ -131,9 +131,9 @@ XcbView::XcbView(const Instance *inst, ViewImpl *v, StringView, URect rect) {
 	_socket = xcb_get_file_descriptor(_connection); // assume it's non-blocking
 	_eventFd = eventfd(0, EFD_NONBLOCK);
 
-	uint32_t mask = /* XCB_CW_BACK_PIXEL | */ XCB_CW_EVENT_MASK;
+	uint32_t mask = /*XCB_CW_BACK_PIXEL | */ XCB_CW_EVENT_MASK;
 	uint32_t values[1];
-	//values[0] = _defaultScreen->black_pixel;
+	//values[0] = _defaultScreen->white_pixel;
 	values[0] = XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_KEY_PRESS | XCB_EVENT_MASK_STRUCTURE_NOTIFY;
 		/*XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_BUTTON_PRESS |	XCB_EVENT_MASK_BUTTON_RELEASE | XCB_EVENT_MASK_POINTER_MOTION
 			| XCB_EVENT_MASK_ENTER_WINDOW | XCB_EVENT_MASK_LEAVE_WINDOW | XCB_EVENT_MASK_KEY_PRESS | XCB_EVENT_MASK_KEY_RELEASE
@@ -323,8 +323,8 @@ bool XcbView::poll() {
 					ev->x, ev->y, ev->width, ev->height, uint32_t(ev->border_width), uint32_t(ev->override_redirect));
 			if (ev->width != _width || ev->height != _height) {
 				_width = ev->width; _height = ev->height;
-				_view->recreateSwapChain();
 				_view->setScreenExtent(Extent2(_width, _height));
+				_view->recreateSwapChain();
 			}
 			break;
 		}

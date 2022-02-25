@@ -46,6 +46,7 @@ class CommandList;
 class Material;
 class MaterialAttachment;
 class DynamicImage;
+class Semaphore;
 struct ImageAttachmentObject;
 
 class FrameEmitter;
@@ -105,7 +106,8 @@ enum class ObjectType {
 	Sampler,
 	Semaphore,
 	ShaderModule,
-	DeviceMemory
+	DeviceMemory,
+	Swapchain
 };
 
 enum class PixelFormat {

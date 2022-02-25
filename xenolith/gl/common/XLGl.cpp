@@ -23,15 +23,21 @@
 #include "XLDefine.h"
 
 #ifdef XL_LOOP_DEBUG
-#define XL_LOOP_LOG(...) log::vtext("Gl::Loop", __VA_ARGS__)
+#define XL_LOOP_LOG(...) log::vtext("gl::Loop", __VA_ARGS__)
 #else
 #define XL_LOOP_LOG(...)
 #endif
 
 #ifdef XL_FRAME_DEBUG
-#define XL_FRAME_LOG(...) log::vtext("Gl::Frame", __VA_ARGS__)
+#define XL_FRAME_LOG(...) log::vtext("gl::Frame", __VA_ARGS__)
 #else
 #define XL_FRAME_LOG(...)
+#endif
+
+#ifdef XL_FRAME_EMITTER_DEBUG
+#define XL_FRAME_EMITTER_LOG(...) log::vtext("gl::FrameEmitter", __VA_ARGS__)
+#else
+#define XL_FRAME_EMITTER_LOG(...)
 #endif
 
 #define XL_FRAME_PROFILE(fn, tag, max) \
@@ -47,6 +53,7 @@
 #include "XLGlRenderQueue.cc"
 #include "XLGlMaterial.cc"
 #include "XLGlInstance.cc"
+#include "XLGlFrameCache.cc"
 #include "XLGlFrameEmitter.cc"
 #include "XLGlFrameHandle.cc"
 #include "XLGlFrameQueue.cc"

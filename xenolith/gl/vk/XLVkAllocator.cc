@@ -234,6 +234,21 @@ bool Allocator::init(Device &dev, VkPhysicalDevice device, const DeviceInfo::Fea
 }
 
 void Allocator::invalidate(Device &dev) {
+	for (auto &type : _memTypes) {
+		for (auto &nodes : type->buf) {
+			for (auto &node : nodes) {
+				if (node.ptr) {
+					_device->getTable()->vkUnmapMemory(_device->getDevice(), node.mem);
+					const_cast<MemNode &>(node).ptr = nullptr;
+				}
+				_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+					table.vkFreeMemory(device, node.mem, nullptr);
+				});
+				const_cast<MemNode &>(node).mem = VK_NULL_HANDLE;
+			}
+		}
+	}
+
 	_device = nullptr;
 }
 
@@ -265,20 +280,6 @@ const Allocator::MemType *Allocator::getType(uint32_t idx) const {
 	}
 	return nullptr;
 }
-
-/*mem::Allocator *Allocator::getHeap(uint32_t typeFilter) {
-	VkMemoryPropertyFlags prop = 0;
-	auto v = findMemoryType(typeFilter, prop);
-
-	std::unique_lock<Mutex> lock(_mutex);
-	auto it = _heaps.find(v);
-	if (it != _heaps.end()) {
-		return &it->second;
-	} else {
-		return &_heaps.emplace(std::piecewise_construct, std::forward_as_tuple(v),
-				std::forward_as_tuple(v, _device->getTable()->vkAllocateMemory, _device->getTable()->vkFreeMemory, _device->getDevice())).first->second;
-	}
-}*/
 
 void Allocator::lock() {
 	_mutex.lock();
@@ -394,13 +395,20 @@ Allocator::MemNode Allocator::alloc(MemType *type, uint64_t in_size, bool persis
 	allocInfo.allocationSize = size;
 	allocInfo.memoryTypeIndex = type->idx;
 
-	if (_device->getTable()->vkAllocateMemory(_device->getDevice(), &allocInfo, nullptr, &ret.mem) != VK_SUCCESS) {
+	VkResult result = VK_ERROR_UNKNOWN;
+	_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+		result = table.vkAllocateMemory(device, &allocInfo, nullptr, &ret.mem);
+	});
+
+	if (result != VK_SUCCESS) {
 		return MemNode();
 	}
 
 	if (persistent) {
 		if (_device->getTable()->vkMapMemory(_device->getDevice(), ret.mem, 0, size, 0, &ret.ptr) != VK_SUCCESS) {
-			_device->getTable()->vkFreeMemory(_device->getDevice(), ret.mem, nullptr);
+			_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+				table.vkFreeMemory(device, ret.mem, nullptr);
+			});
 			return MemNode();
 		}
 	}
@@ -462,7 +470,9 @@ void Allocator::free(MemType *type, SpanView<MemNode> nodes) {
 			_device->getTable()->vkUnmapMemory(_device->getDevice(), it.mem);
 			const_cast<MemNode &>(it).ptr = nullptr;
 		}
-		_device->getTable()->vkFreeMemory(_device->getDevice(), it.mem, nullptr);
+		_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+			table.vkFreeMemory(device, it.mem, nullptr);
+		});
 	}
 }
 
@@ -572,7 +582,11 @@ Rc<Buffer> Allocator::spawnPersistent(AllocationUsage usage, const gl::BufferInf
 		allocInfo.allocationSize = req.requirements.size;
 		allocInfo.memoryTypeIndex = type->idx;
 
-		if (_device->getTable()->vkAllocateMemory(_device->getDevice(), &allocInfo, nullptr, &memory) != VK_SUCCESS) {
+		VkResult result = VK_ERROR_UNKNOWN;
+		_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+			result = table.vkAllocateMemory(device, &allocInfo, nullptr, &memory);
+		});
+		if (result != VK_SUCCESS) {
 			_device->getTable()->vkDestroyBuffer(_device->getDevice(), target, nullptr);
 			return nullptr;
 		}
@@ -583,7 +597,11 @@ Rc<Buffer> Allocator::spawnPersistent(AllocationUsage usage, const gl::BufferInf
 		allocInfo.allocationSize = req.requirements.size;
 		allocInfo.memoryTypeIndex = type->idx;
 
-		if (_device->getTable()->vkAllocateMemory(_device->getDevice(), &allocInfo, nullptr, &memory) != VK_SUCCESS) {
+		VkResult result = VK_ERROR_UNKNOWN;
+		_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+			result = table.vkAllocateMemory(device, &allocInfo, nullptr, &memory);
+		});
+		if (result != VK_SUCCESS) {
 			_device->getTable()->vkDestroyBuffer(_device->getDevice(), target, nullptr);
 			return nullptr;
 		}
@@ -597,7 +615,9 @@ Rc<Buffer> Allocator::spawnPersistent(AllocationUsage usage, const gl::BufferInf
 			memcpy(ptr, view.data(), view.size());
 			_device->getTable()->vkUnmapMemory(_device->getDevice(), memory);
 		} else {
-			_device->getTable()->vkFreeMemory(_device->getDevice(), memory, nullptr);
+			_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+				table.vkFreeMemory(device, memory, nullptr);
+			});
 			_device->getTable()->vkDestroyBuffer(_device->getDevice(), target, nullptr);
 			return nullptr;
 		}
@@ -653,7 +673,11 @@ Rc<Image> Allocator::spawnPersistent(AllocationUsage usage, const gl::ImageInfo 
 		allocInfo.allocationSize = req.requirements.size;
 		allocInfo.memoryTypeIndex = type->idx;
 
-		if (_device->getTable()->vkAllocateMemory(_device->getDevice(), &allocInfo, nullptr, &memory) != VK_SUCCESS) {
+		VkResult result = VK_ERROR_UNKNOWN;
+		_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+			result = table.vkAllocateMemory(device, &allocInfo, nullptr, &memory);
+		});
+		if (result != VK_SUCCESS) {
 			_device->getTable()->vkDestroyImage(_device->getDevice(), target, nullptr);
 			return nullptr;
 		}
@@ -664,7 +688,11 @@ Rc<Image> Allocator::spawnPersistent(AllocationUsage usage, const gl::ImageInfo 
 		allocInfo.allocationSize = req.requirements.size;
 		allocInfo.memoryTypeIndex = type->idx;
 
-		if (_device->getTable()->vkAllocateMemory(_device->getDevice(), &allocInfo, nullptr, &memory) != VK_SUCCESS) {
+		VkResult result = VK_ERROR_UNKNOWN;
+		_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+			result = table.vkAllocateMemory(device, &allocInfo, nullptr, &memory);
+		});
+		if (result != VK_SUCCESS) {
 			_device->getTable()->vkDestroyImage(_device->getDevice(), target, nullptr);
 			return nullptr;
 		}
@@ -709,6 +737,7 @@ Rc<DeviceBuffer> DeviceMemoryPool::spawn(AllocationUsage type, const gl::BufferI
 	VkBuffer target = VK_NULL_HANDLE;
 	auto dev = _allocator->getDevice();
 	if (dev->getTable()->vkCreateBuffer(dev->getDevice(), &bufferInfo, nullptr, &target) != VK_SUCCESS) {
+		log::text("DeviceMemoryPool", "Fail tocreate buffer");
 		return nullptr;
 	}
 
@@ -716,6 +745,7 @@ Rc<DeviceBuffer> DeviceMemoryPool::spawn(AllocationUsage type, const gl::BufferI
 
 	if (requirements.requiresDedicated) {
 		// TODO: deal with dedicated allocations
+		log::text("DeviceMemoryPool", "Dedicated allocation required");
 	} else {
 		auto memType = _allocator->findMemoryType(requirements.requirements.memoryTypeBits, type);
 		if (!memType) {
@@ -737,7 +767,12 @@ Rc<DeviceBuffer> DeviceMemoryPool::spawn(AllocationUsage type, const gl::BufferI
 				auto ret = Rc<DeviceBuffer>::create(this, target, move(mem), type, info);
 				_buffers.emplace_back(ret);
 				return ret;
+			} else {
+				log::text("DeviceMemoryPool", "Fail to bind memory for buffer");
+				return nullptr;
 			}
+		} else {
+			log::text("DeviceMemoryPool", "Fail to allocate memory for buffer");
 		}
 	}
 
@@ -788,7 +823,7 @@ Allocator::MemBlock DeviceMemoryPool::alloc(MemData *mem, VkDeviceSize in_size, 
 		alignedOffset = 0;
 	}
 
-	if (node) {
+	if (node && node->mem) {
 		node->offset = alignedOffset + size;
 		node->lastAllocation = allocType;
 		return Allocator::MemBlock({node->mem, alignedOffset, size, mem->type->idx, node->ptr});

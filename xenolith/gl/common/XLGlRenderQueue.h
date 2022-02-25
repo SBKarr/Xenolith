@@ -185,24 +185,26 @@ public:
 	RenderPassData * addRenderPass(const Rc<RenderPass> &);
 
 	AttachmentRef *addPassInput(const Rc<RenderPass> &, uint32_t subpassIdx,
-			const Rc<BufferAttachment> &, FrameRenderPassState = FrameRenderPassState::Initial);
+			const Rc<BufferAttachment> &, AttachmentDependencyInfo);
 	AttachmentRef *addPassOutput(const Rc<RenderPass> &, uint32_t subpassIdx,
-			const Rc<BufferAttachment> &, FrameRenderPassState = FrameRenderPassState::Initial);
+			const Rc<BufferAttachment> &, AttachmentDependencyInfo);
 
-	AttachmentRef *addPassInput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<GenericAttachment> &,
-			FrameRenderPassState = FrameRenderPassState::Initial);
-	AttachmentRef *addPassOutput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<GenericAttachment> &,
-			FrameRenderPassState = FrameRenderPassState::Initial);
+	AttachmentRef *addPassInput(const Rc<RenderPass> &, uint32_t subpassIdx,
+			const Rc<GenericAttachment> &, AttachmentDependencyInfo);
+	AttachmentRef *addPassOutput(const Rc<RenderPass> &, uint32_t subpassIdx,
+			const Rc<GenericAttachment> &, AttachmentDependencyInfo);
 
-	ImageAttachmentRef *addPassInput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<ImageAttachment> &,
-			FrameRenderPassState = FrameRenderPassState::Initial);
-	ImageAttachmentRef *addPassOutput(const Rc<RenderPass> &, uint32_t subpassIdx, const Rc<ImageAttachment> &,
-			FrameRenderPassState = FrameRenderPassState::Initial);
+	ImageAttachmentRef *addPassInput(const Rc<RenderPass> &, uint32_t subpassIdx,
+			const Rc<ImageAttachment> &, AttachmentDependencyInfo);
+	ImageAttachmentRef *addPassOutput(const Rc<RenderPass> &, uint32_t subpassIdx,
+			const Rc<ImageAttachment> &, AttachmentDependencyInfo);
+
 	Pair<ImageAttachmentRef *, ImageAttachmentRef *> addPassResolve(const Rc<RenderPass> &, uint32_t subpassIdx,
-			const Rc<ImageAttachment> &color, const Rc<ImageAttachment> &resolve, FrameRenderPassState = FrameRenderPassState::Initial);
+			const Rc<ImageAttachment> &color, const Rc<ImageAttachment> &resolve,
+			AttachmentDependencyInfo colorDep, AttachmentDependencyInfo resolveDep);
 
 	ImageAttachmentRef *addPassDepthStencil(const Rc<RenderPass> &, uint32_t subpassIdx,
-			const Rc<ImageAttachment> &, FrameRenderPassState = FrameRenderPassState::Initial);
+			const Rc<ImageAttachment> &, AttachmentDependencyInfo);
 
 	bool addSubpassDependency(const Rc<RenderPass> &, uint32_t srcSubpass, PipelineStage srcStage, AccessType srcAccess,
 			uint32_t dstSubpass, PipelineStage dstStage, AccessType dstAccess, bool byRegion = true);

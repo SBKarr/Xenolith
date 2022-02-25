@@ -80,6 +80,7 @@ public:
 
 	virtual Rc<Framebuffer> makeFramebuffer(const gl::RenderPassData *, SpanView<Rc<gl::ImageView>>, Extent2);
 	virtual Rc<ImageAttachmentObject> makeImage(const gl::ImageAttachment *, Extent3);
+	virtual Rc<Semaphore> makeSemaphore();
 
 protected:
 	friend class Loop;
@@ -98,7 +99,8 @@ protected:
 
 	bool _started = false;
 	const Instance *_glInstance = nullptr;
-	Mutex _mutex;
+	Mutex _shaderMutex;
+	Mutex _objectMutex;
 
 	Map<String, Rc<Shader>> _shaders;
 
@@ -109,6 +111,8 @@ protected:
 	uint32_t _samplersCount = 0;
 	bool _samplersCompiled = false;
 	uint32_t _textureLayoutImagesCount = 0;
+
+	std::thread::id _loopThreadId;
 };
 
 }

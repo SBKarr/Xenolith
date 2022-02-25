@@ -23,7 +23,7 @@
 #ifndef XENOLITH_GL_COMMON_XLGLFRAMEEMITTER_H_
 #define XENOLITH_GL_COMMON_XLGLFRAMEEMITTER_H_
 
-#include "XLGl.h"
+#include "XLGlFrameCache.h"
 
 namespace stappler::xenolith::gl {
 
@@ -31,42 +31,9 @@ class FrameHandle;
 class Loop;
 class Attachment;
 class FrameEmitter;
+class Swapchain;
 
-struct FrameCacheRenderPass final {
-	const RenderPassData *pass;
-	Extent2 extent;
-	std::multimap<uint64_t, Rc<Framebuffer>> framebuffers;
-};
-
-struct FrameCacheImageAttachment final {
-	const ImageAttachment *attachment;
-	Extent3 extent;
-	Vector<Rc<ImageAttachmentObject>> images;
-};
-
-struct FrameCacheStorage final : public Ref {
-	Device *device;
-	const FrameEmitter *emitter;
-	const RenderQueue *queue;
-
-	Map<const RenderPassData *, FrameCacheRenderPass> passes;
-	Map<const ImageAttachment *, FrameCacheImageAttachment> images;
-
-	Mutex _invalidateMutex;
-
-	virtual ~FrameCacheStorage() { }
-
-	bool init(Device *, const FrameEmitter *, const RenderQueue *);
-	void invalidate();
-
-	void reset(const RenderPassData *, Extent2);
-	Rc<Framebuffer> acquireFramebuffer(const Loop &, const RenderPassData *, SpanView<Rc<ImageView>>);
-	void releaseFramebuffer(const RenderPassData *, Rc<Framebuffer> &&);
-
-	void reset(const ImageAttachment *, Extent3);
-	Rc<ImageAttachmentObject> acquireImage(const Loop &, const ImageAttachment *);
-	void releaseImage(const ImageAttachment *, Rc<ImageAttachmentObject> &&);
-};
+struct FrameQueueAttachmentData;
 
 class FrameRequest final : public Ref {
 public:
@@ -80,7 +47,12 @@ public:
 	void addInput(const Attachment *, Rc<AttachmentInputData> &&);
 	void acquireInput(Map<const Attachment *, Rc<AttachmentInputData>> &target);
 
+	bool onOutputReady(gl::Loop &, FrameQueueAttachmentData &) const;
+
 	void finalize();
+
+	bool bindSwapchain(const Rc<Swapchain> &);
+	bool bindSwapchain(const Attachment *, const Rc<Swapchain> &);
 
 	const Rc<FrameEmitter> &getEmitter() const { return _emitter; }
 	const Rc<RenderQueue> &getQueue() const { return _queue; }
@@ -110,6 +82,12 @@ protected:
 	bool _readyForSubmit = true; // if true, do not wait synchronization with other active frames in emitter
 	bool _persistentMappings = true; // try to map per-frame GPU memory persistently
 	uint32_t _sceneId = 0;
+
+	// return true to setaside output
+	Map<const Attachment *, Function<bool(const Rc<FrameCacheStorage> &, const FrameQueueAttachmentData &)>> _output;
+
+	const Attachment *_swapchainAttachment;
+	Rc<Swapchain> _swapchain;
 };
 
 // Frame emitter is an interface, that continuously spawns frames, and can control validity of a frame
@@ -127,6 +105,8 @@ public:
 
 	virtual void acquireNextFrame();
 
+	virtual void dropFrameTimeout();
+
 	bool isValid() const { return _valid; }
 
 	void setFrameTime(uint64_t v) { _frame = v; }
@@ -135,11 +115,13 @@ public:
 	void setFrameInterval(uint64_t v) { _frameInterval = v; }
 	uint64_t getFrameInterval() const { return _frameInterval; }
 
+	const Rc<Loop> &getLoop() const { return _loop; }
+
 protected:
 	virtual void onFrameEmitted(gl::FrameHandle &);
 	virtual void onFrameSubmitted(gl::FrameHandle &);
 	virtual void onFrameComplete(gl::FrameHandle &);
-	virtual void onFrameTimeout();
+	virtual void onFrameTimeout(uint64_t order);
 	virtual void onFrameRequest(bool timeout);
 
 	virtual Rc<FrameHandle> makeFrame(Rc<FrameRequest> &&, bool readyForSubmit);

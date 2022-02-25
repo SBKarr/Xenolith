@@ -72,25 +72,19 @@ bool ViewImpl::begin(const Rc<Director> &director, Function<void()> &&cb) {
 		return false;
 	}
 
-	return View::begin(director, move(cb));
+	_director = director;
+	_swapchain = Rc<Swapchain>::create(this, *_vkDevice, _surface).get();
+
+	if (View::begin(director, move(cb))) {
+		return true;
+	}
+
+	return false;
 }
 
 void ViewImpl::end() {
 	View::end();
-
-	if (_surface) {
-		_vkInstance->vkDestroySurfaceKHR(_vkInstance->getInstance(), _surface, nullptr);
-		_surface = VK_NULL_HANDLE;
-	}
-
-	/*foreachBacktrace([] (uint64_t id, Time time, const std::vector<std::string> &vec) {
-		StringStream stream;
-		stream << "[" << id << ":" << time.toHttp() << "]:\n";
-		for (auto &it : vec) {
-			stream << "\t" << it << "\n";
-		}
-		log::text("Gl-View-Backtrace", stream.str());
-	});*/
+	_swapchain->invalidate(*_vkDevice);
 }
 
 bool ViewImpl::isAvailableOnDevice(VkSurfaceKHR surface) const {
@@ -119,7 +113,7 @@ StringView ViewImpl::getClipboardString() const {
 }
 
 void ViewImpl::recreateSwapChain() {
-	// _glLoop->recreateSwapChain(_swapchain);
+	_swapchain->deprecate();
 }
 
 void ViewImpl::pushEvent(AppEvent::Value val) const {

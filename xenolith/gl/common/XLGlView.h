@@ -90,7 +90,7 @@ public:
 
 	virtual void runFrame(const Rc<gl::RenderQueue> &, Extent2);
 
-	virtual gl::SwapchainConfig selectConfig(const gl::SurfaceInfo &) const;
+	virtual gl::SwapchainConfig selectConfig(const gl::SurfaceInfo &);
 
 protected:
 	virtual void acquireNextFrame() override;
@@ -115,6 +115,7 @@ protected:
 	Function<void()> _onEnded;
 	Rc<Director> _director;
 	Rc<EventLoop> _eventLoop;
+	Rc<Swapchain> _swapchain;
 };
 
 }

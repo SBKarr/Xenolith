@@ -323,6 +323,12 @@ void FrameQueue::onAttachmentAcquire(FrameQueueAttachmentData &attachment) {
 		_cache->reset(img, attachment.extent);
 		attachment.image = _cache->acquireImage(*_loop, img);
 		_autorelease.emplace_front(attachment.image);
+		if (attachment.image->signalSem) {
+			_autorelease.emplace_front(attachment.image->signalSem);
+		}
+		if (attachment.image->waitSem) {
+			_autorelease.emplace_front(attachment.image->waitSem);
+		}
 
 		if (isResourcePending(attachment)) {
 			waitForResource(attachment, [attachment = &attachment] {
@@ -432,8 +438,8 @@ void FrameQueue::updateRenderPassState(FrameQueueRenderPassData &data, FrameRend
 
 	for (auto &it : data.attachments) {
 		if (it->passes.back() == &data && it->state != FrameAttachmentState::ResourcesReleased) {
-			if ((toInt(it->final) >= toInt(state))
-					|| (toInt(state) >= toInt(FrameRenderPassState::Complete) && it->final == FrameRenderPassState::Initial)) {
+			if ((toInt(state) >= toInt(it->final))
+					|| (toInt(state) >= toInt(FrameRenderPassState::Submitted) && it->final == FrameRenderPassState::Initial)) {
 				onAttachmentRelease(*it);
 			}
 		}
@@ -555,8 +561,10 @@ void FrameQueue::onRenderPassSubmission(FrameQueueRenderPassData &data) {
 		return;
 	}
 
+	auto sync = makeRenderPassSync(data);
+
 	data.waitForResult = true;
-	data.handle->submit(*this, [this, guard = Rc<FrameQueue>(this), data = &data] (bool success) {
+	data.handle->submit(*this, move(sync), [this, guard = Rc<FrameQueue>(this), data = &data] (bool success) {
 		_loop->performOnThread([this, data, success] {
 			if (success && !_finalized) {
 				updateRenderPassState(*data, FrameRenderPassState::Submitted);
@@ -585,6 +593,15 @@ void FrameQueue::onRenderPassSubmitted(FrameQueueRenderPassData &data) {
 		_cache->releaseFramebuffer(data.handle->getData(), move(data.framebuffer));
 		data.framebuffer = nullptr;
 	}
+
+	for (auto &it : data.attachments) {
+		if (it->handle->isOutput() && it->handle->getAttachment()->getLastRenderPass() == data.handle->getData()) {
+			_frame->onOutputAttachment(*it);
+		}
+	}
+
+	data.handle->getRenderPass()->releaseForFrame(*this);
+
 	if (_renderPassSubmitted == _renderPasses.size()) {
 		_frame->onQueueSubmitted(*this);
 	}
@@ -596,11 +613,39 @@ void FrameQueue::onRenderPassComplete(FrameQueueRenderPassData &data) {
 		return;
 	}
 
-	data.handle->getRenderPass()->releaseForFrame(*this);
 	++ _renderPassCompleted;
 	if (_renderPassCompleted == _renderPasses.size()) {
 		onComplete();
 	}
+}
+
+Rc<FrameSync> FrameQueue::makeRenderPassSync(FrameQueueRenderPassData &data) const {
+	auto ret = Rc<FrameSync>::alloc();
+
+	for (auto &it : data.attachments) {
+		if (it->handle->getAttachment()->getFirstRenderPass() == data.handle->getData()) {
+			if (it->image && it->image->waitSem) {
+				ret->waitAttachments.emplace_back(FrameSyncAttachment{it->handle, it->image->waitSem,
+					getWaitStageForAttachment(data, it->handle)});
+			}
+		}
+		if (it->handle->getAttachment()->getLastRenderPass() == data.handle->getData()) {
+			if (it->image && it->image->signalSem) {
+				ret->signalAttachments.emplace_back(FrameSyncAttachment{it->handle, it->image->signalSem});
+			}
+		}
+	}
+
+	return ret;
+}
+
+PipelineStage FrameQueue::getWaitStageForAttachment(FrameQueueRenderPassData &data, const gl::AttachmentHandle *handle) const {
+	for (auto &it : data.handle->getData()->descriptors) {
+		if (it->getAttachment() == handle->getAttachment()) {
+			return it->getDependency().initialUsageStage;
+		}
+	}
+	return PipelineStage::None;
 }
 
 void FrameQueue::onComplete() {
@@ -636,7 +681,7 @@ void FrameQueue::invalidate(FrameQueueAttachmentData &data) {
 		return;
 	}
 
-	if (!data.waitForResult && data.state != FrameAttachmentState::ResourcesReleased) {
+	if (!data.waitForResult) {
 		data.handle->finalize(*this, _success);
 		data.state = FrameAttachmentState::Finalized;
 		++ _finalizedObjects;

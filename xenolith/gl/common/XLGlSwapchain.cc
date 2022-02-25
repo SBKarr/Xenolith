@@ -26,11 +26,14 @@
 
 namespace stappler::xenolith::gl {
 
+Swapchain::PresentTask::~PresentTask() {
+	cache->releaseImage(attachment, move(object));
+}
+
 Swapchain::~Swapchain() { }
 
-bool Swapchain::init(const View *view, Function<SwapchainConfig(const SurfaceInfo &)> &&cb) {
+bool Swapchain::init(View *view) {
 	_view = view;
-	_configCallback = move(cb);
 	return true;
 }
 
@@ -42,36 +45,49 @@ void Swapchain::invalidate(Device &) {
 
 }
 
-void Swapchain::incrementGeneration(AppEvent::Value event) {
-	_valid = false;
-	/*if (_submitted == 0) {
-		log::text("gl::Swapchain", "Increment generation without submitted frames");
-	}
-	++ _gen;
-	if (!_frames.empty()) {
-		auto f = move(_frames);
-		_frames.clear();
-		for (auto &it : f) {
-			invalidateFrame(*it);
-		}
-	}
-	_suboptimal = 20;
-	if (event) {
-		_view->pushEvent(event);
-	}
-	_submitted = 0;*/
+bool Swapchain::present(gl::Loop &, const Rc<PresentTask> &) {
+	return false;
 }
 
+void Swapchain::deprecate() { }
+
 bool Swapchain::isResetRequired() {
-	/*if (_suboptimal > 0) {
-		-- _suboptimal;
-		if (_suboptimal == 0) {
-			if (!isBestPresentMode()) {
-				return true;
-			}
-		}
-	}*/
 	return false;
+}
+
+gl::ImageInfo Swapchain::getSwapchainImageInfo() const {
+	return getSwapchainImageInfo(_config);
+}
+
+gl::ImageInfo Swapchain::getSwapchainImageInfo(const gl::SwapchainConfig &cfg) const {
+	gl::ImageInfo swapchainImageInfo;
+	swapchainImageInfo.format = cfg.imageFormat;
+	swapchainImageInfo.flags = gl::ImageFlags::None;
+	swapchainImageInfo.imageType = gl::ImageType::Image2D;
+	swapchainImageInfo.extent = Extent3(cfg.extent.width, cfg.extent.height, 1);
+	swapchainImageInfo.arrayLayers = gl::ArrayLayers( 1 );
+	swapchainImageInfo.usage = gl::ImageUsage::ColorAttachment;
+	if (cfg.transfer) {
+		swapchainImageInfo.usage |= gl::ImageUsage::TransferDst;
+	}
+	return swapchainImageInfo;
+}
+
+gl::ImageViewInfo Swapchain::getSwapchainImageViewInfo(const gl::ImageInfo &image) const {
+	gl::ImageViewInfo info;
+	switch (image.imageType) {
+	case gl::ImageType::Image1D:
+		info.type = gl::ImageViewType::ImageView1D;
+		break;
+	case gl::ImageType::Image2D:
+		info.type = gl::ImageViewType::ImageView2D;
+		break;
+	case gl::ImageType::Image3D:
+		info.type = gl::ImageViewType::ImageView3D;
+		break;
+	}
+
+	return image.getViewInfo(info);
 }
 
 }

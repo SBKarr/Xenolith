@@ -216,6 +216,7 @@ void Scene::readInitialMaterials() {
 							it = sp.pipelines.emplace(hash, Vector<const gl::PipelineData *>()).first;
 						}
 						it->second.emplace_back(pipeline);
+						log::vtext("Scene", "Pipeline ", pipeline->material.description(), " : ", pipeline->material.data());
 					}
 				}
 
@@ -264,7 +265,8 @@ const gl::PipelineData *Scene::getPipelineForMaterial(const AttachmentData &a, c
 			}
 		}
 	}
-	log::vtext("Scene", "No pipeline for attachment '", a.attachment->getName(), "': ", info.pipeline.data());
+	log::vtext("Scene", "No pipeline for attachment '", a.attachment->getName(), "': ",
+			info.pipeline.description(), " : ", info.pipeline.data());
 	return nullptr;
 }
 

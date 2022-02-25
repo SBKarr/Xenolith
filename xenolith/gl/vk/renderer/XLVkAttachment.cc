@@ -45,7 +45,7 @@ VertexBufferAttachmentHandle::~VertexBufferAttachmentHandle() {
 	}
 
 	if (_fence) {
-		_device->releaseFence(move(_fence));
+		_device->releaseFenceUnsafe(move(_fence));
 		_fence = nullptr;
 	}
 

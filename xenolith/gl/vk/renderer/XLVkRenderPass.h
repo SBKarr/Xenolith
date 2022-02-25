@@ -56,19 +56,11 @@ protected:
 
 class RenderPassHandle : public gl::RenderPassHandle {
 public:
-	struct Sync {
-		Vector<Rc<gl::AttachmentHandle>> waitAttachment;
-		Vector<VkSemaphore> waitSem;
-		Vector<VkPipelineStageFlags> waitStages;
-		Vector<VkSemaphore> signalSem;
-		Vector<Rc<gl::AttachmentHandle>> signalAttachment;
-	};
-
 	virtual ~RenderPassHandle();
 	virtual void invalidate();
 
 	virtual bool prepare(gl::FrameQueue &, Function<void(bool)> &&) override;
-	virtual void submit(gl::FrameQueue &, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) override;
+	virtual void submit(gl::FrameQueue &, Rc<gl::FrameSync> &&, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) override;
 	virtual void finalize(gl::FrameQueue &, bool) override;
 
 	virtual QueueOperations getQueueOps() const;
@@ -86,8 +78,6 @@ protected:
 	virtual MaterialBuffers updateMaterials(gl::FrameHandle &iframe, const Rc<gl::MaterialSet> &data,
 			const Vector<Rc<gl::Material>> &materials, SpanView<gl::MaterialId> dynamicMaterials, SpanView<gl::MaterialId> materialsToRemove);
 
-	virtual Sync makeSyncInfo();
-
 	Function<void(bool)> _onPrepared;
 	bool _valid = true;
 	bool _commandsReady = false;
@@ -98,7 +88,7 @@ protected:
 	Rc<CommandPool> _pool;
 	Rc<DeviceQueue> _queue;
 	Vector<VkCommandBuffer> _buffers;
-	Sync _sync;
+	Rc<gl::FrameSync> _sync;
 };
 
 class VertexRenderPass : public RenderPass {

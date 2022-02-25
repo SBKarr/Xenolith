@@ -29,6 +29,8 @@
 namespace stappler::xenolith::gl {
 
 class FrameHandle;
+class FrameCacheStorage;
+struct FrameQueueAttachmentData;
 
 struct SwapchainConfig {
 	PresentMode presentMode = PresentMode::Mailbox;
@@ -66,30 +68,53 @@ struct SurfaceInfo {
 
 class Swapchain : public Ref {
 public:
+	struct PresentTask : public Ref {
+		Rc<FrameCacheStorage> cache;
+		const gl::ImageAttachment *attachment;
+		Rc<gl::ImageAttachmentObject> object;
+		uint64_t order = maxOf<uint64_t>();
+
+		PresentTask(const Rc<FrameCacheStorage> &c, const gl::ImageAttachment *a, const Rc<gl::ImageAttachmentObject> &obj)
+		: cache(c), attachment(a), object(obj) { }
+
+		virtual ~PresentTask();
+	};
+
 	virtual ~Swapchain();
 
-	virtual bool init(const View *, Function<SwapchainConfig(const SurfaceInfo &)> &&);
+	virtual bool init(View *);
 
 	const View *getView() const { return _view; }
+
+	uint64_t getGen() const { return _gen; }
 
 	virtual bool recreateSwapchain(Device &, gl::SwapchanCreationMode);
 	virtual void invalidate(Device &);
 
+	// true - if presentation request accepted, false otherwise,
+	// frame should not mark image as detached if false is returned
+	virtual bool present(gl::Loop &, const Rc<PresentTask> &);
+
 	// invalidate all frames in process before that
-	virtual void incrementGeneration(AppEvent::Value);
+	virtual void deprecate();
 
 	virtual bool isBestPresentMode() const { return true; }
 
 	virtual bool isResetRequired();
 
+	gl::ImageInfo getSwapchainImageInfo() const;
+	gl::ImageInfo getSwapchainImageInfo(const gl::SwapchainConfig &cfg) const;
+	gl::ImageViewInfo getSwapchainImageViewInfo(const gl::ImageInfo &image) const;
+
 protected:
-	bool _valid = false;
 	uint64_t _order = 0;
 	uint64_t _gen = 0;
 	SwapchainConfig _config;
-	Function<SwapchainConfig(const SurfaceInfo &)> _configCallback;
 	Device *_device = nullptr;
-	const View *_view = nullptr;
+	View *_view = nullptr;
+
+	mutable Mutex _swapchainMutex;
+	Mutex _presentCurrentMutex;
 };
 
 }

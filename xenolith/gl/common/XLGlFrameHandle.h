@@ -87,6 +87,8 @@ protected:
 	virtual void onQueueInvalidated(FrameQueue &);
 	virtual void onRequiredTaskCompleted(StringView tag);
 
+	virtual void onOutputAttachment(FrameQueueAttachmentData &);
+
 	virtual void tryComplete();
 	virtual void onComplete();
 

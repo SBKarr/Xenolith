@@ -80,8 +80,8 @@ bool TransferQueue::init() {
 	auto pass = Rc<TransferRenderPass>::create("TransferRenderPass");
 
 	builder.addRenderPass(pass);
-	builder.addPassInput(pass, 0, attachment);
-	builder.addPassOutput(pass, 0, attachment);
+	builder.addPassInput(pass, 0, attachment, gl::AttachmentDependencyInfo());
+	builder.addPassOutput(pass, 0, attachment, gl::AttachmentDependencyInfo());
 	builder.addInput(attachment);
 	builder.addOutput(attachment);
 
@@ -571,18 +571,7 @@ bool TransferResource::transfer(const Rc<DeviceQueue> &queue, const Rc<CommandPo
 		return false;
 	}
 
-	VkSubmitInfo submitInfo{};
-	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submitInfo.pNext = nullptr;
-	submitInfo.waitSemaphoreCount = 0;
-	submitInfo.pWaitSemaphores = nullptr;
-	submitInfo.pWaitDstStageMask = 0;
-	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &buf;
-	submitInfo.signalSemaphoreCount = 0;
-	submitInfo.pSignalSemaphores = nullptr;
-
-	return table->vkQueueSubmit(queue->getQueue(), 1, &submitInfo, fence->getFence()) == VK_SUCCESS;
+	return queue->submit(*fence, makeSpanView(&buf, 1));
 }
 
 void TransferResource::dropStaging(StagingBuffer &buffer) const {

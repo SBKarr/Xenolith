@@ -44,36 +44,10 @@ bool Semaphore::init(Device &dev) {
 	semaphoreInfo.flags = 0;
 
 	if (dev.getTable()->vkCreateSemaphore(dev.getDevice(), &semaphoreInfo, nullptr, &_sem) == VK_SUCCESS) {
-		return gl::Object::init(dev, Semaphore_destroy, gl::ObjectType::Semaphore, _sem);
+		return gl::Semaphore::init(dev, Semaphore_destroy, gl::ObjectType::Semaphore, _sem);
 	}
 
 	return false;
-}
-
-void Semaphore::setSignaled(bool signaled) {
-	_signaled = signaled;
-}
-
-VkSemaphore Semaphore::getUnsignalled() {
-	if (_signaled) {
-		reset();
-	}
-	return _sem;
-}
-
-void Semaphore::reset() {
-	if (_signaled) {
-		VkSemaphoreCreateInfo semaphoreInfo{};
-		semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-		semaphoreInfo.pNext = nullptr;
-		semaphoreInfo.flags = 0;
-
-		auto dev = ((Device *)_device);
-		dev->getTable()->vkDestroySemaphore(dev->getDevice(), (VkSemaphore)_ptr, nullptr);
-		dev->getTable()->vkCreateSemaphore(dev->getDevice(), &semaphoreInfo, nullptr, &_sem);
-		_ptr = _sem;
-		_signaled = false;
-	}
 }
 
 Fence::~Fence() { }
@@ -84,17 +58,69 @@ bool Fence::init(Device &dev) {
 	fenceInfo.pNext = nullptr;
 	fenceInfo.flags = 0;
 
+	_state = Disabled;
+
 	if (dev.getTable()->vkCreateFence(dev.getDevice(), &fenceInfo, nullptr, &_fence) == VK_SUCCESS) {
 		return gl::Object::init(dev, Fence_destroy, gl::ObjectType::Fence, _fence);
 	}
 	return false;
 }
 
+void Fence::setArmed(DeviceQueue &q) {
+	std::unique_lock<Mutex> lock(_mutex);
+	_state = Armed;
+	_queue = &q;
+	_queue->retainFence(*this);
+}
+
 void Fence::addRelease(Function<void(bool)> &&cb, Ref *ref, StringView tag) {
+	std::unique_lock<Mutex> lock(_mutex);
 	_release.emplace_back(ReleaseHandle({move(cb), ref, tag}));
 }
 
 bool Fence::check(bool lockfree) {
+	std::unique_lock<Mutex> lock(_mutex);
+	if (_state != Armed) {
+		if (_state == Delayed) {
+			_state = Signaled;
+			doRelease(true);
+		}
+		return true;
+	}
+
+	auto dev = ((Device *)_device);
+	enum VkResult status;
+
+	dev->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+		if (lockfree) {
+			status = table.vkGetFenceStatus(device, _fence);
+		} else {
+			status = table.vkWaitForFences(device, 1, &_fence, VK_TRUE, UINT64_MAX);
+		}
+	});
+
+	switch (status) {
+	case VK_SUCCESS:
+		_state = Signaled;
+		doRelease(true);
+		return true;
+		break;
+	case VK_TIMEOUT:
+	case VK_NOT_READY:
+		_state = Armed;
+		return false;
+	default:
+		break;
+	}
+	return false;
+}
+
+bool Fence::checkDelayed(bool lockfree) {
+	std::unique_lock<Mutex> lock(_mutex);
+	if (_state != Armed) {
+		return true;
+	}
+
 	auto dev = ((Device *)_device);
 	enum VkResult status;
 
@@ -106,20 +132,12 @@ bool Fence::check(bool lockfree) {
 
 	switch (status) {
 	case VK_SUCCESS:
-		_signaled = true;
-		for (auto &it : _release) {
-			if (it.callback) {
-				XL_PROFILE_BEGIN(fence, "vk::Fence::check", it.tag, 500);
-				it.callback(true);
-				XL_PROFILE_END(fence);
-			}
-		}
-		_release.clear();
+		_state = Delayed;
 		return true;
 		break;
 	case VK_TIMEOUT:
 	case VK_NOT_READY:
-		_signaled = false;
+		_state = Armed;
 		return false;
 	default:
 		break;
@@ -127,21 +145,54 @@ bool Fence::check(bool lockfree) {
 	return false;
 }
 
-void Fence::reset() {
-	if (!_release.empty()) {
-		for (auto &it : _release) {
-			if (it.callback) {
-				XL_PROFILE_BEGIN(fence, "vk::Fence::reset", it.tag, 500);
-				it.callback(false);
-				XL_PROFILE_END(fence);
-			}
+void Fence::reset(gl::Loop &loop, Function<void(Rc<Fence> &&)> &&cb) {
+	std::unique_lock<Mutex> lock(_mutex);
+
+	_state = Disabled;
+
+	doRelease(false);
+
+	auto refId = retain();
+	loop.getQueue()->perform(Rc<Task>::create([this] (const Task &) {
+		auto dev = ((Device *)_device);
+		dev->getTable()->vkResetFences(dev->getDevice(), 1, &_fence);
+		return true;
+	}, [this, cb = move(cb), refId] (const Task &, bool success) {
+		if (success) {
+			cb(this);
 		}
-		_release.clear();
-	}
+		release(refId);
+	}));
+}
+
+void Fence::resetUnsafe() {
+	std::unique_lock<Mutex> lock(_mutex);
+
+	_state = Disabled;
+
+	doRelease(false);
 
 	auto dev = ((Device *)_device);
 	dev->getTable()->vkResetFences(dev->getDevice(), 1, &_fence);
-	_signaled = false;
+}
+
+void Fence::doRelease(bool success) {
+	if (_queue) {
+		_queue->releaseFence(*this);
+		_queue = nullptr;
+	}
+	if (!_release.empty()) {
+		XL_PROFILE_BEGIN(total, "vk::Fence::reset", "total", 250);
+		for (auto &it : _release) {
+			if (it.callback) {
+				XL_PROFILE_BEGIN(fence, "vk::Fence::reset", it.tag, 250);
+				it.callback(success);
+				XL_PROFILE_END(fence);
+			}
+		}
+		XL_PROFILE_END(total);
+		_release.clear();
+	}
 }
 
 

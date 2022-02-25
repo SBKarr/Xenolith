@@ -32,7 +32,6 @@ struct Loop::Internal : memory::AllocPool {
 		auto p = memory::pool::acquire();
 		memory::pool::push(p);
 		events = new (p) memory::vector<Event>(); events->reserve(4);
-		eventsSwap = new (p) memory::vector<Event>(); eventsSwap->reserve(4);
 		timers = new (p) memory::vector<Timer>(); timers->reserve(8);
 		reschedule = new (p) memory::vector<Timer>(); reschedule->reserve(8);
 		autorelease = new (p) memory::vector<Rc<Ref>>(); autorelease->reserve(8);
@@ -40,8 +39,6 @@ struct Loop::Internal : memory::AllocPool {
 	}
 
 	memory::vector<Event> *events;
-	memory::vector<Event> *eventsSwap;
-
 	memory::vector<Timer> *timers;
 	memory::vector<Timer> *reschedule;
 	memory::vector<Rc<Ref>> *autorelease;
@@ -69,10 +66,8 @@ struct PresentationData {
 
 Loop::Loop(Application *app, const Rc<Device> &dev)
 : _application(app), _device(dev) {
-	_queue = Rc<thread::TaskQueue>::alloc("Gl::Loop::Queue", [this] {
-		_cond.notify_all();
-	});
-	_queue->spawnWorkers(thread::TaskQueue::Flags::None, LoopThreadId,
+	_queue = Rc<thread::TaskQueue>::alloc("Gl::Loop::Queue");
+	_queue->spawnWorkers(thread::TaskQueue::Flags::Waitable | thread::TaskQueue::Flags::Cancelable, LoopThreadId,
 			math::clamp(uint16_t(std::thread::hardware_concurrency()), uint16_t(4), uint16_t(16)));
 }
 
@@ -108,19 +103,18 @@ bool Loop::worker() {
 
 	_running.store(true);
 
-	_mutex.lock();
+	_queue->lock();
 	for (auto &it : _pendingEvents) {
 		_internal->events->emplace_back(move(it));
 	}
 
 	_pendingEvents.clear();
-	_mutex.unlock();
+	_queue->unlock();
 
 	_device->onLoopStarted(*this);
 
 	auto pool = memory::pool::create(_pool);
 
-	std::unique_lock<std::mutex> lock(_mutex);
 	while (!data.exit) {
 		bool timerPassed = false;
 		do {
@@ -135,28 +129,19 @@ bool Loop::worker() {
 			Context context;
 			context.events = _internal->events;
 			context.loop = this;
-			_internal->events = _internal->eventsSwap;
-			_internal->eventsSwap = context.events;
-
-			XL_PROFILE_BEGIN(poll, "gl::Loop::Poll", "poll", 500);
-			timerPassed = pollEvents(lock, data, context);
-			XL_PROFILE_END(poll)
 
 			_currentContext = &context;
 
-			XL_PROFILE_BEGIN(queue, "gl::Loop::Queue", "queue", 500);
-			_queue->update(&data.tasks);
-			XL_PROFILE_END(queue)
+			XL_PROFILE_BEGIN(poll, "gl::Loop::Poll", "poll", 500);
+			timerPassed = pollEvents(data);
+			XL_PROFILE_END(poll)
 
-			//uint64_t now = 0;
 			if (timerPassed) {
-				//now = platform::device::_clock();
 				auto dt = data.now - data.last;
 				XL_PROFILE_BEGIN(timers, "gl::Loop::Timers", "timers", 500);
 				data.timers += runTimers(dt, context);
 				XL_PROFILE_END(timers)
 				data.last = data.now;
-				// log::vtext("Dt", data.updateInterval, " - ", dt);
 			}
 
 			memory::vector<Event> *tmpEvents = nullptr;
@@ -188,27 +173,6 @@ bool Loop::worker() {
 						} else {
 							log::text("gl::Loop", "Event::Update without FrameEmitter");
 						}
-						break;
-					case EventName::SwapChainDeprecated:
-						/*if (auto s = (Swapchain *)it->data.get()) {
-							invalidateSwapchain(s, AppEvent::SwapchainRecreation);
-						} else {
-							log::text("gl::Loop", "Event::SwapChainDeprecated without swapchain");
-						}*/
-						break;
-					case EventName::SwapChainRecreated:
-						/*if (auto s = (Swapchain *)it->data.get()) {
-							s->beginFrame(*this, true);
-						} else {
-							log::text("gl::Loop", "Event::SwapChainRecreated without swapchain");
-						}*/
-						break;
-					case EventName::SwapChainForceRecreate:
-						/*if (auto s = (Swapchain *)it->data.get()) {
-							invalidateSwapchain(s, AppEvent::SwapchainRecreationBest);
-						} else {
-							log::text("gl::Loop", "Event::SwapChainForceRecreate without swapchain");
-						}*/
 						break;
 					case EventName::FrameUpdate:
 						if (auto frame = it->data.cast<FrameHandle>()) {
@@ -254,7 +218,6 @@ bool Loop::worker() {
 				events->clear();
 			}
 
-
 			context.events = origEvents;
 			_currentContext = nullptr;
 			context.events->clear();
@@ -266,63 +229,53 @@ bool Loop::worker() {
 			memory::pool::clear(pool);
 		} while (0);
 		// log::vtext("gl::Loop", "Clock: ", platform::device::_clock() - data.now, "(", data.events, ", ", data.timers, ", ", data.tasks, ")");
-		lock.lock();
 	}
 
 	memory::pool::clear(pool);
+
+	_queue->lock();
 
 	_device->onLoopEnded(*this);
 	_device->waitIdle();
 
 	_running.store(false);
-	lock.unlock();
+	_queue->unlock();
 
 	_queue->waitForAll();
 
+	_queue->lock();
 	memory::pool::push(_pool);
 	_device->end(*_queue);
 	memory::pool::pop();
+	_queue->unlock();
 
 	_queue->waitForAll();
-	_queue->cancelWorkers();
 
-	lock.lock();
+	_queue->lock();
 	_internal->events->clear();
-	_internal->eventsSwap->clear();
 	_internal->timers->clear();
 	_internal->reschedule->clear();
 	_internal->autorelease->clear();
 	_internal = nullptr;
-	lock.unlock();
+	_queue->unlock();
+
+	_queue->cancelWorkers();
 
 	memory::pool::destroy(_pool);
 	memory::pool::terminate();
-
-	/*if (FrameHandle::GetActiveFramesCount() > 0) {
-		log::vtext("gl::Loop", "Not all frames ended with loop, ", FrameHandle::GetActiveFramesCount(), " remains");
-	}
-
-	log::vtext("gl::Loop", "refcount: ", getReferenceCount());
-
-	foreachBacktrace([] (uint64_t id, Time time, const std::vector<std::string> &vec) {
-		StringStream stream;
-		stream << "[" << id << ":" << time.toHttp() << "]:\n";
-		for (auto &it : vec) {
-			stream << "\t" << it << "\n";
-		}
-		log::text("Gl-Loop-Backtrace", stream.str());
-	});*/
 
 	return false;
 }
 
 void Loop::pushEvent(EventName event, Rc<Ref> && data, data::Value &&value, Function<void(bool)> &&cb) {
-	std::unique_lock<std::mutex> lock(_mutex);
 	if (_running.load()) {
-		_internal->events->emplace_back(event, move(data), move(value), move(cb));
-		_cond.notify_all();
+		performOnThread([this, event, data = move(data), value = move(value), cb = move(cb)] () mutable {
+			_internal->events->emplace_back(event, move(data), move(value), move(cb));
+		});
 	} else {
+		_queue->lock();
 		_pendingEvents.emplace_back(event, move(data), move(value), move(cb));
+		_queue->unlock();
 	}
 }
 
@@ -343,14 +296,26 @@ void Loop::pushContextEvent(EventName event, Rc<Ref> && ref, data::Value && data
 void Loop::schedule(Function<bool(Context &)> &&cb, StringView tag) {
 	XL_ASSERT(isOnThread(), "Gl-Loop: schedule should be called in GL thread");
 	if (_running.load()) {
-		_internal->timers->emplace_back(0, move(cb), tag);
+		if (isOnThread()) {
+			_internal->timers->emplace_back(0, move(cb), tag);
+		} else {
+			performOnThread([this, cb = move(cb), tag] () mutable {
+				_internal->timers->emplace_back(0, move(cb), tag);
+			});
+		}
 	}
 }
 
 void Loop::schedule(Function<bool(Context &)> &&cb, uint64_t delay, StringView tag) {
 	XL_ASSERT(isOnThread(), "Gl-Loop: schedule should be called in GL thread");
 	if (_running.load()) {
-		_internal->timers->emplace_back(delay, move(cb), tag);
+		if (isOnThread()) {
+			_internal->timers->emplace_back(delay, move(cb), tag);
+		} else {
+			performOnThread([this, cb = move(cb), delay, tag] () mutable {
+				_internal->timers->emplace_back(delay, move(cb), tag);
+			});
+		}
 	}
 }
 
@@ -382,7 +347,7 @@ const Instance *Loop::getInstance() const {
 	return _application->getGlInstance();
 }
 
-void Loop::performOnThread(const Function<void()> &func, Ref *target, bool immediate) {
+void Loop::performOnThread(Function<void()> &&func, Ref *target, bool immediate) {
 	if (immediate) {
 		if (isOnThread()) {
 			func();
@@ -390,9 +355,7 @@ void Loop::performOnThread(const Function<void()> &func, Ref *target, bool immed
 		}
 	}
 
-	_queue->onMainThread(Rc<thread::Task>::create([func] (const thread::Task &, bool success) {
-		if (success) { func(); }
-	}, target));
+	_queue->onMainThread(move(func), target);
 }
 
 bool Loop::isOnThread() const {
@@ -405,42 +368,35 @@ void Loop::autorelease(Ref *ref) {
 	}
 }
 
-bool Loop::pollEvents(std::unique_lock<std::mutex> &lock, PresentationData &data, Context &context) {
+bool Loop::pollEvents(PresentationData &data) {
 	bool timerPassed = false;
-	data.now = platform::device::_clock();
 	auto counter = _queue->getOutputCounter();
-	if (!context.events->empty() || counter > 0) {
-		// there are pending events, check if timeout already passed
+	if (counter > 0) {
+		XL_PROFILE_BEGIN(queue, "gl::Loop::Queue", "queue", 500);
+		_queue->update(&data.tasks);
+		XL_PROFILE_END(queue)
+
+		data.now = platform::device::_clock();
 		if (data.now - data.last > data.updateInterval) {
 			timerPassed = true;
 		}
 	} else {
+		data.now = platform::device::_clock();
 		if (data.now - data.last > data.updateInterval) {
 			timerPassed = true;
 		} else {
 			if (_internal->timers->empty()) {
 				// no timers - just wait for events with 60FPS wakeups
-				auto t = std::max(data.updateInterval, uint64_t(1000000 / 60));
-				_cond.wait_for(lock, std::chrono::microseconds(t), [&] {
-					return !_internal->events->empty() || _queue->getOutputCounter() > 0;
-				});
-				context.events = _internal->events;
-				_internal->events = _internal->eventsSwap;
-				_internal->eventsSwap = context.events;
+				auto t = std::max(data.updateInterval, uint64_t(1'000'000 / 60));
+				_queue->wait(TimeInterval::microseconds(t));
 			} else {
-				if (!_cond.wait_for(lock, std::chrono::microseconds(data.updateInterval - (data.now - data.last)), [&] {
-					return !_internal->events->empty();
-				})) {
+				if (!_queue->wait(TimeInterval::microseconds(data.updateInterval - (data.now - data.last)))) {
+					data.now = platform::device::_clock();
 					timerPassed = true;
-				} else {
-					context.events = _internal->events;
-					_internal->events = _internal->eventsSwap;
-					_internal->eventsSwap = context.events;
 				}
 			}
 		}
 	}
-	lock.unlock();
 	return timerPassed;
 }
 
@@ -498,9 +454,6 @@ uint32_t Loop::runTimers(uint64_t dt, Context &t) {
 StringView Loop::getEventName(EventName event) {
 	switch (event) {
 	case EventName::Update: return StringView("EventName::Update"); break;
-	case EventName::SwapChainDeprecated: return StringView("EventName::SwapChainDeprecated"); break;
-	case EventName::SwapChainRecreated: return StringView("EventName::SwapChainRecreated"); break;
-	case EventName::SwapChainForceRecreate: return StringView("EventName::SwapChainForceRecreate"); break;
 	case EventName::FrameUpdate: return StringView("EventName::FrameUpdate"); break;
 	case EventName::FrameInvalidated: return StringView("EventName::FrameInvalidated"); break;
 	case EventName::CompileResource: return StringView("EventName::CompileResource"); break;

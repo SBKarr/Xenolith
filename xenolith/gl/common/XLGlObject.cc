@@ -200,4 +200,21 @@ void Shader::inspect(SpanView<uint32_t> data) {
 	spvReflectDestroyShaderModule(&shader);
 }
 
+void Semaphore::setSignaled(bool value) {
+	_signaled = value;
+}
+
+void Semaphore::setWaited(bool value) {
+	_waited = value;
+}
+
+bool Semaphore::reset() {
+	if (_signaled == _waited) {
+		_signaled = false;
+		_waited = false;
+		return true;
+	}
+	return false;
+}
+
 }

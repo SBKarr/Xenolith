@@ -31,13 +31,12 @@ XL_DECLARE_EVENT_CLASS(View, onBackground);
 XL_DECLARE_EVENT_CLASS(View, onFocus);
 XL_DECLARE_EVENT_CLASS(View, onScreenSize);
 
-View::View() {
-}
+View::View() { }
 
 View::~View() { }
 
 bool View::init(const Rc<EventLoop> &ev, const Rc<gl::Loop> &loop) {
-	if (!FrameEmitter::init(loop, 0 /* 1'000'000 / 60 */)) {
+	if (!FrameEmitter::init(loop, 1'000'000 / 60)) {
 		return false;
 	}
 
@@ -69,11 +68,9 @@ void View::end() {
 }
 
 void View::reset(SwapchanCreationMode mode) {
-	/*if (_swapchain) {
-		_swapchain->recreateSwapchain(*_glLoop->getDevice(), mode);
+	if (_swapchain) {
+		_swapchain->recreateSwapchain(*_loop->getDevice(), mode);
 	}
-
-	_glLoop->pushEvent(Loop::EventName::SwapChainRecreated, _swapchain);*/
 }
 
 void View::update() {
@@ -85,6 +82,7 @@ void View::update() {
 int View::getDpi() const {
 	return _dpi;
 }
+
 float View::getDensity() const {
 	return _density;
 }
@@ -94,8 +92,13 @@ const Extent2 & View::getScreenExtent() const {
 }
 
 void View::setScreenExtent(Extent2 e) {
-	_screenExtent = e;
-	onScreenSize(this);
+	if (e != _screenExtent) {
+		_screenExtent = e;
+		onScreenSize(this);
+		if (_loop) {
+			dropFrameTimeout();
+		}
+	}
 }
 
 void View::handleTouchesBegin(int num, intptr_t ids[], float xs[], float ys[]) { }
@@ -139,11 +142,15 @@ void View::acquireNextFrame() {
 }
 
 void View::runFrame(const Rc<gl::RenderQueue> &queue, Extent2 extent) {
-	submitNextFrame(Rc<FrameRequest>::create(queue, this, extent));
+	auto req = Rc<FrameRequest>::create(queue, this, extent);
+	req->bindSwapchain(_swapchain);
+	submitNextFrame(move(req));
 }
 
-gl::SwapchainConfig View::selectConfig(const gl::SurfaceInfo &info) const {
-	return _director->selectConfig(info);
+gl::SwapchainConfig View::selectConfig(const gl::SurfaceInfo &info) {
+	auto ret = _director->selectConfig(info);
+	setScreenExtent(ret.extent);
+	return ret;
 }
 
 }

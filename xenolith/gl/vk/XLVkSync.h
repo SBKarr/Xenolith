@@ -30,31 +30,27 @@
 namespace stappler::xenolith::vk {
 
 class Device;
+class DeviceQueue;
 
 /* VkSemaphore wrapper
  *
  * usage pattern:
  * - store handles in common storage
  * - pop one before running signal function
- * - run function, that signals VkSemaphore, handle should be acquired with getUnsignalled()
+ * - run function, that signals VkSemaphore, handle should be acquired with getSemaphore()
  * - run function, that waits on VkSemaphore
  * - push Semaphore back into storage
  */
 
-class Semaphore : public gl::Object {
+class Semaphore : public gl::Semaphore {
 public:
 	virtual ~Semaphore();
 
 	bool init(Device &);
 
-	void setSignaled(bool);
-	bool isSignaled() const { return _signaled; }
 	VkSemaphore getSemaphore() const { return _sem; }
-	VkSemaphore getUnsignalled();
-	void reset();
 
 protected:
-	bool _signaled = false;
 	VkSemaphore _sem = VK_NULL_HANDLE;
 };
 
@@ -74,23 +70,37 @@ protected:
 
 class Fence : public gl::Object {
 public:
+	enum State {
+		Disabled,
+		Armed,
+		Delayed,
+		Signaled
+	};
+
 	virtual ~Fence();
 
 	bool init(Device &);
 
-	bool isSignaled() const { return _signaled; }
 	VkFence getFence() const { return _fence; }
 
 	void setFrame(uint32_t f) { _frame = f; }
 	uint32_t getFrame() const { return _frame; }
 
+	bool isArmed() const { return _state == Armed; }
+	void setArmed(DeviceQueue &);
+
 	// function will be called and ref will be released on fence's signal
 	void addRelease(Function<void(bool)> &&, Ref *, StringView tag);
 
 	bool check(bool lockfree = true);
-	void reset();
+	bool checkDelayed(bool lockfree = true);
+
+	void reset(gl::Loop &, Function<void(Rc<Fence> &&)> &&);
+	void resetUnsafe();
 
 protected:
+	void doRelease(bool success);
+
 	struct ReleaseHandle {
 		Function<void(bool)> callback;
 		Rc<Ref> ref;
@@ -98,9 +108,11 @@ protected:
 	};
 
 	uint32_t _frame = 0;
-	bool _signaled = false;
+	State _state = Disabled;
 	VkFence _fence = VK_NULL_HANDLE;
 	Vector<ReleaseHandle> _release;
+	Mutex _mutex;
+	DeviceQueue *_queue = nullptr;
 };
 
 }

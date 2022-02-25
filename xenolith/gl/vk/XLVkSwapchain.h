@@ -23,8 +23,8 @@
 #ifndef XENOLITH_GL_VK_XLVKSWAPCHAIN_H_
 #define XENOLITH_GL_VK_XLVKSWAPCHAIN_H_
 
-#include "XLVk.h"
 #include "XLGlSwapchain.h"
+#include "XLVkSwapchainSync.h"
 #include "XLVkImageAttachment.h"
 
 namespace stappler::xenolith::vk {
@@ -36,76 +36,50 @@ class Fence;
 class RenderPassImpl;
 class FrameHandle;
 
-class SwapchainSync : public Ref {
-public:
-	virtual ~SwapchainSync();
-
-	bool init(Device &dev, uint32_t idx, uint64_t gen);
-	void reset(uint64_t gen);
-	void invalidate();
-
-	void lock();
-	void unlock();
-
-	VkResult acquireImage(Device &, Swapchain &);
-
-	void setSwapchainValid(bool value) { _swapchainValid = value; }
-	bool isSwapchainValid() const { return _swapchainValid; }
-
-	uint32_t getFrameIndex() const { return _frameIndex; }
-	uint32_t getImageIndex() const { return _imageIndex; }
-	void clearImageIndex();
-
-	const Rc<Semaphore> &getImageReady() const { return _imageReady; }
-	const Rc<Semaphore> &getRenderFinished() const { return _renderFinished; }
-
-protected:
-	Mutex _mutex;
-	bool _swapchainValid = true;
-	uint32_t _frameIndex = 0;
-	uint32_t _imageIndex = maxOf<uint32_t>();
-	uint64_t _gen = 0;
-	Rc<Semaphore> _imageReady;
-	Rc<Semaphore> _renderFinished;
-};
-
 class Swapchain : public gl::Swapchain {
 public:
 	static constexpr uint32_t FramesInFlight = 2;
 
 	virtual ~Swapchain();
 
-	bool init(const gl::View *, Device &, Function<gl::SwapchainConfig(const gl::SurfaceInfo &)> &&, VkSurfaceKHR);
+	bool init(gl::View *, Device &, VkSurfaceKHR);
 
 	virtual bool recreateSwapchain(gl::Device &, gl::SwapchanCreationMode) override;
 	virtual void invalidate(gl::Device &) override;
 
-	bool createSwapchain(Device &, gl::SwapchainConfig &&, gl::PresentMode);
-	void cleanupSwapchain(Device &);
+	virtual bool present(gl::Loop &, const Rc<PresentTask> &) override;
 
-	gl::PresentMode getPresentMode() const { return _presentMode; }
+	virtual void deprecate() override;
+
+	bool createSwapchain(Device &, gl::SwapchainConfig &&, gl::PresentMode);
+
 	VkSurfaceKHR getSurface() const { return _surface; }
-	VkSwapchainKHR getSwapchain() const { return _swapchain; }
-	gl::ImageInfo getSwapchainImageInfo(const gl::SwapchainConfig &cfg) const;
-	gl::ImageViewInfo getSwapchainImageViewInfo(const gl::ImageInfo &image) const;
+	Rc<SwapchainHandle> getSwapchain() const { return _swapchain; }
 
 	virtual bool isBestPresentMode() const override;
 
-	Rc<SwapchainSync> acquireSwapchainSync(Device &, uint64_t);
-	void releaseSwapchainSync(Rc<SwapchainSync> &&);
+	Rc<SwapchainSync> acquireSwapchainSync(Device &, bool lock = true);
+	void releaseSync(Rc<SwapchainSync> &&);
 
-	bool present(gl::Loop &loop, Rc<Image> &&, VkImageLayout l);
-
-	Rc<Image> getImage(uint32_t) const;
+	void setPresentSync(Rc<SwapchainSync> &&);
 
 protected:
-	gl::PresentMode _presentMode = gl::PresentMode::Fifo;
-	VkSurfaceKHR _surface = VK_NULL_HANDLE;
-	VkSwapchainKHR _swapchain = VK_NULL_HANDLE;
-	VkSwapchainKHR _oldSwapchain = VK_NULL_HANDLE;
+	void onPresentComplete(gl::Loop &, VkResult res, const Rc<PresentTask> &);
 
-	Vector<Vector<Rc<SwapchainSync>>> _sems;
-	Vector<Rc<Image>> _images;
+	bool isImagePresentable(const gl::ImageObject &image, VkFilter &filter) const;
+
+	bool presentImmediate(const Rc<PresentTask> &);
+
+	VkSurfaceKHR _surface = VK_NULL_HANDLE;
+	Rc<SwapchainHandle> _swapchain;
+
+	Vector<Rc<SwapchainSync>> _syncs;
+	Rc<SwapchainSync> _presentedSync;
+
+	bool _presentScheduled = false;
+	Rc<PresentTask> _presentPending;
+	Rc<PresentTask> _presentCurrent;
+	Rc<DeviceQueue> _presentQueue;
 };
 
 }

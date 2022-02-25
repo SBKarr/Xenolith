@@ -111,6 +111,40 @@ protected:
 	VkSampler _sampler = VK_NULL_HANDLE;
 };
 
+class SwapchainHandle : public gl::Object {
+public:
+	virtual ~SwapchainHandle() { }
+
+	bool init(Device &dev, const gl::SwapchainConfig &, gl::ImageInfo &&, gl::PresentMode,
+			VkSurfaceKHR, uint32_t families[2], Function<void()> &&, SwapchainHandle * = nullptr);
+
+	gl::PresentMode getPresentMode() const { return _presentMode; }
+	const gl::ImageInfo &getImageInfo() const { return _imageInfo; }
+	const gl::SwapchainConfig &getConfig() const { return _config; }
+	VkSwapchainKHR getSwapchain() const { return _swapchain; }
+
+	bool isDeprecated();
+
+	Rc<Image> getImage(uint32_t) const;
+
+	// returns true if it was first deprecation
+	bool deprecate(bool invalidate = false);
+
+	bool retainUsage();
+	void releaseUsage();
+
+protected:
+	Mutex _mutex;
+	uint32_t _inUse = 0;
+	bool _deprecated = false;
+	gl::PresentMode _presentMode = gl::PresentMode::Unsupported;
+	gl::ImageInfo _imageInfo;
+	gl::SwapchainConfig _config;
+	VkSwapchainKHR _swapchain = VK_NULL_HANDLE;
+	Vector<Rc<Image>> _images;
+	Function<void()> _rebuildCallback;
+};
+
 }
 
 #endif /* XENOLITH_GL_VK_XLVKOBJECT_H_ */

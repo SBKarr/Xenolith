@@ -41,8 +41,8 @@ THE SOFTWARE.
 namespace stappler::xenolith::vk {
 
 #if DEBUG
-#define VK_HOOK_DEBUG 1
-static constexpr bool s_enableValidationLayers = false;
+#define VK_HOOK_DEBUG 0 // enable engine hooks for Vulkan calls
+static constexpr bool s_enableValidationLayers = true;
 static const char * const s_validationLayers[] = {
     "VK_LAYER_KHRONOS_validation"
 };

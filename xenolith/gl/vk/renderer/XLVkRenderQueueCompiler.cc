@@ -80,7 +80,7 @@ public:
 	virtual ~RenderQueueRenderPassHandle();
 
 	virtual bool prepare(gl::FrameQueue &, Function<void(bool)> &&) override;
-	virtual void submit(gl::FrameQueue &, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) override;
+	virtual void submit(gl::FrameQueue &, Rc<gl::FrameSync> &&, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) override;
 
 	virtual void finalize(gl::FrameQueue &, bool successful) override;
 
@@ -102,8 +102,8 @@ bool RenderQueueCompiler::init(Device &dev) {
 	auto pass = Rc<RenderQueueRenderPass>::create("RenderQueueRenderPass");
 
 	builder.addRenderPass(pass);
-	builder.addPassInput(pass, 0, attachment);
-	builder.addPassOutput(pass, 0, attachment);
+	builder.addPassInput(pass, 0, attachment, gl::AttachmentDependencyInfo());
+	builder.addPassOutput(pass, 0, attachment, gl::AttachmentDependencyInfo());
 	builder.addInput(attachment);
 	builder.addOutput(attachment);
 
@@ -346,12 +346,12 @@ bool RenderQueueRenderPassHandle::prepare(gl::FrameQueue &frame, Function<void(b
 	return false;
 }
 
-void RenderQueueRenderPassHandle::submit(gl::FrameQueue &queue, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) {
+void RenderQueueRenderPassHandle::submit(gl::FrameQueue &queue, Rc<gl::FrameSync> &&sync, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) {
 	if (_buffers.empty()) {
 		onSubmited(true);
 		onComplete(true);
 	} else {
-		RenderPassHandle::submit(queue, move(onSubmited), move(onComplete));
+		RenderPassHandle::submit(queue, move(sync), move(onSubmited), move(onComplete));
 	}
 }
 

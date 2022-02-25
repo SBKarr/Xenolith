@@ -51,16 +51,14 @@ void Attachment::acquireInput(FrameQueue &frame, const Rc<AttachmentHandle> &a, 
 	}
 }
 
-AttachmentDescriptor *Attachment::addDescriptor(RenderPassData *data, FrameRenderPassState state) {
+AttachmentDescriptor *Attachment::addDescriptor(RenderPassData *data) {
 	for (auto &it : _descriptors) {
 		if (it->getRenderPass() == data) {
-			it->setRequiredRenderPassState(state);
 			return it;
 		}
 	}
 
 	if (auto d = makeDescriptor(data)) {
-		d->setRequiredRenderPassState(state);
 		return _descriptors.emplace_back(d);
 	}
 
@@ -184,19 +182,20 @@ void AttachmentDescriptor::setIndex(uint32_t idx) {
 	std::cout << "[" << getName() << ":" << _index << "] usage:" << getProgramStageDescription(_descriptor.stages) << "\n";
 }
 
-AttachmentRef *AttachmentDescriptor::addRef(uint32_t idx, AttachmentUsage usage) {
+AttachmentRef *AttachmentDescriptor::addRef(uint32_t idx, AttachmentUsage usage, AttachmentDependencyInfo info) {
 	for (auto &it : _refs) {
 		if (it->getSubpass() == idx) {
 			if ((it->getUsage() & usage) != AttachmentUsage::None) {
 				return nullptr;
 			} else {
 				it->addUsage(usage);
+				it->addDependency(info);
 				return it;
 			}
 		}
 	}
 
-	if (auto ref = makeRef(idx, usage)) {
+	if (auto ref = makeRef(idx, usage, info)) {
 		return _refs.emplace_back(ref);
 	}
 
@@ -210,7 +209,15 @@ void AttachmentDescriptor::sortRefs(RenderQueue &queue, Device &dev) {
 
 	for (auto &it : _refs) {
 		it->updateLayout();
+
+		_dependency.requiredRenderPassState = FrameRenderPassState(std::max(toInt(_dependency.requiredRenderPassState),
+				toInt(it->getDependency().requiredRenderPassState)));
 	}
+
+	_dependency.initialUsageStage = _refs.front()->getDependency().initialUsageStage;
+	_dependency.initialAccessMask = _refs.front()->getDependency().initialAccessMask;
+	_dependency.finalUsageStage = _refs.back()->getDependency().finalUsageStage;
+	_dependency.finalAccessMask = _refs.back()->getDependency().finalAccessMask;
 
 	if (_descriptor.type != DescriptorType::Unknown) {
 		return;
@@ -270,11 +277,24 @@ void AttachmentDescriptor::sortRefs(RenderQueue &queue, Device &dev) {
 	}
 }
 
-bool AttachmentRef::init(AttachmentDescriptor *desc, uint32_t idx, AttachmentUsage usage) {
+bool AttachmentRef::init(AttachmentDescriptor *desc, uint32_t idx, AttachmentUsage usage, AttachmentDependencyInfo dep) {
 	_descriptor = desc;
 	_subpass = idx;
 	_usage = usage;
+	_dependency = dep;
 	return true;
+}
+
+void AttachmentRef::addDependency(AttachmentDependencyInfo info) {
+	if (info.initialUsageStage != PipelineStage::None) {
+		_dependency.initialUsageStage |= info.initialUsageStage;
+		_dependency.initialAccessMask |= info.initialAccessMask;
+	}
+
+	if (info.finalUsageStage != PipelineStage::None) {
+		_dependency.finalUsageStage |= info.finalUsageStage;
+		_dependency.finalAccessMask |= info.finalAccessMask;
+	}
 }
 
 void AttachmentRef::updateLayout() {
@@ -294,20 +314,56 @@ void BufferAttachment::clear() {
 	Attachment::clear();
 }
 
-BufferAttachmentDescriptor *BufferAttachment::addBufferDescriptor(RenderPassData *pass, FrameRenderPassState state) {
-	return (BufferAttachmentDescriptor *)addDescriptor(pass, state);
+BufferAttachmentDescriptor *BufferAttachment::addBufferDescriptor(RenderPassData *pass) {
+	return (BufferAttachmentDescriptor *)addDescriptor(pass);
 }
 
 Rc<AttachmentDescriptor> BufferAttachment::makeDescriptor(RenderPassData *pass) {
 	return Rc<BufferAttachmentDescriptor>::create(pass, this);
 }
 
-BufferAttachmentRef *BufferAttachmentDescriptor::addBufferRef(uint32_t idx, AttachmentUsage usage) {
-	return (BufferAttachmentRef *)addRef(idx, usage);
+BufferAttachmentRef *BufferAttachmentDescriptor::addBufferRef(uint32_t idx, AttachmentUsage usage, AttachmentDependencyInfo info) {
+	return (BufferAttachmentRef *)addRef(idx, usage, info);
 }
 
-Rc<AttachmentRef> BufferAttachmentDescriptor::makeRef(uint32_t idx, AttachmentUsage usage) {
-	return Rc<BufferAttachmentRef>::create(this, idx, usage);
+Rc<AttachmentRef> BufferAttachmentDescriptor::makeRef(uint32_t idx, AttachmentUsage usage, AttachmentDependencyInfo info) {
+	return Rc<BufferAttachmentRef>::create(this, idx, usage, info);
+}
+
+void ImageAttachmentObject::rearmSemaphores(Device &dev) {
+	if (waitSem && waitSem->isWaited()) {
+		// successfully waited on this sem
+		auto tmp = move(waitSem);
+		waitSem = nullptr;
+
+		if (signalSem && signalSem->isSignaled()) {
+			// successfully signaled
+			if (!signalSem->isWaited()) {
+				waitSem = move(signalSem);
+			}
+		}
+
+		signalSem = move(tmp);
+		if (!signalSem->reset()) {
+			signalSem = nullptr;
+		}
+	} else if (!waitSem) {
+		if (signalSem && signalSem->isSignaled()) {
+			if (!signalSem->isWaited()) {
+				// successfully signaled
+				waitSem = move(signalSem);
+			}
+		}
+		signalSem = nullptr;
+	} else {
+		// next frame should wait on this waitSem
+		// signalSem should be unsignaled due frame processing logic
+		signalSem = nullptr;
+	}
+
+	if (!signalSem) {
+		signalSem = dev.makeSemaphore();
+	}
 }
 
 bool ImageAttachment::init(StringView str, const ImageInfo &info, AttachmentInfo &&a) {
@@ -324,8 +380,8 @@ void ImageAttachment::addImageUsage(gl::ImageUsage usage) {
 	_imageInfo.usage |= usage;
 }
 
-ImageAttachmentDescriptor *ImageAttachment::addImageDescriptor(RenderPassData *data, FrameRenderPassState state) {
-	return (ImageAttachmentDescriptor *)addDescriptor(data, state);
+ImageAttachmentDescriptor *ImageAttachment::addImageDescriptor(RenderPassData *data) {
+	return (ImageAttachmentDescriptor *)addDescriptor(data);
 }
 
 bool ImageAttachment::isCompatible(const ImageInfo &image) const {
@@ -352,7 +408,8 @@ bool ImageAttachmentDescriptor::init(RenderPassData *pass, ImageAttachment *atta
 	return false;
 }
 
-ImageAttachmentRef *ImageAttachmentDescriptor::addImageRef(uint32_t idx, AttachmentUsage usage, AttachmentLayout layout) {
+ImageAttachmentRef *ImageAttachmentDescriptor::addImageRef(uint32_t idx, AttachmentUsage usage, AttachmentLayout layout,
+		AttachmentDependencyInfo info) {
 	for (auto &it : _refs) {
 		if (it->getSubpass() == idx) {
 			if ((it->getUsage() & usage) != AttachmentUsage::None) {
@@ -366,12 +423,13 @@ ImageAttachmentRef *ImageAttachmentDescriptor::addImageRef(uint32_t idx, Attachm
 				}
 
 				it->addUsage(usage);
+				it->addDependency(info);
 				return (ImageAttachmentRef *)it.get();
 			}
 		}
 	}
 
-	if (auto ref = makeImageRef(idx, usage, layout)) {
+	if (auto ref = makeImageRef(idx, usage, layout, info)) {
 		_refs.emplace_back(ref);
 		return ref;
 	}
@@ -383,12 +441,14 @@ ImageAttachment *ImageAttachmentDescriptor::getImageAttachment() const {
 	return (ImageAttachment *)getAttachment();
 }
 
-Rc<ImageAttachmentRef> ImageAttachmentDescriptor::makeImageRef(uint32_t idx, AttachmentUsage usage, AttachmentLayout layout) {
-	return Rc<ImageAttachmentRef>::create(this, idx, usage, layout);
+Rc<ImageAttachmentRef> ImageAttachmentDescriptor::makeImageRef(uint32_t idx, AttachmentUsage usage, AttachmentLayout layout,
+		AttachmentDependencyInfo info) {
+	return Rc<ImageAttachmentRef>::create(this, idx, usage, layout, info);
 }
 
-bool ImageAttachmentRef::init(ImageAttachmentDescriptor *desc, uint32_t subpass, AttachmentUsage usage, AttachmentLayout layout) {
-	if (AttachmentRef::init(desc, subpass, usage)) {
+bool ImageAttachmentRef::init(ImageAttachmentDescriptor *desc, uint32_t subpass, AttachmentUsage usage, AttachmentLayout layout,
+		AttachmentDependencyInfo info) {
+	if (AttachmentRef::init(desc, subpass, usage, info)) {
 		_layout = layout;
 		return true;
 	}
@@ -550,8 +610,8 @@ Rc<AttachmentDescriptor> GenericAttachment::makeDescriptor(RenderPassData *data)
 	return Rc<GenericAttachmentDescriptor>::create(data, this);
 }
 
-Rc<AttachmentRef> GenericAttachmentDescriptor::makeRef(uint32_t idx, AttachmentUsage usage) {
-	return Rc<GenericAttachmentRef>::create(this, idx, usage);
+Rc<AttachmentRef> GenericAttachmentDescriptor::makeRef(uint32_t idx, AttachmentUsage usage, AttachmentDependencyInfo info) {
+	return Rc<GenericAttachmentRef>::create(this, idx, usage, info);
 }
 
 bool AttachmentHandle::init(const Rc<Attachment> &attachment, const FrameQueue &frame) {

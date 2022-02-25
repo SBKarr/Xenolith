@@ -231,6 +231,23 @@ protected:
 	Vector<uint64_t> _layoutIndexes;
 };
 
+class Semaphore : public gl::Object {
+public:
+	virtual ~Semaphore() { }
+
+	void setSignaled(bool value);
+	bool isSignaled() const { return _signaled; }
+
+	void setWaited(bool value);
+	bool isWaited() const { return _waited; }
+
+	virtual bool reset();
+
+protected:
+	bool _signaled = false;
+	bool _waited = false;
+};
+
 }
 
 #endif /* XENOLITH_GL_COMMON_XLGLOBJECT_H_ */

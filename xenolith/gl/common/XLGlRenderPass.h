@@ -103,7 +103,7 @@ public:
 	virtual bool isCompleted() const;
 
 	virtual bool prepare(FrameQueue &, Function<void(bool)> &&);
-	virtual void submit(FrameQueue &, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete);
+	virtual void submit(FrameQueue &, Rc<FrameSync> &&, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete);
 
 	// after submit
 	virtual void finalize(FrameQueue &, bool successful);

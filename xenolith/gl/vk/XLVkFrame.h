@@ -30,7 +30,7 @@ namespace stappler::xenolith::vk {
 
 class FrameHandle : public gl::FrameHandle {
 public:
-	virtual ~FrameHandle() { }
+	virtual ~FrameHandle();
 
 	bool init(gl::Loop &, Rc<gl::FrameRequest> &&, uint64_t gen);
 

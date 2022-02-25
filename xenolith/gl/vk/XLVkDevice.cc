@@ -125,10 +125,13 @@ bool Device::init(const vk::Instance *inst, DeviceInfo && info, const Features &
 	}
 
 	for (auto &it : _families) {
-		it.queues.resize(it.count, VK_NULL_HANDLE);
+		it.queues.reserve(it.count);
 		it.pools.reserve(it.count);
 		for (size_t i = 0; i < it.count; ++ i) {
-			getTable()->vkGetDeviceQueue(_device, it.index, i, it.queues.data() + i);
+			VkQueue queue = VK_NULL_HANDLE;
+			getTable()->vkGetDeviceQueue(_device, it.index, i, &queue);
+
+			it.queues.emplace_back(Rc<DeviceQueue>::create(*this, queue, it.index, it.ops));
 			it.pools.emplace_back(Rc<CommandPool>::create(*this, it.index, it.preferred));
 		}
 	}
@@ -249,13 +252,44 @@ void Device::onLoopEnded(gl::Loop &loop) {
 	gl::Device::onLoopEnded(loop);
 }
 
+static thread_local uint64_t s_vkFnCallStart = 0;
+
 const DeviceTable * Device::getTable() const {
 #if VK_HOOK_DEBUG
-	setDeviceHookThreadContext([] (void *, const char *name, PFN_vkVoidFunction) {
-		log::text("Vk-Call", name);
-	}, nullptr, _original, nullptr, (void *)this);
+	setDeviceHookThreadContext([] (void *ctx, const char *name, PFN_vkVoidFunction fn) {
+		auto dev = (Device *)ctx;
+		if (std::this_thread::get_id() == dev->_loopThreadId) {
+			if (fn != (PFN_vkVoidFunction)dev->_original->vkCreateFence
+					&& fn != (PFN_vkVoidFunction)dev->_original->vkGetFenceStatus) {
+				//log::text("Vk-Call", name);
+			}
+		}
+		if (fn == (PFN_vkVoidFunction)dev->_original->vkQueueSubmit
+				|| fn == (PFN_vkVoidFunction)dev->_original->vkQueuePresentKHR
+				|| fn == (PFN_vkVoidFunction)dev->_original->vkAcquireNextImageKHR
+				|| fn == (PFN_vkVoidFunction)dev->_original->vkCreateSwapchainKHR
+				|| fn == (PFN_vkVoidFunction)dev->_original->vkDestroySwapchainKHR) {
+			log::text("Vk-Call", name);
+		}
+		s_vkFnCallStart = platform::device::_clock();
+	}, [] (void *ctx, const char *name, PFN_vkVoidFunction fn) {
+		auto dt = platform::device::_clock() - s_vkFnCallStart;
+		if (dt > 200000) {
+			log::vtext("Vk-Call-Timeout", name, ": ", dt);
+		}
+	}, _original, nullptr, (void *)this);
 #endif
+
 	return _table;
+}
+
+const DeviceQueueFamily *Device::getQueueFamily(uint32_t familyIdx) const {
+	for (auto &it : _families) {
+		if (it.index == familyIdx) {
+			return &it;
+		}
+	}
+	return nullptr;
 }
 
 const DeviceQueueFamily *Device::getQueueFamily(QueueOperations ops) const {
@@ -294,22 +328,33 @@ const Vector<DeviceQueueFamily> &Device::getQueueFamilies() const {
 	return _families;
 }
 
+Rc<DeviceQueue> Device::tryAcquireQueueSync(QueueOperations ops) {
+	auto family = (DeviceQueueFamily *)getQueueFamily(ops);
+	if (!family) {
+		return nullptr;
+	}
+
+	std::unique_lock<Mutex> lock(_resourceMutex);
+	if (!family->queues.empty()) {
+		auto queue = move(family->queues.back());
+		family->queues.pop_back();
+		return queue;
+	}
+	return nullptr;
+}
+
 bool Device::acquireQueue(QueueOperations ops, gl::FrameHandle &handle, Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> && acquire,
 		Function<void(gl::FrameHandle &)> && invalidate, Rc<Ref> &&ref) {
 
-	auto selectFamily = [&] () -> DeviceQueueFamily * {
-		auto ret = getQueueFamily(ops);
-		return (DeviceQueueFamily *)ret;
-	};
-
-	auto family = selectFamily();
+	auto family = (DeviceQueueFamily *)getQueueFamily(ops);
 	if (!family) {
 		return false;
 	}
 
+	std::unique_lock<Mutex> lock(_resourceMutex);
 	Rc<DeviceQueue> queue;
 	if (!family->queues.empty()) {
-		queue = Rc<DeviceQueue>::create(*this, family->queues.back(), family->index, family->ops);
+		queue = move(family->queues.back());
 		family->queues.pop_back();
 	} else {
 		family->waiters.emplace_back(DeviceQueueFamily::Waiter(move(acquire), move(invalidate), &handle, move(ref)));
@@ -324,24 +369,21 @@ bool Device::acquireQueue(QueueOperations ops, gl::FrameHandle &handle, Function
 bool Device::acquireQueue(QueueOperations ops, gl::Loop &loop, Function<void(gl::Loop &, const Rc<DeviceQueue> &)> && acquire,
 		Function<void(gl::Loop &)> && invalidate, Rc<Ref> &&ref) {
 
-	auto selectFamily = [&] () -> DeviceQueueFamily * {
-		auto ret = getQueueFamily(ops);
-		return (DeviceQueueFamily *)ret;
-	};
-
-	auto family = selectFamily();
+	auto family = (DeviceQueueFamily *)getQueueFamily(ops);
 	if (!family) {
 		return false;
 	}
 
+	std::unique_lock<Mutex> lock(_resourceMutex);
 	Rc<DeviceQueue> queue;
 	if (!family->queues.empty()) {
-		queue = Rc<DeviceQueue>::create(*this, family->queues.back(), family->index, family->ops);
+		queue = move(family->queues.back());
 		family->queues.pop_back();
 	} else {
 		family->waiters.emplace_back(DeviceQueueFamily::Waiter(move(acquire), move(invalidate), &loop, move(ref)));
 	}
 
+	lock.unlock();
 	if (queue) {
 		acquire(loop, queue);
 	}
@@ -361,8 +403,9 @@ void Device::releaseQueue(Rc<DeviceQueue> &&queue) {
 		return;
 	}
 
+	std::unique_lock<Mutex> lock(_resourceMutex);
 	if (family->waiters.empty()) {
-		family->queues.emplace_back(queue->getQueue());
+		family->queues.emplace_back(move(queue));
 	} else {
 		if (family->waiters.front().handle) {
 			Rc<gl::FrameHandle> handle;
@@ -413,84 +456,124 @@ void Device::releaseQueue(Rc<DeviceQueue> &&queue) {
 }
 
 Rc<CommandPool> Device::acquireCommandPool(QueueOperations c, uint32_t) {
-	for (auto &it : _families) {
-		auto index = it.index;
-		if ((it.preferred & c) != QueueOperations::None) {
-			if (!it.pools.empty()) {
-				auto ret = it.pools.back();
-				it.pools.pop_back();
-				return ret;
-			}
-			return Rc<CommandPool>::create(*this, index, it.ops);
-		}
+	auto family = (DeviceQueueFamily *)getQueueFamily(c);
+	if (!family) {
+		return nullptr;
 	}
-	return nullptr;
+
+	std::unique_lock<Mutex> lock(_resourceMutex);
+	if (!family->pools.empty()) {
+		auto ret = family->pools.back();
+		family->pools.pop_back();
+		return ret;
+	}
+	lock.unlock();
+	return Rc<CommandPool>::create(*this, family->index, family->ops);
 }
 
 Rc<CommandPool> Device::acquireCommandPool(uint32_t familyIndex) {
-	for (auto &it : _families) {
-		if (it.index == familyIndex) {
-			if (!it.pools.empty()) {
-				auto ret = it.pools.back();
-				it.pools.pop_back();
-				return ret;
-			}
-			return Rc<CommandPool>::create(*this, it.index, it.ops);
-		}
+	auto family = (DeviceQueueFamily *)getQueueFamily(familyIndex);
+	if (!family) {
+		return nullptr;
 	}
-	return nullptr;
+
+	std::unique_lock<Mutex> lock(_resourceMutex);
+	if (!family->pools.empty()) {
+		auto ret = family->pools.back();
+		family->pools.pop_back();
+		return ret;
+	}
+	lock.unlock();
+	return Rc<CommandPool>::create(*this, family->index, family->ops);
 }
 
 void Device::releaseCommandPool(gl::Loop &loop, Rc<CommandPool> &&pool) {
-	auto refId = retain();
+	pool->reset(*this);
+
+	std::unique_lock<Mutex> lock(_resourceMutex);
+	_families[pool->getFamilyIdx()].pools.emplace_back(Rc<CommandPool>(pool));
+
+	/*auto refId = retain();
 	loop.getQueue()->perform(Rc<Task>::create([this, pool] (const Task &) -> bool {
 		pool->reset(*this);
 		return true;
 	}, [this, pool, refId] (const Task &, bool success) {
 		if (success) {
+			std::unique_lock<Mutex> lock(_resourceMutex);
 			_families[pool->getFamilyIdx()].pools.emplace_back(Rc<CommandPool>(pool));
 		}
 		release(refId);
-	}));
+	}));*/
 }
 
 void Device::releaseCommandPoolUnsafe(Rc<CommandPool> &&pool) {
 	pool->reset(*this);
 
+	std::unique_lock<Mutex> lock(_resourceMutex);
 	_families[pool->getFamilyIdx()].pools.emplace_back(Rc<CommandPool>(pool));
 }
 
 Rc<Fence> Device::acquireFence(uint32_t v) {
+	std::unique_lock<Mutex> lock(_resourceMutex);
 	if (!_fences.empty()) {
 		auto ret = _fences.back();
 		_fences.pop_back();
 		ret->setFrame(v);
 		return ret;
 	}
+	lock.unlock();
 	auto f = Rc<Fence>::create(*this);
 	f->setFrame(v);
 	return f;
 }
 
-void Device::releaseFence(Rc<Fence> &&ref) {
-	ref->reset();
+void Device::releaseFence(gl::Loop &loop, Rc<Fence> &&ref) {
+	ref->reset(loop, [this] (Rc<Fence> &&ref) {
+		std::unique_lock<Mutex> lock(_resourceMutex);
+		_fences.emplace_back(move(ref));
+	});
+}
+
+void Device::releaseFenceUnsafe(Rc<Fence> &&ref) {
+	ref->resetUnsafe();
+	std::unique_lock<Mutex> lock(_resourceMutex);
 	_fences.emplace_back(move(ref));
 }
 
 void Device::scheduleFence(gl::Loop &loop, Rc<Fence> &&fence) {
-	if (fence->check()) {
-		releaseFence(move(fence));
+	if (!fence->isArmed() || fence->check()) {
+		releaseFence(loop, move(fence));
 		return;
 	}
 
 	_scheduled.emplace(fence);
-	loop.schedule([this, fence = move(fence)] (gl::Loop::Context &) {
+	loop.schedule([this, fence = move(fence)] (gl::Loop::Context &ctx) {
 		if (_scheduled.find(fence) == _scheduled.end()) {
 			return true;
 		}
 		if (fence->check()) {
 			_scheduled.erase(fence);
-			releaseFence(Rc<Fence>(fence));
+			releaseFence(*ctx.loop, Rc<Fence>(fence));
+			return true;
+		}
+		return false;
+	}, "Device::scheduleFence");
+}
+
+void Device::scheduleFence(gl::Loop &loop, Rc<Fence> &&fence, Function<bool(Fence &)> &&cb) {
+	if (cb(*fence)) {
+		releaseFence(loop, move(fence));
+		return;
+	}
+
+	_scheduled.emplace(fence);
+	loop.schedule([this, fence = move(fence), cb = move(cb)] (gl::Loop::Context &ctx) mutable {
+		if (_scheduled.find(fence) == _scheduled.end()) {
+			return true;
+		}
+		if (cb(*fence)) {
+			_scheduled.erase(fence);
+			releaseFence(*ctx.loop, move(fence));
 			return true;
 		}
 		return false;
@@ -583,6 +666,11 @@ Rc<gl::ImageAttachmentObject> Device::makeImage(const gl::ImageAttachment *attac
 		ret->views.emplace(desc->getRenderPass(), move(v));
 	}
 
+	return ret;
+}
+
+Rc<gl::Semaphore> Device::makeSemaphore() {
+	auto ret = Rc<Semaphore>::create(*this);
 	return ret;
 }
 

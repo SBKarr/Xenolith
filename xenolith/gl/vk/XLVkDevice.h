@@ -63,6 +63,7 @@ public:
 	const DeviceTable * getTable() const;
 	const Rc<Allocator> & getAllocator() const { return _allocator; }
 
+	const DeviceQueueFamily *getQueueFamily(uint32_t) const;
 	const DeviceQueueFamily *getQueueFamily(QueueOperations) const;
 	const DeviceQueueFamily *getQueueFamily(gl::RenderPassType) const;
 
@@ -80,6 +81,7 @@ public:
 	// - false if frame is not valid or no queue family with requested capabilities exists
 	//
 	// Acquired DeviceQueue must be released with releaseQueue
+	Rc<DeviceQueue> tryAcquireQueueSync(QueueOperations);
 	bool acquireQueue(QueueOperations, gl::FrameHandle &, Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> && acquire,
 			Function<void(gl::FrameHandle &)> && invalidate, Rc<Ref> &&);
 	bool acquireQueue(QueueOperations, gl::Loop &, Function<void(gl::Loop &, const Rc<DeviceQueue> &)> && acquire,
@@ -92,8 +94,10 @@ public:
 	void releaseCommandPoolUnsafe(Rc<CommandPool> &&);
 
 	Rc<Fence> acquireFence(uint32_t);
-	void releaseFence(Rc<Fence> &&);
+	void releaseFence(gl::Loop &, Rc<Fence> &&);
+	void releaseFenceUnsafe(Rc<Fence> &&);
 	void scheduleFence(gl::Loop &, Rc<Fence> &&);
+	void scheduleFence(gl::Loop &, Rc<Fence> &&, Function<bool(Fence &)> &&);
 
 	const Rc<TextureSetLayout> &getTextureSetLayout() const { return _textureSetLayout; }
 
@@ -112,6 +116,14 @@ public:
 
 	virtual Rc<gl::Framebuffer> makeFramebuffer(const gl::RenderPassData *, SpanView<Rc<gl::ImageView>>, Extent2) override;
 	virtual Rc<gl::ImageAttachmentObject> makeImage(const gl::ImageAttachment *, Extent3) override;
+	virtual Rc<gl::Semaphore> makeSemaphore() override;
+
+	template <typename Callback>
+	void makeApiCall(const Callback &cb) {
+		//_apiMutex.lock();
+		cb(*getTable(), getDevice());
+		//_apiMutex.unlock();
+	}
 
 private:
 	friend class DeviceQueue;
@@ -154,9 +166,11 @@ private:
 	Vector<Rc<Sampler>> _samplers;
 	std::atomic<bool> _samplersCompiled = false;
 
-	Mutex _formatMutex;
 	Vector<gl::ImageFormat> _depthFormats;
 	std::unordered_map<VkFormat, VkFormatProperties> _formats;
+
+	Mutex _resourceMutex;
+	Mutex _apiMutex;
 };
 
 }
