@@ -50,17 +50,41 @@ void Device::begin(const Application *, thread::TaskQueue &) {
 
 void Device::end(thread::TaskQueue &) {
 	_started = false;
+
+	if (isRetainTrackerEnabled()) {
+		log::vtext("Gl-Device", "Backtrace for ", (void *)this);
+		foreachBacktrace([] (uint64_t id, Time time, const std::vector<std::string> &vec) {
+			StringStream stream;
+			stream << "[" << id << ":" << time.toHttp() << "]:\n";
+			for (auto &it : vec) {
+				stream << "\t" << it << "\n";
+			}
+			log::text("Gl-Device-Backtrace", stream.str());
+		});
+	}
 }
 
 void Device::waitIdle() {
 
 }
 
-void Device::defineSamplers(Vector<SamplerInfo> &&info) {
-	if (isSamplersCompiled()) {
-		log::text("Gl-Device", "Fail to define sampler list - samplers already compiled");
+uint32_t Device::addSampler(const SamplerInfo &info) {
+	auto lb = std::lower_bound(_samplersInfo.begin(), _samplersInfo.end(), info);
+	if (lb != _samplersInfo.end() && *lb == info) {
+		return uint32_t(lb - _samplersInfo.begin());
 	} else {
-		_samplersInfo = move(info);
+		if (isSamplersCompiled()) {
+			log::text("Gl-Device", "Fail to define sampler list - samplers already compiled");
+			return maxOf<uint32_t>();
+		}
+
+		if (lb != _samplersInfo.end()) {
+			_samplersInfo.emplace(lb, info);
+			return uint32_t(lb - lb) + 1;
+		} else {
+			_samplersInfo.emplace_back(info);
+			return _samplersInfo.size() - 1;
+		}
 	}
 }
 
@@ -99,6 +123,10 @@ Rc<ImageAttachmentObject> Device::makeImage(const gl::ImageAttachment *, Extent3
 }
 
 Rc<Semaphore> Device::makeSemaphore() {
+	return nullptr;
+}
+
+Rc<ImageView> Device::makeImageView(const Rc<ImageObject> &, const ImageViewInfo &) {
 	return nullptr;
 }
 

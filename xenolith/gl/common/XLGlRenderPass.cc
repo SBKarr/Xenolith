@@ -88,6 +88,15 @@ Extent2 RenderPass::getSizeForFrame(const FrameQueue &queue) const {
 	}
 }
 
+const AttachmentDescriptor *RenderPass::getDescriptor(const Attachment *a) const {
+	for (auto &it : _data->descriptors) {
+		if (it->getAttachment() == a) {
+			return it;
+		}
+	}
+	return nullptr;
+}
+
 void RenderPass::prepare(Device &device) {
 
 }

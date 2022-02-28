@@ -71,15 +71,24 @@ void FrameCacheStorage::reset(const RenderPassData *p, Extent2 e) {
 		return;
 	}
 
+	if (!it->second.framebuffers.empty()) {
+		it->second.framebuffers.clear();
+	}
 	it->second.extent = e;
-	it->second.framebuffers.clear();
 }
 
-Rc<Framebuffer> FrameCacheStorage::acquireFramebuffer(const Loop &, const RenderPassData *p, SpanView<Rc<ImageView>> views) {
+Rc<Framebuffer> FrameCacheStorage::acquireFramebuffer(const Loop &, const RenderPassData *p, SpanView<Rc<ImageView>> views, Extent2 e) {
 	std::unique_lock<Mutex> lock(_invalidateMutex);
 	auto passIt = _passes.find(p);
 	if (passIt == _passes.end()) {
 		return nullptr;
+	}
+
+	if (passIt->second.extent != e) {
+		if (!passIt->second.framebuffers.empty()) {
+			passIt->second.framebuffers.clear();
+		}
+		passIt->second.extent = e;
 	}
 
 	Vector<uint64_t> ids; ids.reserve(views.size());
@@ -130,15 +139,24 @@ void FrameCacheStorage::reset(const ImageAttachment *a, Extent3 e) {
 		return;
 	}
 
-	imageIt->second.images.clear();
+	if (!imageIt->second.images.empty()) {
+		imageIt->second.images.clear();
+	}
 	imageIt->second.extent = e;
 }
 
-Rc<ImageAttachmentObject> FrameCacheStorage::acquireImage(const Loop &loop, const ImageAttachment *a) {
+Rc<ImageAttachmentObject> FrameCacheStorage::acquireImage(const Loop &loop, const ImageAttachment *a, Extent3 e) {
 	std::unique_lock<Mutex> lock(_invalidateMutex);
 	auto imageIt = _images.find(a);
 	if (imageIt == _images.end()) {
 		return nullptr;
+	}
+
+	if (imageIt->second.extent != e) {
+		if (!imageIt->second.images.empty()) {
+			imageIt->second.images.clear();
+		}
+		imageIt->second.extent = e;
 	}
 
 	if (!imageIt->second.images.empty()) {
@@ -155,6 +173,10 @@ Rc<ImageAttachmentObject> FrameCacheStorage::acquireImage(const Loop &loop, cons
 }
 
 void FrameCacheStorage::releaseImage(const ImageAttachment *a, Rc<ImageAttachmentObject> &&image) {
+	if (image->isSwapchainImage) {
+		return;
+	}
+
 	std::unique_lock<Mutex> lock(_invalidateMutex);
 	auto imageIt = _images.find(a);
 	if (imageIt == _images.end()) {

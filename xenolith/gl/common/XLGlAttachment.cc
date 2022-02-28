@@ -330,6 +330,8 @@ Rc<AttachmentRef> BufferAttachmentDescriptor::makeRef(uint32_t idx, AttachmentUs
 	return Rc<BufferAttachmentRef>::create(this, idx, usage, info);
 }
 
+ImageAttachmentObject::~ImageAttachmentObject() { }
+
 void ImageAttachmentObject::rearmSemaphores(Device &dev) {
 	if (waitSem && waitSem->isWaited()) {
 		// successfully waited on this sem
@@ -363,6 +365,20 @@ void ImageAttachmentObject::rearmSemaphores(Device &dev) {
 
 	if (!signalSem) {
 		signalSem = dev.makeSemaphore();
+	}
+}
+
+void ImageAttachmentObject::makeViews(Device &dev, const ImageAttachment &attachment) {
+	for (auto &desc : attachment.getDescriptors()) {
+		if (desc->getAttachment()->getType() == gl::AttachmentType::Image) {
+			auto imgDesc = (gl::ImageAttachmentDescriptor *)desc.get();
+			gl::ImageViewInfo info(*imgDesc);
+
+			auto it = views.find(info);
+			if (it == views.end()) {
+				views.emplace(info, dev.makeImageView(image, info));
+			}
+		}
 	}
 }
 

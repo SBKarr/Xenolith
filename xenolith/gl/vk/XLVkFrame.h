@@ -23,7 +23,7 @@
 #ifndef XENOLITH_GL_VK_XLVKFRAME_H_
 #define XENOLITH_GL_VK_XLVKFRAME_H_
 
-#include "../common/XLGlFrameHandle.h"
+#include "XLGlFrameHandle.h"
 #include "XLVkAllocator.h"
 
 namespace stappler::xenolith::vk {

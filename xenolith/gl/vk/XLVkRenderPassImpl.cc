@@ -36,6 +36,10 @@ bool RenderPassImpl::PassData::cleanup(Device &dev) {
 		dev.getTable()->vkDestroyRenderPass(dev.getDevice(), renderPass, nullptr);
 	}
 
+	if (renderPassAlternative) {
+		dev.getTable()->vkDestroyRenderPass(dev.getDevice(), renderPassAlternative, nullptr);
+	}
+
 	if (layout) {
 		dev.getTable()->vkDestroyPipelineLayout(dev.getDevice(), layout, nullptr);
 	}
@@ -64,6 +68,14 @@ bool RenderPassImpl::init(Device &dev, gl::RenderPassData &data) {
 	}
 
 	return false;
+}
+
+VkRenderPass RenderPassImpl::getRenderPass(bool alt) const {
+	if (!alt) {
+		return _data->renderPass;
+	} else {
+		return _data->renderPassAlternative;
+	}
 }
 
 VkDescriptorSet RenderPassImpl::getDescriptorSet(uint32_t idx) const {
@@ -248,7 +260,17 @@ bool RenderPassImpl::writeDescriptors(const RenderPassHandle &handle, bool async
 }
 
 void RenderPassImpl::perform(const RenderPassHandle &handle, VkCommandBuffer buf, const Callback<void()> &cb) {
-	if (auto pass = getRenderPass()) {
+	bool useAlternative = false;
+	for (auto &it : _variableAttachments) {
+		if (auto aHandle = handle.getAttachmentHandle(it)) {
+			if (aHandle->getQueueData()->image && !aHandle->getQueueData()->image->isSwapchainImage) {
+				useAlternative = true;
+				break;
+			}
+		}
+	}
+
+	if (auto pass = getRenderPass(useAlternative)) {
 		auto dev = (Device *)_device;
 		auto table = dev->getTable();
 
@@ -274,6 +296,7 @@ void RenderPassImpl::perform(const RenderPassHandle &handle, VkCommandBuffer buf
 }
 
 bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
+	bool hasAlternative = false;
 	PassData pass;
 
 	size_t attachmentReferences = 0;
@@ -283,6 +306,7 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
 		}
 
 		VkAttachmentDescription attachment;
+		VkAttachmentDescription attachmentAlternative;
 
 		bool mayAlias = false;
 		for (auto &u : it->getRefs()) {
@@ -294,18 +318,26 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
 		auto imageDesc = (gl::ImageAttachmentDescriptor *)it;
 		auto &info = imageDesc->getInfo();
 
-		attachment.flags = (mayAlias ? VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT : 0);
-		attachment.format = VkFormat(info.format);
-		attachment.samples = VkSampleCountFlagBits(info.samples);
-		attachment.loadOp = VkAttachmentLoadOp(imageDesc->getLoadOp());
-		attachment.storeOp = VkAttachmentStoreOp(imageDesc->getStoreOp());
-		attachment.stencilLoadOp = VkAttachmentLoadOp(imageDesc->getStencilLoadOp());
-		attachment.stencilStoreOp = VkAttachmentStoreOp(imageDesc->getStencilStoreOp());
-		attachment.initialLayout = VkImageLayout(imageDesc->getInitialLayout());
-		attachment.finalLayout = VkImageLayout(imageDesc->getFinalLayout());
+		attachmentAlternative.flags = attachment.flags = (mayAlias ? VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT : 0);
+		attachmentAlternative.format = attachment.format = VkFormat(info.format);
+		attachmentAlternative.samples = attachment.samples = VkSampleCountFlagBits(info.samples);
+		attachmentAlternative.loadOp = attachment.loadOp = VkAttachmentLoadOp(imageDesc->getLoadOp());
+		attachmentAlternative.storeOp = attachment.storeOp = VkAttachmentStoreOp(imageDesc->getStoreOp());
+		attachmentAlternative.stencilLoadOp = attachment.stencilLoadOp = VkAttachmentLoadOp(imageDesc->getStencilLoadOp());
+		attachmentAlternative.stencilStoreOp = attachment.stencilStoreOp = VkAttachmentStoreOp(imageDesc->getStencilStoreOp());
+		attachmentAlternative.initialLayout = attachment.initialLayout = VkImageLayout(imageDesc->getInitialLayout());
+		attachmentAlternative.finalLayout = attachment.finalLayout = VkImageLayout(imageDesc->getFinalLayout());
+
+		if (imageDesc->getFinalLayout() == gl::AttachmentLayout::PresentSrc) {
+			hasAlternative = true;
+			attachmentAlternative.finalLayout = VkImageLayout(gl::AttachmentLayout::TransferSrcOptimal);
+			_variableAttachments.emplace(it->getAttachment());
+		}
 
 		it->setIndex(_attachmentDescriptions.size());
+
 		_attachmentDescriptions.emplace_back(attachment);
+		_attachmentDescriptionsAlternative.emplace_back(attachmentAlternative);
 
 		if (imageDesc->getLoadOp() == gl::AttachmentLoadOp::Clear) {
 			auto c = ((gl::ImageAttachment *)imageDesc->getAttachment())->getClearColor();
@@ -447,6 +479,15 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
 
 	if (dev.getTable()->vkCreateRenderPass(dev.getDevice(), &renderPassInfo, nullptr, &pass.renderPass) != VK_SUCCESS) {
 		return pass.cleanup(dev);
+	}
+
+	if (hasAlternative) {
+		renderPassInfo.attachmentCount = _attachmentDescriptionsAlternative.size();
+		renderPassInfo.pAttachments = _attachmentDescriptionsAlternative.data();
+
+		if (dev.getTable()->vkCreateRenderPass(dev.getDevice(), &renderPassInfo, nullptr, &pass.renderPassAlternative) != VK_SUCCESS) {
+			return pass.cleanup(dev);
+		}
 	}
 
 	if (initDescriptors(dev, data, pass)) {

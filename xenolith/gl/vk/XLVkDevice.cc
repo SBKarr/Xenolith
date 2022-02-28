@@ -252,7 +252,9 @@ void Device::onLoopEnded(gl::Loop &loop) {
 	gl::Device::onLoopEnded(loop);
 }
 
+#if VK_HOOK_DEBUG
 static thread_local uint64_t s_vkFnCallStart = 0;
+#endif
 
 const DeviceTable * Device::getTable() const {
 #if VK_HOOK_DEBUG
@@ -660,17 +662,18 @@ Rc<gl::ImageAttachmentObject> Device::makeImage(const gl::ImageAttachment *attac
 	auto img = _allocator->spawnPersistent(AllocationUsage::DeviceLocal, imageInfo, false);
 
 	ret->image = img.get();
-
-	for (auto &desc : attachment->getDescriptors()) {
-		auto v = Rc<ImageView>::create(*this, *(gl::ImageAttachmentDescriptor *)desc.get(), img);
-		ret->views.emplace(desc->getRenderPass(), move(v));
-	}
+	ret->makeViews(*this, *attachment);
 
 	return ret;
 }
 
 Rc<gl::Semaphore> Device::makeSemaphore() {
 	auto ret = Rc<Semaphore>::create(*this);
+	return ret;
+}
+
+Rc<gl::ImageView> Device::makeImageView(const Rc<gl::ImageObject> &img, const gl::ImageViewInfo &info) {
+	auto ret = Rc<ImageView>::create(*this, (Image *)img.get(), info);
 	return ret;
 }
 

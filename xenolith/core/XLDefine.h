@@ -77,13 +77,8 @@ struct ColorMode {
 	ColorMode &operator=(const ColorMode &) = default;
 	ColorMode &operator=(ColorMode &&) = default;
 
-	bool operator==(const ColorMode &n) const {
-		return memcmp(this, &n, sizeof(ColorMode)) == 0;
-	}
-
-	bool operator!=(const ColorMode &n) const {
-		return memcmp(this, &n, sizeof(ColorMode)) != 0;
-	}
+	bool operator==(const ColorMode &n) const = default;
+	bool operator!=(const ColorMode &n) const = default;
 
 	Mode getMode() const { return Mode(mode); }
 	gl::ComponentMapping getR() const { return gl::ComponentMapping(r); }
@@ -119,13 +114,8 @@ struct BlendInfo {
 	: enabled(1), srcColor(toInt(srcColor)), dstColor(toInt(dstColor)), opColor(toInt(opColor))
 	, srcAlpha(toInt(srcAlpha)), dstAlpha(toInt(dstAlpha)), opAlpha(toInt(opAlpha)), writeMask(toInt(flags)) { }
 
-	bool operator==(const BlendInfo &other) const {
-		return memcmp(this, &other, sizeof(BlendInfo)) == 0;
-	}
-
-	bool operator!=(const BlendInfo &other) const {
-		return memcmp(this, &other, sizeof(BlendInfo)) != 0;
-	}
+	bool operator==(const BlendInfo &other) const = default;
+	bool operator!=(const BlendInfo &other) const = default;
 
 	bool isEnabled() const {
 		return enabled != 0;
@@ -142,13 +132,8 @@ struct DepthInfo {
 	DepthInfo(bool write, bool test, gl::CompareOp compareOp)
 	: writeEnabled(write ? 1 : 0), testEnabled(test ? 1 : 0), compare(toInt(compareOp)) { }
 
-	bool operator==(const DepthInfo &other) const {
-		return memcmp(this, &other, sizeof(BlendInfo)) == 0;
-	}
-
-	bool operator!=(const DepthInfo &other) const {
-		return memcmp(this, &other, sizeof(BlendInfo)) != 0;
-	}
+	bool operator==(const DepthInfo &other) const = default;
+	bool operator!=(const DepthInfo &other) const = default;
 };
 
 struct DepthBounds {
@@ -156,13 +141,8 @@ struct DepthBounds {
 	float min = 0.0f;
 	float max = 0.0f;
 
-	bool operator==(const DepthBounds &other) const {
-		return enabled == other.enabled && (!enabled || (min == other.min && max == other.max));
-	}
-
-	bool operator!=(const DepthBounds &other) const {
-		return enabled != other.enabled || (enabled && (min != other.min || max != other.max));
-	}
+	bool operator==(const DepthBounds &other) const = default;
+	bool operator!=(const DepthBounds &other) const = default;
 };
 
 struct StencilInfo {
@@ -174,15 +154,8 @@ struct StencilInfo {
 	uint32_t writeMask = 0;
 	uint32_t reference = 0;
 
-	friend bool operator==(const StencilInfo &l, const StencilInfo &r) {
-		return l.fail == r.fail && l.pass == r.pass && l.depthFail == r.depthFail && l.compare == r.compare
-				&& l.compareMask == r.compareMask && l.writeMask == r.writeMask && l.reference == r.reference;
-	}
-
-	friend bool operator!=(const StencilInfo &l, const StencilInfo &r) {
-		return l.fail != r.fail || l.pass != r.pass || l.depthFail != r.depthFail || l.compare != r.compare
-				|| l.compareMask != r.compareMask || l.writeMask != r.writeMask || l.reference != r.reference;
-	}
+	friend bool operator==(const StencilInfo &l, const StencilInfo &r) = default;
+	friend bool operator!=(const StencilInfo &l, const StencilInfo &r) = default;
 };
 
 struct PipelineMaterialInfo {
@@ -281,13 +254,8 @@ struct MaterialInfo {
 		return hash::hash64((const char *)this, sizeof(MaterialInfo));
 	}
 
-	bool operator==(const MaterialInfo &info) const {
-		return memcmp(this, &info, sizeof(MaterialInfo)) == 0;
-	}
-
-	bool operator!=(const MaterialInfo &info) const {
-		return memcmp(this, &info, sizeof(MaterialInfo)) == 0;
-	}
+	bool operator==(const MaterialInfo &info) const = default;
+	bool operator!=(const MaterialInfo &info) const = default;
 };
 
 class PoolRef : public Ref {

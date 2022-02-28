@@ -66,6 +66,24 @@ struct SurfaceInfo {
 	String description() const;
 };
 
+class SwapchainImage : public Ref {
+public:
+	virtual ~SwapchainImage();
+
+	virtual bool init(Device &dev);
+
+	Rc<gl::ImageAttachmentObject> getImage() const { return _image; }
+
+protected:
+	virtual void setImage(const Rc<gl::ImageAttachmentObject> &);
+
+	uint64_t _gen = 0;
+	Rc<Semaphore> _imageReady;
+	Rc<Semaphore> _renderFinished;
+
+	gl::ImageAttachmentObject *_image = nullptr;
+};
+
 class Swapchain : public Ref {
 public:
 	struct PresentTask : public Ref {
@@ -105,6 +123,8 @@ public:
 	gl::ImageInfo getSwapchainImageInfo() const;
 	gl::ImageInfo getSwapchainImageInfo(const gl::SwapchainConfig &cfg) const;
 	gl::ImageViewInfo getSwapchainImageViewInfo(const gl::ImageInfo &image) const;
+
+	virtual Rc<gl::ImageAttachmentObject> acquireImage(const Loop &loop, const ImageAttachment *a, Extent3 e);
 
 protected:
 	uint64_t _order = 0;

@@ -117,6 +117,7 @@ public:
 	virtual Rc<gl::Framebuffer> makeFramebuffer(const gl::RenderPassData *, SpanView<Rc<gl::ImageView>>, Extent2) override;
 	virtual Rc<gl::ImageAttachmentObject> makeImage(const gl::ImageAttachment *, Extent3) override;
 	virtual Rc<gl::Semaphore> makeSemaphore() override;
+	virtual Rc<gl::ImageView> makeImageView(const Rc<gl::ImageObject> &, const gl::ImageViewInfo &) override;
 
 	template <typename Callback>
 	void makeApiCall(const Callback &cb) {

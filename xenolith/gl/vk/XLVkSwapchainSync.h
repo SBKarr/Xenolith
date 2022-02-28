@@ -35,11 +35,13 @@ class Fence;
 class SwapchainHandle;
 class Image;
 
-class SwapchainSync : public Ref {
+class SwapchainSync : public gl::SwapchainImage {
 public:
 	virtual ~SwapchainSync();
 
-	bool init(Device &dev, const Rc<SwapchainHandle> &, Mutex *mutex, uint64_t gen, Function<void(Rc<SwapchainSync> &&)> &&);
+	bool init(Device &dev, const Rc<SwapchainHandle> &, Mutex *mutex, uint64_t gen,
+			Function<void(Rc<SwapchainSync> &&)> &&, Function<void(Rc<SwapchainSync> &&)> &&);
+	void disable();
 	void reset(Device &dev, const Rc<SwapchainHandle> &, uint64_t gen);
 	void invalidate();
 
@@ -52,27 +54,27 @@ public:
 	uint32_t getImageIndex() const { return _imageIndex; }
 	void clearImageIndex();
 
-	Rc<Image> getImage() const;
-
 	void setSubmitCompleted(bool);
 	void setPresentationEnded(bool);
+
+	Extent3 getImageExtent() const;
 
 protected:
 	VkResult doPresent(Device &, DeviceQueue &);
 
 	void releaseForSwapchain();
 
-	Mutex *_mutex;
+	Mutex *_mutex = nullptr;
 	Rc<SwapchainHandle> _handle;
 	uint32_t _imageIndex = maxOf<uint32_t>();
-	uint64_t _gen = 0;
-	Rc<Semaphore> _imageReady;
-	Rc<Semaphore> _renderFinished;
 
 	Function<void(Rc<SwapchainSync> &&)> _cleanup;
+	Function<void(Rc<SwapchainSync> &&)> _present;
 
+	bool _presented = false;
 	bool _waitForSubmission = false;
 	bool _waitForPresentation = false;
+	VkResult _result = VK_SUCCESS;
 };
 
 }

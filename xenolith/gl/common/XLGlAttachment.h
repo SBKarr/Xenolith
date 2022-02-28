@@ -227,15 +227,21 @@ protected:
 };
 
 struct ImageAttachmentObject final : public Ref {
-	virtual ~ImageAttachmentObject() { }
+	virtual ~ImageAttachmentObject();
 
 	void rearmSemaphores(Device &);
+	void makeViews(Device &, const ImageAttachment &);
 
 	Extent3 extent;
 	Rc<ImageObject> image;
 	Rc<Semaphore> waitSem;
 	Rc<Semaphore> signalSem;
-	HashMap<const RenderPassData *, Rc<ImageView>> views;
+	Map<ImageViewInfo, Rc<ImageView>> views;
+
+	Rc<SwapchainImage> swapchainImage;
+
+	bool isSwapchainImage = false;
+	AttachmentLayout layout = AttachmentLayout::Undefined;
 };
 
 class ImageAttachment : public Attachment {
@@ -371,6 +377,7 @@ public:
 
 	virtual bool init(const Rc<Attachment> &, const FrameQueue &);
 	virtual void setQueueData(FrameQueueAttachmentData &);
+	virtual FrameQueueAttachmentData *getQueueData() const { return _queueData; }
 
 	virtual bool isAvailable(const FrameQueue &) const { return true; }
 

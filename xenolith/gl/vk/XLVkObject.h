@@ -125,7 +125,7 @@ public:
 
 	bool isDeprecated();
 
-	Rc<Image> getImage(uint32_t) const;
+	Rc<gl::ImageAttachmentObject> getImage(uint32_t) const;
 
 	// returns true if it was first deprecation
 	bool deprecate(bool invalidate = false);
@@ -141,7 +141,7 @@ protected:
 	gl::ImageInfo _imageInfo;
 	gl::SwapchainConfig _config;
 	VkSwapchainKHR _swapchain = VK_NULL_HANDLE;
-	Vector<Rc<Image>> _images;
+	Vector<Rc<gl::ImageAttachmentObject>> _images;
 	Function<void()> _rebuildCallback;
 };
 

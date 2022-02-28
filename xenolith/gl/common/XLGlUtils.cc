@@ -616,6 +616,67 @@ ImageData ImageData::make(Rc<ImageObject> &&obj) {
 	return ret;
 }
 
+void ImageViewInfo::setup(const ImageAttachmentDescriptor &desc) {
+	bool usedAsInput = false;
+	for (auto &it : desc.getRefs()) {
+		if ((it->getUsage() & gl::AttachmentUsage::Input) != gl::AttachmentUsage::None) {
+			usedAsInput = true;
+			break;
+		}
+	}
+
+	auto &info = desc.getInfo();
+
+	format = info.format;
+	baseArrayLayer = BaseArrayLayer(0);
+	layerCount = info.arrayLayers;
+	switch (info.imageType) {
+	case gl::ImageType::Image1D:
+		type = gl::ImageViewType::ImageView1D;
+		break;
+	case gl::ImageType::Image2D:
+		type = gl::ImageViewType::ImageView2D;
+		break;
+	case gl::ImageType::Image3D:
+		type = gl::ImageViewType::ImageView3D;
+		break;
+	}
+
+	setup(desc.getColorMode());
+
+	if (usedAsInput) {
+		// input attachment cannot have swizzle mask
+
+		if (r != gl::ComponentMapping::Identity) {
+			r = gl::ComponentMapping::Identity;
+			log::vtext("gl::ImageView", "Attachment descriptor '", desc.getName(),
+					"' can not have non-identity ColorMode because it's used as input attachment");
+		}
+
+		if (g != gl::ComponentMapping::Identity) {
+			g = gl::ComponentMapping::Identity;
+			log::vtext("gl::ImageView", "Attachment descriptor '", desc.getName(),
+					"' can not have non-identity ColorMode because it's used as input attachment");
+		}
+
+		if (b != gl::ComponentMapping::Identity) {
+			b = gl::ComponentMapping::Identity;
+			log::vtext("gl::ImageView", "Attachment descriptor '", desc.getName(),
+					"' can not have non-identity ColorMode because it's used as input attachment");
+		}
+
+		if (a != gl::ComponentMapping::Identity) {
+			a = gl::ComponentMapping::Identity;
+			log::vtext("gl::ImageView", "Attachment descriptor '", desc.getName(),
+					"' can not have non-identity ColorMode because it's used as input attachment");
+		}
+	}
+}
+
+void ImageViewInfo::setup(const ImageViewInfo &value) {
+	*this = value;
+}
+
 void ImageViewInfo::setup(const ImageInfo &value) {
 	format = value.format;
 	baseArrayLayer = BaseArrayLayer(0);
@@ -746,14 +807,6 @@ String ImageViewInfo::description() const {
 	stream << "B -> " << getComponentMappingName(b) << "; ";
 	stream << "A -> " << getComponentMappingName(a) << "; ";
 	return stream.str();
-}
-
-bool ImageViewInfo::operator==(const ImageViewInfo &val) const {
-	return memcmp(this, &val, sizeof(ImageViewInfo)) == 0;
-}
-
-bool ImageViewInfo::operator!=(const ImageViewInfo &val) const {
-	return memcmp(this, &val, sizeof(ImageViewInfo)) != 0;
 }
 
 size_t getFormatBlockSize(ImageFormat format) {

@@ -67,6 +67,14 @@ void FrameHandle::update(bool init) {
 	}
 }
 
+bool FrameHandle::isSwapchainAttachment(const Attachment *a) const {
+	return _request->isSwapchainAttachment(a);
+}
+
+Rc<ImageAttachmentObject> FrameHandle::acquireSwapchainImage(const Loop &loop, const ImageAttachment *a, Extent3 e) {
+	return _request->acquireSwapchainImage(loop, a, e);
+}
+
 void FrameHandle::schedule(Function<bool(FrameHandle &, Loop::Context &)> &&cb, StringView tag) {
 	auto linkId = retain();
 	_loop->schedule([this, cb = move(cb), linkId] (Loop::Context &ctx) {

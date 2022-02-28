@@ -87,8 +87,8 @@ public:
 	QueueOperations getOps() const { return _ops; }
 
 protected:
-	Rc<Device> _device;
-	uint32_t _index;
+	Device *_device = nullptr;
+	uint32_t _index = 0;
 	QueueOperations _ops = QueueOperations::None;
 	VkQueue _queue;
 	std::atomic<uint32_t> _nfences;

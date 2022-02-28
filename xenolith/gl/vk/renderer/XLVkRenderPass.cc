@@ -234,6 +234,28 @@ Vector<VkCommandBuffer> RenderPassHandle::doPrepareCommands(gl::FrameHandle &) {
 }
 
 bool RenderPassHandle::doSubmit() {
+	if (_sync) {
+		gl::Attachment *swapchainAttachment = nullptr;
+		Rc<gl::SwapchainImage> swapchainImage;
+		for (auto &it : _sync->images) {
+			if (it.image->isSwapchainImage && it.image->swapchainImage) {
+				swapchainImage = it.image->swapchainImage;
+				swapchainAttachment = it.attachment->getAttachment().get();
+			}
+		}
+
+		if (swapchainImage && swapchainAttachment) {
+			if (swapchainAttachment->getLastRenderPass() == getData()) {
+				auto sync = (SwapchainSync *)swapchainImage.get();
+				auto ret = sync->submitWithPresent(*_device, *_queue, *_sync, *_fence, _buffers,
+						gl::PipelineStage::ColorAttachmentOutput);
+				if (ret == VK_SUCCESS || ret == VK_SUBOPTIMAL_KHR) {
+					return true;
+				}
+				return false;
+			}
+		}
+	}
 	return _queue->submit(*_sync, *_fence, _buffers);
 }
 

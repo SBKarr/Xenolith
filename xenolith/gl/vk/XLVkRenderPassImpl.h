@@ -34,6 +34,7 @@ public:
 	struct PassData {
 		VkPipelineLayout layout = VK_NULL_HANDLE;
 		VkRenderPass renderPass = VK_NULL_HANDLE;
+		VkRenderPass renderPassAlternative = VK_NULL_HANDLE;
 		VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
 		Vector<VkDescriptorSetLayout> layouts;
 		Vector<VkDescriptorSet> sets;
@@ -43,7 +44,7 @@ public:
 
 	virtual bool init(Device &dev, gl::RenderPassData &);
 
-	VkRenderPass getRenderPass() const { return _data->renderPass; }
+	VkRenderPass getRenderPass(bool alt = false) const;
 	VkPipelineLayout getPipelineLayout() const { return _data->layout; }
 	const Vector<VkDescriptorSet> &getDescriptorSets() const { return _data->sets; }
 
@@ -64,10 +65,12 @@ protected:
 	bool initDescriptors(Device &dev, gl::RenderPassData &, PassData &);
 
 	Vector<VkAttachmentDescription> _attachmentDescriptions;
+	Vector<VkAttachmentDescription> _attachmentDescriptionsAlternative;
 	Vector<VkAttachmentReference> _attachmentReferences;
 	Vector<uint32_t> _preservedAttachments;
 	Vector<VkSubpassDependency> _subpassDependencies;
 	Vector<VkSubpassDescription> _subpasses;
+	Set<const gl::Attachment *> _variableAttachments;
 	PassData *_data = nullptr;
 
 	Vector<VkClearValue> _clearValues;

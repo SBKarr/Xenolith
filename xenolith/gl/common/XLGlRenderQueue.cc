@@ -415,8 +415,11 @@ static void RenderQueue_buildDescriptors(RenderQueue::QueueData *data, Device &d
 				case AttachmentLayout::General:
 				case AttachmentLayout::ShaderReadOnlyOptimal:
 				case AttachmentLayout::Preinitialized:
-				case AttachmentLayout::PresentSrc:
 				case AttachmentLayout::Ignored:
+					break;
+				case AttachmentLayout::PresentSrc:
+					// in alternative mode, images can be presented via transfer
+					desc->getImageAttachment()->addImageUsage(gl::ImageUsage::TransferSrc);
 					break;
 				case AttachmentLayout::ColorAttachmentOptimal:
 					desc->getImageAttachment()->addImageUsage(gl::ImageUsage::ColorAttachment);

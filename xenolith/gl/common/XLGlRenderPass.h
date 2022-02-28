@@ -61,6 +61,8 @@ public:
 
 	virtual Extent2 getSizeForFrame(const FrameQueue &) const;
 
+	virtual const AttachmentDescriptor *getDescriptor(const Attachment *) const;
+
 protected:
 	friend class RenderQueue;
 

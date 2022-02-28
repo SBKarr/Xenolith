@@ -130,7 +130,7 @@ struct SwapchainPresentFrame : public Ref {
 
 	Rc<Swapchain::PresentTask> sourceObject;
 	Rc<Image> sourceImage;
-	Rc<Image> targetImage;
+	Rc<gl::ImageAttachmentObject> targetImage;
 	gl::FrameSync frameSync;
 
 	bool imageAcquired = false;
@@ -281,7 +281,7 @@ struct SwapchainPresentFrame : public Ref {
 		loop->getQueue()->perform(Rc<Task>::create([this] (const Task &) {
 			if (targetImage) {
 				auto buf = pool->allocBuffer(*device);
-				Swapchain_writeImageTransfer(*device, buf, sourceImage, targetImage, sourceLayout, filter);
+				Swapchain_writeImageTransfer(*device, buf, sourceImage, targetImage->image.cast<Image>(), sourceLayout, filter);
 				buffers.emplace_back(buf);
 				return true;
 			}
@@ -353,9 +353,6 @@ struct SwapchainPresentFrame : public Ref {
 				queue = nullptr;
 			}
 			if (success) {
-				swapchain->setPresentSync(move(sync));
-				sync = nullptr;
-
 				device->scheduleFence(*loop, move(fence));
 				fence = nullptr;
 				invalidate();
@@ -447,17 +444,6 @@ bool Swapchain::createSwapchain(Device &device, gl::SwapchainConfig &&cfg, gl::P
 	do {
 		std::unique_lock<Mutex> lock(_swapchainMutex);
 
-		/*if (!_presentQueue) {
-			_presentQueue = device.tryAcquireQueueSync(QueueOperations::Present);
-		}
-
-		auto v = _presentQueue->getActiveFencesCount();
-		if (v > 0) {
-			log::vtext("Swapchain" "getActiveFencesCount: ", v);
-		}*/
-
-		//_presentQueue->waitIdle();
-
 		auto oldSwapchain = move(_swapchain);
 
 		_swapchain = Rc<SwapchainHandle>::create(device, cfg, move(swapchainImageInfo), presentMode,
@@ -471,7 +457,7 @@ bool Swapchain::createSwapchain(Device &device, gl::SwapchainConfig &&cfg, gl::P
 
 		Rc<PresentTask> task;
 		_presentCurrentMutex.lock();
-		if (_presentCurrent) {
+		if (_presentCurrent && _presentCurrent->order) {
 			task = _presentCurrent;
 		}
 		_presentCurrentMutex.unlock();
@@ -526,10 +512,11 @@ bool Swapchain::present(gl::Loop &loop, const Rc<PresentTask> &presentTask) {
 	if (presentTask != _presentCurrent) {
 		_presentCurrent = presentTask;
 	}
-	_presentCurrentMutex.unlock();
 
 	++ _order;
 	presentTask->order = _order;
+
+	_presentCurrentMutex.unlock();
 
 	_presentScheduled = true;
 	auto frame = Rc<SwapchainPresentFrame>::alloc(loop, this, _order,
@@ -537,7 +524,7 @@ bool Swapchain::present(gl::Loop &loop, const Rc<PresentTask> &presentTask) {
 		onPresentComplete(*loop, res, presentTask);
 	}, _presentQueue);
 
-	frame->run(presentTask, VkImageLayout(presentTask->attachment->getFinalLayout()), filter);
+	frame->run(presentTask, VkImageLayout(presentTask->object->layout), filter);
 	return true;
 }
 
@@ -570,30 +557,66 @@ Rc<SwapchainSync> Swapchain::acquireSwapchainSync(Device &dev, bool lock) {
 	}
 	return Rc<SwapchainSync>::create(dev, swapchain, &_swapchainMutex, _gen, [this] (Rc<SwapchainSync> &&sync) {
 		releaseSync(move(sync));
+	}, [this] (Rc<SwapchainSync> &&sync) {
+		presentSync(move(sync));
 	});
 }
 
 void Swapchain::releaseSync(Rc<SwapchainSync> &&ref) {
 	if (_view->getLoop()->isOnThread()) {
+		ref->disable();
 		_syncs.emplace_back(move(ref));
 	} else {
 		_view->getLoop()->performOnThread([this, ref = move(ref)] () mutable {
+			ref->disable();
 			_syncs.emplace_back(move(ref));
 		}, this);
 	}
 }
 
-void Swapchain::setPresentSync(Rc<SwapchainSync> &&sync) {
-	std::unique_lock<Mutex> lock(_presentCurrentMutex);
-	Rc<SwapchainSync> tmp;
-	if (_presentedSync) {
-		tmp = move(_presentedSync);
+void Swapchain::presentSync(Rc<SwapchainSync> &&sync) {
+	if (_view->getLoop()->isOnThread()) {
+		std::unique_lock<Mutex> lock(_presentCurrentMutex);
+		if (_presentCurrent && _presentCurrent->order < _order) {
+			_presentCurrent = nullptr;
+		}
+		if (sync == _presentedSync) {
+			return;
+		}
+
+		Rc<SwapchainSync> tmp;
+		if (_presentedSync) {
+			tmp = move(_presentedSync);
+		}
+		_presentedSync = move(sync);
+		lock.unlock();
+		if (tmp) {
+			tmp->setPresentationEnded(true);
+		}
+	} else {
+		_view->getLoop()->performOnThread([this, sync = move(sync)] () mutable {
+			presentSync(move(sync));
+		}, this);
 	}
-	_presentedSync = move(sync);
-	lock.unlock();
-	if (tmp) {
-		tmp->setPresentationEnded(true);
+}
+
+Rc<gl::ImageAttachmentObject> Swapchain::acquireImage(const gl::Loop &loop, const gl::ImageAttachment *a, Extent3 e) {
+	auto device = (Device *)loop.getDevice().get();
+	auto sync = acquireSwapchainSync(*device);
+	if (sync) {
+		if (sync->getImageExtent() == e) {
+			sync->acquireImage(*device);
+			if (auto img = sync->getImage()) {
+				img->makeViews(*device, *a);
+				_presentCurrentMutex.lock();
+				++ _order;
+				_presentCurrentMutex.unlock();
+				return img;
+			}
+		}
+		releaseSync(move(sync));
 	}
+	return nullptr;
 }
 
 void Swapchain::onPresentComplete(gl::Loop &loop, VkResult res, const Rc<PresentTask> &task) {
@@ -681,7 +704,7 @@ bool Swapchain::presentImmediate(const Rc<PresentTask> &task) {
 	Rc<Fence> fence;
 
 	Rc<Image> sourceImage = (Image *)task->object->image.get();
-	Rc<Image> targetImage;
+	Rc<gl::ImageAttachmentObject> targetImage;
 
 	Vector<VkCommandBuffer> buffers;
 	gl::PipelineStage waitStages = gl::PipelineStage::Transfer;
@@ -723,7 +746,7 @@ bool Swapchain::presentImmediate(const Rc<PresentTask> &task) {
 
 	auto buf = pool->allocBuffer(*dev);
 
-	Swapchain_writeImageTransfer(*dev, buf, sourceImage, targetImage, VkImageLayout(task->attachment->getFinalLayout()), filter);
+	Swapchain_writeImageTransfer(*dev, buf, sourceImage, targetImage->image.cast<Image>(), VkImageLayout(task->object->layout), filter);
 
 	buffers.emplace_back(buf);
 
@@ -739,7 +762,6 @@ bool Swapchain::presentImmediate(const Rc<PresentTask> &task) {
 		queue = nullptr;
 	}
 	if (result == VK_SUCCESS) {
-		setPresentSync(move(sync));
 		fence->check(false);
 		dev->releaseFenceUnsafe(move(fence));
 		dev->releaseCommandPoolUnsafe(move(pool));

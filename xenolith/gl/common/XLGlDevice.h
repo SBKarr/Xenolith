@@ -50,7 +50,7 @@ public:
 	virtual void end(thread::TaskQueue &);
 	virtual void waitIdle();
 
-	virtual void defineSamplers(Vector<SamplerInfo> &&);
+	virtual uint32_t addSampler(const SamplerInfo &);
 
 	// release any external resources
 	virtual void invalidateFrame(FrameHandle &);
@@ -81,6 +81,7 @@ public:
 	virtual Rc<Framebuffer> makeFramebuffer(const gl::RenderPassData *, SpanView<Rc<gl::ImageView>>, Extent2);
 	virtual Rc<ImageAttachmentObject> makeImage(const gl::ImageAttachment *, Extent3);
 	virtual Rc<Semaphore> makeSemaphore();
+	virtual Rc<ImageView> makeImageView(const Rc<ImageObject> &, const ImageViewInfo &);
 
 protected:
 	friend class Loop;

@@ -138,59 +138,13 @@ bool ImageView::init(Device &dev, VkImage image, VkFormat format) {
 }
 
 bool ImageView::init(Device &dev, const gl::ImageAttachmentDescriptor &desc, Image *image) {
-	gl::ImageViewInfo info(image->getInfo(), desc.getColorMode());
+	gl::ImageViewInfo info(desc);
 
 	VkImageViewCreateInfo createInfo = { };
 	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	createInfo.image = image->getImage();
 	createInfo.viewType = VkImageViewType(info.type);
 	createInfo.format = VkFormat(info.format);
-
-	bool usedAsInput = false;
-	for (auto &it : desc.getRefs()) {
-		if ((it->getUsage() & gl::AttachmentUsage::Input) != gl::AttachmentUsage::None) {
-			usedAsInput = true;
-			break;
-		}
-	}
-
-	if (usedAsInput) {
-		// input attachment cannot have swizzle mask
-
-		if (_info.r != gl::ComponentMapping::Identity) {
-			_info.r = gl::ComponentMapping::Identity;
-			log::vtext("vk::ImageView", "Attachment descriptor '", desc.getName(),
-					"' can not have non-identity ColorMode because it's used as input attachment");
-		}
-
-		if (_info.g != gl::ComponentMapping::Identity) {
-			_info.g = gl::ComponentMapping::Identity;
-			log::vtext("vk::ImageView", "Attachment descriptor '", desc.getName(),
-					"' can not have non-identity ColorMode because it's used as input attachment");
-		}
-
-		if (_info.b != gl::ComponentMapping::Identity) {
-			_info.b = gl::ComponentMapping::Identity;
-			log::vtext("vk::ImageView", "Attachment descriptor '", desc.getName(),
-					"' can not have non-identity ColorMode because it's used as input attachment");
-		}
-
-		if (_info.a != gl::ComponentMapping::Identity) {
-			_info.a = gl::ComponentMapping::Identity;
-			log::vtext("vk::ImageView", "Attachment descriptor '", desc.getName(),
-					"' can not have non-identity ColorMode because it's used as input attachment");
-		}
-
-		createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-		createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-		createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-		createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-	} else {
-		createInfo.components.r = VkComponentSwizzle(_info.r);
-		createInfo.components.g = VkComponentSwizzle(_info.g);
-		createInfo.components.b = VkComponentSwizzle(_info.b);
-		createInfo.components.a = VkComponentSwizzle(_info.a);
-	}
 
 	auto ops = desc.getOps();
 
@@ -223,13 +177,11 @@ bool ImageView::init(Device &dev, const gl::ImageAttachmentDescriptor &desc, Ima
 
 	createInfo.subresourceRange.baseMipLevel = 0;
 	createInfo.subresourceRange.levelCount = desc.getInfo().mipLevels.get();
-	createInfo.subresourceRange.baseArrayLayer = 0;
-	createInfo.subresourceRange.layerCount = desc.getInfo().arrayLayers.get();
-
-	_info.baseArrayLayer = gl::BaseArrayLayer(createInfo.subresourceRange.baseArrayLayer);
-	_info.layerCount = gl::ArrayLayers(createInfo.subresourceRange.layerCount);
+	createInfo.subresourceRange.baseArrayLayer = info.baseArrayLayer.get();
+	createInfo.subresourceRange.layerCount = info.layerCount.get();
 
 	if (dev.getTable()->vkCreateImageView(dev.getDevice(), &createInfo, nullptr, &_imageView) == VK_SUCCESS) {
+		_info = move(info);
 		_image = image;
 		return gl::ImageView::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
 			auto d = ((Device *)dev);
@@ -342,11 +294,12 @@ bool ImageView::init(Device &dev, Image *image, const gl::ImageViewInfo &info) {
 		createInfo.subresourceRange.layerCount = info.layerCount.get();
 	}
 
-	_info.baseArrayLayer = gl::BaseArrayLayer(createInfo.subresourceRange.baseArrayLayer);
-	_info.layerCount = gl::ArrayLayers(createInfo.subresourceRange.layerCount);
-
 	if (dev.getTable()->vkCreateImageView(dev.getDevice(), &createInfo, nullptr, &_imageView) == VK_SUCCESS) {
 		_info = info;
+		_info.format = format;
+		_info.baseArrayLayer = gl::BaseArrayLayer(createInfo.subresourceRange.baseArrayLayer);
+		_info.layerCount = gl::ArrayLayers(createInfo.subresourceRange.layerCount);
+
 		_image = image;
 		return gl::ImageView::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
 			auto d = ((Device *)dev);
@@ -432,7 +385,13 @@ bool SwapchainHandle::init(Device &dev, const gl::SwapchainConfig &cfg, gl::Imag
 
 		_images.reserve(imageCount);
 		for (auto &it : swapchainImages) {
-			_images.emplace_back(Rc<Image>::create(dev, it, swapchainImageInfo));
+			auto image = Rc<Image>::create(dev, it, swapchainImageInfo);
+			auto obj = Rc<gl::ImageAttachmentObject>::alloc();
+			obj->extent = swapchainImageInfo.extent;
+			obj->image = image.get();
+			obj->isSwapchainImage = true;
+
+			_images.emplace_back(move(obj));
 		}
 
 		_presentMode = presentMode;
@@ -455,7 +414,7 @@ bool SwapchainHandle::isDeprecated() {
 	return _deprecated;
 }
 
-Rc<Image> SwapchainHandle::getImage(uint32_t i) const {
+Rc<gl::ImageAttachmentObject> SwapchainHandle::getImage(uint32_t i) const {
 	if (i < _images.size()) {
 		return _images[i];
 	}

@@ -103,7 +103,7 @@ bool FrameQueue::setup() {
 		for (auto &a : passIt.first->descriptors) {
 			auto aIt = _attachments.find(a->getAttachment());
 			if (aIt != _attachments.end()) {
-				passIt.second.attachments.emplace_back(&aIt->second);
+				passIt.second.attachments.emplace_back(a, &aIt->second);
 			} else {
 				log::vtext("gl::FrameQueue", "Attachment '", a->getName(), "' is not available on frame");
 				valid = false;
@@ -111,19 +111,19 @@ bool FrameQueue::setup() {
 		}
 
 		for (auto &a : passIt.second.attachments) {
-			auto &desc = a->handle->getAttachment()->getDescriptors();
+			auto &desc = a.first->getAttachment()->getDescriptors();
 			auto it = desc.begin();
 			while (it != desc.end() && (*it)->getRenderPass() != passIt.second.handle->getData()) {
 				auto iit = _renderPasses.find((*it)->getRenderPass());
 				if (iit != _renderPasses.end()) {
-					addRequiredPass(passIt.second, iit->second, *a, **it);
+					addRequiredPass(passIt.second, iit->second, *a.second, **it);
 				} else {
 					log::vtext("gl::FrameQueue", "RenderPass '", (*it)->getRenderPass()->key, "' is not available on frame");
 					valid = false;
 				}
 			}
 
-			passIt.second.attachmentMap.emplace(a->handle->getAttachment(), a);
+			passIt.second.attachmentMap.emplace(a.first->getAttachment(), a.second);
 		}
 	}
 
@@ -320,8 +320,17 @@ void FrameQueue::onAttachmentAcquire(FrameQueueAttachmentData &attachment) {
 	attachment.state = FrameAttachmentState::ResourcesPending;
 	if (attachment.handle->getAttachment()->getType() == AttachmentType::Image) {
 		auto img = (ImageAttachment *)attachment.handle->getAttachment().get();
-		_cache->reset(img, attachment.extent);
-		attachment.image = _cache->acquireImage(*_loop, img);
+
+		if constexpr (config::EnableSwapchainHook) {
+			if (_frame->isSwapchainAttachment(attachment.handle->getAttachment())) {
+				attachment.image = _frame->acquireSwapchainImage(*_loop, img, attachment.extent);
+			}
+		}
+
+		if (!attachment.image) {
+			attachment.image = _cache->acquireImage(*_loop, img, attachment.extent);
+		}
+
 		_autorelease.emplace_front(attachment.image);
 		if (attachment.image->signalSem) {
 			_autorelease.emplace_front(attachment.image->signalSem);
@@ -379,7 +388,7 @@ bool FrameQueue::isRenderPassReady(const FrameQueueRenderPassData &data) const {
 	}
 
 	for (auto &it : data.attachments) {
-		if (toInt(it->state) < toInt(FrameAttachmentState::Ready)) {
+		if (toInt(it.second->state) < toInt(FrameAttachmentState::Ready)) {
 			return false;
 		}
 	}
@@ -437,10 +446,10 @@ void FrameQueue::updateRenderPassState(FrameQueueRenderPassData &data, FrameRend
 	}
 
 	for (auto &it : data.attachments) {
-		if (it->passes.back() == &data && it->state != FrameAttachmentState::ResourcesReleased) {
-			if ((toInt(state) >= toInt(it->final))
-					|| (toInt(state) >= toInt(FrameRenderPassState::Submitted) && it->final == FrameRenderPassState::Initial)) {
-				onAttachmentRelease(*it);
+		if (it.second->passes.back() == &data && it.second->state != FrameAttachmentState::ResourcesReleased) {
+			if ((toInt(state) >= toInt(it.second->final))
+					|| (toInt(state) >= toInt(FrameRenderPassState::Submitted) && it.second->final == FrameRenderPassState::Initial)) {
+				onAttachmentRelease(*it.second);
 			}
 		}
 	}
@@ -481,17 +490,20 @@ void FrameQueue::onRenderPassOwned(FrameQueueRenderPassData &data) {
 
 	data.waitForResult = true;
 	for (auto &it : data.attachments) {
-		if (it->state == FrameAttachmentState::Ready) {
-			onAttachmentAcquire(*it);
-			if (it->state != FrameAttachmentState::ResourcesAcquired) {
+		if (it.second->state == FrameAttachmentState::Ready) {
+			onAttachmentAcquire(*it.second);
+			if (it.second->state != FrameAttachmentState::ResourcesAcquired) {
 				attachmentsAcquired = false;
-				waitForResource(*it, [this, data = &data] {
+				waitForResource(*it.second, [this, data = &data] {
 					onRenderPassOwned(*data);
 				});
 			} else {
-				if (it->image) {
-					auto vIt = it->image->views.find(data.handle->getData());
-					if (vIt != it->image->views.end()) {
+				if (it.second->image) {
+					auto imgDesc = (gl::ImageAttachmentDescriptor *)it.first;
+					ImageViewInfo info(*imgDesc);
+
+					auto vIt = it.second->image->views.find(info);
+					if (vIt != it.second->image->views.end()) {
 						imageViews.emplace_back(vIt->second);
 					}
 				}
@@ -501,8 +513,7 @@ void FrameQueue::onRenderPassOwned(FrameQueueRenderPassData &data) {
 
 	if (attachmentsAcquired) {
 		if (!imageViews.empty()) {
-			_cache->reset(data.handle->getData(), data.extent);
-			data.framebuffer = _cache->acquireFramebuffer(*_loop, data.handle->getData(), imageViews);
+			data.framebuffer = _cache->acquireFramebuffer(*_loop, data.handle->getData(), imageViews, data.extent);
 			_autorelease.emplace_front(data.framebuffer);
 			if (isResourcePending(data)) {
 				waitForResource(data, [this, data = &data] {
@@ -595,8 +606,8 @@ void FrameQueue::onRenderPassSubmitted(FrameQueueRenderPassData &data) {
 	}
 
 	for (auto &it : data.attachments) {
-		if (it->handle->isOutput() && it->handle->getAttachment()->getLastRenderPass() == data.handle->getData()) {
-			_frame->onOutputAttachment(*it);
+		if (it.second->handle->isOutput() && it.first->getAttachment()->getLastRenderPass() == data.handle->getData()) {
+			_frame->onOutputAttachment(*it.second);
 		}
 	}
 
@@ -623,15 +634,25 @@ Rc<FrameSync> FrameQueue::makeRenderPassSync(FrameQueueRenderPassData &data) con
 	auto ret = Rc<FrameSync>::alloc();
 
 	for (auto &it : data.attachments) {
-		if (it->handle->getAttachment()->getFirstRenderPass() == data.handle->getData()) {
-			if (it->image && it->image->waitSem) {
-				ret->waitAttachments.emplace_back(FrameSyncAttachment{it->handle, it->image->waitSem,
-					getWaitStageForAttachment(data, it->handle)});
+		if (it.first->getAttachment()->getFirstRenderPass() == data.handle->getData()) {
+			if (it.second->image && it.second->image->waitSem) {
+				ret->waitAttachments.emplace_back(FrameSyncAttachment{it.second->handle, it.second->image->waitSem,
+					getWaitStageForAttachment(data, it.second->handle)});
 			}
 		}
-		if (it->handle->getAttachment()->getLastRenderPass() == data.handle->getData()) {
-			if (it->image && it->image->signalSem) {
-				ret->signalAttachments.emplace_back(FrameSyncAttachment{it->handle, it->image->signalSem});
+		if (it.second->handle->getAttachment()->getLastRenderPass() == data.handle->getData()) {
+			if (it.second->image && it.second->image->signalSem) {
+				ret->signalAttachments.emplace_back(FrameSyncAttachment{it.second->handle, it.second->image->signalSem});
+			}
+		}
+		if (auto desc = data.handle->getRenderPass()->getDescriptor(it.second->handle->getAttachment())) {
+			if (it.second->image) {
+				auto imgDesc = (ImageAttachmentDescriptor *)desc;
+				auto layout = imgDesc->getFinalLayout();
+				if (layout == gl::AttachmentLayout::PresentSrc && !it.second->image->isSwapchainImage) {
+					layout = gl::AttachmentLayout::TransferSrcOptimal;
+				}
+				ret->images.emplace_back(FrameSyncImage{it.second->handle, it.second->image, layout});
 			}
 		}
 	}

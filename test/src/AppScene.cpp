@@ -78,7 +78,7 @@ static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder 
 	// output attachment
 	vk::OutputImageAttachment::AttachmentInfo attachmentInfo;
 	attachmentInfo.initialLayout = gl::AttachmentLayout::Undefined;
-	attachmentInfo.finalLayout = gl::AttachmentLayout::TransferSrcOptimal;
+	attachmentInfo.finalLayout = gl::AttachmentLayout::PresentSrc;
 	attachmentInfo.clearOnLoad = true;
 	attachmentInfo.clearColor = Color4F::BLACK;
 	attachmentInfo.frameSizeCallback = [] (const gl::FrameQueue &frame) {

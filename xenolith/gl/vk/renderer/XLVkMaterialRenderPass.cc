@@ -215,11 +215,15 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 	}
 
 	// create buffers
-	_vertexes = handle->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
+	_vertexes = handle->getMemPool()->spawn(AllocationUsage::HostTransitionSource,
 			gl::BufferInfo(gl::BufferUsage::StorageBuffer, globalWritePlan.vertexes * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
 
-	_indexes = handle->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
+	_indexes = handle->getMemPool()->spawn(AllocationUsage::HostTransitionSource,
 			gl::BufferInfo(gl::BufferUsage::IndexBuffer, globalWritePlan.indexes * sizeof(uint32_t)));
+
+	if (!_vertexes || !_indexes) {
+		return false;
+	}
 
 	auto vertexesMap = _vertexes->map();
 	auto indexesMap = _indexes->map();

@@ -54,6 +54,10 @@ public:
 	bool bindSwapchain(const Rc<Swapchain> &);
 	bool bindSwapchain(const Attachment *, const Rc<Swapchain> &);
 
+	bool isSwapchainAttachment(const Attachment *) const;
+
+	Rc<ImageAttachmentObject> acquireSwapchainImage(const Loop &loop, const ImageAttachment *a, Extent3 e);
+
 	const Rc<FrameEmitter> &getEmitter() const { return _emitter; }
 	const Rc<RenderQueue> &getQueue() const { return _queue; }
 	const Rc<FrameCacheStorage> &getCache() const { return _cache; }
@@ -86,7 +90,7 @@ protected:
 	// return true to setaside output
 	Map<const Attachment *, Function<bool(const Rc<FrameCacheStorage> &, const FrameQueueAttachmentData &)>> _output;
 
-	const Attachment *_swapchainAttachment;
+	const Attachment *_swapchainAttachment = nullptr;
 	Rc<Swapchain> _swapchain;
 };
 

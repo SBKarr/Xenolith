@@ -51,11 +51,11 @@ public:
 	const RenderQueue *getQueue() const { return _queue; }
 
 	void reset(const RenderPassData *, Extent2);
-	Rc<Framebuffer> acquireFramebuffer(const Loop &, const RenderPassData *, SpanView<Rc<ImageView>>);
+	Rc<Framebuffer> acquireFramebuffer(const Loop &, const RenderPassData *, SpanView<Rc<ImageView>>, Extent2 e);
 	void releaseFramebuffer(const RenderPassData *, Rc<Framebuffer> &&);
 
 	void reset(const ImageAttachment *, Extent3);
-	Rc<ImageAttachmentObject> acquireImage(const Loop &, const ImageAttachment *);
+	Rc<ImageAttachmentObject> acquireImage(const Loop &, const ImageAttachment *, Extent3 e);
 	void releaseImage(const ImageAttachment *, Rc<ImageAttachmentObject> &&);
 
 	Rc<Semaphore> acquireSemaphore();

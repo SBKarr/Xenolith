@@ -26,7 +26,6 @@
 #include "XLVkRenderPass.h"
 #include "XLVkAllocator.h"
 #include "XLGlAttachment.h"
-#include <optional>
 
 namespace stappler::xenolith::vk {
 

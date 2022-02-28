@@ -67,8 +67,6 @@ bool DeviceQueue::submit(const gl::FrameSync &sync, Fence &fence, SpanView<VkCom
 	submitInfo.signalSemaphoreCount = signalSem.size();
 	submitInfo.pSignalSemaphores = signalSem.data();
 
-	log::vtext("Vk-Queue-Submit", (uintptr_t)_queue);
-
 	VkResult result = VK_ERROR_UNKNOWN;
 	_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
 		result = table.vkQueueSubmit(_queue, 1, &submitInfo, fence.getFence());
@@ -85,6 +83,10 @@ bool DeviceQueue::submit(const gl::FrameSync &sync, Fence &fence, SpanView<VkCom
 
 		for (auto &it : sync.signalAttachments) {
 			it.semaphore->setSignaled(true);
+		}
+
+		for (auto &it : sync.images) {
+			it.image->layout = it.newLayout;
 		}
 
 		return true;

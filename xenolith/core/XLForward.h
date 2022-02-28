@@ -30,6 +30,8 @@ THE SOFTWARE.
 #include "SPLog.h"
 #include "SPSpanView.h"
 
+#include <optional>
+
 #include "XLConfig.h"
 
 #define XL_ASSERT(cond, msg)  do { if (!(cond)) { stappler::log::text("Assert", msg); } assert((cond)); } while (0)

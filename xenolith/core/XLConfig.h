@@ -45,6 +45,9 @@ static constexpr uint64_t MaxDirectorDeltaTime = 10'000'000 / 16;
 static constexpr uint64_t MaxDirectorDeltaTime = 100'000'000 / 16;
 #endif
 
+/* Enable hooking output image with swapchain image when possible, can improve performance */
+static constexpr bool EnableSwapchainHook = true;
+
 }
 
 #endif /* COMPONENTS_XENOLITH_CORE_XLCONFIG_H_ */

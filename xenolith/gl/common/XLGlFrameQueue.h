@@ -65,7 +65,7 @@ struct FrameQueueRenderPassData {
 	Rc<RenderPassHandle> handle;
 	Extent2 extent;
 
-	Vector<FrameQueueAttachmentData *> attachments;
+	Vector<Pair<AttachmentDescriptor *, FrameQueueAttachmentData *>> attachments;
 	HashMap<const Attachment *, FrameQueueAttachmentData *> attachmentMap;
 
 	// Second value, FrameRenderPassState defines a state of required RenderPass, that is required to be reached
@@ -106,9 +106,16 @@ struct FrameSyncAttachment {
 	PipelineStage stages = PipelineStage::None;
 };
 
+struct FrameSyncImage {
+	const AttachmentHandle *attachment;
+	ImageAttachmentObject *image = nullptr;
+	AttachmentLayout newLayout = AttachmentLayout::Undefined;
+};
+
 struct FrameSync : public Ref {
 	Vector<FrameSyncAttachment> waitAttachments;
 	Vector<FrameSyncAttachment> signalAttachments;
+	Vector<FrameSyncImage> images;
 };
 
 class FrameQueue final : public Ref {

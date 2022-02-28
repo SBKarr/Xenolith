@@ -27,6 +27,7 @@
 #include "SPBitmap.h"
 #include "SPThreadTaskQueue.h"
 #include "XLHashTable.h"
+#include <optional>
 
 namespace stappler::xenolith::gl {
 
@@ -70,6 +71,7 @@ class ImageAttachmentRef;
 
 class AttachmentHandle;
 class RenderPassHandle;
+class SwapchainImage;
 
 using MaterialId = uint32_t;
 
@@ -135,6 +137,10 @@ struct SamplerInfo {
 	CompareOp compareOp = CompareOp::Never;
 	float minLod = 0.0;
 	float maxLod = 0.0;
+
+	bool operator==(const SamplerInfo &) const = default;
+	bool operator!=(const SamplerInfo &) const = default;
+	auto operator<=>(const SamplerInfo &) const = default;
 };
 
 struct ProgramDescriptorBinding {
@@ -328,13 +334,19 @@ struct ImageViewInfo {
 	ArrayLayers layerCount = ArrayLayers(maxOf<uint32_t>());
 
 	ImageViewInfo() = default;
+	ImageViewInfo(const ImageViewInfo &) = default;
+	ImageViewInfo(ImageViewInfo &&) = default;
+	ImageViewInfo &operator=(const ImageViewInfo &) = default;
+	ImageViewInfo &operator=(ImageViewInfo &&) = default;
 
 	template<typename ... Args>
 	ImageViewInfo(Args && ... args) {
 		define(std::forward<Args>(args)...);
 	}
 
-	void setup(const ImageInfo &value);
+	void setup(const ImageAttachmentDescriptor &);
+	void setup(const ImageViewInfo &);
+	void setup(const ImageInfo &);
 	void setup(ImageViewType value) { type = value; }
 	void setup(ImageFormat value) { format = value; }
 	void setup(ArrayLayers value) { layerCount = value; }
@@ -359,8 +371,9 @@ struct ImageViewInfo {
 	bool isCompatible(const ImageInfo &) const;
 	String description() const;
 
-	bool operator==(const ImageViewInfo &) const;
-	bool operator!=(const ImageViewInfo &) const;
+	bool operator==(const ImageViewInfo &) const = default;
+	bool operator!=(const ImageViewInfo &) const = default;
+	auto operator<=>(const ImageViewInfo &) const = default;
 };
 
 // Designed to use with SSBO and std430

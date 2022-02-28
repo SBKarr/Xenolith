@@ -66,9 +66,15 @@ void FrameRequest::acquireInput(Map<const Attachment *, Rc<AttachmentInputData>>
 
 bool FrameRequest::onOutputReady(gl::Loop &loop, FrameQueueAttachmentData &data) const {
 	if (data.handle->getAttachment() == _swapchainAttachment) {
-		auto v = Rc<Swapchain::PresentTask>::alloc(_cache, (const gl::ImageAttachment *)data.handle->getAttachment().get(), data.image);
-		if (_swapchain->present(loop, v)) {
-			return true;
+		if (data.image) {
+			if (data.image->isSwapchainImage) {
+
+			} else {
+				auto v = Rc<Swapchain::PresentTask>::alloc(_cache, (const gl::ImageAttachment *)data.handle->getAttachment().get(), data.image);
+				if (_swapchain->present(loop, v)) {
+					return true;
+				}
+			}
 		}
 	}
 
@@ -109,6 +115,14 @@ bool FrameRequest::bindSwapchain(const Attachment *a, const Rc<Swapchain> &swapc
 		return true;
 	}
 	return false;
+}
+
+bool FrameRequest::isSwapchainAttachment(const Attachment *a) const {
+	return _swapchainAttachment == a;
+}
+
+Rc<ImageAttachmentObject> FrameRequest::acquireSwapchainImage(const Loop &loop, const ImageAttachment *a, Extent3 e) {
+	return _swapchain->acquireImage(loop, a, e);
 }
 
 FrameEmitter::~FrameEmitter() { }

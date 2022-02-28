@@ -60,8 +60,9 @@ public:
 
 	Rc<SwapchainSync> acquireSwapchainSync(Device &, bool lock = true);
 	void releaseSync(Rc<SwapchainSync> &&);
+	void presentSync(Rc<SwapchainSync> &&);
 
-	void setPresentSync(Rc<SwapchainSync> &&);
+	virtual Rc<gl::ImageAttachmentObject> acquireImage(const gl::Loop &loop, const gl::ImageAttachment *a, Extent3 e) override;
 
 protected:
 	void onPresentComplete(gl::Loop &, VkResult res, const Rc<PresentTask> &);

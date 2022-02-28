@@ -26,6 +26,34 @@
 
 namespace stappler::xenolith::gl {
 
+SwapchainImage::~SwapchainImage() {
+	setImage(nullptr);
+}
+
+bool SwapchainImage::init(Device &dev) {
+	_imageReady = dev.makeSemaphore();
+	_renderFinished = dev.makeSemaphore();
+	return true;
+}
+
+void SwapchainImage::setImage(const Rc<gl::ImageAttachmentObject> &image) {
+	if (_image == image) {
+		return;
+	}
+	if (_image) {
+		_image->waitSem = nullptr;
+		_image->signalSem = nullptr;
+		_image->swapchainImage = nullptr;
+	}
+	_image = image;
+	if (_image) {
+		// semaphores will be inverted on rearm call
+		_image->waitSem = _imageReady;
+		_image->signalSem = _renderFinished;
+		_image->swapchainImage = this;
+	}
+}
+
 Swapchain::PresentTask::~PresentTask() {
 	cache->releaseImage(attachment, move(object));
 }
@@ -88,6 +116,10 @@ gl::ImageViewInfo Swapchain::getSwapchainImageViewInfo(const gl::ImageInfo &imag
 	}
 
 	return image.getViewInfo(info);
+}
+
+Rc<gl::ImageAttachmentObject> Swapchain::acquireImage(const Loop &loop, const ImageAttachment *a, Extent3 e) {
+	return nullptr;
 }
 
 }

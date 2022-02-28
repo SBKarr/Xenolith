@@ -50,6 +50,10 @@ public:
 	Extent2 getExtent() const { return _request->getExtent(); }
 	const Rc<PoolRef> &getPool() const { return _pool; }
 
+	bool isSwapchainAttachment(const Attachment *) const;
+
+	Rc<ImageAttachmentObject> acquireSwapchainImage(const Loop &loop, const ImageAttachment *a, Extent3 e);
+
 	// spinners within frame should not spin directly on loop to preserve FrameHandle object
 	virtual void schedule(Function<bool(FrameHandle &, Loop::Context &)> &&, StringView tag);
 

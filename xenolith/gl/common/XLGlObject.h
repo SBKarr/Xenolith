@@ -38,6 +38,7 @@ public:
 	virtual void invalidate();
 
 	ObjectType getType() const { return _type; }
+	void *getObject() const { return _ptr; }
 
 protected:
 	ObjectType _type;

@@ -71,6 +71,9 @@ void View::reset(SwapchanCreationMode mode) {
 	if (_swapchain) {
 		_swapchain->recreateSwapchain(*_loop->getDevice(), mode);
 	}
+	if (_loop) {
+		dropFrameTimeout();
+	}
 }
 
 void View::update() {
@@ -95,9 +98,6 @@ void View::setScreenExtent(Extent2 e) {
 	if (e != _screenExtent) {
 		_screenExtent = e;
 		onScreenSize(this);
-		if (_loop) {
-			dropFrameTimeout();
-		}
 	}
 }
 
