@@ -339,11 +339,53 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
 		_attachmentDescriptions.emplace_back(attachment);
 		_attachmentDescriptionsAlternative.emplace_back(attachmentAlternative);
 
-		if (imageDesc->getLoadOp() == gl::AttachmentLoadOp::Clear) {
-			auto c = ((gl::ImageAttachment *)imageDesc->getAttachment())->getClearColor();
-			_clearValues.emplace_back(VkClearValue{c.r, c.g, c.b, c.a});
-		} else {
-			_clearValues.emplace_back(VkClearValue{0.0f, 0.0f, 0.0f, 1.0f});
+		auto fmt = gl::getImagePixelFormat(imageDesc->getInfo().format);
+		switch (fmt) {
+		case gl::PixelFormat::D:
+			if (imageDesc->getLoadOp() == gl::AttachmentLoadOp::Clear) {
+				auto c = ((gl::ImageAttachment *)imageDesc->getAttachment())->getClearColor();
+				VkClearValue clearValue;
+				clearValue.depthStencil.depth = c.r;
+				_clearValues.emplace_back(clearValue);
+			} else {
+				VkClearValue clearValue;
+				clearValue.depthStencil.depth = 0.0f;
+				_clearValues.emplace_back(clearValue);
+			}
+			break;
+		case gl::PixelFormat::DS:
+			if (imageDesc->getStencilLoadOp() == gl::AttachmentLoadOp::Clear || imageDesc->getLoadOp() == gl::AttachmentLoadOp::Clear) {
+				auto c = ((gl::ImageAttachment *)imageDesc->getAttachment())->getClearColor();
+				VkClearValue clearValue;
+				clearValue.depthStencil.depth = c.r;
+				clearValue.depthStencil.stencil = 0;
+				_clearValues.emplace_back(clearValue);
+			} else {
+				VkClearValue clearValue;
+				clearValue.depthStencil.depth = 0.0f;
+				clearValue.depthStencil.stencil = 0;
+				_clearValues.emplace_back(clearValue);
+			}
+			break;
+		case gl::PixelFormat::S:
+			if (imageDesc->getStencilLoadOp() == gl::AttachmentLoadOp::Clear) {
+				VkClearValue clearValue;
+				clearValue.depthStencil.stencil = 0;
+				_clearValues.emplace_back(clearValue);
+			} else {
+				VkClearValue clearValue;
+				clearValue.depthStencil.stencil = 0;
+				_clearValues.emplace_back(clearValue);
+			}
+			break;
+		default:
+			if (imageDesc->getLoadOp() == gl::AttachmentLoadOp::Clear) {
+				auto c = ((gl::ImageAttachment *)imageDesc->getAttachment())->getClearColor();
+				_clearValues.emplace_back(VkClearValue{c.r, c.g, c.b, c.a});
+			} else {
+				_clearValues.emplace_back(VkClearValue{0.0f, 0.0f, 0.0f, 1.0f});
+			}
+			break;
 		}
 
 		attachmentReferences += it->getRefs().size();

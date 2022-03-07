@@ -110,8 +110,6 @@ public:
 	virtual Rc<gl::ImageObject> getEmptyImageObject() const override;
 	virtual Rc<gl::ImageObject> getSolidImageObject() const override;
 
-	const Vector<gl::ImageFormat> &getSupportedDepthStencilFormat() const override;
-
 	virtual Rc<gl::FrameHandle> makeFrame(gl::Loop &, Rc<gl::FrameRequest> &&, uint64_t gen) override;
 
 	virtual Rc<gl::Framebuffer> makeFramebuffer(const gl::RenderPassData *, SpanView<Rc<gl::ImageView>>, Extent2) override;
@@ -167,7 +165,6 @@ private:
 	Vector<Rc<Sampler>> _samplers;
 	std::atomic<bool> _samplersCompiled = false;
 
-	Vector<gl::ImageFormat> _depthFormats;
 	std::unordered_map<VkFormat, VkFormatProperties> _formats;
 
 	Mutex _resourceMutex;

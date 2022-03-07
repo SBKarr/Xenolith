@@ -42,7 +42,6 @@ THE SOFTWARE.
 #include "XLVkFrame.cc"
 #include "XLVkObject.cc"
 #include "XLVkTextureSet.cc"
-#include "renderer/XLVkImageAttachment.cc"
 #include "renderer/XLVkAttachment.cc"
 #include "renderer/XLVkRenderPass.cc"
 #include "renderer/XLVkTransferQueue.cc"

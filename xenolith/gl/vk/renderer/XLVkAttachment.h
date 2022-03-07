@@ -34,13 +34,22 @@ class RenderPassHandle;
 
 class BufferAttachment : public gl::BufferAttachment {
 public:
+	virtual ~BufferAttachment() { }
 
 protected:
 };
 
+class ImageAttachment : public gl::ImageAttachment {
+public:
+	virtual ~ImageAttachment() { }
+
+	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameQueue &) override;
+};
+
+
 class BufferAttachmentHandle : public gl::AttachmentHandle {
 public:
-	virtual ~BufferAttachmentHandle();
+	virtual ~BufferAttachmentHandle() { }
 
 	virtual bool writeDescriptor(const RenderPassHandle &, const gl::PipelineDescriptor &,
 			uint32_t, bool, VkDescriptorBufferInfo &) { return false; }
@@ -48,7 +57,7 @@ public:
 
 class ImageAttachmentHandle : public gl::AttachmentHandle {
 public:
-	virtual ~ImageAttachmentHandle();
+	virtual ~ImageAttachmentHandle() { }
 
 	virtual bool writeDescriptor(const RenderPassHandle &, const gl::PipelineDescriptor &,
 			uint32_t, bool, VkDescriptorImageInfo &) { return false; }

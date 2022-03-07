@@ -211,6 +211,8 @@ bool isPromotedExtension(uint32_t apiVersion, StringView name);
 
 size_t getFormatBlockSize(VkFormat);
 
+VkPresentModeKHR getVkPresentMode(gl::PresentMode presentMode);
+
 }
 
 #endif /* COMPONENTS_XENOLITH_GL_XLVK_H_ */

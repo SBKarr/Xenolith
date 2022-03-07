@@ -641,10 +641,6 @@ Rc<gl::ImageObject> Device::getSolidImageObject() const {
 	return _textureSetLayout->getSolidImageObject();
 }
 
-const Vector<gl::ImageFormat> &Device::getSupportedDepthStencilFormat() const {
-	return _depthFormats;
-}
-
 Rc<gl::FrameHandle> Device::makeFrame(gl::Loop &loop, Rc<gl::FrameRequest> &&req, uint64_t gen) {
 	return Rc<FrameHandle>::create(loop, move(req), gen);
 }
@@ -657,9 +653,14 @@ Rc<gl::ImageAttachmentObject> Device::makeImage(const gl::ImageAttachment *attac
 	auto ret = Rc<gl::ImageAttachmentObject>::alloc();
 
 	auto imageInfo = attachment->getInfo();
+	if (attachment->isTransient()) {
+		imageInfo.usage |= gl::ImageUsage::TransientAttachment;
+	}
 	ret->extent = imageInfo.extent = extent;
 
-	auto img = _allocator->spawnPersistent(AllocationUsage::DeviceLocal, imageInfo, false);
+	auto img = _allocator->spawnPersistent(
+			attachment->isTransient() ? AllocationUsage::DeviceLocalLazilyAllocated : AllocationUsage::DeviceLocal,
+			imageInfo, false);
 
 	ret->image = img.get();
 	ret->makeViews(*this, *attachment);

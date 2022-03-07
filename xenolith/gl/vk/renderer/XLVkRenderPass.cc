@@ -24,7 +24,7 @@
 
 #include "XLGlFrameHandle.h"
 #include "XLVkRenderPassImpl.h"
-#include "XLVkImageAttachment.h"
+#include "XLVkAttachment.h"
 #include "XLVkDevice.h"
 #include "XLGlLoop.h"
 

@@ -63,6 +63,9 @@ public:
 
 	Rc<Texture> acquireTexture(StringView) const;
 
+	const gl::ImageData *getEmptyImage() const { return &_emptyImage; }
+	const gl::ImageData *getSolidImage() const { return &_solidImage; }
+
 protected:
 	gl::ImageData _emptyImage;
 	gl::ImageData _solidImage;

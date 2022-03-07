@@ -121,6 +121,7 @@ public:
 	bool init(const PipelineData *, Vector<MaterialImage> &&, Bytes && = Bytes());
 	bool init(const PipelineData *, const Rc<DynamicImageInstance> &, Bytes && = Bytes());
 	bool init(const PipelineData *, const ImageData *, Bytes && = Bytes(), bool ownedData = false);
+	bool init(const PipelineData *, const ImageData *, ColorMode, Bytes && = Bytes(), bool ownedData = false);
 	bool init(const Material *, Rc<ImageObject> &&, Rc<ImageAtlas> &&, Bytes && = Bytes());
 
 	MaterialId getId() const { return _id; }

@@ -341,7 +341,7 @@ bool Sampler::init(Device &dev, const gl::SamplerInfo &info) {
 }
 
 bool SwapchainHandle::init(Device &dev, const gl::SwapchainConfig &cfg, gl::ImageInfo &&swapchainImageInfo,
-		gl::PresentMode presentMode, VkSurfaceKHR surface, uint32_t families[2], Function<void()> &&cb, SwapchainHandle *old) {
+		gl::PresentMode presentMode, VkSurfaceKHR surface, uint32_t families[2], Function<void(gl::SwapchanCreationMode)> &&cb, SwapchainHandle *old) {
 	VkSwapchainCreateInfoKHR swapChainCreateInfo = { };
 	swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 	swapChainCreateInfo.surface = surface;
@@ -414,6 +414,10 @@ bool SwapchainHandle::isDeprecated() {
 	return _deprecated;
 }
 
+bool SwapchainHandle::isOptimal() const {
+	return _presentMode == _config.presentMode;
+}
+
 Rc<gl::ImageAttachmentObject> SwapchainHandle::getImage(uint32_t i) const {
 	if (i < _images.size()) {
 		return _images[i];
@@ -428,7 +432,7 @@ bool SwapchainHandle::deprecate(bool invalidate) {
 	_deprecated = true;
 	if (!invalidate) {
 		if (!tmp && _inUse == 0 && _rebuildCallback) {
-			_rebuildCallback();
+			_rebuildCallback(_rebuildMode);
 			_rebuildCallback = nullptr;
 		}
 	} else {
@@ -452,9 +456,39 @@ void SwapchainHandle::releaseUsage() {
 
 	-- _inUse;
 	if (_inUse == 0 && _deprecated && _rebuildCallback) {
-		_rebuildCallback();
+		_rebuildCallback(_rebuildMode);
 		_rebuildCallback = nullptr;
 	}
 }
+
+VkResult SwapchainHandle::present(Device &dev, DeviceQueue &queue, VkSemaphore presentSem, uint32_t imageIdx) {
+	VkPresentInfoKHR presentInfo{};
+	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+	presentInfo.waitSemaphoreCount = 1;
+	presentInfo.pWaitSemaphores = &presentSem;
+
+	presentInfo.swapchainCount = 1;
+	presentInfo.pSwapchains = &_swapchain;
+	presentInfo.pImageIndices = &imageIdx;
+	presentInfo.pResults = nullptr; // Optional
+
+	VkResult result = VK_ERROR_UNKNOWN;
+	dev.makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+		result = table.vkQueuePresentKHR(queue.getQueue(), &presentInfo);
+	});
+
+	if (result == VK_SUCCESS) {
+		auto ret = _presentedFrames.fetch_add(1);
+		if (ret >= config::MaxSuboptimalFrame && _presentMode == _config.presentModeFast
+				&& _config.presentModeFast != _config.presentMode) {
+			result = VK_SUBOPTIMAL_KHR;
+			_rebuildMode = gl::SwapchanCreationMode::Best;
+		}
+	}
+
+	return result;
+}
+
 
 }

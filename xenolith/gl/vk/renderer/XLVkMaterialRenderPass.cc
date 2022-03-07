@@ -145,6 +145,8 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 		std::forward_list<const gl::CmdVertexArray *> commands;
 	};
 
+	Map<SpanView<int16_t>, float> paths;
+
 	// fill write plan
 	MaterialWritePlan globalWritePlan;
 
@@ -155,7 +157,7 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 	std::unordered_map<gl::MaterialId, MaterialWritePlan> surfaceWritePlan;
 
 	// write plan for transparent objects, that should be drawn in order
-	std::map<SpanView<int16_t>, std::unordered_map<gl::MaterialId, MaterialWritePlan>> transparentWritePlan;
+	Map<SpanView<int16_t>, std::unordered_map<gl::MaterialId, MaterialWritePlan>> transparentWritePlan;
 
 	auto emplaceWritePlan = [&] (std::unordered_map<gl::MaterialId, MaterialWritePlan> &writePlan, const gl::CmdVertexArray *cmd) {
 		auto it = writePlan.find(cmd->material);
@@ -177,6 +179,11 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 			it->second.vertexes += cmd->vertexes->data.size();
 			it->second.indexes += cmd->vertexes->indexes.size();
 			it->second.commands.emplace_front(cmd);
+		}
+
+		auto pathsIt = paths.find(cmd->zPath);
+		if (pathsIt == paths.end()) {
+			paths.emplace(cmd->zPath, 0.0f);
 		}
 	};
 
@@ -212,6 +219,13 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 
 	if (globalWritePlan.vertexes == 0 || globalWritePlan.indexes == 0) {
 		return true;
+	}
+
+	float depthScale = 1.0f / float(paths.size() + 1);
+	float depthOffset = 1.0f - depthScale;
+	for (auto &it : paths) {
+		it.second = depthOffset;
+		depthOffset -= depthScale;
 	}
 
 	// create buffers
@@ -267,12 +281,19 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 						cmd->vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U));
 
 				if (!isGpuTransform()) {
+					float depth = 0.0f;
+					auto pathIt = paths.find(cmd->zPath);
+					if (pathIt != paths.end()) {
+						depth = pathIt->second;
+					}
+
 					// pre-transform vertexes
 					auto transform = cmd->transform;
 
 					size_t idx = 0;
 					for (auto &v : cmd->vertexes->data) {
 						target[idx].pos = transform * v.pos;
+						target[idx].pos.z = depth;
 						target[idx].material = it->first;
 
 						if (target[idx].object && it->second.atlas) {

@@ -38,6 +38,8 @@ public:
 protected:
 	Layer *_background = nullptr;
 	Sprite *_logo = nullptr;
+
+	Layer *_layers[5] = { nullptr };
 };
 
 }

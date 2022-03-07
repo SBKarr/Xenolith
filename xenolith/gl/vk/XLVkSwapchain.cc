@@ -369,17 +369,6 @@ struct SwapchainPresentFrame : public Ref {
 	}
 };
 
-static VkPresentModeKHR getVkPresentMode(gl::PresentMode presentMode) {
-	switch (presentMode) {
-	case gl::PresentMode::Immediate: return VK_PRESENT_MODE_IMMEDIATE_KHR; break;
-	case gl::PresentMode::FifoRelaxed: return VK_PRESENT_MODE_FIFO_RELAXED_KHR; break;
-	case gl::PresentMode::Fifo: return VK_PRESENT_MODE_FIFO_KHR; break;
-	case gl::PresentMode::Mailbox: return VK_PRESENT_MODE_MAILBOX_KHR; break;
-	default: break;
-	}
-	return VkPresentModeKHR(0);
-}
-
 Swapchain::~Swapchain() {
 	_syncs.clear();
 }
@@ -428,7 +417,7 @@ bool Swapchain::recreateSwapchain(gl::Device &idevice, gl::SwapchanCreationMode 
 		return false;
 	}
 
-	if (mode == gl::SwapchanCreationMode::Best && cfg.presentModeFast != gl::PresentMode::Unsupported) {
+	if (mode == gl::SwapchanCreationMode::Fast && cfg.presentModeFast != gl::PresentMode::Unsupported) {
 		return createSwapchain(device, move(cfg), cfg.presentModeFast);
 	} else {
 		return createSwapchain(device, move(cfg), cfg.presentMode);
@@ -447,8 +436,15 @@ bool Swapchain::createSwapchain(Device &device, gl::SwapchainConfig &&cfg, gl::P
 		auto oldSwapchain = move(_swapchain);
 
 		_swapchain = Rc<SwapchainHandle>::create(device, cfg, move(swapchainImageInfo), presentMode,
-				_surface, queueFamilyIndices, [this] {
-			_view->pushEvent(AppEvent::SwapchainRecreation);
+				_surface, queueFamilyIndices, [this] (gl::SwapchanCreationMode mode) {
+			switch (mode) {
+			case gl::SwapchanCreationMode::Best:
+				_view->pushEvent(AppEvent::SwapchainRecreationBest);
+				break;
+			case gl::SwapchanCreationMode::Fast:
+				_view->pushEvent(AppEvent::SwapchainRecreation);
+				break;
+			}
 		}, oldSwapchain.get());
 
 		_config = move(cfg);
@@ -533,11 +529,6 @@ void Swapchain::deprecate() {
 	_swapchain->deprecate();
 }
 
-bool Swapchain::isBestPresentMode() const {
-	std::unique_lock<Mutex> swapchainLock(_swapchainMutex);
-	return _swapchain && _swapchain->getPresentMode() == _config.presentMode;
-}
-
 Rc<SwapchainSync> Swapchain::acquireSwapchainSync(Device &dev, bool lock) {
 	std::unique_lock<Mutex> swapchainLock;
 	if (lock) {
@@ -601,6 +592,13 @@ void Swapchain::presentSync(Rc<SwapchainSync> &&sync) {
 }
 
 Rc<gl::ImageAttachmentObject> Swapchain::acquireImage(const gl::Loop &loop, const gl::ImageAttachment *a, Extent3 e) {
+	std::unique_lock<Mutex> lock(_swapchainMutex);
+	if (!_swapchain->isOptimal()) {
+		return nullptr;
+	}
+
+	lock.unlock();
+
 	auto device = (Device *)loop.getDevice().get();
 	auto sync = acquireSwapchainSync(*device);
 	if (sync) {

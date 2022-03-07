@@ -704,4 +704,15 @@ size_t getFormatBlockSize(VkFormat format) {
 	return 0;
 }
 
+VkPresentModeKHR getVkPresentMode(gl::PresentMode presentMode) {
+	switch (presentMode) {
+	case gl::PresentMode::Immediate: return VK_PRESENT_MODE_IMMEDIATE_KHR; break;
+	case gl::PresentMode::FifoRelaxed: return VK_PRESENT_MODE_FIFO_RELAXED_KHR; break;
+	case gl::PresentMode::Fifo: return VK_PRESENT_MODE_FIFO_KHR; break;
+	case gl::PresentMode::Mailbox: return VK_PRESENT_MODE_MAILBOX_KHR; break;
+	default: break;
+	}
+	return VkPresentModeKHR(0);
+}
+
 }

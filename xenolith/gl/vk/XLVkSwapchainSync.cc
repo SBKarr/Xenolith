@@ -236,23 +236,7 @@ Extent3 SwapchainSync::getImageExtent() const {
 VkResult SwapchainSync::doPresent(Device &dev, DeviceQueue &queue) {
 	auto presentSem = VkSemaphore(_renderFinished->getObject());
 
-	VkSwapchainKHR swapchain = _handle->getSwapchain();
-
-	VkPresentInfoKHR presentInfo{};
-	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-
-	presentInfo.waitSemaphoreCount = 1;
-	presentInfo.pWaitSemaphores = &presentSem;
-
-	presentInfo.swapchainCount = 1;
-	presentInfo.pSwapchains = &swapchain;
-	presentInfo.pImageIndices = &_imageIndex;
-	presentInfo.pResults = nullptr; // Optional
-
-	VkResult result = VK_ERROR_UNKNOWN;
-	dev.makeApiCall([&] (const DeviceTable &table, VkDevice device) {
-		result = table.vkQueuePresentKHR(queue.getQueue(), &presentInfo);
-	});
+	VkResult result = _handle->present(dev, queue, presentSem, _imageIndex);
 
 	clearImageIndex();
 

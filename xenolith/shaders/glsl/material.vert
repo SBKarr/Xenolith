@@ -34,7 +34,7 @@ layout (location = 0) out vec4 fragColor;
 layout (location = 1) out vec2 fragTexCoord;
 
 void main() {
-	gl_Position = vec4(vertices[gl_VertexIndex].pos.xy, 0.0, 1.0);
+	gl_Position = vec4(vertices[gl_VertexIndex].pos.xyz, 1.0);
 	fragColor = vertices[gl_VertexIndex].color;
 	fragTexCoord = vertices[gl_VertexIndex].tex;
 }

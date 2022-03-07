@@ -708,9 +708,9 @@ void ImageViewInfo::setup(ColorMode value) {
 			a = gl::ComponentMapping::R;
 			break;
 		case gl::PixelFormat::IA:
-			r = gl::ComponentMapping::B;
-			g = gl::ComponentMapping::B;
-			b = gl::ComponentMapping::B;
+			r = gl::ComponentMapping::R;
+			g = gl::ComponentMapping::R;
+			b = gl::ComponentMapping::R;
 			a = gl::ComponentMapping::G;
 			break;
 		case gl::PixelFormat::RGB:
@@ -739,6 +739,49 @@ void ImageViewInfo::setup(ColorMode value) {
 		a = value.getA();
 		break;
 	}
+}
+
+ColorMode ImageViewInfo::getColorMode() const {
+	auto f = gl::getImagePixelFormat(format);
+	switch (f) {
+	case gl::PixelFormat::Unknown: return ColorMode(); break;
+	case gl::PixelFormat::A:
+		if (r == gl::ComponentMapping::One
+				&& g == gl::ComponentMapping::One
+				&& b == gl::ComponentMapping::One
+				&& a == gl::ComponentMapping::R) {
+			return ColorMode();
+		}
+		break;
+	case gl::PixelFormat::IA:
+		if (r == gl::ComponentMapping::R
+				&& g == gl::ComponentMapping::R
+				&& b == gl::ComponentMapping::R
+				&& a == gl::ComponentMapping::G) {
+			return ColorMode();
+		}
+		break;
+	case gl::PixelFormat::RGB:
+		if (r == gl::ComponentMapping::Identity
+				&& g == gl::ComponentMapping::Identity
+				&& b == gl::ComponentMapping::Identity
+				&& a == gl::ComponentMapping::One) {
+			return ColorMode();
+		}
+		break;
+	case gl::PixelFormat::RGBA:
+	case gl::PixelFormat::D:
+	case gl::PixelFormat::DS:
+	case gl::PixelFormat::S:
+		if (r == gl::ComponentMapping::Identity
+				&& g == gl::ComponentMapping::Identity
+				&& b == gl::ComponentMapping::Identity
+				&& a == gl::ComponentMapping::Identity) {
+			return ColorMode();
+		}
+		break;
+	}
+	return ColorMode(r, g, b, a);
 }
 
 bool ImageViewInfo::isCompatible(const ImageInfo &info) const {

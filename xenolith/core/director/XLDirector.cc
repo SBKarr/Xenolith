@@ -56,6 +56,9 @@ gl::SwapchainConfig Director::selectConfig(const gl::SurfaceInfo &info) const {
 	ret.extent = info.currentExtent;
 	ret.imageCount = std::max(uint32_t(3), info.minImageCount);
 	ret.presentMode = info.presentModes.front();
+	if (std::find(info.presentModes.begin(), info.presentModes.end(), gl::PresentMode::Immediate) != info.presentModes.end()) {
+		ret.presentModeFast = gl::PresentMode::Immediate;
+	}
 
 	ret.imageFormat = info.formats.front().first;
 	ret.colorSpace = info.formats.front().second;

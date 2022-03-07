@@ -480,6 +480,7 @@ void ImageAttachmentRef::updateLayout() {
 
 	auto fmt = ((ImageAttachment *)_descriptor->getAttachment())->getInfo().format;
 
+	bool separateDepthStencil = false;
 	bool hasColor = false;
 	bool hasDepth = false;
 	bool hasStencil = false;
@@ -518,7 +519,7 @@ void ImageAttachmentRef::updateLayout() {
 		case AttachmentLayout::Ignored:
 			if (hasColor) {
 				_layout = AttachmentLayout::ShaderReadOnlyOptimal;
-			} else if (hasDepth && hasStencil) {
+			} else if ((!separateDepthStencil && (hasDepth || hasStencil)) || (hasDepth && hasStencil)) {
 				_layout = AttachmentLayout::DepthStencilReadOnlyOptimal;
 			} else if (hasDepth) {
 				_layout = AttachmentLayout::DepthReadOnlyOptimal;
@@ -575,8 +576,8 @@ void ImageAttachmentRef::updateLayout() {
 		case AttachmentLayout::General:
 			break;
 		case AttachmentLayout::Ignored:
-			if (hasDepth && hasStencil) {
-				_layout = AttachmentLayout::DepthAttachmentOptimal;
+			if ((!separateDepthStencil && (hasDepth || hasStencil)) || (hasDepth && hasStencil)) {
+				_layout = AttachmentLayout::DepthStencilAttachmentOptimal;
 			} else if (hasDepth) {
 				_layout = AttachmentLayout::DepthAttachmentOptimal;
 			} else if (hasStencil) {

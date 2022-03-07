@@ -32,10 +32,31 @@ bool RootLayout::init() {
 
 	_background = addChild(Rc<Layer>::create());
 	_background->setColorMode(ColorMode(gl::ComponentMapping::R, gl::ComponentMapping::One));
+	_background->setAnchorPoint(Anchor::Middle);
 
-	_logo = addChild(Rc<Sprite>::create("Xenolith.png"));
+	/*_logo = addChild(Rc<Sprite>::create("Xenolith.png"), 6);
 	_logo->setOpacity(0.5f);
 	_logo->setContentSize(Size(308, 249));
+	_logo->setAnchorPoint(Anchor::Middle);*/
+
+	Color colors[5] = {
+		Color::Red_500,
+		Color::Green_500,
+		Color::White,
+		Color::Blue_500,
+		Color::Teal_500
+	};
+
+	int16_t indexes[5] = {
+		4, 3, 5, 2, 1
+	};
+
+	for (size_t i = 0; i < 5; ++ i) {
+		_layers[i] = addChild(Rc<Layer>::create(), indexes[i]);
+		_layers[i]->setContentSize(Size(300, 300));
+		_layers[i]->setColor(colors[i]);
+		_layers[i]->setAnchorPoint(Anchor::Middle);
+	}
 
 	scheduleUpdate();
 
@@ -45,12 +66,24 @@ bool RootLayout::init() {
 void RootLayout::onContentSizeDirty() {
 	Node::onContentSizeDirty();
 
-	_background->setAnchorPoint(Anchor::Middle);
+	Vec2 center = _contentSize / 2.0f;
+
 	_background->setPosition(_contentSize / 2.0f);
 	_background->setContentSize(_contentSize);
 
-	_logo->setAnchorPoint(Anchor::Middle);
-	_logo->setPosition(_contentSize / 2.0f);
+	//_logo->setPosition(_contentSize / 2.0f);
+
+	Vec2 positions[5] = {
+		center + Vec2(-100, -100),
+		center + Vec2(100, -100),
+		center,
+		center + Vec2(-100, 100),
+		center + Vec2(100, 100),
+	};
+
+	for (size_t i = 0; i < 5; ++ i) {
+		_layers[i]->setPosition(positions[i]);
+	}
 }
 
 void RootLayout::update(const UpdateTime &time) {

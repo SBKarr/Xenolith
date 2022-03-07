@@ -226,6 +226,7 @@ public: // Threading, Events
 	const Rc<storage::Server> &getStorageServer() const { return _storageServer; }
 	const Rc<network::Controller> &getNetworkController() const { return _networkController; }
 	const Rc<EventLoop> &getEventLoop() const { return _loop; }
+	const Rc<gl::Loop> &getGlLoop() const { return _glLoop; }
 
 protected:
 	uint64_t _clockStart = 0;

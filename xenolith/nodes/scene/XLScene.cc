@@ -238,15 +238,18 @@ MaterialInfo Scene::getMaterialInfo(gl::MaterialType type, const Rc<gl::Material
 		if (idx < config::MaxMaterialImages) {
 			ret.images[idx] = it.image->image->getIndex();
 			ret.samplers[idx] = it.sampler;
+			ret.colorModes[idx] = it.info.getColorMode();
 		}
 		++ idx;
 	}
+
+	ret.pipeline = material->getPipeline()->material.normalize();
 
 	return ret;
 }
 
 gl::ImageViewInfo Scene::getImageViewForMaterial(const MaterialInfo &info, uint32_t idx, const gl::ImageData *image) const {
-	return gl::ImageViewInfo(image->format, info.colorMode);
+	return gl::ImageViewInfo(image->format, info.colorModes[idx]);
 }
 
 Bytes Scene::getDataForMaterial(const gl::MaterialAttachment *a, const MaterialInfo &) const {

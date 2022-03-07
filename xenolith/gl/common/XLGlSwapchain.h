@@ -116,8 +116,6 @@ public:
 	// invalidate all frames in process before that
 	virtual void deprecate();
 
-	virtual bool isBestPresentMode() const { return true; }
-
 	virtual bool isResetRequired();
 
 	gl::ImageInfo getSwapchainImageInfo() const;

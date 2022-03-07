@@ -36,6 +36,9 @@ static constexpr uint64_t PresentationSchedulerInterval = 500; // 500 ms or 1/32
 /* Max sampled image descriptors per material texture set (can be actually lower due maxPerStageDescriptorSampledImages) */
 static constexpr uint32_t MaxTextureSetImages = 1024;
 
+/* Number of frames, that can be performed in suboptimal swapchain modes */
+static constexpr uint32_t MaxSuboptimalFrame = 24;
+
 /* Maximum images in single material */
 static constexpr size_t MaxMaterialImages = 4;
 

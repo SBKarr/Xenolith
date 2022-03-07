@@ -113,8 +113,8 @@ public:
 	}
 
 	virtual void addChildNode(Node *child);
-	virtual void addChildNode(Node *child, int32_t localZOrder);
-	virtual void addChildNode(Node *child, int32_t localZOrder, uint64_t tag);
+	virtual void addChildNode(Node *child, int16_t localZOrder);
+	virtual void addChildNode(Node *child, int16_t localZOrder, uint64_t tag);
 
 	virtual Node* getChildByTag(uint64_t tag) const;
 

@@ -36,6 +36,7 @@ enum class AllocationUsage {
 	DeviceLocalHostVisible, // device local, visible directly on host
 	HostTransitionSource, // host-local, used as source for transfer to GPU device (so, non-cached, coherent preferable)
 	HostTransitionDestination, // host-local, used as destination for transfer from GPU Device (cached, non-coherent)
+	DeviceLocalLazilyAllocated, // memory for transient images
 };
 
 enum class AllocationType {

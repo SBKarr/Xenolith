@@ -116,7 +116,7 @@ public:
 	virtual ~SwapchainHandle() { }
 
 	bool init(Device &dev, const gl::SwapchainConfig &, gl::ImageInfo &&, gl::PresentMode,
-			VkSurfaceKHR, uint32_t families[2], Function<void()> &&, SwapchainHandle * = nullptr);
+			VkSurfaceKHR, uint32_t families[2], Function<void(gl::SwapchanCreationMode)> &&, SwapchainHandle * = nullptr);
 
 	gl::PresentMode getPresentMode() const { return _presentMode; }
 	const gl::ImageInfo &getImageInfo() const { return _imageInfo; }
@@ -124,6 +124,7 @@ public:
 	VkSwapchainKHR getSwapchain() const { return _swapchain; }
 
 	bool isDeprecated();
+	bool isOptimal() const;
 
 	Rc<gl::ImageAttachmentObject> getImage(uint32_t) const;
 
@@ -132,6 +133,8 @@ public:
 
 	bool retainUsage();
 	void releaseUsage();
+
+	VkResult present(Device &dev, DeviceQueue &queue, VkSemaphore presentSem, uint32_t imageIdx);
 
 protected:
 	Mutex _mutex;
@@ -142,7 +145,9 @@ protected:
 	gl::SwapchainConfig _config;
 	VkSwapchainKHR _swapchain = VK_NULL_HANDLE;
 	Vector<Rc<gl::ImageAttachmentObject>> _images;
-	Function<void()> _rebuildCallback;
+	Function<void(gl::SwapchanCreationMode)> _rebuildCallback;
+	std::atomic<uint32_t> _presentedFrames = 0;
+	gl::SwapchanCreationMode _rebuildMode = gl::SwapchanCreationMode::Fast;
 };
 
 }

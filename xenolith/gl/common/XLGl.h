@@ -357,6 +357,8 @@ struct ImageViewInfo {
 	void setup(ComponentMappingA value) { a = value.get(); }
 	void setup(ColorMode value);
 
+	ColorMode getColorMode() const;
+
 	template <typename T>
 	void define(T && t) {
 		setup(std::forward<T>(t));

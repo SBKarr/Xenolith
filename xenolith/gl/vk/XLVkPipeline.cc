@@ -269,6 +269,22 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 			depthState.back.reference = params.material.back.reference;
 		} else {
 			depthState.stencilTestEnable = VK_FALSE;
+
+			depthState.front.failOp = VK_STENCIL_OP_KEEP;
+			depthState.front.passOp = VK_STENCIL_OP_KEEP;
+			depthState.front.depthFailOp = VK_STENCIL_OP_KEEP;
+			depthState.front.compareOp = VK_COMPARE_OP_NEVER;
+			depthState.front.compareMask = 0;
+			depthState.front.writeMask = 0;
+			depthState.front.reference = 0;
+
+			depthState.back.failOp = VK_STENCIL_OP_KEEP;
+			depthState.back.passOp = VK_STENCIL_OP_KEEP;
+			depthState.back.depthFailOp = VK_STENCIL_OP_KEEP;
+			depthState.back.compareOp = VK_COMPARE_OP_NEVER;
+			depthState.back.compareMask = 0;
+			depthState.back.writeMask = 0;
+			depthState.back.reference = 0;
 		}
 	}
 

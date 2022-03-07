@@ -66,6 +66,8 @@ public:
 
 	uint32_t getTextureLayoutImagesCount() const { return _textureLayoutImagesCount; }
 
+	const Vector<gl::ImageFormat> &getSupportedDepthStencilFormat() const { return _depthFormats; }
+
 	virtual void onLoopStarted(gl::Loop &);
 	virtual void onLoopEnded(gl::Loop &);
 
@@ -73,8 +75,6 @@ public:
 
 	virtual Rc<gl::ImageObject> getEmptyImageObject() const = 0;
 	virtual Rc<gl::ImageObject> getSolidImageObject() const = 0;
-
-	virtual const Vector<ImageFormat> &getSupportedDepthStencilFormat() const = 0;
 
 	virtual Rc<gl::FrameHandle> makeFrame(gl::Loop &, Rc<gl::FrameRequest> &&, uint64_t gen);
 
@@ -108,6 +108,7 @@ protected:
 	std::unordered_set<ObjectInterface *> _objects;
 
 	Vector<SamplerInfo> _samplersInfo;
+	Vector<gl::ImageFormat> _depthFormats;
 
 	uint32_t _samplersCount = 0;
 	bool _samplersCompiled = false;

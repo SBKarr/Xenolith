@@ -26,8 +26,8 @@
 
 namespace stappler::xenolith::vk {
 
-BufferAttachmentHandle::~BufferAttachmentHandle() {
-
+Rc<gl::AttachmentHandle> ImageAttachment::makeFrameHandle(const gl::FrameQueue &handle) {
+	return Rc<ImageAttachmentHandle>::create(this, handle);
 }
 
 VertexBufferAttachment::~VertexBufferAttachment() {

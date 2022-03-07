@@ -25,7 +25,7 @@
 
 #include "XLGlSwapchain.h"
 #include "XLVkSwapchainSync.h"
-#include "XLVkImageAttachment.h"
+#include "XLVkAttachment.h"
 
 namespace stappler::xenolith::vk {
 
@@ -55,8 +55,6 @@ public:
 
 	VkSurfaceKHR getSurface() const { return _surface; }
 	Rc<SwapchainHandle> getSwapchain() const { return _swapchain; }
-
-	virtual bool isBestPresentMode() const override;
 
 	Rc<SwapchainSync> acquireSwapchainSync(Device &, bool lock = true);
 	void releaseSync(Rc<SwapchainSync> &&);

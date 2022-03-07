@@ -236,11 +236,11 @@ void Node::addChildNode(Node *child) {
 	addChildNode(child, child->_zOrder, child->_tag);
 }
 
-void Node::addChildNode(Node *child, int32_t localZOrder) {
+void Node::addChildNode(Node *child, int16_t localZOrder) {
 	addChildNode(child, localZOrder, child->_tag);
 }
 
-void Node::addChildNode(Node *child, int32_t localZOrder, uint64_t tag) {
+void Node::addChildNode(Node *child, int16_t localZOrder, uint64_t tag) {
 	XLASSERT( child != nullptr, "Argument must be non-nil");
 	XLASSERT( child->_parent == nullptr, "child already added. It can't be added again");
 

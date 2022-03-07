@@ -36,6 +36,14 @@ THE SOFTWARE.
 
 //#include "XLStaticResource.cc"
 
+namespace stappler::xenolith {
+
+const ColorMode ColorMode::SolidColor = ColorMode();
+const ColorMode ColorMode::IntensityChannel(gl::ComponentMapping::R, gl::ComponentMapping::One);
+const ColorMode ColorMode::AlphaChannel(gl::ComponentMapping::One, gl::ComponentMapping::R);
+
+}
+
 namespace stappler::xenolith::profiling {
 
 ProfileData begin(StringView tag, StringView variant, uint64_t limit) {

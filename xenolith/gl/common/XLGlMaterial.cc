@@ -475,6 +475,27 @@ bool Material::init(const PipelineData *pipeline, const ImageData *image, Bytes 
 	return true;
 }
 
+bool Material::init(const PipelineData *pipeline, const ImageData *image, ColorMode mode, Bytes &&data, bool ownedData) {
+	_id = s_MaterialCurrentIndex.fetch_add(1);
+	_pipeline = pipeline;
+
+	MaterialImage img({
+		image
+	});
+
+	img.info.setup(mode);
+
+	_images = Vector<MaterialImage>({
+		move(img)
+	});
+	_atlas = image->atlas;
+	_data = move(data);
+	if (ownedData) {
+		_ownedData = image;
+	}
+	return true;
+}
+
 bool Material::init(const Material *master, Rc<ImageObject> &&image, Rc<ImageAtlas> &&atlas, Bytes &&data) {
 	_id = master->getId();
 	_pipeline = master->getPipeline();

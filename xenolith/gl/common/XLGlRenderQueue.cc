@@ -259,13 +259,26 @@ static void RenderQueue_buildLoadStore(RenderQueue::QueueData *data) {
 				continue;
 			}
 
+			auto img = (ImageAttachment *)attachment.get();
 			for (auto &desc : attachment->getDescriptors()) {
-				auto img = (ImageAttachmentDescriptor *)desc.get();
+				auto imgDesc = (ImageAttachmentDescriptor *)desc.get();
 
-				img->setLoadOp(AttachmentLoadOp::DontCare);
-				img->setStencilLoadOp(AttachmentLoadOp::DontCare);
-				img->setStoreOp(AttachmentStoreOp::DontCare);
-				img->setStencilStoreOp(AttachmentStoreOp::DontCare);
+				auto fmt = getImagePixelFormat(img->getInfo().format);
+				switch (fmt) {
+				case PixelFormat::DS:
+				case PixelFormat::S:
+					imgDesc->setLoadOp(img->shouldClearOnLoad() ? AttachmentLoadOp::Clear : AttachmentLoadOp::DontCare);
+					imgDesc->setStencilLoadOp(img->shouldClearOnLoad() ? AttachmentLoadOp::Clear : AttachmentLoadOp::DontCare);
+					imgDesc->setStoreOp(AttachmentStoreOp::DontCare);
+					imgDesc->setStencilStoreOp(AttachmentStoreOp::DontCare);
+					break;
+				default:
+					imgDesc->setLoadOp(img->shouldClearOnLoad() ? AttachmentLoadOp::Clear : AttachmentLoadOp::DontCare);
+					imgDesc->setStencilLoadOp(img->shouldClearOnLoad() ? AttachmentLoadOp::Clear : AttachmentLoadOp::DontCare);
+					imgDesc->setStoreOp(AttachmentStoreOp::DontCare);
+					imgDesc->setStencilStoreOp(AttachmentStoreOp::DontCare);
+					break;
+				}
 			}
 		} else {
 			if (!isImageAttachmentType(attachment->getType())) {

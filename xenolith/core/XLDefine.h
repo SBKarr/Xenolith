@@ -54,6 +54,10 @@ SP_DEFINE_ENUM_AS_MASK(NodeFlags)
  * (see gl::ComponentMapping)
  */
 struct ColorMode {
+	static const ColorMode SolidColor;
+	static const ColorMode IntensityChannel;
+	static const ColorMode AlphaChannel;
+
 	enum Mode {
 		Solid,
 		Custom
@@ -206,6 +210,8 @@ struct PipelineMaterialInfo {
 
 		if (blend.isEnabled()) {
 			ret.blend = blend;
+		} else {
+			ret.blend.writeMask = blend.writeMask;
 		}
 		if (depth.testEnabled) {
 			ret.depth.testEnabled = 1;
@@ -246,8 +252,8 @@ static constexpr auto SolidTextureName = "org.xenolith.SolidImage";
 struct MaterialInfo {
 	std::array<uint64_t, config::MaxMaterialImages> images = { 0 };
 	std::array<uint16_t, config::MaxMaterialImages> samplers = { 0 };
+	std::array<ColorMode, config::MaxMaterialImages> colorModes = { ColorMode() };
 	gl::MaterialType type = gl::MaterialType::Basic2D;
-	ColorMode colorMode;
 	PipelineMaterialInfo pipeline;
 
 	uint64_t hash() const {

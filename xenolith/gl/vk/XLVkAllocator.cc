@@ -30,6 +30,7 @@ namespace stappler::xenolith::vk {
 static uint32_t Allocator_getTypeScoreInternal(const Allocator::MemHeap &heap, const Allocator::MemType &type, AllocationUsage usage) {
 	switch (usage) {
 	case AllocationUsage::DeviceLocal:
+	case AllocationUsage::DeviceLocalLazilyAllocated:
 		switch (heap.type) {
 		case Allocator::MemHeapType::DeviceLocal:
 			if (type.isDeviceLocal()) {
@@ -37,6 +38,7 @@ static uint32_t Allocator_getTypeScoreInternal(const Allocator::MemHeap &heap, c
 				if (type.isHostVisible()) { ret -= 2; }
 				if (type.isHostCoherent()) { ret -= 3; }
 				if (type.isHostCached()) { ret -= 4; }
+				if (usage == AllocationUsage::DeviceLocalLazilyAllocated && type.isLazilyAllocated()) { ret += 12; }
 				return ret;
 			}
 			return 0;
@@ -47,6 +49,7 @@ static uint32_t Allocator_getTypeScoreInternal(const Allocator::MemHeap &heap, c
 				if (type.isHostVisible()) { ret -= 2; }
 				if (type.isHostCoherent()) { ret -= 3; }
 				if (type.isHostCached()) { ret -= 4; }
+				if (usage == AllocationUsage::DeviceLocalLazilyAllocated && type.isLazilyAllocated()) { ret += 12; }
 				return ret;
 			}
 			return 0;
@@ -639,7 +642,7 @@ Rc<Image> Allocator::spawnPersistent(AllocationUsage usage, const gl::ImageInfo 
 	imageInfo.arrayLayers = info.arrayLayers.get();
 	imageInfo.samples = VkSampleCountFlagBits(info.samples);
 	imageInfo.tiling = VkImageTiling(info.tiling);
-	imageInfo.usage = VkImageUsageFlags(info.usage) | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	imageInfo.usage = VkImageUsageFlags(info.usage);
 	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 	if (preinitialized) {

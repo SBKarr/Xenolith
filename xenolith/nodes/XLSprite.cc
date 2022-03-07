@@ -29,6 +29,7 @@ namespace stappler::xenolith {
 
 Sprite::Sprite() {
 	_materialInfo.blend = BlendInfo(gl::BlendFactor::One, gl::BlendFactor::OneMinusSrcAlpha);
+	_materialInfo.depth = DepthInfo(false, true, gl::CompareOp::LessOrEqual);
 }
 
 bool Sprite::init() {
@@ -109,6 +110,10 @@ void Sprite::draw(RenderFrameInfo &frame, NodeFlags flags) {
 				_materialInfo.blend.enabled = isSolid ? 0 : 1;
 			}
 
+			if (bool(_materialInfo.depth.writeEnabled) != isSolid) {
+				_materialInfo.depth.writeEnabled = isSolid ? 1 : 0;
+			}
+
 			auto info = getMaterialInfo();
 			_materialId = frame.scene->getMaterial(info);
 			if (_materialId == 0) {
@@ -159,6 +164,11 @@ void Sprite::setForceSolid(bool val) {
 			_materialInfo.blend.enabled = isSolid ? 0 : 1;
 			_materialDirty = true;
 		}
+
+		if (bool(_materialInfo.depth.writeEnabled) != isSolid) {
+			_materialInfo.depth.writeEnabled = isSolid ? 1 : 0;
+			_materialDirty = true;
+		}
 	}
 }
 
@@ -166,8 +176,8 @@ MaterialInfo Sprite::getMaterialInfo() const {
 	MaterialInfo ret;
 	ret.type = gl::MaterialType::Basic2D;
 	ret.images[0] = _texture->getIndex();
-	ret.colorMode = _colorMode;
-	ret.pipeline = _materialInfo;
+	ret.colorModes[0] = _colorMode;
+	ret.pipeline = _materialInfo.normalize();
 	return ret;
 }
 
@@ -187,9 +197,17 @@ void Sprite::updateColor() {
 						_materialInfo.blend.enabled = 0;
 						_materialDirty = true;
 					}
+					if (!_materialInfo.depth.writeEnabled) {
+						_materialInfo.depth.writeEnabled = 1;
+						_materialDirty = true;
+					}
 				} else {
 					if (!_materialInfo.blend.enabled) {
 						_materialInfo.blend.enabled = 1;
+						_materialDirty = true;
+					}
+					if (_materialInfo.depth.writeEnabled) {
+						_materialInfo.depth.writeEnabled = 0;
 						_materialDirty = true;
 					}
 				}
