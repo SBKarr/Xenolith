@@ -79,6 +79,12 @@ void SwapchainSync::invalidate() {
 	_renderFinished = nullptr;
 }
 
+void SwapchainSync::cleanup() {
+	if (_image && _image->layout == gl::AttachmentLayout::Undefined) {
+		releaseForSwapchain();
+	}
+}
+
 VkResult SwapchainSync::acquireImage(Device &dev, bool sync) {
 	VkResult result = VK_ERROR_UNKNOWN;
 	/*std::unique_lock<Mutex> lock(*_mutex, std::try_to_lock_t());

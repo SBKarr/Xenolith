@@ -91,12 +91,13 @@ static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder 
 	// pipelines for material-besed rendering
 	auto materialPipeline = builder.addPipeline(pass, 0, "Solid", shaderSpecInfo, PipelineMaterialInfo({
 		BlendInfo(),
-		DepthInfo(true, true, gl::CompareOp::LessOrEqual)
+		DepthInfo(true, true, gl::CompareOp::Less)
 	}));
-	/*auto transparentPipeline = builder.addPipeline(pass, 0, "Transparent", shaderSpecInfo, PipelineMaterialInfo({
-		BlendInfo(gl::BlendFactor::One, gl::BlendFactor::OneMinusSrcAlpha),
-		// DepthInfo(false, true, gl::CompareOp::LessOrEqual)
-	}));*/
+	auto transparentPipeline = builder.addPipeline(pass, 0, "Transparent", shaderSpecInfo, PipelineMaterialInfo({
+		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
+				gl::BlendFactor::One, gl::BlendFactor::Zero, gl::BlendOp::Add),
+		DepthInfo(false, true, gl::CompareOp::Less)
+	}));
 
 	// define internal resources (images and buffers)
 	gl::Resource::Builder resourceBuilder("LoaderResources");
@@ -127,7 +128,7 @@ static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder 
 	outAttachmentInfo.initialLayout = gl::AttachmentLayout::Undefined;
 	outAttachmentInfo.finalLayout = gl::AttachmentLayout::PresentSrc;
 	outAttachmentInfo.clearOnLoad = true;
-	outAttachmentInfo.clearColor = Color4F::BLACK;
+	outAttachmentInfo.clearColor = Color4F(0.0f, 0.0f, 0.0f, 0.0f); // Color4F::BLACK;
 	outAttachmentInfo.frameSizeCallback = [] (const gl::FrameQueue &frame) {
 		return Extent3(frame.getExtent());
 	};
@@ -143,10 +144,10 @@ static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder 
 
 		// ... with predefined list of materials
 		Vector<Rc<gl::Material>>({
-			Rc<gl::Material>::create(materialPipeline, initImage),
+			/*Rc<gl::Material>::create(materialPipeline, initImage),
 			Rc<gl::Material>::create(materialPipeline, cache->getEmptyImage(), ColorMode::IntensityChannel),
 			Rc<gl::Material>::create(materialPipeline, cache->getSolidImage(), ColorMode::IntensityChannel),
-			/*Rc<gl::Material>::create(transparentPipeline, initImage),
+			Rc<gl::Material>::create(transparentPipeline, initImage),
 			Rc<gl::Material>::create(transparentPipeline, cache->getEmptyImage(), ColorMode::IntensityChannel),
 			Rc<gl::Material>::create(transparentPipeline, cache->getSolidImage(), ColorMode::IntensityChannel)*/
 		})

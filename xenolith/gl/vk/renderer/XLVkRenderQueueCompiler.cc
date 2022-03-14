@@ -79,6 +79,8 @@ class RenderQueueRenderPassHandle : public RenderPassHandle {
 public:
 	virtual ~RenderQueueRenderPassHandle();
 
+	virtual bool init(gl::RenderPass &, const gl::FrameQueue &) override;
+
 	virtual bool prepare(gl::FrameQueue &, Function<void(bool)> &&) override;
 	virtual void submit(gl::FrameQueue &, Rc<gl::FrameSync> &&, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) override;
 
@@ -270,6 +272,15 @@ RenderQueueRenderPassHandle::~RenderQueueRenderPassHandle() {
 	if (_resource) {
 		_resource->invalidate(*_device);
 	}
+}
+
+bool RenderQueueRenderPassHandle::init(gl::RenderPass &pass, const gl::FrameQueue &queue) {
+	if (!RenderPassHandle::init(pass, queue)) {
+		return false;
+	}
+
+	_isAsync = true;
+	return true;
 }
 
 bool RenderQueueRenderPassHandle::prepare(gl::FrameQueue &frame, Function<void(bool)> &&cb) {

@@ -820,7 +820,7 @@ void Node::visit(RenderFrameInfo &info, NodeFlags parentFlags) {
 
 	bool visibleByCamera = true;
 
-	info.transformStack.push_back(_modelViewTransform);
+	info.modelTransformStack.push_back(_modelViewTransform);
 	info.zPath.push_back(getLocalZOrder());
 
 	size_t i = 0;
@@ -860,7 +860,7 @@ void Node::visit(RenderFrameInfo &info, NodeFlags parentFlags) {
 	}
 
 	info.zPath.pop_back();
-	info.transformStack.pop_back();
+	info.modelTransformStack.pop_back();
 }
 
 void Node::scheduleUpdate() {
@@ -899,7 +899,7 @@ NodeFlags Node::processParentFlags(RenderFrameInfo &info, NodeFlags parentFlags)
 	flags |= (_contentSizeDirty ? NodeFlags::ContentSizeDirty : NodeFlags::None);
 
 	if ((flags & NodeFlags::DirtyMask) != NodeFlags::None || _transformDirty || _contentSizeDirty) {
-		_modelViewTransform = this->transform(info.transformStack.back());
+		_modelViewTransform = this->transform(info.modelTransformStack.back());
 	}
 
 	if (_transformDirty) {

@@ -35,5 +35,5 @@ void main() {
 			images[materials[pushConstants.materialIdx].imageIdx],
 			immutableSamplers[materials[pushConstants.materialIdx].samplerIdx]
 		), fragTexCoord);
-	outColor = fragColor * vec4(textureColor.xyz, 1.0);
+	outColor = fragColor * textureColor;
 }

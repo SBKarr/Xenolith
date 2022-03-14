@@ -30,6 +30,8 @@ THE SOFTWARE.
 #include "SPLog.h"
 #include "SPSpanView.h"
 
+#include "SLFont.h"
+
 #include <optional>
 
 #include "XLConfig.h"
@@ -176,6 +178,25 @@ namespace stappler::xenolith::font {
 class FontLibrary;
 class FontController;
 class FontFaceObject;
+
+using Metrics = layout::Metrics;
+using CharLayout = layout::CharLayout;
+
+enum FontAnchor : uint32_t {
+	BottomLeft,
+	TopLeft,
+	TopRight,
+	BottomRight
+};
+
+struct FontCharLayout {
+	static uint32_t getObjectId(uint16_t sourceId, char16_t, FontAnchor);
+	static uint32_t getObjectId(uint32_t, FontAnchor);
+
+	CharLayout layout;
+	uint16_t width;
+	uint16_t height;
+};
 
 }
 

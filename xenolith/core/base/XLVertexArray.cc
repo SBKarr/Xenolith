@@ -161,6 +161,34 @@ VertexArray::Quad & VertexArray::Quad::setColor(std::initializer_list<Color4F> &
 	return setColor(SpanView<Color4F>(colors.begin(), colors.size()));
 }
 
+VertexArray::Quad & VertexArray::Quad::drawChar(const font::Metrics &m, const font::FontCharLayout &l, int16_t charX, int16_t charY,
+		const Color4B &color, layout::style::TextDecoration, uint16_t face) {
+
+	setGeometry(Vec4(charX + l.layout.xOffset, charY - (l.layout.yOffset + l.height) - m.descender, 0.0f, 1.0f),
+			Size(l.width, l.height));
+	setColor(Color4F(color));
+
+	gl::Vertex_V4F_V4F_T2F2U *data = const_cast<gl::Vertex_V4F_V4F_T2F2U *>(vertexes.data());
+
+
+	const float texLeft = 0.0f;
+	const float texRight = 1.0f;
+	const float texTop = 0.0f;
+	const float texBottom = 1.0f;
+
+	data[0].tex = Vec2(texLeft, texTop);
+	data[1].tex = Vec2(texLeft, texBottom);
+	data[2].tex = Vec2(texRight, texTop);
+	data[3].tex = Vec2(texRight, texBottom);
+
+	data[0].object = font::FontCharLayout::getObjectId(face, l.layout.charID, font::FontAnchor::BottomLeft);
+	data[1].object = font::FontCharLayout::getObjectId(face, l.layout.charID, font::FontAnchor::TopLeft);
+	data[2].object = font::FontCharLayout::getObjectId(face, l.layout.charID, font::FontAnchor::BottomRight);
+	data[3].object = font::FontCharLayout::getObjectId(face, l.layout.charID, font::FontAnchor::TopRight);
+
+	return *this;
+}
+
 bool VertexArray::init(uint32_t bufferCapacity, uint32_t indexCapacity) {
 	_data = Rc<gl::VertexData>::alloc();
 	_data->data.reserve(bufferCapacity);
@@ -247,6 +275,77 @@ void VertexArray::updateColor(const Color4F &color) {
 
 	for (auto &it : _data->data) {
 		it.color = color;
+	}
+}
+
+void VertexArray::updateColor(const Color4F &color, const Vector<ColorMask> &mask) {
+	if (_copyOnWrite) {
+		copy();
+	}
+
+	auto count = std::min(_data->data.size(), mask.size());
+
+	for (size_t i = 0; i < count; ++ i) {
+		switch (mask[i]) {
+		case ColorMask::None: break;
+		case ColorMask::All:
+			_data->data[i].color = color;
+			break;
+		case ColorMask::Color:
+			_data->data[i].color.x = color.r;
+			_data->data[i].color.y = color.g;
+			_data->data[i].color.z = color.b;
+			break;
+		case ColorMask::A:
+			_data->data[i].color.w = color.a;
+			break;
+		default:
+			if ((mask[i] & ColorMask::R) != ColorMask::None) { _data->data[i].color.x = color.r; }
+			if ((mask[i] & ColorMask::G) != ColorMask::None) { _data->data[i].color.y = color.g; }
+			if ((mask[i] & ColorMask::B) != ColorMask::None) { _data->data[i].color.z = color.b; }
+			if ((mask[i] & ColorMask::A) != ColorMask::None) { _data->data[i].color.w = color.a; }
+			break;
+		}
+	}
+}
+
+void VertexArray::updateColorQuads(const Color4F &color, const Vector<ColorMask> &mask) {
+	if (_copyOnWrite) {
+		copy();
+	}
+
+	auto quadsCount = _data->data.size() / 4;
+	auto count = std::min(quadsCount, mask.size());
+
+	for (size_t i = 0; i < count; ++ i) {
+		switch (mask[i]) {
+		case ColorMask::None: break;
+		case ColorMask::All:
+			for (size_t j = 0; j < 4; ++ j) {
+				_data->data[i * 4 + j].color = color;
+			}
+			break;
+		case ColorMask::Color:
+			for (size_t j = 0; j < 4; ++ j) {
+				_data->data[i * 4 + j].color.x = color.r;
+				_data->data[i * 4 + j].color.y = color.g;
+				_data->data[i * 4 + j].color.z = color.b;
+			}
+			break;
+		case ColorMask::A:
+			for (size_t j = 0; j < 4; ++ j) {
+				_data->data[i * 4 + j].color.w = color.a;
+			}
+			break;
+		default:
+			for (size_t j = 0; j < 4; ++ j) {
+				if ((mask[i] & ColorMask::R) != ColorMask::None) { _data->data[i * 4 + j].color.x = color.r; }
+				if ((mask[i] & ColorMask::G) != ColorMask::None) { _data->data[i * 4 + j].color.y = color.g; }
+				if ((mask[i] & ColorMask::B) != ColorMask::None) { _data->data[i * 4 + j].color.z = color.b; }
+				if ((mask[i] & ColorMask::A) != ColorMask::None) { _data->data[i * 4 + j].color.w = color.a; }
+			}
+			break;
+		}
 	}
 }
 

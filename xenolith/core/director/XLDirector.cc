@@ -103,6 +103,8 @@ void Director::update() {
 
 	_view->runFrame(_scene->getRenderQueue(), size);
 	_scheduler->update(_time);
+
+	_application->update(_time.delta);
 }
 
 void Director::begin(gl::View *view) {

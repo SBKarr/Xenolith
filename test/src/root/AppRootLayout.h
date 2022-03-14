@@ -24,6 +24,7 @@
 #define TEST_SRC_ROOT_APPROOTLAYOUT_H_
 
 #include "XLLayer.h"
+#include "XLLabel.h"
 
 namespace stappler::xenolith::app {
 
@@ -36,10 +37,14 @@ public:
 	virtual void update(const UpdateTime &) override;
 
 protected:
+	void onFontsLoaded();
+
 	Layer *_background = nullptr;
 	Sprite *_logo = nullptr;
 
 	Layer *_layers[5] = { nullptr };
+	Label *_label = nullptr;
+	Label *_label2 = nullptr;
 };
 
 }

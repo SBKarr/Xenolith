@@ -23,7 +23,10 @@ THE SOFTWARE.
 #include "XLDefine.h"
 
 #include "XLComponent.cc"
+#include "XLEventListener.cc"
+
 #include "XLNode.cc"
 #include "XLResourceComponent.cc"
 #include "XLSprite.cc"
 #include "XLLayer.cc"
+#include "XLLabel.cc"

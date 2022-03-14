@@ -248,7 +248,7 @@ void RenderFontAttachmentHandle::writeBufferData(gl::RenderFontInput::FontReques
 			*target = VkBufferImageCopy({
 				VkDeviceSize(offset),
 				uint32_t(/*pitch*/0),
-				uint32_t(gl::RenderFontInput::getObjectId(req.first->getId(), req.second[i], gl::RenderFontInput::BottomLeft)),
+				uint32_t(gl::RenderFontInput::getObjectId(req.first->getId(), req.second[i], font::FontAnchor::BottomLeft)),
 				VkImageSubresourceLayers({VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}),
 				VkOffset3D({0, 0, 0}),
 				VkExtent3D({width, rows, 1})
@@ -268,7 +268,7 @@ void RenderFontAttachmentHandle::writeAtlasData(gl::FrameHandle &handle) {
 			_bufferData[_bufferData.size() - 1] = VkBufferImageCopy({
 				VkDeviceSize(offset),
 				uint32_t(0),
-				uint32_t(gl::RenderFontInput::getObjectId(0, char16_t(0), gl::RenderFontInput::BottomLeft)),
+				uint32_t(gl::RenderFontInput::getObjectId(0, char16_t(0), font::FontAnchor::BottomLeft)),
 				VkImageSubresourceLayers({VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}),
 				VkOffset3D({0, 0, 0}),
 				VkExtent3D({1, 1, 1})
@@ -295,13 +295,13 @@ void RenderFontAttachmentHandle::writeAtlasData(gl::FrameHandle &handle) {
 			const float w = float(d.imageExtent.width);
 			const float h = float(d.imageExtent.height);
 
-			atlas->addObject(gl::RenderFontInput::getObjectId(id, gl::RenderFontInput::BottomLeft),
+			atlas->addObject(gl::RenderFontInput::getObjectId(id, font::FontAnchor::BottomLeft),
 					Vec2(x / _imageExtent.width, y / _imageExtent.height));
-			atlas->addObject(gl::RenderFontInput::getObjectId(id, gl::RenderFontInput::TopLeft),
+			atlas->addObject(gl::RenderFontInput::getObjectId(id, font::FontAnchor::TopLeft),
 					Vec2(x / _imageExtent.width, (y + h) / _imageExtent.height));
-			atlas->addObject(gl::RenderFontInput::getObjectId(id, gl::RenderFontInput::TopRight),
+			atlas->addObject(gl::RenderFontInput::getObjectId(id, font::FontAnchor::TopRight),
 					Vec2((x + w) / _imageExtent.width, (y + h) / _imageExtent.height));
-			atlas->addObject(gl::RenderFontInput::getObjectId(id, gl::RenderFontInput::BottomRight),
+			atlas->addObject(gl::RenderFontInput::getObjectId(id, font::FontAnchor::BottomRight),
 					Vec2((x + w) / _imageExtent.width, y / _imageExtent.height));
 		}
 

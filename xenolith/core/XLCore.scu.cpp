@@ -72,3 +72,18 @@ void store(ProfileData &data) {
 }
 
 }
+
+namespace stappler::xenolith::font {
+
+uint32_t FontCharLayout::getObjectId(uint16_t sourceId, char16_t ch, FontAnchor a) {
+	uint32_t ret = ch;
+	ret |= (toInt(a) << (sizeof(char16_t) * 8));
+	ret |= (sourceId << ((sizeof(char16_t) * 8) + 2));
+	return ret;
+}
+
+uint32_t FontCharLayout::getObjectId(uint32_t ret, FontAnchor a) {
+	return (ret & (~ (3 << (sizeof(char16_t) * 8)))) | (toInt(a) << (sizeof(char16_t) * 8));
+}
+
+}

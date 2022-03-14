@@ -36,6 +36,10 @@ bool SwapchainImage::init(Device &dev) {
 	return true;
 }
 
+void SwapchainImage::cleanup() {
+
+}
+
 void SwapchainImage::setImage(const Rc<gl::ImageAttachmentObject> &image) {
 	if (_image == image) {
 		return;
@@ -51,6 +55,7 @@ void SwapchainImage::setImage(const Rc<gl::ImageAttachmentObject> &image) {
 		_image->waitSem = _imageReady;
 		_image->signalSem = _renderFinished;
 		_image->swapchainImage = this;
+		_image->layout = gl::AttachmentLayout::Undefined;
 	}
 }
 

@@ -45,6 +45,8 @@ public:
 	void reset(Device &dev, const Rc<SwapchainHandle> &, uint64_t gen);
 	void invalidate();
 
+	virtual void cleanup() override;
+
 	VkResult acquireImage(Device &, bool sync = false);
 	VkResult present(Device &, DeviceQueue &);
 

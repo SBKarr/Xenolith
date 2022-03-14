@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,28 +20,29 @@
  THE SOFTWARE.
  **/
 
-#ifndef COMPONENTS_XENOLITH_CORE_BASE_XLRENDERFRAMEINFO_H_
-#define COMPONENTS_XENOLITH_CORE_BASE_XLRENDERFRAMEINFO_H_
+#ifndef XENOLITH_NODES_COMPONENTS_XLEVENTLISTENER_H_
+#define XENOLITH_NODES_COMPONENTS_XLEVENTLISTENER_H_
 
-#include "XLGlCommandList.h"
-#include "XLDefine.h"
+#include "XLComponent.h"
+#include "XLEventHandler.h"
 
 namespace stappler::xenolith {
 
-class Scene;
+class EventListener : public Component, public EventHandler {
+public:
+	using Callback = Function<void (const Event &)>;
 
-struct RenderFrameInfo {
-	memory::vector<int16_t> zPath;
-	memory::vector<Mat4> viewProjectionStack;
-	memory::vector<Mat4> modelTransformStack;
-	memory::pool_t *pool;
+	virtual ~EventListener();
+	virtual bool init() override;
 
-	Rc<Director> director;
-	Rc<Scene> scene;
+	void onEventRecieved(const Event &ev, const Callback &);
 
-	Rc<gl::CommandList> commands;
+	EventHandlerNode * onEvent(const EventHeader &h, Callback &&, bool destroyAfterEvent = false);
+	EventHandlerNode * onEventWithObject(const EventHeader &h, layout::Ref *obj, Callback &&, bool destroyAfterEvent = false);
+
+	void clear();
 };
 
 }
 
-#endif /* COMPONENTS_XENOLITH_CORE_BASE_XLRENDERFRAMEINFO_H_ */
+#endif /* XENOLITH_NODES_COMPONENTS_XLEVENTLISTENER_H_ */

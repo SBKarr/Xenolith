@@ -99,6 +99,8 @@ void ImageAtlas::addObject(uint32_t idx, Vec2 obj) {
 	_objects.emplace_back(obj);
 	auto num = _objects.size() - 1;
 	_names.emplace(idx, num);
+
+	std::cout << "Atlas: [" << num << "] " << idx << " -> " << obj << "\n";
 }
 
 bool ImageObject::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr) {

@@ -292,12 +292,13 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 
 					size_t idx = 0;
 					for (auto &v : cmd->vertexes->data) {
-						target[idx].pos = transform * v.pos;
-						target[idx].pos.z = depth;
-						target[idx].material = it->first;
+						auto &t = target[idx];
+						t.pos = transform * v.pos;
+						t.pos.z = depth;
+						t.material = it->first;
 
-						if (target[idx].object && it->second.atlas) {
-							target[idx].tex = it->second.atlas->getObjectByName(target[idx].object);
+						if (t.object && it->second.atlas) {
+							t.tex = it->second.atlas->getObjectByName(t.object);
 						}
 
 						++ idx;

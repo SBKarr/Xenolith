@@ -142,19 +142,19 @@ public: // Threading, Events
     void performOnMainThread(Rc<thread::Task> &&task, bool onNextFrame = false) const;
 
 	/* Performs action in this thread, task will be constructed in place */
-	void perform(const ExecuteCallback &, const CompleteCallback & = nullptr, Ref * = nullptr);
+	void perform(const ExecuteCallback &, const CompleteCallback & = nullptr, Ref * = nullptr) const;
 
 	/* Performs task in thread, identified by id */
-    void perform(Rc<thread::Task> &&task);
+    void perform(Rc<thread::Task> &&task) const;
 
 	/* Performs task in thread, identified by id */
-    void perform(Rc<thread::Task> &&task, bool performFirst);
+    void perform(Rc<thread::Task> &&task, bool performFirst) const;
 
     /* Spawn exclusive thread for task */
-	void performAsync(Rc<Task> &&task);
+	void performAsync(Rc<Task> &&task) const;
 
     /* Spawn exclusive thread for task */
-	void performAsync(const ExecuteCallback &, const CompleteCallback & = nullptr, Ref * = nullptr);
+	void performAsync(const ExecuteCallback &, const CompleteCallback & = nullptr, Ref * = nullptr) const;
 
 	/* "Single-threaded" mode allow you to perform async tasks on single thread.
 	 When "perform" function is called, task and all subsequent callbacks will be

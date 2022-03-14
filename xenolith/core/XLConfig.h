@@ -51,6 +51,9 @@ static constexpr uint64_t MaxDirectorDeltaTime = 100'000'000 / 16;
 /* Enable hooking output image with swapchain image when possible, can improve performance */
 static constexpr bool EnableSwapchainHook = true;
 
+// max chars count, used by locale::hasLocaleTagsFast
+static constexpr size_t MaxFastLocaleChars = size_t(127);
+
 }
 
 #endif /* COMPONENTS_XENOLITH_CORE_XLCONFIG_H_ */

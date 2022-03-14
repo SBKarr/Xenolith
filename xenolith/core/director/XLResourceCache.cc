@@ -43,7 +43,12 @@ bool Texture::init(const Rc<gl::DynamicImage> &image) {
 }
 
 StringView Texture::getName() const {
-	return _data->key;
+	if (_dynamic) {
+		return _dynamic->getInfo().key;
+	} else if (_data) {
+		return _data->key;
+	}
+	return StringView();
 }
 
 gl::MaterialImage Texture::getMaterialImage() const {

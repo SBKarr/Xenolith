@@ -234,6 +234,18 @@ struct PipelineMaterialInfo {
 	}
 };
 
+enum class ColorMask : uint8_t {
+	None = 0,
+	R = 0x01,
+	G = 0x02,
+	B = 0x04,
+	A = 0x08,
+	Color = 0x07,
+	All = 0x0F
+};
+
+SP_DEFINE_ENUM_AS_MASK(ColorMask)
+
 namespace AppEvent {
 	using Value = uint32_t;
 

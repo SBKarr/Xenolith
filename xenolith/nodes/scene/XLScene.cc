@@ -108,9 +108,13 @@ void Scene::on2dVertexInput(gl::FrameQueue &frame, const Rc<gl::AttachmentHandle
 		info.director = _director;
 		info.scene = this;
 		info.pool = frame->getPool()->getPool();
-		info.transformStack.reserve(8);
 		info.zPath.reserve(8);
-		info.transformStack.push_back(_director->getGeneralProjection());
+
+		info.viewProjectionStack.reserve(2);
+		info.viewProjectionStack.push_back(_director->getGeneralProjection());
+
+		info.modelTransformStack.reserve(8);
+		info.modelTransformStack.push_back(Mat4::IDENTITY);
 		info.commands = Rc<gl::CommandList>::create(frame->getPool());
 
 		render(info);

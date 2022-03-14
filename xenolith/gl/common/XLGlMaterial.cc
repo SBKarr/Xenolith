@@ -194,7 +194,7 @@ Vector<Material *> MaterialSet::updateMaterials(const Vector<Rc<Material>> &mate
 					++ i;
 				}
 
-				auto mat = Rc<Material>::create(material->getPipeline(), move(images), material->getData().bytes());
+				auto mat = Rc<Material>::create(material, move(images));
 
 				for (auto &it : mat->getImages()) {
 					if (it.dynamic && _owner) {
@@ -520,6 +520,21 @@ bool Material::init(const Material *master, Rc<ImageObject> &&image, Rc<ImageAtl
 			_ownedData
 		})
 	});
+	return true;
+}
+
+bool Material::init(const Material *master, Vector<MaterialImage> &&images) {
+	_id = master->getId();
+	_pipeline = master->getPipeline();
+	_data = master->getData().bytes();
+	_images = move(images);
+	for (auto &it : _images) {
+		if (it.image->atlas) {
+			_atlas = it.image->atlas;
+			break;
+		}
+	}
+
 	return true;
 }
 

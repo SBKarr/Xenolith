@@ -40,9 +40,10 @@ public:
 
 	virtual void update(uint64_t dt) override;
 
+	font::FontController *getFontController() const { return _fontMainController; }
+
 protected:
 	void runMainView(Rc<AppScene> &&scene);
-	void runFontTest();
 
 	Rc<font::FontLibrary> _fontLibrary;
 	Rc<font::FontController> _fontMainController;

@@ -461,17 +461,21 @@ void FrameQueue::updateRenderPassState(FrameQueueRenderPassData &data, FrameRend
 }
 
 void FrameQueue::onRenderPassReady(FrameQueueRenderPassData &data) {
-	if (data.handle->getRenderPass()->acquireForFrame(*this, [this, data = &data] (bool success) {
-		data->waitForResult = false;
-		if (success && !_finalized) {
-			updateRenderPassState(*data, FrameRenderPassState::Owned);
-		} else {
-			invalidate(*data);
-		}
-	})) {
+	if (data.handle->isAsync()) {
 		updateRenderPassState(data, FrameRenderPassState::Owned);
 	} else {
-		data.waitForResult = true;
+		if (data.handle->getRenderPass()->acquireForFrame(*this, [this, data = &data] (bool success) {
+			data->waitForResult = false;
+			if (success && !_finalized) {
+				updateRenderPassState(*data, FrameRenderPassState::Owned);
+			} else {
+				invalidate(*data);
+			}
+		})) {
+			updateRenderPassState(data, FrameRenderPassState::Owned);
+		} else {
+			data.waitForResult = true;
+		}
 	}
 }
 

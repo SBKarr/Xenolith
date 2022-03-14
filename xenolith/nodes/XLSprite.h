@@ -55,6 +55,12 @@ public:
 	virtual void setForceSolid(bool);
 	virtual bool isForceSolid() const { return _forceSolid; }
 
+	virtual void setSurface(bool);
+	virtual bool isSurface() const { return _isSurface; }
+
+	virtual void setNormalized(bool);
+	virtual bool isNormalized() const { return _normalized; }
+
 protected:
 	virtual MaterialInfo getMaterialInfo() const;
 	virtual Vector<gl::MaterialImage> getMaterialImages() const;
@@ -62,7 +68,7 @@ protected:
 	virtual void updateVertexesColor();
 	virtual void updateVertexes();
 
-	virtual bool isSolidColor() const;
+	virtual void updateBlendAndDepth();
 
 	String _textureName;
 	Rc<Texture> _texture;
@@ -80,6 +86,7 @@ protected:
 	// useful for draw optimization, solid nodes can be drown out of order
 	bool _forceSolid = false;
 	bool _materialDirty = true;
+	bool _normalized = false;
 
 	Color4F _tmpColor;
 	ColorMode _colorMode;

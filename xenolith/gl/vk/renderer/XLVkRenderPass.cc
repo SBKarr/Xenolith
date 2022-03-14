@@ -236,9 +236,11 @@ Vector<VkCommandBuffer> RenderPassHandle::doPrepareCommands(gl::FrameHandle &) {
 bool RenderPassHandle::doSubmit() {
 	if (_sync) {
 		gl::Attachment *swapchainAttachment = nullptr;
+		gl::ImageAttachmentObject *image = nullptr;
 		Rc<gl::SwapchainImage> swapchainImage;
 		for (auto &it : _sync->images) {
 			if (it.image->isSwapchainImage && it.image->swapchainImage) {
+				image = it.image;
 				swapchainImage = it.image->swapchainImage;
 				swapchainAttachment = it.attachment->getAttachment().get();
 			}

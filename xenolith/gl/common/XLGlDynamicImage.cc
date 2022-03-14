@@ -48,7 +48,7 @@ void DynamicImage::updateInstance(Loop &loop, const Rc<ImageObject> &obj, Rc<Ima
 	auto newInstance = Rc<DynamicImageInstance>::alloc();
 	static_cast<ImageInfo &>(newInstance->data) = obj->getInfo();
 	newInstance->data.image = obj;
-	newInstance->data.atlas = atlas;
+	newInstance->data.atlas = move(atlas);
 	newInstance->image = this;
 
 	std::unique_lock<Mutex> lock(_mutex);

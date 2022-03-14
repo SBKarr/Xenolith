@@ -72,6 +72,8 @@ public:
 
 	virtual bool init(Device &dev);
 
+	virtual void cleanup();
+
 	Rc<gl::ImageAttachmentObject> getImage() const { return _image; }
 
 protected:

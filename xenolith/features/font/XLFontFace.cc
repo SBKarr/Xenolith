@@ -24,26 +24,48 @@
 
 namespace stappler::xenolith::font {
 
-bool FontFaceData::init(BytesView data, bool persistent) {
+static CharGroupId getCharGroupForChar(char16_t c) {
+	using namespace chars;
+	if (CharGroup<char16_t, CharGroupId::Numbers>::match(c)) {
+		return CharGroupId::Numbers;
+	} else if (CharGroup<char16_t, CharGroupId::Latin>::match(c)) {
+		return CharGroupId::Latin;
+	} else if (CharGroup<char16_t, CharGroupId::Cyrillic>::match(c)) {
+		return CharGroupId::Cyrillic;
+	} else if (CharGroup<char16_t, CharGroupId::Currency>::match(c)) {
+		return CharGroupId::Currency;
+	} else if (CharGroup<char16_t, CharGroupId::GreekBasic>::match(c)) {
+		return CharGroupId::GreekBasic;
+	} else if (CharGroup<char16_t, CharGroupId::Math>::match(c)) {
+		return CharGroupId::Math;
+	} else if (CharGroup<char16_t, CharGroupId::TextPunctuation>::match(c)) {
+		return CharGroupId::TextPunctuation;
+	}
+	return CharGroupId::None;
+}
+
+bool FontFaceData::init(StringView name, BytesView data, bool persistent) {
 	if (persistent) {
 		_view = data;
 		_persisent = true;
+		_name = name.str();
 		return true;
 	} else {
-		return init(data.bytes());
+		return init(name, data.bytes());
 	}
 }
 
-bool FontFaceData::init(Bytes &&data) {
+bool FontFaceData::init(StringView name, Bytes &&data) {
 	_persisent = false;
 	_data = move(data);
 	_view = _data;
+	_name = name.str();
 	return true;
 }
 
 FontFaceObject::~FontFaceObject() { }
 
-bool FontFaceObject::init(const Rc<FontFaceData> &data, FT_Face face, FontSize fontSize, uint16_t id) {
+bool FontFaceObject::init(StringView name, const Rc<FontFaceData> &data, FT_Face face, FontSize fontSize, uint16_t id) {
 		//we want to use unicode
 	auto err = FT_Select_Charmap(face, FT_ENCODING_UNICODE);
 	if (err != FT_Err_Ok) {
@@ -56,6 +78,14 @@ bool FontFaceObject::init(const Rc<FontFaceData> &data, FT_Face face, FontSize f
 		return false;
 	}
 
+	_metrics.size = fontSize.get();
+	_metrics.height = face->size->metrics.height >> 6;
+	_metrics.ascender = face->size->metrics.ascender >> 6;
+	_metrics.descender = face->size->metrics.descender >> 6;
+	_metrics.underlinePosition = face->underline_position >> 6;
+	_metrics.underlineThickness = face->underline_thickness >> 6;
+
+	_name = name.str();
 	_id = id;
 	_data = data;
 	_size = fontSize;
@@ -65,7 +95,7 @@ bool FontFaceObject::init(const Rc<FontFaceData> &data, FT_Face face, FontSize f
 }
 
 bool FontFaceObject::acquireTexture(char16_t theChar, const Callback<void(uint8_t *, uint32_t width, uint32_t rows, int pitch)> &cb) {
-	std::unique_lock<Mutex> lock(_mutex);
+	std::unique_lock<Mutex> lock(_faceMutex);
 
 	int glyph_index = FT_Get_Char_Index(_face, theChar);
 	if (!glyph_index) {
@@ -90,6 +120,168 @@ bool FontFaceObject::acquireTexture(char16_t theChar, const Callback<void(uint8_
 		}
 	}
 	return false;
+}
+
+bool FontFaceObject::addChars(const Vector<char16_t> &chars, bool expand, Vector<char16_t> *failed) {
+	bool updated = false;
+	uint32_t mask = 0;
+
+	// for some chars, we add full group, not only requested char
+	for (auto &c : chars) {
+		if (expand) {
+			auto g = getCharGroupForChar(c);
+			if (g != CharGroupId::None) {
+				if ((mask & toInt(g)) == 0) {
+					mask |= toInt(g);
+					if (addCharGroup(g, failed)) {
+						updated = true;
+					}
+					continue;
+				}
+			}
+		}
+
+		if (!addChar(c, updated) && failed) {
+			mem_std::emplace_ordered(*failed, c);
+		}
+	}
+	return updated;
+}
+
+bool FontFaceObject::addCharGroup(CharGroupId g, Vector<char16_t> *failed) {
+	bool updated = false;
+	using namespace chars;
+	auto f = [&] (char16_t c) {
+		if (!addChar(c, updated) && failed) {
+			mem_std::emplace_ordered(*failed, c);
+		}
+	};
+
+	switch (g) {
+	case CharGroupId::Numbers: CharGroup<char16_t, CharGroupId::Numbers>::foreach(f); break;
+	case CharGroupId::Latin: CharGroup<char16_t, CharGroupId::Latin>::foreach(f); break;
+	case CharGroupId::Cyrillic: CharGroup<char16_t, CharGroupId::Cyrillic>::foreach(f); break;
+	case CharGroupId::Currency: CharGroup<char16_t, CharGroupId::Currency>::foreach(f); break;
+	case CharGroupId::GreekBasic: CharGroup<char16_t, CharGroupId::GreekBasic>::foreach(f); break;
+	case CharGroupId::Math: CharGroup<char16_t, CharGroupId::Math>::foreach(f); break;
+	case CharGroupId::TextPunctuation: CharGroup<char16_t, CharGroupId::TextPunctuation>::foreach(f); break;
+	default: break;
+	}
+	return updated;
+}
+
+bool FontFaceObject::addRequiredChar(char16_t ch) {
+	std::unique_lock<Mutex> lock(_requiredMutex);
+	return mem_std::emplace_ordered(_required, ch);
+}
+
+Vector<char16_t> FontFaceObject::getRequiredChars() const {
+	std::unique_lock<Mutex> lock(_requiredMutex);
+	return _required;
+}
+
+CharLayout FontFaceObject::getChar(char16_t c) const {
+	std::unique_lock<Mutex> lock(_charsMutex);
+	auto l = _chars.get(c);
+	if (l && l->layout.charID == c) {
+		return l->layout;
+	}
+	return CharLayout{0};
+}
+
+FontCharLayout FontFaceObject::getFullChar(char16_t c) const {
+	std::unique_lock<Mutex> lock(_charsMutex);
+	auto l = _chars.get(c);
+	if (l && l->layout.charID == c) {
+		return *l;
+	}
+	return FontCharLayout();
+}
+
+int16_t FontFaceObject::getKerningAmount(char16_t first, char16_t second) const {
+	std::unique_lock<Mutex> lock(_charsMutex);
+	uint32_t key = (first << 16) | (second & 0xffff);
+	auto it = _kerning.find(key);
+	if (it != _kerning.end()) {
+		return it->second;
+	}
+	return 0;
+}
+
+bool FontFaceObject::addChar(char16_t theChar, bool &updated) {
+	std::unique_lock<Mutex> charsLock(_charsMutex);
+	auto value = _chars.get(theChar);
+	if (value) {
+		if (value->layout.charID == theChar) {
+			return true;
+		} else if (value->layout.charID == char16_t(0xFFFF)) {
+			return false;
+		}
+	}
+
+	std::unique_lock<Mutex> faceLock(_faceMutex);
+	int cIdx = FT_Get_Char_Index(_face, theChar);
+	if (!cIdx) {
+		_chars.emplace(theChar, FontCharLayout{ CharLayout{char16_t(0xFFFF), 0, 0, 0}, 0, 0 });
+		return false;
+	}
+
+	auto err = FT_Load_Glyph(_face, cIdx, FT_LOAD_DEFAULT | FT_LOAD_NO_BITMAP);
+	if (err != FT_Err_Ok) {
+		_chars.emplace(theChar, FontCharLayout{ CharLayout{char16_t(0xFFFF), 0, 0, 0}, 0, 0 });
+		return false;
+	}
+
+	// store result in the passed rectangle
+	_chars.emplace(theChar, FontCharLayout{ CharLayout{theChar,
+		static_cast<int16_t>(_face->glyph->metrics.horiBearingX >> 6),
+		static_cast<int16_t>(- (_face->glyph->metrics.horiBearingY >> 6)),
+		static_cast<uint16_t>(_face->glyph->metrics.horiAdvance >> 6)},
+		static_cast<uint16_t>(_face->glyph->metrics.width >> 6),
+		static_cast<uint16_t>(_face->glyph->metrics.height >> 6)});
+
+	if (!chars::isspace(theChar)) {
+		updated = true;
+	}
+
+	if (FT_HAS_KERNING(_face)) {
+		_chars.foreach([&] (const FontCharLayout & it) {
+			if (it.layout.charID == 0 || it.layout.charID == char16_t(0xFFFF)) {
+				return;
+			}
+
+			if (it.layout.charID != theChar) {
+				FT_Vector kerning;
+				auto err = FT_Get_Kerning(_face, cIdx, cIdx, FT_KERNING_DEFAULT, &kerning);
+				if (err == FT_Err_Ok) {
+					auto value = (int16_t)(kerning.x >> 6);
+					if (value != 0) {
+						_kerning.emplace(theChar << 16 | (it.layout.charID & 0xffff), value);
+					}
+				}
+			} else {
+				auto kIdx = FT_Get_Char_Index(_face, it.layout.charID);
+
+				FT_Vector kerning;
+				auto err = FT_Get_Kerning(_face, cIdx, kIdx, FT_KERNING_DEFAULT, &kerning);
+				if (err == FT_Err_Ok) {
+					auto value = (int16_t)(kerning.x >> 6);
+					if (value != 0) {
+						_kerning.emplace(theChar << 16 | (it.layout.charID & 0xffff), value);
+					}
+				}
+
+				err = FT_Get_Kerning(_face, kIdx, cIdx, FT_KERNING_DEFAULT, &kerning);
+				if (err == FT_Err_Ok) {
+					auto value = (int16_t)(kerning.x >> 6);
+					if (value != 0) {
+						_kerning.emplace(it.layout.charID << 16 | (theChar & 0xffff), value);
+					}
+				}
+			}
+		});
+	}
+	return true;
 }
 
 }

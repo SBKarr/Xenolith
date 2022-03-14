@@ -47,6 +47,9 @@ public:
 		Quad & setColor(const Color4F &color);
 		Quad & setColor(SpanView<Color4F>); // tl bl tr br
 		Quad & setColor(std::initializer_list<Color4F> &&); // tl bl tr br
+
+		Quad & drawChar(const font::Metrics &m, const font::FontCharLayout &l, int16_t charX, int16_t charY,
+				const Color4B &color, layout::style::TextDecoration, uint16_t face);
 	};
 
 	virtual ~VertexArray() { }
@@ -66,6 +69,8 @@ public:
 	Quad getQuad(size_t firstVertex, size_t firstIndex);
 
 	void updateColor(const Color4F &color);
+	void updateColor(const Color4F &color, const Vector<ColorMask> &);
+	void updateColorQuads(const Color4F &color, const Vector<ColorMask> &);
 
 protected:
 	void copy();

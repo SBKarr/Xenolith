@@ -22,6 +22,7 @@
 
 #include "XLDefine.h"
 #include "AppRootLayout.h"
+#include "XLTestAppDelegate.h"
 
 namespace stappler::xenolith::app {
 
@@ -30,9 +31,9 @@ bool RootLayout::init() {
 		return false;
 	}
 
-	_background = addChild(Rc<Layer>::create());
+	/*_background = addChild(Rc<Layer>::create());
 	_background->setColorMode(ColorMode(gl::ComponentMapping::R, gl::ComponentMapping::One));
-	_background->setAnchorPoint(Anchor::Middle);
+	_background->setAnchorPoint(Anchor::Middle);*/
 
 	/*_logo = addChild(Rc<Sprite>::create("Xenolith.png"), 6);
 	_logo->setOpacity(0.5f);
@@ -51,12 +52,33 @@ bool RootLayout::init() {
 		4, 3, 5, 2, 1
 	};
 
-	for (size_t i = 0; i < 5; ++ i) {
+	/*for (size_t i = 0; i < 5; ++ i) {
 		_layers[i] = addChild(Rc<Layer>::create(), indexes[i]);
 		_layers[i]->setContentSize(Size(300, 300));
 		_layers[i]->setColor(colors[i]);
 		_layers[i]->setAnchorPoint(Anchor::Middle);
-	}
+	}*/
+
+	auto app = (AppDelegate *)Application::getInstance();
+	auto fontController = app->getFontController();
+
+	_label = addChild(Rc<Label>::create(fontController), 5);
+	_label->setAnchorPoint(Anchor::Middle);
+	_label->setColor(Color::Green_500, true);
+
+	_label->setFontFamily("DejaVuSansMono");
+	_label->setFontSize(20);
+	_label->appendTextWithStyle("Hello", Label::Style({font::FontStyle::Italic}));
+	_label->appendTextWithStyle("World", Label::Style({font::FontWeight::Bold}));
+
+	_label2 = addChild(Rc<Label>::create(fontController), 5);
+	_label2->setAnchorPoint(Anchor::Middle);
+	_label2->setColor(Color::BlueGrey_500, true);
+
+	_label2->setFontFamily("DejaVuSans");
+	_label2->setFontSize(20);
+	_label2->appendTextWithStyle("Hello", Label::Style({font::FontStyle::Italic}));
+	_label2->appendTextWithStyle("World", Label::Style({font::FontWeight::Bold, Color::Red_500}));
 
 	scheduleUpdate();
 
@@ -68,8 +90,10 @@ void RootLayout::onContentSizeDirty() {
 
 	Vec2 center = _contentSize / 2.0f;
 
-	_background->setPosition(_contentSize / 2.0f);
-	_background->setContentSize(_contentSize);
+	if (_background) {
+		_background->setPosition(_contentSize / 2.0f);
+		_background->setContentSize(_contentSize);
+	}
 
 	//_logo->setPosition(_contentSize / 2.0f);
 
@@ -82,7 +106,17 @@ void RootLayout::onContentSizeDirty() {
 	};
 
 	for (size_t i = 0; i < 5; ++ i) {
-		_layers[i]->setPosition(positions[i]);
+		if (_layers[i]) {
+			_layers[i]->setPosition(positions[i]);
+		}
+	}
+
+	if (_label) {
+		_label->setPosition(center);
+	}
+
+	if (_label2) {
+		_label2->setPosition(center + Vec2(0.0f, 100.0f));
 	}
 }
 

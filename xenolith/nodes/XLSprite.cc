@@ -28,8 +28,9 @@
 namespace stappler::xenolith {
 
 Sprite::Sprite() {
-	_materialInfo.blend = BlendInfo(gl::BlendFactor::One, gl::BlendFactor::OneMinusSrcAlpha);
-	_materialInfo.depth = DepthInfo(false, true, gl::CompareOp::LessOrEqual);
+	_materialInfo.blend = BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
+			gl::BlendFactor::One, gl::BlendFactor::Zero, gl::BlendOp::Add);
+	_materialInfo.depth = DepthInfo(false, true, gl::CompareOp::Less);
 }
 
 bool Sprite::init() {
@@ -82,14 +83,17 @@ void Sprite::setTexture(Rc<Texture> &&tex) {
 	if (_texture) {
 		if (!tex) {
 			_texture = nullptr;
+			_textureName.clear();
 			_materialDirty = true;
 		} else if (_texture->getName() != tex->getName()) {
 			_texture = move(tex);
+			_textureName = _texture->getName().str();
 			_materialDirty = true;
 		}
 	} else {
 		if (tex) {
 			_texture = move(tex);
+			_textureName = _texture->getName().str();
 			_materialDirty = true;
 		}
 	}
@@ -105,14 +109,7 @@ void Sprite::visit(RenderFrameInfo &info, NodeFlags parentFlags) {
 void Sprite::draw(RenderFrameInfo &frame, NodeFlags flags) {
 	if (_texture) {
 		if (_materialDirty) {
-			auto isSolid = isSolidColor();
-			if (bool(_materialInfo.blend.enabled) != !isSolid) {
-				_materialInfo.blend.enabled = isSolid ? 0 : 1;
-			}
-
-			if (bool(_materialInfo.depth.writeEnabled) != isSolid) {
-				_materialInfo.depth.writeEnabled = isSolid ? 1 : 0;
-			}
+			updateBlendAndDepth();
 
 			auto info = getMaterialInfo();
 			_materialId = frame.scene->getMaterial(info);
@@ -124,7 +121,21 @@ void Sprite::draw(RenderFrameInfo &frame, NodeFlags flags) {
 			}
 			_materialDirty = false;
 		}
-		frame.commands->pushVertexArray(_vertexes.pop(), frame.transformStack.back(), frame.zPath, _materialId, _isSurface);
+
+		auto &modelTransform = frame.modelTransformStack.back();
+		if (_normalized) {
+			Mat4 newMV;
+			newMV.m[12] = floorf(modelTransform.m[12]);
+			newMV.m[13] = floorf(modelTransform.m[13]);
+			newMV.m[14] = floorf(modelTransform.m[14]);
+
+			frame.commands->pushVertexArray(_vertexes.pop(),
+					frame.viewProjectionStack.back() * newMV, frame.zPath, _materialId, _isSurface);
+		} else {
+			frame.commands->pushVertexArray(_vertexes.pop(),
+					frame.viewProjectionStack.back() * modelTransform, frame.zPath, _materialId, _isSurface);
+		}
+
 	}
 }
 
@@ -159,16 +170,20 @@ void Sprite::setBlendInfo(const BlendInfo &info) {
 void Sprite::setForceSolid(bool val) {
 	if (_forceSolid != val) {
 		_forceSolid = val;
-		auto isSolid = isSolidColor();
-		if (bool(_materialInfo.blend.enabled) != !isSolid) {
-			_materialInfo.blend.enabled = isSolid ? 0 : 1;
-			_materialDirty = true;
-		}
+		updateBlendAndDepth();
+	}
+}
 
-		if (bool(_materialInfo.depth.writeEnabled) != isSolid) {
-			_materialInfo.depth.writeEnabled = isSolid ? 1 : 0;
-			_materialDirty = true;
-		}
+void Sprite::setSurface(bool value) {
+	if (_isSurface != value) {
+		_isSurface = value;
+		updateBlendAndDepth();
+	}
+}
+
+void Sprite::setNormalized(bool value) {
+	if (_normalized != value) {
+		_normalized = value;
 	}
 }
 
@@ -192,25 +207,7 @@ void Sprite::updateColor() {
 		updateVertexesColor();
 		if (_tmpColor.a != _displayedColor.a) {
 			if (_displayedColor.a == 1.0f || _tmpColor.a == 1.0f) {
-				if (isSolidColor()) {
-					if (_materialInfo.blend.enabled) {
-						_materialInfo.blend.enabled = 0;
-						_materialDirty = true;
-					}
-					if (!_materialInfo.depth.writeEnabled) {
-						_materialInfo.depth.writeEnabled = 1;
-						_materialDirty = true;
-					}
-				} else {
-					if (!_materialInfo.blend.enabled) {
-						_materialInfo.blend.enabled = 1;
-						_materialDirty = true;
-					}
-					if (_materialInfo.depth.writeEnabled) {
-						_materialInfo.depth.writeEnabled = 0;
-						_materialDirty = true;
-					}
-				}
+				updateBlendAndDepth();
 			}
 		}
 		_tmpColor = _displayedColor;
@@ -229,36 +226,89 @@ void Sprite::updateVertexes() {
 		.setColor(_displayedColor);
 }
 
-bool Sprite::isSolidColor() const {
-	if (_forceSolid) {
-		return true;
-	}
-	if (_displayedColor.a < 1.0f || !_texture) {
-		return false;
-	}
-	if (_colorMode.getMode() == ColorMode::Solid) {
-		if (_texture->hasAlpha()) {
-			return false;
+void Sprite::updateBlendAndDepth() {
+	bool shouldBlendColors = false;
+	bool shouldWriteDepth = false;
+
+	auto checkBlendColors = [&]  {
+		if (_forceSolid) {
+			shouldWriteDepth = true;
+			shouldBlendColors = false;
+			return;
+		}
+		if (_displayedColor.a < 1.0f || !_texture || _isSurface) {
+			shouldBlendColors = true;
+			shouldWriteDepth = false;
+			return;
+		}
+		if (_colorMode.getMode() == ColorMode::Solid) {
+			if (_texture->hasAlpha()) {
+				shouldBlendColors = true;
+				shouldWriteDepth = false;
+			} else {
+				shouldBlendColors = false;
+				shouldWriteDepth = true;
+			}
+		} else {
+			auto alphaMapping = _colorMode.getA();
+			switch (alphaMapping) {
+			case gl::ComponentMapping::Identity:
+				if (_texture->hasAlpha()) {
+					shouldBlendColors = true;
+					shouldWriteDepth = false;
+				}
+				break;
+			case gl::ComponentMapping::Zero:
+				shouldBlendColors = true;
+				shouldWriteDepth = false;
+				break;
+			case gl::ComponentMapping::One:
+				shouldBlendColors = false;
+				shouldWriteDepth = true;
+				break;
+			default:
+				shouldBlendColors = true;
+				shouldWriteDepth = false;
+				break;
+			}
+		}
+	};
+
+	checkBlendColors();
+
+	if (shouldBlendColors) {
+		if (!_materialInfo.blend.enabled) {
+			_materialInfo.blend.enabled = 1;
+			_materialDirty = true;
 		}
 	} else {
-		auto alphaMapping = _colorMode.getA();
-		switch (alphaMapping) {
-		case gl::ComponentMapping::Identity:
-			if (_texture->hasAlpha()) {
-				return false;
-			}
-			break;
-		case gl::ComponentMapping::Zero:
-			return false;
-			break;
-		case gl::ComponentMapping::One:
-			break;
-		default:
-			return false;
-			break;
+		if (_materialInfo.blend.enabled) {
+			_materialInfo.blend.enabled = 0;
+			_materialDirty = true;
 		}
 	}
-	return true;
+	if (shouldWriteDepth) {
+		if (!_materialInfo.depth.writeEnabled) {
+			_materialInfo.depth.writeEnabled = 1;
+			_materialDirty = true;
+		}
+	} else {
+		if (_materialInfo.depth.writeEnabled) {
+			_materialInfo.depth.writeEnabled = 0;
+			_materialDirty = true;
+		}
+	}
+	if (_isSurface) {
+		if (_materialInfo.depth.compare != toInt(gl::CompareOp::LessOrEqual)) {
+			_materialInfo.depth.compare = toInt(gl::CompareOp::LessOrEqual);
+			_materialDirty = true;
+		}
+	} else {
+		if (_materialInfo.depth.compare != toInt(gl::CompareOp::Less)) {
+			_materialInfo.depth.compare = toInt(gl::CompareOp::Less);
+			_materialDirty = true;
+		}
+	}
 }
 
 }

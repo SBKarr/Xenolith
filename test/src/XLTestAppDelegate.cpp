@@ -29,7 +29,8 @@
 #include "XLAppShaders.h"
 #include "XLDefaultShaders.h"
 #include "XLFontSourceSystem.h"
-#include "XLFontFace.h"
+#include "XLFontLibrary.h"
+#include "XLLabelParameters.h"
 
 namespace stappler::xenolith::app {
 
@@ -48,6 +49,60 @@ bool AppDelegate::onFinishLaunching() {
 }
 
 bool AppDelegate::onMainLoop() {
+	_fontLibrary = Rc<font::FontLibrary>::create(_glLoop, Rc<vk::RenderFontQueue>::create("FontQueue"));
+
+	using FontQuery = font::FontController::FontQuery;
+	using FamilyQuery = font::FontController::FamilyQuery;
+	using SystemFontName = font::SystemFontName;
+
+	_fontMainController = _fontLibrary->acquireController("AppFont", font::FontController::Query{
+		Vector<FontQuery>{
+			SystemFontName::DejaVuSans,
+			SystemFontName::DejaVuSans_Bold,
+			SystemFontName::DejaVuSans_BoldOblique,
+			SystemFontName::DejaVuSans_ExtraLight,
+			SystemFontName::DejaVuSans_Oblique,
+			SystemFontName::DejaVuSansCondensed,
+			SystemFontName::DejaVuSansCondensed_Bold,
+			SystemFontName::DejaVuSansCondensed_BoldOblique,
+			SystemFontName::DejaVuSansCondensed_Oblique,
+			SystemFontName::DejaVuSansMono,
+			SystemFontName::DejaVuSansMono_Bold,
+			SystemFontName::DejaVuSansMono_BoldOblique,
+			SystemFontName::DejaVuSansMono_Oblique,
+		},
+		Vector<FamilyQuery>{
+			FamilyQuery{"DejaVuSans", font::FontStyle::Normal, font::FontWeight::Normal, font::FontStretch::Normal,
+				Vector<String>{ font::getSystemFontName(SystemFontName::DejaVuSans).str() }},
+			FamilyQuery{"DejaVuSans", font::FontStyle::Normal, font::FontWeight::Bold, font::FontStretch::Normal,
+				Vector<String>{ font::getSystemFontName(SystemFontName::DejaVuSans_Bold).str() }},
+			FamilyQuery{"DejaVuSans", font::FontStyle::Oblique, font::FontWeight::Bold, font::FontStretch::Normal,
+				Vector<String>{ font::getSystemFontName(SystemFontName::DejaVuSans_BoldOblique).str() }},
+			FamilyQuery{"DejaVuSans", font::FontStyle::Normal, font::FontWeight::W200, font::FontStretch::Normal,
+				Vector<String>{ font::getSystemFontName(SystemFontName::DejaVuSans_ExtraLight).str() }},
+			FamilyQuery{"DejaVuSans", font::FontStyle::Oblique, font::FontWeight::Normal, font::FontStretch::Normal,
+				Vector<String>{ font::getSystemFontName(SystemFontName::DejaVuSans_Oblique).str() }},
+
+			FamilyQuery{"DejaVuSans", font::FontStyle::Normal, font::FontWeight::Normal, font::FontStretch::Condensed,
+				Vector<String>{ font::getSystemFontName(SystemFontName::DejaVuSansCondensed).str() }},
+			FamilyQuery{"DejaVuSans", font::FontStyle::Normal, font::FontWeight::Bold, font::FontStretch::Condensed,
+				Vector<String>{ font::getSystemFontName(SystemFontName::DejaVuSansCondensed_Bold).str() }},
+			FamilyQuery{"DejaVuSans", font::FontStyle::Oblique, font::FontWeight::Bold, font::FontStretch::Condensed,
+				Vector<String>{ font::getSystemFontName(SystemFontName::DejaVuSansCondensed_BoldOblique).str() }},
+			FamilyQuery{"DejaVuSans", font::FontStyle::Oblique, font::FontWeight::Normal, font::FontStretch::Condensed,
+				Vector<String>{ font::getSystemFontName(SystemFontName::DejaVuSansCondensed_Oblique).str() }},
+
+			FamilyQuery{"DejaVuSansMono", font::FontStyle::Normal, font::FontWeight::Normal, font::FontStretch::Condensed,
+				Vector<String>{ font::getSystemFontName(SystemFontName::DejaVuSansMono).str() }},
+			FamilyQuery{"DejaVuSansMono", font::FontStyle::Normal, font::FontWeight::Bold, font::FontStretch::Condensed,
+				Vector<String>{ font::getSystemFontName(SystemFontName::DejaVuSansMono_Bold).str() }},
+			FamilyQuery{"DejaVuSansMono", font::FontStyle::Oblique, font::FontWeight::Bold, font::FontStretch::Condensed,
+				Vector<String>{ font::getSystemFontName(SystemFontName::DejaVuSansMono_BoldOblique).str() }},
+			FamilyQuery{"DejaVuSansMono", font::FontStyle::Oblique, font::FontWeight::Normal, font::FontStretch::Condensed,
+				Vector<String>{ font::getSystemFontName(SystemFontName::DejaVuSansMono_Oblique).str() }}
+		}
+	});
+
 	auto scene = Rc<AppScene>::create(this, Extent2(1024, 768));
 
 	_glLoop->compileRenderQueue(scene->getRenderQueue(), [&] (bool success) {
@@ -67,20 +122,15 @@ bool AppDelegate::onMainLoop() {
 
 void AppDelegate::update(uint64_t dt) {
 	Application::update(dt);
+	if (_fontMainController) {
+		_fontMainController->update();
+	}
 	if (_fontLibrary) {
 		_fontLibrary->update();
 	}
 }
 
 void AppDelegate::runMainView(Rc<AppScene> &&scene) {
-	/*_fontLibrary = Rc<font::FontLibrary>::create(_glLoop, Rc<vk::RenderFontQueue>::create("FontQueue"));
-	_fontLibrary->acquireController("AppFont", [this, scene] (Rc<font::FontController> &&c) {
-		_fontMainController = move(c);
-		log::text("App", "AppFont created");
-		runFontTest();
-		scene->addFontController(_fontMainController);
-	});*/
-
 	auto dir = Rc<Director>::create(this, move(scene));
 
 	auto view = platform::graphic::createView(_loop, _glLoop, "Xenolith",
@@ -89,26 +139,6 @@ void AppDelegate::runMainView(Rc<AppScene> &&scene) {
 	view->begin(dir, [this] {
 		_loop->pushEvent(AppEvent::Terminate);
 	});
-}
-
-void AppDelegate::runFontTest() {
-	/*auto query = Rc<gl::RenderFontInput>::alloc();
-
-	Vector<char16_t> chars;
-	chars::CharGroup<char16_t, CharGroupId::Numbers>::foreach([&] (char16_t c) {
-		chars.emplace_back(c);
-	});
-	chars::CharGroup<char16_t, CharGroupId::Cyrillic>::foreach([&] (char16_t c) {
-		chars.emplace_back(c);
-	});
-
-	auto monoFace = _fontLibrary->openFontFace(font::SystemFontName::DejaVuSansMono, font::FontSize(24));
-	auto regularFace = _fontLibrary->openFontFace(font::SystemFontName::DejaVuSans, font::FontSize(24));
-
-	_fontMainController->updateTexture({
-		pair(monoFace, chars),
-		pair(regularFace, chars)
-	});*/
 }
 
 }

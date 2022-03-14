@@ -123,6 +123,7 @@ public:
 	bool init(const PipelineData *, const ImageData *, Bytes && = Bytes(), bool ownedData = false);
 	bool init(const PipelineData *, const ImageData *, ColorMode, Bytes && = Bytes(), bool ownedData = false);
 	bool init(const Material *, Rc<ImageObject> &&, Rc<ImageAtlas> &&, Bytes && = Bytes());
+	bool init(const Material *, Vector<MaterialImage> &&);
 
 	MaterialId getId() const { return _id; }
 	const PipelineData * getPipeline() const { return _pipeline; }

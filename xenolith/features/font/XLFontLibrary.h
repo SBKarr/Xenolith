@@ -23,36 +23,112 @@
 #ifndef XENOLITH_FEATURES_FONT_XLFONTLIBRARY_H_
 #define XENOLITH_FEATURES_FONT_XLFONTLIBRARY_H_
 
-#include "XLDefine.h"
-#include "XLFontSourceSystem.h"
 #include "XLResourceCache.h"
-
-typedef struct FT_LibraryRec_ * FT_Library;
-typedef struct FT_FaceRec_ * FT_Face;
+#include "XLFontFace.h"
 
 namespace stappler::xenolith::font {
-
-using FontSize = layout::style::FontSize;
 
 class FontFaceObject;
 class FontFaceData;
 class FontLibrary;
 
-class FontController : public Ref {
+using FontLayoutId = layout::FontLayoutId;
+using FontParameters = layout::style::FontStyleParameters;
+using FontCharString = layout::FontCharString;
+
+class FontController : public layout::FormatterSourceInterface {
 public:
+	static EventHeader onLoaded;
+	static EventHeader onFontSourceUpdated;
+
+	struct FontQuery {
+		String name;
+		String fontFilePath;
+		Bytes fontMemoryData;
+		BytesView fontExternalData;
+		font::SystemFontName systemFont = font::SystemFontName::None;
+
+		FontQuery(StringView name, BytesView data)
+		: name(name.str()), fontExternalData(data) { }
+
+		FontQuery(StringView name, Bytes && data)
+		: name(name.str()), fontMemoryData(move(data)) { }
+
+		FontQuery(StringView name, FilePath data)
+		: name(name.str()), fontFilePath(data.get().str()) { }
+
+		FontQuery(font::SystemFontName font)
+		: name(getSystemFontName(font).str()), systemFont(font) { }
+	};
+
+	struct FamilyQuery {
+		String family;
+		FontStyle style;
+		FontWeight weight;
+		FontStretch stretch;
+		Vector<String> sources;
+		Vector<Pair<FontSize, FontCharString>> chars;
+	};
+
+	struct Query {
+		Vector<FontQuery> dataQueries;
+		Vector<FamilyQuery> familyQueries;
+	};
+
 	virtual ~FontController();
 
-	bool init(const Rc<FontLibrary> &, Rc<gl::DynamicImage> &&);
+	bool init(const Rc<FontLibrary> &);
 
-	void updateTexture(Vector<Pair<Rc<FontFaceObject>, Vector<char16_t>>> &&);
+	void addFont(StringView family, FontStyle, FontWeight, FontStretch, Rc<FontFaceData> &&, bool front = false);
+	void addFont(StringView family, FontStyle, FontWeight, FontStretch, Vector<Rc<FontFaceData>> &&, bool front = false);
 
+	bool isLoaded() const { return _loaded; }
 	const Rc<gl::DynamicImage> &getImage() const { return _image; }
 	const Rc<Texture> &getTexture() const { return _texture; }
 
+	virtual FontLayoutId getLayout(const FontParameters &f, float scale) override;
+	virtual void addString(FontLayoutId, const FontCharString &) override;
+	virtual uint16_t getFontHeight(FontLayoutId) override;
+	virtual int16_t getKerningAmount(FontLayoutId, char16_t first, char16_t second, uint16_t face) const override;
+	virtual Metrics getMetrics(FontLayoutId) override;
+	virtual CharLayout getChar(FontLayoutId, char16_t, uint16_t &face) override;
+	virtual StringView getFontName(FontLayoutId) override;
+
+	FontCharLayout getFullChar(FontLayoutId, char16_t, uint16_t &face);
+	void addTextureChars(FontLayoutId, SpanView<layout::CharSpec>);
+
+	uint32_t getFamilyIndex(StringView) const;
+	StringView getFamilyName(uint32_t idx) const;
+
+	void update();
+
 protected:
+	friend class FontLibrary;
+
+	void setImage(Rc<gl::DynamicImage> &&);
+	void setLoaded(bool);
+
+	class FontSizedLayout;
+	class FontLayout;
+
+	void updateTexture(Vector<Pair<Rc<FontFaceObject>, Vector<char16_t>>> &&);
+
+	FontLayout * getFontLayout(const FontParameters &style);
+
+	bool _loaded = false;
+	String _defaultFontFamily = "default";
 	Rc<Texture> _texture;
 	Rc<gl::DynamicImage> _image;
 	Rc<FontLibrary> _library;
+
+	Vector<StringView> _familiesNames;
+	Map<StringView, Vector<FontLayout *>> _families;
+	HashMap<StringView, Rc<FontLayout>> _layouts;
+	Vector<FontSizedLayout *> _sizes;
+
+	std::atomic<uint16_t> _nextId = 1;
+	bool _dirty = false;
+	mutable Mutex _mutex;
 };
 
 class FontLibrary : public Ref {
@@ -80,13 +156,17 @@ public:
 
 	bool init(const Rc<gl::Loop> &, Rc<gl::RenderQueue> &&);
 
-	// callback returns <view, isPersistent>
+	Rc<FontFaceData> openFontData(StringView, const Callback<FontData()> & = nullptr);
+	Rc<FontFaceData> openFontData(SystemFontName);
+
 	Rc<FontFaceObject> openFontFace(SystemFontName, FontSize);
 	Rc<FontFaceObject> openFontFace(StringView, FontSize, const Callback<FontData()> &);
+	Rc<FontFaceObject> openFontFace(const Rc<FontFaceData> &, FontSize);
 
 	void update();
 
-	void acquireController(StringView, Function<void(Rc<FontController> &&)> &&);
+	Rc<FontController> acquireController(StringView);
+	Rc<FontController> acquireController(StringView, FontController::Query &&query);
 
 	void updateImage(const Rc<gl::DynamicImage> &, Vector<Pair<Rc<FontFaceObject>, Vector<char16_t>>> &&);
 
@@ -95,20 +175,24 @@ protected:
 	void doneFontFace(FT_Face);
 
 	void onActivated();
-	void runAcquire(StringView, Function<void(Rc<FontController> &&)> &&);
+
+	struct ImageQuery {
+		Rc<gl::DynamicImage> image;
+		Vector<Pair<Rc<FontFaceObject>, Vector<char16_t>>> chars;
+	};
 
 	bool _active = false;
 
 	Mutex _mutex;
 	uint16_t _nextId = 0;
-	Map<String, Rc<FontFaceObject>> _faces;
-	Map<String, Rc<FontFaceData>> _data;
+	Map<StringView, Rc<FontFaceObject>> _faces;
+	Map<StringView, Rc<FontFaceData>> _data;
 	FT_Library _library = nullptr;
 
+	const Application *_application = nullptr;
 	Rc<gl::Loop> _loop; // for texture streaming
 	Rc<gl::RenderQueue> _queue;
-
-	Vector<Pair<String, Function<void(Rc<FontController> &&)>>> _pending;
+	Vector<ImageQuery> _pendingImageQueries;
 };
 
 }

@@ -34,3 +34,6 @@ THE SOFTWARE.
 
 #include "XLFontLibrary.cc"
 #include "XLFontFace.cc"
+#include "XLLabelParameters.cc"
+
+#include "XLLocale.cc"

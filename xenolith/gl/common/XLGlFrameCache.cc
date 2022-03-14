@@ -174,6 +174,9 @@ Rc<ImageAttachmentObject> FrameCacheStorage::acquireImage(const Loop &loop, cons
 
 void FrameCacheStorage::releaseImage(const ImageAttachment *a, Rc<ImageAttachmentObject> &&image) {
 	if (image->isSwapchainImage) {
+		if (image->swapchainImage) {
+			image->swapchainImage->cleanup();
+		}
 		return;
 	}
 

@@ -421,15 +421,8 @@ struct VertexData : public AttachmentInputData {
 struct RenderFontInput : public AttachmentInputData {
 	using FontRequest = Pair<Rc<font::FontFaceObject>, Vector<char16_t>>;
 
-	enum Anchor : uint32_t {
-		BottomLeft,
-		TopLeft,
-		TopRight,
-		BottomRight
-	};
-
-	static uint32_t getObjectId(uint16_t sourceId, char16_t, Anchor);
-	static uint32_t getObjectId(uint32_t, Anchor);
+	static uint32_t getObjectId(uint16_t sourceId, char16_t, font::FontAnchor);
+	static uint32_t getObjectId(uint32_t, font::FontAnchor);
 
 	Rc<DynamicImage> image;
 	Vector<FontRequest> requests;

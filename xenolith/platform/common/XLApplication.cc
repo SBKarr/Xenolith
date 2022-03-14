@@ -448,11 +448,11 @@ void Application::performOnMainThread(Rc<thread::Task> &&task, bool onNextFrame)
 	}
 }
 
-void Application::perform(const ExecuteCallback &exec, const CompleteCallback &complete, Ref *obj) {
+void Application::perform(const ExecuteCallback &exec, const CompleteCallback &complete, Ref *obj) const {
 	perform(Rc<Task>::create(exec, complete, obj));
 }
 
-void Application::perform(Rc<thread::Task> &&task) {
+void Application::perform(Rc<thread::Task> &&task) const {
 	if (!_queue || _singleThreaded) {
 		task->setSuccessful(task->execute());
 		task->onComplete();
@@ -461,7 +461,7 @@ void Application::perform(Rc<thread::Task> &&task) {
 	}
 }
 
-void Application::perform(Rc<thread::Task> &&task, bool performFirst) {
+void Application::perform(Rc<thread::Task> &&task, bool performFirst) const {
 	if (!_queue || _singleThreaded) {
 		task->setSuccessful(task->execute());
 		task->onComplete();
@@ -470,7 +470,7 @@ void Application::perform(Rc<thread::Task> &&task, bool performFirst) {
 	}
 }
 
-void Application::performAsync(Rc<Task> &&task) {
+void Application::performAsync(Rc<Task> &&task) const {
 	if (!_queue || _singleThreaded) {
 		task->setSuccessful(task->execute());
 		task->onComplete();
@@ -479,7 +479,7 @@ void Application::performAsync(Rc<Task> &&task) {
 	}
 }
 
-void Application::performAsync(const ExecuteCallback &exec, const CompleteCallback &complete, Ref *obj) {
+void Application::performAsync(const ExecuteCallback &exec, const CompleteCallback &complete, Ref *obj) const {
 	performAsync(Rc<Task>::create(exec, complete, obj));
 }
 
