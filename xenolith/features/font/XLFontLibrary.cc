@@ -658,12 +658,14 @@ Rc<FontFaceData> FontLibrary::openFontData(StringView dataName, const Callback<F
 	}
 
 	auto fontData = dataCallback();
-	if (fontData.view.empty()) {
+	if (fontData.view.empty() && !fontData.callback) {
 		return nullptr;
 	}
 
 	Rc<FontFaceData> dataObject;
-	if (fontData.persistent) {
+	if (fontData.callback) {
+		dataObject = Rc<FontFaceData>::create(dataName, move(fontData.callback));
+	} else if (fontData.persistent) {
 		dataObject = Rc<FontFaceData>::create(dataName, move(fontData.view), true);
 	} else {
 		dataObject = Rc<FontFaceData>::create(dataName, move(fontData.bytes));
@@ -672,26 +674,6 @@ Rc<FontFaceData> FontLibrary::openFontData(StringView dataName, const Callback<F
 		_data.emplace(dataObject->getName(), dataObject);
 	}
 	return dataObject;
-}
-
-Rc<FontFaceData> FontLibrary::openFontData(SystemFontName fontName) {
-	return openFontData(getSystemFontName(fontName), [fontName] () -> FontData {
-		// decompress file from app bundle
-		auto d = getSystemFont(fontName);
-		auto fontData = data::decompress<memory::StandartInterface>(d.data(), d.size());
-
-		return FontData(move(fontData));
-	});
-}
-
-Rc<FontFaceObject> FontLibrary::openFontFace(SystemFontName name, FontSize size) {
-	return openFontFace(getSystemFontName(name), size, [name] () -> FontData {
-		// decompress file from app bundle
-		auto d = getSystemFont(name);
-		auto fontData = data::decompress<memory::StandartInterface>(d.data(), d.size());
-
-		return FontData(move(fontData));
-	});
 }
 
 Rc<FontFaceObject> FontLibrary::openFontFace(StringView dataName, FontSize size, const Callback<FontData()> &dataCallback) {
@@ -921,24 +903,21 @@ Rc<FontController> FontLibrary::acquireController(StringView key, FontController
 
 	for (auto &it : builder->data) {
 		_application->perform([this, sourcePtr = it.second.first, targetPtr = &it.second.second] (const thread::Task &) -> bool {
-			if (sourcePtr->systemFont != font::SystemFontName::None) {
-				*targetPtr = openFontData(sourcePtr->systemFont);
-			} else {
-				*targetPtr = openFontData(sourcePtr->name, [&] () -> FontData {
-					if (!sourcePtr->fontExternalData.empty()) {
-						return FontData(sourcePtr->fontExternalData, true);
-					} else if (!sourcePtr->fontMemoryData.empty()) {
-						return FontData(move(sourcePtr->fontMemoryData));
-					} else if (!sourcePtr->fontFilePath.empty()) {
-						auto d = filesystem::readIntoMemory(sourcePtr->fontFilePath);
-						if (!d.empty()) {
-							return FontData(move(d));
-						}
+			*targetPtr = openFontData(sourcePtr->name, [&] () -> FontData {
+				if (sourcePtr->fontCallback) {
+					return FontData(move(sourcePtr->fontCallback));
+				} else if (!sourcePtr->fontExternalData.empty()) {
+					return FontData(sourcePtr->fontExternalData, true);
+				} else if (!sourcePtr->fontMemoryData.empty()) {
+					return FontData(move(sourcePtr->fontMemoryData));
+				} else if (!sourcePtr->fontFilePath.empty()) {
+					auto d = filesystem::readIntoMemory(sourcePtr->fontFilePath);
+					if (!d.empty()) {
+						return FontData(move(d));
 					}
-					return FontData(BytesView(), false);
-				});
-			}
-
+				}
+				return FontData(BytesView(), false);
+			});
 			return true;
 		}, [builder] (const thread::Task &, bool success) {
 			if (success) {
@@ -989,10 +968,10 @@ void FontLibrary::updateImage(const Rc<gl::DynamicImage> &image, Vector<Pair<Rc<
 	auto input = Rc<gl::RenderFontInput>::alloc();
 	input->image = image;
 	input->requests = move(data);
-	input->output = [] (const gl::ImageInfo &info, BytesView data) {
+	/*input->output = [] (const gl::ImageInfo &info, BytesView data) {
 		Bitmap bmp(data, info.extent.width, info.extent.height, Bitmap::PixelFormat::A8);
 		bmp.save(Bitmap::FileFormat::Png, toString(Time::now().toMicros(), ".png"));
-	};
+	};*/
 
 	auto req = Rc<gl::FrameRequest>::create(_queue);
 

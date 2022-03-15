@@ -46,7 +46,7 @@ public:
 		String fontFilePath;
 		Bytes fontMemoryData;
 		BytesView fontExternalData;
-		font::SystemFontName systemFont = font::SystemFontName::None;
+		Function<Bytes()> fontCallback;
 
 		FontQuery(StringView name, BytesView data)
 		: name(name.str()), fontExternalData(data) { }
@@ -57,8 +57,8 @@ public:
 		FontQuery(StringView name, FilePath data)
 		: name(name.str()), fontFilePath(data.get().str()) { }
 
-		FontQuery(font::SystemFontName font)
-		: name(getSystemFontName(font).str()), systemFont(font) { }
+		FontQuery(StringView name, Function<Bytes()> &&cb)
+		: name(name.str()), fontCallback(move(cb)) { }
 	};
 
 	struct FamilyQuery {
@@ -137,6 +137,7 @@ public:
 		bool persistent;
 		BytesView view;
 		Bytes bytes;
+		Function<Bytes()> callback;
 
 		FontData(BytesView v, bool p) : persistent(p) {
 			if (persistent) {
@@ -149,6 +150,7 @@ public:
 		FontData(Bytes &&b) : persistent(false), bytes(move(b)) {
 			view = bytes;
 		}
+		FontData(Function<Bytes()> &&cb) : persistent(true), callback(move(cb)) { }
 	};
 
 	FontLibrary();
@@ -157,9 +159,7 @@ public:
 	bool init(const Rc<gl::Loop> &, Rc<gl::RenderQueue> &&);
 
 	Rc<FontFaceData> openFontData(StringView, const Callback<FontData()> & = nullptr);
-	Rc<FontFaceData> openFontData(SystemFontName);
 
-	Rc<FontFaceObject> openFontFace(SystemFontName, FontSize);
 	Rc<FontFaceObject> openFontFace(StringView, FontSize, const Callback<FontData()> &);
 	Rc<FontFaceObject> openFontFace(const Rc<FontFaceData> &, FontSize);
 

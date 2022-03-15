@@ -47,7 +47,7 @@ static CharGroupId getCharGroupForChar(char16_t c) {
 bool FontFaceData::init(StringView name, BytesView data, bool persistent) {
 	if (persistent) {
 		_view = data;
-		_persisent = true;
+		_persistent = true;
 		_name = name.str();
 		return true;
 	} else {
@@ -56,11 +56,23 @@ bool FontFaceData::init(StringView name, BytesView data, bool persistent) {
 }
 
 bool FontFaceData::init(StringView name, Bytes &&data) {
-	_persisent = false;
+	_persistent = false;
 	_data = move(data);
 	_view = _data;
 	_name = name.str();
 	return true;
+}
+
+bool FontFaceData::init(StringView name, Function<Bytes()> &&cb) {
+	_persistent = true;
+	_data = cb();
+	_view = _data;
+	_name = name.str();
+	return true;
+}
+
+BytesView FontFaceData::getView() const {
+	return _view;
 }
 
 FontFaceObject::~FontFaceObject() { }

@@ -52,12 +52,12 @@ bool RootLayout::init() {
 		4, 3, 5, 2, 1
 	};
 
-	/*for (size_t i = 0; i < 5; ++ i) {
+	for (size_t i = 0; i < 5; ++ i) {
 		_layers[i] = addChild(Rc<Layer>::create(), indexes[i]);
 		_layers[i]->setContentSize(Size(300, 300));
 		_layers[i]->setColor(colors[i]);
 		_layers[i]->setAnchorPoint(Anchor::Middle);
-	}*/
+	}
 
 	auto app = (AppDelegate *)Application::getInstance();
 	auto fontController = app->getFontController();
@@ -65,18 +65,20 @@ bool RootLayout::init() {
 	_label = addChild(Rc<Label>::create(fontController), 5);
 	_label->setAnchorPoint(Anchor::Middle);
 	_label->setColor(Color::Green_500, true);
+	_label->setOpacity(0.75f);
 
-	_label->setFontFamily("DejaVuSansMono");
-	_label->setFontSize(20);
+	_label->setFontFamily("monospace");
+	_label->setFontSize(48);
 	_label->appendTextWithStyle("Hello", Label::Style({font::FontStyle::Italic}));
 	_label->appendTextWithStyle("World", Label::Style({font::FontWeight::Bold}));
 
 	_label2 = addChild(Rc<Label>::create(fontController), 5);
 	_label2->setAnchorPoint(Anchor::Middle);
 	_label2->setColor(Color::BlueGrey_500, true);
+	_label2->setOpacity(0.75f);
 
-	_label2->setFontFamily("DejaVuSans");
-	_label2->setFontSize(20);
+	_label2->setFontFamily("Roboto");
+	_label2->setFontSize(48);
 	_label2->appendTextWithStyle("Hello", Label::Style({font::FontStyle::Italic}));
 	_label2->appendTextWithStyle("World", Label::Style({font::FontWeight::Bold, Color::Red_500}));
 
@@ -112,11 +114,11 @@ void RootLayout::onContentSizeDirty() {
 	}
 
 	if (_label) {
-		_label->setPosition(center);
+		_label->setPosition(center - Vec2(0.0f, 50.0f));
 	}
 
 	if (_label2) {
-		_label2->setPosition(center + Vec2(0.0f, 100.0f));
+		_label2->setPosition(center + Vec2(0.0f, 50.0f));
 	}
 }
 

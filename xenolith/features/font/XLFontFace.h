@@ -24,7 +24,6 @@
 #define XENOLITH_FEATURES_FONT_XLFONTFACE_H_
 
 #include "XLDefine.h"
-#include "XLFontSourceSystem.h"
 #include "SLFont.h"
 
 typedef struct FT_LibraryRec_ * FT_Library;
@@ -93,12 +92,13 @@ public:
 
 	bool init(StringView, BytesView, bool);
 	bool init(StringView, Bytes &&);
+	bool init(StringView, Function<Bytes()> &&);
 
 	StringView getName() const { return _name; }
-	BytesView getView() const { return _view; }
+	BytesView getView() const;
 
 protected:
-	bool _persisent = false;
+	bool _persistent = false;
 	String _name;
 	BytesView _view;
 	Bytes _data;

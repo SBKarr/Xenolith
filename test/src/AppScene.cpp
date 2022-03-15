@@ -99,6 +99,12 @@ static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder 
 		DepthInfo(false, true, gl::CompareOp::Less)
 	}));
 
+	builder.addPipeline(pass, 0, "Surface", shaderSpecInfo, PipelineMaterialInfo({
+		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
+				gl::BlendFactor::One, gl::BlendFactor::Zero, gl::BlendOp::Add),
+		DepthInfo(false, true, gl::CompareOp::LessOrEqual)
+	}));
+
 	// define internal resources (images and buffers)
 	gl::Resource::Builder resourceBuilder("LoaderResources");
 	auto initImage = resourceBuilder.addImage("Xenolith.png",

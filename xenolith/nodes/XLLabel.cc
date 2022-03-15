@@ -44,7 +44,7 @@ bool Label::init(font::FontController *source, const DescriptionStyle &style, co
 	setNormalized(true);
 
 	setColorMode(ColorMode::AlphaChannel);
-	//setSurface(true);
+	setSurface(true);
 
 	auto el = Rc<EventListener>::create();
 	el->onEventWithObject(font::FontController::onFontSourceUpdated, source, std::bind(&Label::onFontSourceUpdated, this));

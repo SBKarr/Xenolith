@@ -28,10 +28,10 @@ LOCAL_TOOLKIT_EXTERNAL := $(abspath ../xenolith/xenolith.mk)
 LOCAL_ROOT = .
 
 LOCAL_SRCS_DIRS :=  src tests
-LOCAL_SRCS_OBJS := shaders/XLAppShaders.cpp ../xenolith/resource/fonts/XLFontSourceSystem.cpp
+LOCAL_SRCS_OBJS := shaders/XLAppShaders.cpp ../resources/fonts/XLResourceFontSource.cpp
 
 LOCAL_INCLUDES_DIRS := src tests
-LOCAL_INCLUDES_OBJS := shaders
+LOCAL_INCLUDES_OBJS := shaders ../resources/fonts
 
 LOCAL_SHADERS := $(wildcard $(LOCAL_ROOT)/shaders/glsl/*)
 
