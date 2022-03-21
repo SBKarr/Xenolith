@@ -39,6 +39,7 @@ bool Director::init(Application *app, Rc<Scene> &&scene) {
 	_nextScene = move(scene);
 	_pool->perform([&] {
 		_scheduler = Rc<Scheduler>::create();
+		_inputDispatcher = Rc<InputDispatcher>::create();
 	});
 	_startTime = _application->getClock();
 	_time.global = 0;
@@ -102,6 +103,7 @@ void Director::update() {
 	// log::vtext("Director", "FrameOffset: ", platform::device::_clock() - _view->getFrameTime());
 
 	_view->runFrame(_scene->getRenderQueue(), size);
+	_inputDispatcher->update(_time);
 	_scheduler->update(_time);
 
 	_application->update(_time.delta);

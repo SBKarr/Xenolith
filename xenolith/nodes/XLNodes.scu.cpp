@@ -24,7 +24,8 @@ THE SOFTWARE.
 
 #include "XLComponent.cc"
 #include "XLEventListener.cc"
-
+#include "XLGestureRecognizer.cc"
+#include "XLInputListener.cc"
 #include "XLNode.cc"
 #include "XLResourceComponent.cc"
 #include "XLSprite.cc"

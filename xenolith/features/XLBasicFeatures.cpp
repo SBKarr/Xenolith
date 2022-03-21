@@ -22,7 +22,7 @@ THE SOFTWARE.
 
 #include "XLDefine.h"
 
-#include "XLGestureData.cc"
+//#include "XLGestureData.cc"
 
 #include "XLNetworkController.cc"
 #include "XLNetworkHandle.cc"

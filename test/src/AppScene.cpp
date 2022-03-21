@@ -150,12 +150,12 @@ static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder 
 
 		// ... with predefined list of materials
 		Vector<Rc<gl::Material>>({
-			/*Rc<gl::Material>::create(materialPipeline, initImage),
+			Rc<gl::Material>::create(materialPipeline, initImage),
 			Rc<gl::Material>::create(materialPipeline, cache->getEmptyImage(), ColorMode::IntensityChannel),
 			Rc<gl::Material>::create(materialPipeline, cache->getSolidImage(), ColorMode::IntensityChannel),
 			Rc<gl::Material>::create(transparentPipeline, initImage),
 			Rc<gl::Material>::create(transparentPipeline, cache->getEmptyImage(), ColorMode::IntensityChannel),
-			Rc<gl::Material>::create(transparentPipeline, cache->getSolidImage(), ColorMode::IntensityChannel)*/
+			Rc<gl::Material>::create(transparentPipeline, cache->getSolidImage(), ColorMode::IntensityChannel)
 		})
 	);
 

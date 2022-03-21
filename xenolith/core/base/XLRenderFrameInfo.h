@@ -29,6 +29,7 @@
 namespace stappler::xenolith {
 
 class Scene;
+class InputListenerStorage;
 
 struct RenderFrameInfo {
 	memory::vector<int16_t> zPath;
@@ -40,6 +41,8 @@ struct RenderFrameInfo {
 	Rc<Scene> scene;
 
 	Rc<gl::CommandList> commands;
+
+	Rc<InputListenerStorage> input;
 };
 
 }

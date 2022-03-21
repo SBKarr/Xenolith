@@ -170,7 +170,6 @@ VertexArray::Quad & VertexArray::Quad::drawChar(const font::Metrics &m, const fo
 
 	gl::Vertex_V4F_V4F_T2F2U *data = const_cast<gl::Vertex_V4F_V4F_T2F2U *>(vertexes.data());
 
-
 	const float texLeft = 0.0f;
 	const float texRight = 1.0f;
 	const float texTop = 0.0f;
@@ -185,6 +184,30 @@ VertexArray::Quad & VertexArray::Quad::drawChar(const font::Metrics &m, const fo
 	data[1].object = font::FontCharLayout::getObjectId(face, l.layout.charID, font::FontAnchor::TopLeft);
 	data[2].object = font::FontCharLayout::getObjectId(face, l.layout.charID, font::FontAnchor::BottomRight);
 	data[3].object = font::FontCharLayout::getObjectId(face, l.layout.charID, font::FontAnchor::TopRight);
+
+	return *this;
+}
+
+VertexArray::Quad & VertexArray::Quad::drawUnderlineRect(int16_t charX, int16_t charY, uint16_t width, uint16_t height, const Color4B &color) {
+	setGeometry(Vec4(charX, charY, 0.0f, 1.0f), Size(width, height));
+	setColor(Color4F(color));
+
+	gl::Vertex_V4F_V4F_T2F2U *data = const_cast<gl::Vertex_V4F_V4F_T2F2U *>(vertexes.data());
+
+	const float texLeft = 0.0f;
+	const float texRight = 1.0f;
+	const float texTop = 0.0f;
+	const float texBottom = 1.0f;
+
+	data[0].tex = Vec2(texLeft, texTop);
+	data[1].tex = Vec2(texLeft, texBottom);
+	data[2].tex = Vec2(texRight, texTop);
+	data[3].tex = Vec2(texRight, texBottom);
+
+	data[0].object = font::FontCharLayout::getObjectId(0, 0, font::FontAnchor::BottomLeft);
+	data[1].object = font::FontCharLayout::getObjectId(0, 0, font::FontAnchor::TopLeft);
+	data[2].object = font::FontCharLayout::getObjectId(0, 0, font::FontAnchor::BottomRight);
+	data[3].object = font::FontCharLayout::getObjectId(0, 0, font::FontAnchor::TopRight);
 
 	return *this;
 }

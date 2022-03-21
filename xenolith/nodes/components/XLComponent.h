@@ -32,8 +32,8 @@ class Node;
 
 class Component : public Ref {
 public:
-	Component(void);
-	virtual ~Component(void);
+	Component();
+	virtual ~Component();
 	virtual bool init();
 
 	virtual void onAdded();
@@ -54,10 +54,10 @@ public:
 	virtual void setEnabled(bool b);
 
 	void setOwner(Node *pOwner);
-	Node* getOwner() const;
+	Node* getOwner() const { return _owner; }
 
 	void setTag(uint64_t);
-	uint64_t getTag() const;
+	uint64_t getTag() const { return _tag; }
 
 protected:
 	Node *_owner = nullptr;

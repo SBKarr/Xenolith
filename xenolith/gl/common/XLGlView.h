@@ -67,13 +67,15 @@ public:
 	virtual int getDpi() const;
 	virtual float getDensity() const;
 
+	virtual const Rc<Director> &getDirector() const;
+
 	virtual const Extent2 & getScreenExtent() const;
 	virtual void setScreenExtent(Extent2);
 
-	virtual void handleTouchesBegin(int num, intptr_t ids[], float xs[], float ys[]);
-	virtual void handleTouchesMove(int num, intptr_t ids[], float xs[], float ys[]);
-	virtual void handleTouchesEnd(int num, intptr_t ids[], float xs[], float ys[]);
-	virtual void handleTouchesCancel(int num, intptr_t ids[], float xs[], float ys[]);
+	virtual void handleInputEvent(const InputEventData &);
+
+	virtual void handleFocusIn();
+	virtual void handleFocusOut();
 
 	virtual void setClipboardString(StringView);
 	virtual StringView getClipboardString() const;
@@ -94,10 +96,6 @@ public:
 
 protected:
 	virtual void acquireNextFrame() override;
-
-	/*virtual bool isRetainTrackerEnabled() const {
-		return true;
-	}*/
 
 	Extent2 _screenExtent;
 

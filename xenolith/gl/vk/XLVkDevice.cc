@@ -706,24 +706,26 @@ void Device::compileImage(gl::Loop &loop, const Rc<gl::DynamicImage> &image, Fun
 }
 
 void Device::compileSamplers(thread::TaskQueue &q, bool force) {
-	_immutableSamplers.reserve(_samplersInfo.size());
-	_samplers.reserve(_samplersInfo.size());
+	_immutableSamplers.resize(_samplersInfo.size(), nullptr);
+	_samplers.resize(_samplersInfo.size(), nullptr);
 	_samplersCount = _samplersInfo.size();
 
+	size_t i = 0;
 	for (auto &it : _samplersInfo) {
-		auto ret = new Rc<Sampler>();
-		q.perform(Rc<thread::Task>::create([this, ret, v = &it] (const thread::Task &) -> bool {
-			*ret = Rc<Sampler>::create(*this, *v);
+		auto objIt = _samplers.data() + i;
+		auto glIt = _immutableSamplers.data() + i;
+		q.perform(Rc<thread::Task>::create([this, objIt, glIt, v = &it] (const thread::Task &) -> bool {
+			*objIt = Rc<Sampler>::create(*this, *v);
+			*glIt = (*objIt)->getSampler();
 			return true;
-		}, [this, ret] (const thread::Task &, bool) {
-			(*ret)->setIndex(_samplers.size());
-			_immutableSamplers.emplace_back((*ret)->getSampler());
-			_samplers.emplace_back(move(*ret));
-			if (_samplers.size() == _samplersCount) {
+		}, [this] (const thread::Task &, bool) {
+			++ _compiledSamplers;
+			if (_compiledSamplers == _samplersCount) {
 				_samplersCompiled = true;
 			}
-			delete ret;
 		}));
+
+		++ i;
 	}
 	if (force) {
 		q.waitForAll();

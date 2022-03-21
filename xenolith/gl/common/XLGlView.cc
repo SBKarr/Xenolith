@@ -21,6 +21,8 @@
  **/
 
 #include "XLGlView.h"
+
+#include "../../core/director/XLInputDispatcher.h"
 #include "XLGlLoop.h"
 #include "XLScene.h"
 
@@ -90,6 +92,10 @@ float View::getDensity() const {
 	return _density;
 }
 
+const Rc<Director> &View::getDirector() const {
+	return _director;
+}
+
 const Extent2 & View::getScreenExtent() const {
 	return _screenExtent;
 }
@@ -101,13 +107,19 @@ void View::setScreenExtent(Extent2 e) {
 	}
 }
 
-void View::handleTouchesBegin(int num, intptr_t ids[], float xs[], float ys[]) { }
+void View::handleInputEvent(const InputEventData &event) {
+	if (_director) {
+		_director->getInputDispatcher()->handleInputEvent(event);
+	}
+}
 
-void View::handleTouchesMove(int num, intptr_t ids[], float xs[], float ys[]) { }
+void View::handleFocusIn() {
 
-void View::handleTouchesEnd(int num, intptr_t ids[], float xs[], float ys[]) { }
+}
 
-void View::handleTouchesCancel(int num, intptr_t ids[], float xs[], float ys[]) { }
+void View::handleFocusOut() {
+
+}
 
 void View::setClipboardString(StringView) { }
 

@@ -297,7 +297,7 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 						t.pos.z = depth;
 						t.material = it->first;
 
-						if (t.object && it->second.atlas) {
+						if (it->second.atlas) {
 							t.tex = it->second.atlas->getObjectByName(t.object);
 						}
 

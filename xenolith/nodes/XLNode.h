@@ -30,9 +30,14 @@ namespace stappler::xenolith {
 class Component;
 class Scene;
 class Scheduler;
+class InputListener;
 
 class Node : public Ref {
 public:
+	static bool isParent(Node *parent, Node *node);
+	static Mat4 getChainNodeToParentTransform(Node *parent, Node *node, bool withParent);
+	static Mat4 getChainParentToNodeTransform(Node *parent, Node *node, bool withParent);
+
 	Node();
 	virtual ~Node();
 
@@ -160,6 +165,25 @@ public:
 	virtual bool removeAllComponentByTag(uint64_t);
 	virtual void removeAllComponents();
 
+	template <typename C>
+	auto addInputListener(C *component) -> C * {
+		if (addInputListenerItem(component)) {
+			return component;
+		}
+		return nullptr;
+	}
+
+	template <typename C>
+	auto addInputListener(const Rc<C> &component) -> C * {
+		if (addInputListenerItem(component.get())) {
+			return component.get();
+		}
+		return nullptr;
+	}
+
+	virtual bool addInputListenerItem(InputListener *);
+	virtual bool removeInputListener(InputListener *);
+
 	virtual uint64_t getTag() const { return _tag; }
 	virtual void setTag(uint64_t tag);
 
@@ -220,6 +244,8 @@ public:
 	void scheduleUpdate();
 	void unscheduleUpdate();
 
+	virtual bool isTouched(const Vec2 &location, float padding = 0.0f);
+
 protected:
 	virtual void updateCascadeOpacity();
 	virtual void disableCascadeOpacity();
@@ -276,6 +302,7 @@ protected:
 	Function<void()> _onReorderChildDirtyCallback;
 
 	Vector<Rc<Component>> _components;
+	Vector<Rc<InputListener>> _inputEvents;
 
 	Scene *_scene = nullptr;
 	Director *_director = nullptr;

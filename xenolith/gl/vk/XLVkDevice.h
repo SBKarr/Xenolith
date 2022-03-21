@@ -163,6 +163,7 @@ private:
 
 	Vector<VkSampler> _immutableSamplers;
 	Vector<Rc<Sampler>> _samplers;
+	size_t _compiledSamplers = 0;
 	std::atomic<bool> _samplersCompiled = false;
 
 	std::unordered_map<VkFormat, VkFormatProperties> _formats;

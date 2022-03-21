@@ -23,6 +23,7 @@
 #include "XLDefine.h"
 #include "AppRootLayout.h"
 #include "XLTestAppDelegate.h"
+#include "XLInputListener.h"
 
 namespace stappler::xenolith::app {
 
@@ -31,9 +32,9 @@ bool RootLayout::init() {
 		return false;
 	}
 
-	/*_background = addChild(Rc<Layer>::create());
+	_background = addChild(Rc<Layer>::create());
 	_background->setColorMode(ColorMode(gl::ComponentMapping::R, gl::ComponentMapping::One));
-	_background->setAnchorPoint(Anchor::Middle);*/
+	_background->setAnchorPoint(Anchor::Middle);
 
 	/*_logo = addChild(Rc<Sprite>::create("Xenolith.png"), 6);
 	_logo->setOpacity(0.5f);
@@ -79,10 +80,36 @@ bool RootLayout::init() {
 
 	_label2->setFontFamily("Roboto");
 	_label2->setFontSize(48);
-	_label2->appendTextWithStyle("Hello", Label::Style({font::FontStyle::Italic}));
-	_label2->appendTextWithStyle("World", Label::Style({font::FontWeight::Bold, Color::Red_500}));
+	_label2->appendTextWithStyle("Hello", Label::Style({font::FontStyle::Italic, Label::TextDecoration::LineThrough}));
+	_label2->appendTextWithStyle("\nWorld", Label::Style({font::FontWeight::Bold, Color::Red_500, Label::TextDecoration::Underline}));
+
+	_cursor = addChild(Rc<Layer>::create(Color::Blue_500), 10);
+	_cursor->setContentSize(Size(10, 10));
+	_cursor->setAnchorPoint(Anchor::Middle);
 
 	scheduleUpdate();
+
+	auto l = addInputListener(Rc<InputListener>::create());
+	l->addScrollRecognizer([] (GestureEvent event, const GestureScroll &scroll) {
+		std::cout << "Scroll: " << event << ": " << scroll.pos << " - " << scroll.amount << "\n";
+		return true;
+	});
+	l->addTouchRecognizer([this] (GestureEvent event, const InputEvent &ev) {
+		std::cout << "Touch (left): " << event << ": " << ev.currentLocation << "\n";
+		if (event == GestureEvent::Ended) {
+			handleClick(ev.currentLocation);
+		}
+		return true;
+	});
+	l->addTouchRecognizer([] (GestureEvent event, const InputEvent &ev) {
+		std::cout << "Touch (right): " << event << ": " << ev.currentLocation << "\n";
+
+		return true;
+	}, InputListener::makeButtonMask({InputMouseButton::MouseRight}));
+	l->addMoveRecognizer([this] (GestureEvent event, const InputEvent &ev) {
+		_cursor->setPosition(ev.currentLocation);
+		return true;
+	});
 
 	return true;
 }
@@ -131,6 +158,32 @@ void RootLayout::update(const UpdateTime &time) {
 		_background->setGradient(SimpleGradient(Color::Red_500, Color::Green_500,
 				Vec2::forAngle(M_PI * 2.0 * (float(t) / 5_usec))));
 	}
+}
+
+void RootLayout::handleClick(const Vec2 &loc) {
+	auto node = addChild(Rc<Layer>::create(Color::Grey_500), 9);
+
+	node->setContentSize(Size(50, 50));
+	node->setAnchorPoint(Anchor::Middle);
+	node->setPosition(loc);
+
+	auto l = node->addInputListener(Rc<InputListener>::create());
+	l->setSwallowAllEvents();
+	l->addTouchRecognizer([node] (GestureEvent event, const InputEvent &ev) {
+		std::cout << "Touch (node): " << event << ": " << ev.currentLocation << "\n";
+		if (event == GestureEvent::Ended && node->isTouched(ev.currentLocation)) {
+			node->removeFromParent();
+		}
+		return true;
+	});
+	l->addScrollRecognizer([node] (GestureEvent event, const GestureScroll &scroll) {
+		if (scroll.amount.y != 0.0f) {
+			auto zRot = node->getRotation();
+			node->setRotation(zRot + scroll.amount.y / 4.0f);
+		}
+		std::cout << "Scroll: " << event << ": " << scroll.pos << " - " << scroll.amount << "\n";
+		return true;
+	});
 }
 
 }

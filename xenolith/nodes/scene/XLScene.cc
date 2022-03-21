@@ -21,6 +21,8 @@ THE SOFTWARE.
 **/
 
 #include "XLScene.h"
+
+#include "../../core/director/XLInputDispatcher.h"
 #include "XLDirector.h"
 
 namespace stappler::xenolith {
@@ -53,7 +55,23 @@ bool Scene::init(Application *app, gl::RenderQueue::Builder &&builder, Size size
 }
 
 void Scene::render(RenderFrameInfo &info) {
+	info.director = _director;
+	info.scene = this;
+	info.zPath.reserve(8);
+
+	info.viewProjectionStack.reserve(2);
+	info.viewProjectionStack.push_back(_director->getGeneralProjection());
+
+	info.modelTransformStack.reserve(8);
+	info.modelTransformStack.push_back(Mat4::IDENTITY);
+
+	auto eventDispatcher = _director->getInputDispatcher();
+
+	info.input = eventDispatcher->acquireNewStorage();
+
 	visit(info, NodeFlags::None);
+
+	eventDispatcher->commitStorage(move(info.input));
 }
 
 void Scene::onContentSizeDirty() {
@@ -105,16 +123,7 @@ void Scene::on2dVertexInput(gl::FrameQueue &frame, const Rc<gl::AttachmentHandle
 	_director->getApplication()->performOnMainThread(
 			[this, frame = Rc<gl::FrameQueue>(&frame), attachment = attachment, cb = move(cb)] () mutable {
 		RenderFrameInfo info;
-		info.director = _director;
-		info.scene = this;
 		info.pool = frame->getPool()->getPool();
-		info.zPath.reserve(8);
-
-		info.viewProjectionStack.reserve(2);
-		info.viewProjectionStack.push_back(_director->getGeneralProjection());
-
-		info.modelTransformStack.reserve(8);
-		info.modelTransformStack.push_back(Mat4::IDENTITY);
 		info.commands = Rc<gl::CommandList>::create(frame->getPool());
 
 		render(info);

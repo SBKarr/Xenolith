@@ -50,6 +50,7 @@ public:
 
 		Quad & drawChar(const font::Metrics &m, const font::FontCharLayout &l, int16_t charX, int16_t charY,
 				const Color4B &color, layout::style::TextDecoration, uint16_t face);
+		Quad & drawUnderlineRect(int16_t charX, int16_t charY, uint16_t width, uint16_t height, const Color4B &color);
 	};
 
 	virtual ~VertexArray() { }

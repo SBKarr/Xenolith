@@ -24,10 +24,10 @@ THE SOFTWARE.
 
 namespace stappler::xenolith {
 
-Component::Component(void)
+Component::Component()
 : _owner(nullptr), _enabled(true) { }
 
-Component::~Component(void) { }
+Component::~Component() { }
 
 bool Component::init() {
 	return true;
@@ -54,10 +54,6 @@ bool Component::isRunning() const {
 	return _running;
 }
 
-Node* Component::getOwner() const {
-	return _owner;
-}
-
 void Component::setOwner(Node *owner) {
 	_owner = owner;
 }
@@ -72,10 +68,6 @@ void Component::setEnabled(bool b) {
 
 void Component::setTag(uint64_t tag) {
 	_tag = tag;
-}
-
-uint64_t Component::getTag() const {
-	return _tag;
 }
 
 }

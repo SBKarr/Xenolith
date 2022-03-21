@@ -26,6 +26,7 @@
 
 #include "XLVkDevice.h"
 #include "XLGlSwapchain.h"
+#include "XLInputDispatcher.h"
 
 #include <sys/eventfd.h>
 
@@ -63,7 +64,6 @@ public:
 protected:
 	const Instance *_instance = nullptr;
 	ViewImpl *_view = nullptr;
-	// Rc<gl::Loop> _loop;
 	xcb_connection_t *_connection = nullptr;
 	xcb_screen_t *_defaultScreen = nullptr;
 	uint32_t _window = 0;
@@ -217,7 +217,24 @@ VkSurfaceKHR XcbView::createWindowSurface() {
 	return surface;
 }
 
-void print_modifiers (uint32_t mask) {
+static InputModifier getModifiers(uint32_t mask) {
+	InputModifier ret = InputModifier::None;
+	InputModifier *mod, mods[] = { InputModifier::Shift, InputModifier::CapsLock, InputModifier::Ctrl, InputModifier::Alt,
+			InputModifier::Mod2, InputModifier::Mod3, InputModifier::Mod4, InputModifier::Mod5,
+			InputModifier::Button1, InputModifier::Button2, InputModifier::Button3, InputModifier::Button4, InputModifier::Button5 };
+	for (mod = mods; mask; mask >>= 1, mod++) {
+		if (mask & 1) {
+			ret |= *mod;
+		}
+	}
+	return ret;
+}
+
+static InputMouseButton getButton(xcb_button_t btn) {
+	return InputMouseButton(btn);
+}
+
+static void print_modifiers (uint32_t mask) {
 	const char **mod, *mods[] = { "Shift", "Lock", "Ctrl", "Alt", "Mod2", "Mod3",
 			"Mod4", "Mod5", "Button1", "Button2", "Button3", "Button4", "Button5" };
 	printf("Modifier mask: ");
@@ -240,33 +257,101 @@ bool XcbView::poll() {
 					ev->window, ev->x, ev->y, ev->width, ev->height);
 			break;
 		}
-		case XCB_BUTTON_PRESS: {
-			xcb_button_press_event_t *ev = (xcb_button_press_event_t*) e;
-			print_modifiers(ev->state);
+		case XCB_BUTTON_PRESS:
+			if (_window == ((xcb_button_press_event_t *)e)->event) {
+				auto ev = (xcb_button_press_event_t *)e;
+				auto ext = _view->getScreenExtent();
+				auto mod = getModifiers(ev->state);
+				auto btn = getButton(ev->detail);
 
-			switch (ev->detail) {
-			case 4:
-				printf("Wheel Button up in window %d, at coordinates (%d,%d)\n", ev->event, ev->event_x, ev->event_y);
-				break;
-			case 5:
-				printf("Wheel Button down in window %d, at coordinates (%d,%d)\n", ev->event, ev->event_x, ev->event_y);
-				break;
-			default:
-				printf("Button %d pressed in window %d, at coordinates (%d,%d)\n", ev->detail, ev->event, ev->event_x, ev->event_y);
+				InputEventData event({
+					ev->detail,
+					InputEventName::Begin,
+					float(ev->event_x),
+					float(ext.height - ev->event_y),
+					btn,
+					mod
+				});
+
+				switch (btn) {
+				case InputMouseButton::MouseScrollUp:
+					event.event = InputEventName::Scroll;
+					event.valueX = 0.0f; event.valueY = 1.0f;
+					break;
+				case InputMouseButton::MouseScrollDown:
+					event.event = InputEventName::Scroll;
+					event.valueX = 0.0f; event.valueY = -1.0f;
+					break;
+				case InputMouseButton::MouseScrollLeft:
+					event.event = InputEventName::Scroll;
+					event.valueX = 1.0f; event.valueY = 0.0f;
+					break;
+				case InputMouseButton::MouseScrollRight:
+					event.event = InputEventName::Scroll;
+					event.valueX = -1.0f; event.valueY = 0.0f;
+					break;
+				default:
+					break;
+				}
+
+				_view->handleInputEvent(event);
 			}
 			break;
-		}
-		case XCB_BUTTON_RELEASE: {
-			xcb_button_release_event_t *ev = (xcb_button_release_event_t*) e;
-			print_modifiers(ev->state);
-			printf("Button %d released in window %d, at coordinates (%d,%d)\n", ev->detail, ev->event, ev->event_x, ev->event_y);
+		case XCB_BUTTON_RELEASE:
+			if (_window == ((xcb_button_release_event_t *)e)->event) {
+				auto ev = (xcb_button_release_event_t *)e;
+				auto ext = _view->getScreenExtent();
+				auto mod = getModifiers(ev->state);
+				auto btn = getButton(ev->detail);
+
+				InputEventData event({
+					ev->detail,
+					InputEventName::End,
+					float(ev->event_x),
+					float(ext.height - ev->event_y),
+					btn,
+					mod
+				});
+
+				switch (btn) {
+				case InputMouseButton::MouseScrollUp:
+				case InputMouseButton::MouseScrollDown:
+				case InputMouseButton::MouseScrollLeft:
+				case InputMouseButton::MouseScrollRight:
+					break;
+				default:
+					_view->handleInputEvent(event);
+					break;
+				}
+			}
 			break;
-		}
-		case XCB_MOTION_NOTIFY: {
-			// xcb_motion_notify_event_t *ev = (xcb_motion_notify_event_t*) e;
-			//printf("Mouse moved in window %ld, at coordinates (%d,%d)\n", ev->event, ev->event_x, ev->event_y);
+		case XCB_MOTION_NOTIFY:
+			if (_window == ((xcb_motion_notify_event_t *)e)->event) {
+				auto ev = (xcb_motion_notify_event_t *)e;
+				auto ext = _view->getScreenExtent();
+				auto mod = getModifiers(ev->state);
+
+				InputEventData event({
+					maxOf<uint32_t>(),
+					InputEventName::MouseMove,
+					float(ev->event_x),
+					float(ext.height - ev->event_y),
+					InputMouseButton::None,
+					mod
+				});
+
+				_view->handleInputEvent(event);
+
+				auto v = _view->getDirector()->getInputDispatcher()->getActiveEvents();
+				for (auto &it : v) {
+					it.x = float(ev->event_x);
+					it.y = float(ext.height - ev->event_y);
+					it.event = InputEventName::Move;
+					it.modifiers = mod;
+					_view->handleInputEvent(it);
+				}
+			}
 			break;
-		}
 		case XCB_ENTER_NOTIFY: {
 			xcb_enter_notify_event_t *ev = (xcb_enter_notify_event_t*) e;
 			printf("Mouse entered window %d, at coordinates (%d,%d)\n", ev->event, ev->event_x, ev->event_y);
@@ -279,11 +364,13 @@ bool XcbView::poll() {
 		}
 		case XCB_FOCUS_IN: {
 			xcb_focus_in_event_t *ev = (xcb_focus_in_event_t*) e;
+			_view->handleFocusIn();
 			printf("XCB_FOCUS_IN: %d\n", ev->event);
 			break;
 		}
 		case XCB_FOCUS_OUT: {
 			xcb_focus_in_event_t *ev = (xcb_focus_in_event_t*) e;
+			_view->handleFocusOut();
 			printf("XCB_FOCUS_OUT: %d\n", ev->event);
 			break;
 		}

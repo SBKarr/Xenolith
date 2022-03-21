@@ -37,7 +37,7 @@ public:
 	virtual void update(const UpdateTime &) override;
 
 protected:
-	void onFontsLoaded();
+	void handleClick(const Vec2 &);
 
 	Layer *_background = nullptr;
 	Sprite *_logo = nullptr;
@@ -45,6 +45,8 @@ protected:
 	Layer *_layers[5] = { nullptr };
 	Label *_label = nullptr;
 	Label *_label2 = nullptr;
+
+	Layer *_cursor = nullptr;
 };
 
 }

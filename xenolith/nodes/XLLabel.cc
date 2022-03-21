@@ -287,7 +287,7 @@ void Label::updateQuadsForeground(font::FontController *controller, FormatSpec *
 				offset = metrics.height;
 				break;
 			case layout::style::TextDecoration::LineThrough:
-				offset = metrics.height / 2.0f;
+				offset = (metrics.height * 11.0f) / 24.0f;
 				break;
 			case layout::style::TextDecoration::Underline:
 				offset = metrics.height / 8.0f;
@@ -298,16 +298,22 @@ void Label::updateQuadsForeground(font::FontController *controller, FormatSpec *
 			const float base = floorf(width);
 			const float frac = width - base;
 
-			/*quads[0]->drawRect(firstChar.pos, format->height - it.line->pos + offset, lastChar.pos + lastChar.advance - firstChar.pos, base,
-					color, texs[0]->getPixelsWide(), texs[0]->getPixelsHigh());
+			const auto underlineBase = uint16_t(base);
+			const auto underlineX = firstChar.pos;
+			const auto underlineWidth = lastChar.pos + lastChar.advance - firstChar.pos;
+			const auto underlineY = format->height - it.line->pos + offset - underlineBase / 2;
+			const auto underlineHeight = underlineBase;
+
+			auto quad = _vertexes.addQuad();
+			quad.drawUnderlineRect(underlineX, underlineY, underlineWidth, underlineHeight, color);
 			if (frac > 0.1) {
 				color.a *= frac;
-				quads[0]->drawRect(firstChar.pos, format->height - it.line->pos + offset - base + 1, lastChar.pos + lastChar.advance - firstChar.pos, 1,
-						color, texs[0]->getPixelsWide(), texs[0]->getPixelsHigh());
-			}*/
+
+				auto quad = _vertexes.addQuad();
+				quad.drawUnderlineRect(underlineX, underlineY - 1, underlineWidth, 1, color);
+			}
 		}
 	}
-
 }
 
 void Label::setStandalone(bool value) {

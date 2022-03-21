@@ -21,12 +21,61 @@ THE SOFTWARE.
 **/
 
 #include "XLNode.h"
+
+#include "XLInputDispatcher.h"
+#include "XLInputListener.h"
 #include "XLComponent.h"
 #include "XLScene.h"
 #include "XLDirector.h"
 #include "XLScheduler.h"
 
 namespace stappler::xenolith {
+
+bool Node::isParent(Node *parent, Node *node) {
+	if (!node) {
+		return false;
+	}
+	auto p = node->getParent();
+	while (p) {
+		if (p == parent) {
+			return true;
+		}
+		p = p->getParent();
+	}
+	return false;
+}
+
+Mat4 Node::getChainNodeToParentTransform(Node *parent, Node *node, bool withParent) {
+	if (!isParent(parent, node)) {
+		return Mat4::IDENTITY;
+	}
+
+	Mat4 ret = node->getNodeToParentTransform();
+	auto p = node->getParent();
+	for (; p != parent; p = p->getParent()) {
+		ret = ret * p->getNodeToParentTransform();
+	}
+	if (withParent && p == parent) {
+		ret = ret * p->getNodeToParentTransform();
+	}
+	return ret;
+}
+
+Mat4 Node::getChainParentToNodeTransform(Node *parent, Node *node, bool withParent) {
+	if (!isParent(parent, node)) {
+		return Mat4::IDENTITY;
+	}
+
+	Mat4 ret = node->getParentToNodeTransform();
+	auto p = node->getParent();
+	for (; p != parent; p = p->getParent()) {
+		ret = p->getParentToNodeTransform() * ret;
+	}
+	if (withParent && p == parent) {
+		ret = p->getParentToNodeTransform() * ret;
+	}
+	return ret;
+}
 
 Node::Node() { }
 
@@ -464,6 +513,37 @@ void Node::removeAllComponents() {
 	_components.clear();
 }
 
+bool Node::addInputListenerItem(InputListener *input) {
+	XLASSERT(input != nullptr, "Argument must be non-nil");
+	XLASSERT(input->getOwner() == nullptr, "Component already added. It can't be added again");
+
+	input->setOwner(this);
+	_inputEvents.push_back(input);
+	if (this->isRunning()) {
+		input->onEnter(_scene);
+	}
+
+	return true;
+}
+
+bool Node::removeInputListener(InputListener *input) {
+	if (_inputEvents.empty()) {
+		return false;
+	}
+
+	for (auto iter = _inputEvents.begin(); iter != _inputEvents.end(); ++iter) {
+		if ((*iter) == input) {
+			if (this->isRunning()) {
+				input->onExit();
+			}
+			input->setOwner(nullptr);
+			_inputEvents.erase(iter);
+			return true;
+		}
+	}
+	return false;
+}
+
 void Node::onEnter(Scene *scene) {
 	_scene = scene;
 	_director = scene->getDirector();
@@ -474,6 +554,10 @@ void Node::onEnter(Scene *scene) {
 	}
 
 	for (auto &it : _components) {
+		it->onEnter(scene);
+	}
+
+	for (auto &it : _inputEvents) {
 		it->onEnter(scene);
 	}
 
@@ -501,6 +585,10 @@ void Node::onExit() {
 
 	for (auto &child : _children) {
 		child->onExit();
+	}
+
+	for (auto &it : _inputEvents) {
+		it->onExit();
 	}
 
 	for (auto &it : _components) {
@@ -841,6 +929,12 @@ void Node::visit(RenderFrameInfo &info, NodeFlags parentFlags) {
 			it->visit(info, parentFlags);
 		}
 
+		for (auto &it : _inputEvents) {
+			if (it->isEnabled()) {
+				info.input->addListener(it);
+			}
+		}
+
 		// self draw
 		if (visibleByCamera) {
 			this->draw(info, flags);
@@ -852,6 +946,12 @@ void Node::visit(RenderFrameInfo &info, NodeFlags parentFlags) {
 	} else {
 		for (auto &it : _components) {
 			it->visit(info, parentFlags);
+		}
+
+		for (auto &it : _inputEvents) {
+			if (it->isEnabled()) {
+				info.input->addListener(it);
+			}
 		}
 
 		if (visibleByCamera) {
@@ -878,6 +978,18 @@ void Node::unscheduleUpdate() {
 			_scheduler->unschedule(this);
 		}
 		_scheduled = false;
+	}
+}
+
+bool Node::isTouched(const Vec2 &location, float padding) {
+	const Vec2 &point = convertToNodeSpace(location);
+	const Size &size = getContentSize();
+	if (point.x > -padding && point.y > -padding
+			&& point.x < size.width + padding
+			&& point.y < size.height + padding) {
+		return true;
+	} else {
+		return false;
 	}
 }
 
