@@ -101,8 +101,6 @@ public:
 
 	const Rc<TextureSetLayout> &getTextureSetLayout() const { return _textureSetLayout; }
 
-	const Vector<VkSampler> &getImmutableSamplers() const { return _immutableSamplers; }
-
 	BytesView emplaceConstant(gl::PredefinedConstant, Bytes &) const;
 
 	virtual bool supportsUpdateAfterBind(gl::DescriptorType) const override;

@@ -48,7 +48,7 @@ public:
 	virtual void setStyle(const DescriptionStyle &);
 	virtual const DescriptionStyle &getStyle() const;
 
-	virtual void visit(RenderFrameInfo &, NodeFlags parentFlags) override;
+	virtual void onTransformDirty(const Mat4 &) override;
 
 	/** Standalone labels use its own textures and char-to-texture maps
 	 * so, they can be rendered without delays */
@@ -78,20 +78,14 @@ public:
 
 protected:
 	virtual void updateLabel();
-	virtual void updateQuads();
 	virtual void onFontSourceUpdated();
 	virtual void onFontSourceLoaded();
 	virtual void onLayoutUpdated();
 	virtual void updateColor() override;
-	virtual void updateColorQuads();
+	virtual void updateVertexes() override;
+	virtual void updateVertexesColor() override;
 
 	virtual void updateQuadsForeground(font::FontController *, FormatSpec *, Vector<ColorMask> &);
-
-	/*virtual void updateQuadsBackground(Source *, FormatSpec *);
-	virtual void updateQuadsForeground(Source *, const FormatSpec *);
-	virtual void updateQuadsStandalone(Source *, const FormatSpec *);
-	virtual void onQuads(const Time &, const Vector<Rc<cocos2d::Texture2D>> &newTex,
-			Vector<Rc<DynamicQuadArray>> &&newQuads, Vector<Vector<bool>> &&cMap);*/
 
 protected:
 	EventListener *_listener = nullptr;
@@ -101,8 +95,6 @@ protected:
 	Vector<ColorMask> _colorMap;
 
 	bool _standalone = false;
-	bool _formatDirty = true;
-	bool _colorDirty = false;
 
 	float _density = 0.0f;
 

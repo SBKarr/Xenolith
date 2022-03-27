@@ -22,8 +22,9 @@ THE SOFTWARE.
 
 #include "XLScene.h"
 
-#include "../../core/director/XLInputDispatcher.h"
+#include "XLInputDispatcher.h"
 #include "XLDirector.h"
+#include "XLApplication.h"
 
 namespace stappler::xenolith {
 

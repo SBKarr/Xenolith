@@ -76,7 +76,17 @@ void DynamicImage::removeTracker(const MaterialAttachment *a) {
 }
 
 ImageInfo DynamicImage::getInfo() const {
+	std::unique_lock<Mutex> lock(_mutex);
 	return ImageInfo(static_cast<const ImageInfo &>(_data));
+}
+
+Extent3 DynamicImage::getExtent() const {
+	std::unique_lock<Mutex> lock(_mutex);
+	if (_instance) {
+		return _instance->data.extent;
+	} else {
+		return _data.extent;
+	}
 }
 
 void DynamicImage::setImage(const Rc<ImageObject> &obj) {

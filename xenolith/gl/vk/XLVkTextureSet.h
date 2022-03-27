@@ -38,6 +38,8 @@ public:
 	bool init(Device &dev, uint32_t);
 	void invalidate(Device &dev);
 
+	bool compile(Device &dev, const Vector<VkSampler> &);
+
 	const uint32_t &getImageCount() const { return _imageCount; }
 	VkDescriptorSetLayout getLayout() const { return _layout; }
 	const Rc<ImageView> &getEmptyImageView() const { return _emptyImageView; }

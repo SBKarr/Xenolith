@@ -47,7 +47,7 @@ void Component::onExit() {
 void Component::visit(RenderFrameInfo &, NodeFlags parentFlags) { }
 
 void Component::onContentSizeDirty() { }
-void Component::onTransformDirty() { }
+void Component::onTransformDirty(const Mat4 &) { }
 void Component::onReorderChildDirty() { }
 
 bool Component::isRunning() const {

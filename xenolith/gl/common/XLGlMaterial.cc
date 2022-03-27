@@ -650,34 +650,4 @@ void MaterialAttachmentDescriptor::setBoundGeneration(uint64_t gen) {
 	_boundGeneration = gen;
 }
 
-SamplersAttachment::~SamplersAttachment() { }
-
-bool SamplersAttachment::init(StringView name) {
-	if (GenericAttachment::init(name)) {
-		_descriptorType = DescriptorType::Sampler;
-		return true;
-	}
-	return false;
-}
-
-Rc<AttachmentDescriptor> SamplersAttachment::makeDescriptor(RenderPassData *data) {
-	return Rc<SamplersAttachmentDescriptor>::create(data, this);
-}
-
-SamplersAttachmentDescriptor::~SamplersAttachmentDescriptor() { }
-
-bool SamplersAttachmentDescriptor::init(RenderPassData *data, Attachment *a) {
-	if (GenericAttachmentDescriptor::init(data, a)) {
-		_descriptor.type = DescriptorType::Sampler;
-		return true;
-	}
-	return false;
-}
-
-void SamplersAttachmentDescriptor::sortRefs(RenderQueue &queue, Device &dev) {
-	GenericAttachmentDescriptor::sortRefs(queue, dev);
-
-	_descriptor.maxCount = _descriptor.count = dev.getSamplersCount();
-}
-
 }

@@ -31,6 +31,8 @@ namespace stappler::xenolith {
 
 class Sprite : public Node {
 public:
+	using Autofit = layout::style::Autofit;
+
 	Sprite();
 	virtual ~Sprite() { }
 
@@ -41,10 +43,10 @@ public:
 	virtual void setTexture(StringView);
 	virtual void setTexture(Rc<Texture> &&);
 
-	virtual void visit(RenderFrameInfo &, NodeFlags parentFlags) override;
 	virtual void draw(RenderFrameInfo &, NodeFlags flags) override;
 
 	virtual void onEnter(Scene *) override;
+	virtual void onContentSizeDirty() override;
 
 	virtual void setColorMode(const ColorMode &);
 	virtual const ColorMode &getColorMode() const { return _colorMode; }
@@ -61,11 +63,20 @@ public:
 	virtual void setNormalized(bool);
 	virtual bool isNormalized() const { return _normalized; }
 
+	virtual void setAutofit(Autofit);
+	virtual Autofit getAutofit() const { return _autofit; }
+
+	virtual void setAutofitPosition(const Vec2 &);
+	virtual const Vec2 &getAutofitPosition() const { return _autofitPos; }
+
 protected:
+	virtual void pushCommands(RenderFrameInfo &, NodeFlags flags);
+
 	virtual MaterialInfo getMaterialInfo() const;
 	virtual Vector<gl::MaterialImage> getMaterialImages() const;
 	virtual void updateColor() override;
 	virtual void updateVertexesColor();
+	virtual void initVertexes();
 	virtual void updateVertexes();
 
 	virtual void updateBlendAndDepth();
@@ -79,6 +90,13 @@ protected:
 	bool _rotated = false;
 	Rect _textureRect = Rect(0.0f, 0.0f, 1.0f, 1.0f);
 
+	Autofit _autofit = Autofit::None;
+	Vec2 _autofitPos = Vec2(0.5f, 0.5f);
+
+	Vec2 _textureOrigin;
+	Size _textureSize;
+	Size _targetTextureSize;
+
 	bool _isSurface = false;
 	uint64_t _materialId = 0;
 
@@ -87,6 +105,8 @@ protected:
 	bool _forceSolid = false;
 	bool _materialDirty = true;
 	bool _normalized = false;
+	bool _vertexesDirty = true;
+	bool _vertexColorDirty = true;
 
 	Color4F _tmpColor;
 	ColorMode _colorMode;

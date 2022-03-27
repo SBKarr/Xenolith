@@ -61,13 +61,11 @@ bool Label::init(font::FontController *source, const DescriptionStyle &style, co
 
 	setColor(Color4F(_style.text.color, _style.text.opacity), true);
 
-	// setNormalized(true);
-
 	setString(str);
 	setWidth(width);
 	setAlignment(alignment);
 
-	updateLabel();
+	// updateLabel();
 
 	return true;
 }
@@ -97,7 +95,7 @@ void Label::updateLabel() {
 
 	if (_string16.empty()) {
 		_format = nullptr;
-		_formatDirty = true;
+		_vertexesDirty = true;
 		setContentSize(Size(0.0f, getFontHeight() / _density));
 		return;
 	}
@@ -117,29 +115,34 @@ void Label::updateLabel() {
 		if (_format->chars.empty()) {
 			setContentSize(Size(0.0f, getFontHeight() / _density));
 		} else {
-			setContentSize(Size(_format->width / _density, _format->height / _density));
+			setContentSize(Size(_format->width / (_density), _format->height / (_density)));
 		}
 
 		_labelDirty = false;
-		_colorDirty = false;
-		_formatDirty = true;
+		_vertexColorDirty = false;
+		_vertexesDirty = true;
 	}
 }
 
-void Label::visit(RenderFrameInfo &frame, NodeFlags parentFlags) {
-	if (!_visible) {
-		return;
+void Label::onTransformDirty(const Mat4 &parent) {
+	Vec3 scale;
+	parent.decompose(&scale, nullptr, nullptr);
+
+	if (_scale.x != 1.f) { scale.x *= _scale.x; }
+	if (_scale.y != 1.f) { scale.y *= _scale.y; }
+	if (_scale.z != 1.f) { scale.z *= _scale.z; }
+
+	auto density = std::min(std::min(scale.x, scale.y), scale.z);
+	if (density != _density) {
+		_density = density;
+		_labelDirty = true;
 	}
+
 	if (_labelDirty) {
 		updateLabel();
 	}
-	if (_formatDirty) {
-		updateQuads();
-	}
-	if (_colorDirty) {
-		updateColorQuads();
-	}
-	Node::visit(frame, parentFlags);
+
+	Sprite::onTransformDirty(parent);
 }
 
 void Label::updateColor() {
@@ -155,14 +158,13 @@ void Label::updateColor() {
 			}
 		}
 	}
-	_colorDirty = true;
+	_vertexColorDirty = true;
 }
 
-void Label::updateColorQuads() {
+void Label::updateVertexesColor() {
 	if (!_colorMap.empty()) {
 		_vertexes.updateColorQuads(_displayedColor, _colorMap);
 	}
-	_colorDirty = false;
 }
 
 static size_t Label_getQuadsCount(const layout::FormatSpec *format) {
@@ -321,7 +323,7 @@ void Label::setStandalone(bool value) {
 		_standalone = value;
 		//_standaloneMap.clear();
 		//_standaloneChars.clear();
-		_formatDirty = true;
+		_vertexesDirty = true;
 	}
 }
 
@@ -369,7 +371,7 @@ uint16_t Label::getFontHeight() const {
 	return 0;
 }
 
-void Label::updateQuads() {
+void Label::updateVertexes() {
 	if (!_source) {
 		return;
 	}
@@ -384,7 +386,6 @@ void Label::updateQuads() {
 		}
 
 		updateQuadsForeground(_source, _format, _colorMap);
-		_formatDirty = false;
 	}/* else {
 		bool sourceDirty = false;
 		for (auto &it : _format->ranges) {
@@ -413,18 +414,20 @@ void Label::updateQuads() {
 			updateQuadsStandalone(_source, _format);
 		}
 	}*/
+
+	_vertexColorDirty = true;
 }
 
 void Label::onFontSourceUpdated() {
 	if (!_standalone) {
-		_formatDirty = true;
+		_vertexesDirty = true;
 	}
 }
 
 void Label::onFontSourceLoaded() {
 	if (_source) {
 		setTexture(Rc<Texture>(_source->getTexture()));
-		_formatDirty = true;
+		_vertexesDirty = true;
 		_labelDirty = true;
 	}
 }

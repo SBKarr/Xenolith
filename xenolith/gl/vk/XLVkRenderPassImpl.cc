@@ -618,7 +618,8 @@ bool RenderPassImpl::initDescriptors(Device &dev, gl::RenderPassData &data, Pass
 			b.descriptorType = VkDescriptorType(binding->type);
 			b.stageFlags = VkShaderStageFlags(binding->stages);
 			if (binding->type == gl::DescriptorType::Sampler) {
-				b.pImmutableSamplers = dev.getImmutableSamplers().data();
+				// do nothing
+				log::vtext("vk::RenderPassImpl", "gl::DescriptorType::Sampler is not supported for descriptors");
 			} else {
 				incrementSize(VkDescriptorType(binding->type), std::max(binding->count, binding->maxCount));
 				b.pImmutableSamplers = nullptr;
@@ -680,7 +681,7 @@ bool RenderPassImpl::initDescriptors(Device &dev, gl::RenderPassData &data, Pass
 			b.descriptorType = VkDescriptorType(binding.type);
 			b.stageFlags = VkShaderStageFlags(binding.stages);
 			if (binding.type == gl::DescriptorType::Sampler) {
-				b.pImmutableSamplers = dev.getImmutableSamplers().data();
+				log::vtext("vk::RenderPassImpl", "gl::DescriptorType::Sampler is not supported for render pass descriptors");
 			} else {
 				incrementSize(VkDescriptorType(binding.type), std::max(binding.count, binding.maxCount));
 				b.pImmutableSamplers = nullptr;

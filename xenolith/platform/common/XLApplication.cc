@@ -182,7 +182,7 @@ bool Application::onFinishLaunching() {
 	_queue = Rc<thread::TaskQueue>::alloc("Main", [this] {
 		_loop->pushEvent(AppEvent::Thread);
 	});
-	if (!_queue->spawnWorkers(thread::TaskQueue::Flags::None, ApplicationThreadId,
+	if (!_queue->spawnWorkers(thread::TaskQueue::Flags::Cancelable, ApplicationThreadId,
 			math::clamp(uint16_t(std::thread::hardware_concurrency() / 2), uint16_t(2), uint16_t(16)), _queue->getName())) {
 		log::text("Application", "Fail to spawn worker threads");
 		return false;

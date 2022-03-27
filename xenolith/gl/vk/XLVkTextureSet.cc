@@ -29,43 +29,6 @@ namespace stappler::xenolith::vk {
 bool TextureSetLayout::init(Device &dev, uint32_t imageLimit) {
 	_imageCount = imageLimit;
 
-	VkDescriptorSetLayoutBinding b;
-	b.binding = 0;
-	b.descriptorCount = imageLimit;
-	b.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-	b.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT; // TODO - should we extend this?
-	b.pImmutableSamplers = nullptr;
-
-	VkDescriptorSetLayoutCreateInfo layoutInfo { };
-	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layoutInfo.pNext = nullptr;
-	layoutInfo.bindingCount = 1;
-	layoutInfo.pBindings = &b;
-	layoutInfo.flags = 0;
-
-	if (dev.getInfo().features.deviceDescriptorIndexing.descriptorBindingPartiallyBound) {
-		Vector<VkDescriptorBindingFlags> flags;
-		flags.emplace_back(VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT);
-
-		VkDescriptorSetLayoutBindingFlagsCreateInfoEXT bindingFlags;
-		bindingFlags.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
-		bindingFlags.pNext = nullptr;
-		bindingFlags.bindingCount = 1;
-		bindingFlags.pBindingFlags = flags.data();
-		layoutInfo.pNext = &bindingFlags;
-
-		if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &_layout) != VK_SUCCESS) {
-			return false;
-		}
-
-		_partiallyBound = true;
-
-	} else {
-		if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &_layout) != VK_SUCCESS) {
-			return false;
-		}
-	}
-
 	// create dummy image
 
 	_emptyImage = dev.getAllocator()->spawnPersistent(AllocationUsage::DeviceLocal,
@@ -89,6 +52,58 @@ void TextureSetLayout::invalidate(Device &dev) {
 	_emptyImageView = nullptr;
 	_solidImage = nullptr;
 	_solidImageView = nullptr;
+}
+
+bool TextureSetLayout::compile(Device &dev, const Vector<VkSampler> &samplers) {
+	VkDescriptorSetLayoutBinding b[] = {
+		VkDescriptorSetLayoutBinding{
+			uint32_t(0),
+			VK_DESCRIPTOR_TYPE_SAMPLER,
+			uint32_t(samplers.size()),
+			VK_SHADER_STAGE_FRAGMENT_BIT, // TODO - should we extend this?
+			samplers.data()
+		},
+		VkDescriptorSetLayoutBinding{
+			uint32_t(1),
+			VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+			uint32_t(_imageCount),
+			VK_SHADER_STAGE_FRAGMENT_BIT, // TODO - should we extend this?
+			nullptr
+		},
+	};
+
+	VkDescriptorSetLayoutCreateInfo layoutInfo { };
+	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutInfo.pNext = nullptr;
+	layoutInfo.bindingCount = 2;
+	layoutInfo.pBindings = b;
+	layoutInfo.flags = 0;
+
+	if (dev.getInfo().features.deviceDescriptorIndexing.descriptorBindingPartiallyBound) {
+		Vector<VkDescriptorBindingFlags> flags;
+		flags.emplace_back(0);
+		flags.emplace_back(VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT);
+
+		VkDescriptorSetLayoutBindingFlagsCreateInfoEXT bindingFlags;
+		bindingFlags.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT;
+		bindingFlags.pNext = nullptr;
+		bindingFlags.bindingCount = 2;
+		bindingFlags.pBindingFlags = flags.data();
+		layoutInfo.pNext = &bindingFlags;
+
+		if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &_layout) != VK_SUCCESS) {
+			return false;
+		}
+
+		_partiallyBound = true;
+
+	} else {
+		if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &_layout) != VK_SUCCESS) {
+			return false;
+		}
+	}
+
+	return true;
 }
 
 Rc<TextureSet> TextureSetLayout::acquireSet(Device &dev) {
@@ -433,7 +448,7 @@ void TextureSet::write(const gl::MaterialLayout &set) {
 	VkWriteDescriptorSet writeData({
 		VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
 		_set, // set
-		0, // descriptor
+		1, // descriptor
 		0, // index
 		0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr,
 		VK_NULL_HANDLE, VK_NULL_HANDLE
@@ -452,7 +467,7 @@ void TextureSet::write(const gl::MaterialLayout &set) {
 		writeData = VkWriteDescriptorSet ({
 			VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr,
 			_set, // set
-			0, // descriptor
+			1, // descriptor
 			0, // start from next index
 			0, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, nullptr,
 			VK_NULL_HANDLE, VK_NULL_HANDLE

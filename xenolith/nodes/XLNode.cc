@@ -614,13 +614,13 @@ void Node::onContentSizeDirty() {
 	}
 }
 
-void Node::onTransformDirty() {
+void Node::onTransformDirty(const Mat4 &parentTransform) {
 	if (_onTransformDirtyCallback) {
-		_onTransformDirtyCallback();
+		_onTransformDirtyCallback(parentTransform);
 	}
 
 	for (auto &it : _components) {
-		it->onTransformDirty();
+		it->onTransformDirty(parentTransform);
 	}
 }
 
@@ -998,29 +998,26 @@ Mat4 Node::transform(const Mat4 &parentTransform) {
 }
 
 NodeFlags Node::processParentFlags(RenderFrameInfo &info, NodeFlags parentFlags) {
-	if (_transformDirty) {
-		onTransformDirty();
-	}
-
-	if (_contentSizeDirty) {
-		onContentSizeDirty();
-	}
-
 	NodeFlags flags = parentFlags;
-	flags |= (_transformDirty ? NodeFlags::TransformDirty : NodeFlags::None);
-	flags |= (_contentSizeDirty ? NodeFlags::ContentSizeDirty : NodeFlags::None);
+
+	if (_transformDirty) {
+		onTransformDirty(info.modelTransformStack.back());
+	}
 
 	if ((flags & NodeFlags::DirtyMask) != NodeFlags::None || _transformDirty || _contentSizeDirty) {
 		_modelViewTransform = this->transform(info.modelTransformStack.back());
 	}
 
 	if (_transformDirty) {
-		// _transformWasDirty = true;
 		_transformDirty = false;
+		flags |= NodeFlags::TransformDirty;
 	}
 
 	if (_contentSizeDirty) {
 		_contentSizeDirty = false;
+
+		onContentSizeDirty();
+		flags |= NodeFlags::ContentSizeDirty;
 	}
 
 	return flags;

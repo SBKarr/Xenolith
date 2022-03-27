@@ -193,7 +193,7 @@ public:
 	virtual void onExit();
 
 	virtual void onContentSizeDirty();
-	virtual void onTransformDirty();
+	virtual void onTransformDirty(const Mat4 &);
 	virtual void onReorderChildDirty();
 
 	virtual void cleanup();
@@ -298,7 +298,7 @@ protected:
 	Function<void(Scene *)> _onEnterCallback;
 	Function<void()> _onExitCallback;
 	Function<void()> _onContentSizeDirtyCallback;
-	Function<void()> _onTransformDirtyCallback;
+	Function<void(const Mat4 &)> _onTransformDirtyCallback;
 	Function<void()> _onReorderChildDirtyCallback;
 
 	Vector<Rc<Component>> _components;

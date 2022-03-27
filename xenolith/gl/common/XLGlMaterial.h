@@ -206,24 +206,6 @@ protected:
 	std::atomic<uint64_t> _boundGeneration = 0;
 };
 
-class SamplersAttachment : public GenericAttachment {
-public:
-	virtual ~SamplersAttachment();
-
-	virtual bool init(StringView);
-
-protected:
-	virtual Rc<AttachmentDescriptor> makeDescriptor(RenderPassData *) override;
-};
-
-class SamplersAttachmentDescriptor : public GenericAttachmentDescriptor {
-public:
-	virtual ~SamplersAttachmentDescriptor();
-
-	virtual bool init(RenderPassData *, Attachment *) override;
-	virtual void sortRefs(RenderQueue &, Device &dev) override;
-};
-
 }
 
 #endif /* XENOLITH_GL_COMMON_XLGLMATERIAL_H_ */

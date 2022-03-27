@@ -32,10 +32,7 @@ THE SOFTWARE.
 
 #include "XLVertexArray.cc"
 
-#include "XLScene.cc"
 #include "XLScheduler.cc"
-
-//#include "XLStaticResource.cc"
 
 namespace stappler::xenolith {
 

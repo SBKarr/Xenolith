@@ -734,7 +734,9 @@ enum class SwapchanCreationMode {
 // engine-defined specialization constants for shaders
 enum class PredefinedConstant {
 	SamplersArraySize,
+	SamplersDescriptorIdx,
 	TexturesArraySize,
+	TexturesDescriptorIdx,
 };
 
 enum class MaterialType {

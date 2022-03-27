@@ -99,6 +99,20 @@ bool Texture::hasAlpha() const {
 	}
 }
 
+Size Texture::getSize() const {
+	auto extent = getExtent();
+	return Size(extent.width, extent.height);
+}
+
+Extent3 Texture::getExtent() const {
+	if (_dynamic) {
+		return _dynamic->getExtent();
+	} else if (_data) {
+		return _data->extent;
+	}
+	return Extent3();
+}
+
 Rc<ResourceCache> ResourceCache::getInstance() {
 	if (auto app = Application::getInstance()) {
 		return app->getResourceCache();

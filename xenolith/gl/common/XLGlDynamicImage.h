@@ -55,6 +55,7 @@ public:
 	void removeTracker(const MaterialAttachment *);
 
 	ImageInfo getInfo() const;
+	Extent3 getExtent() const;
 
 	// called when image compiled successfully
 	void setImage(const Rc<ImageObject> &);
@@ -63,7 +64,7 @@ public:
 protected:
 	friend class Builder;
 
-	Mutex _mutex;
+	mutable Mutex _mutex;
 	String _keyData;
 	Bytes _imageData;
 	ImageData _data;

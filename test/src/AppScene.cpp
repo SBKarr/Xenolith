@@ -85,7 +85,10 @@ static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder 
 		// no specialization required for vertex shader
 		materialVert,
 		// specialization for fragment shader - use platform-dependent array sizes
-		gl::SpecializationInfo(materialFrag, { gl::PredefinedConstant::SamplersArraySize, gl::PredefinedConstant::TexturesArraySize })
+		gl::SpecializationInfo(materialFrag, {
+			gl::PredefinedConstant::SamplersArraySize,
+			gl::PredefinedConstant::TexturesArraySize
+		})
 	});
 
 	// pipelines for material-besed rendering
@@ -141,9 +144,6 @@ static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder 
 
 	auto out = Rc<vk::ImageAttachment>::create("Output", move(outImageInfo), move(outAttachmentInfo));
 
-	// Engine-defined samplers as input attachment
-	auto samplers = Rc<gl::SamplersAttachment>::create("Samplers");
-
 	// Material input attachment - per-scene list of materials
 	auto materialInput = Rc<vk::MaterialVertexAttachment>::create("MaterialInput",
 		gl::BufferInfo(gl::BufferUsage::StorageBuffer),
@@ -165,9 +165,8 @@ static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder 
 	vertexInput->setInputCallback(move(cb));
 
 	// define pass input-output
-	builder.addPassInput(pass, 0, samplers, gl::AttachmentDependencyInfo()); // 0
-	builder.addPassInput(pass, 0, vertexInput, gl::AttachmentDependencyInfo()); // 1
-	builder.addPassInput(pass, 0, materialInput, gl::AttachmentDependencyInfo()); // 2
+	builder.addPassInput(pass, 0, vertexInput, gl::AttachmentDependencyInfo()); // 0
+	builder.addPassInput(pass, 0, materialInput, gl::AttachmentDependencyInfo()); // 1
 	builder.addPassDepthStencil(pass, 0, depth, gl::AttachmentDependencyInfo{
 		gl::PipelineStage::EarlyFragmentTest,
 			gl::AccessType::DepthStencilAttachmentRead | gl::AccessType::DepthStencilAttachmentWrite,
@@ -213,6 +212,7 @@ bool AppScene::init(Application *app, Extent2 extent) {
 	}
 
 	_layout = addChild(Rc<RootLayout>::create());
+	_layout->setScale(0.5f);
 
 	// _sprite = addChild(Rc<Sprite>::create("Xenolith.png"));
 

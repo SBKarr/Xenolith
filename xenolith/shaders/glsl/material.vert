@@ -22,11 +22,11 @@ layout (push_constant) uniform pcb {
 	uint padding1;
 } pushConstants;
 
-layout (set = 0, binding = 1) readonly buffer Vertices {
+layout (set = 0, binding = 0) readonly buffer Vertices {
 	Vertex vertices[];
 };
 
-layout (set = 0, binding = 2) readonly buffer Materials {
+layout (set = 0, binding = 1) readonly buffer Materials {
 	Material materials[];
 };
 

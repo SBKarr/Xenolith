@@ -17,13 +17,12 @@ layout (push_constant) uniform pcb {
 	uint padding1;
 } pushConstants;
 
-layout (set = 0, binding = 0) uniform sampler immutableSamplers[SAMPLERS_ARRAY_SIZE];
-
-layout (set = 0, binding = 2) readonly buffer Materials {
+layout (set = 0, binding = 1) readonly buffer Materials {
 	Material materials[];
 };
 
-layout (set = 1, binding = 0) uniform texture2D images[IMAGES_ARRAY_SIZE];
+layout (set = 1, binding = 0) uniform sampler immutableSamplers[SAMPLERS_ARRAY_SIZE];
+layout (set = 1, binding = 1) uniform texture2D images[IMAGES_ARRAY_SIZE];
 
 layout (location = 0) in vec4 fragColor;
 layout (location = 0) out vec4 outColor;

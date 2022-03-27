@@ -45,7 +45,7 @@ public:
 	virtual void visit(RenderFrameInfo &, NodeFlags parentFlags);
 
 	virtual void onContentSizeDirty();
-	virtual void onTransformDirty();
+	virtual void onTransformDirty(const Mat4 &);
 	virtual void onReorderChildDirty();
 
 	virtual bool isRunning() const;

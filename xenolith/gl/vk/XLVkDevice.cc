@@ -197,6 +197,7 @@ void Device::begin(const Application *app, thread::TaskQueue &q) {
 
 	gl::Device::begin(app, q);
 
+	_textureSetLayout->compile(*this, _immutableSamplers);
 	_materialQueue = Rc<MaterialCompiler>::create();
 	_transferQueue = Rc<TransferQueue>::create();
 }
@@ -589,12 +590,21 @@ static BytesView Device_emplaceConstant(Bytes &data, BytesView constant) {
 }
 
 BytesView Device::emplaceConstant(gl::PredefinedConstant c, Bytes &data) const {
+	uint32_t intData = 0;
 	switch (c) {
 	case gl::PredefinedConstant::SamplersArraySize:
 		return Device_emplaceConstant(data, BytesView((const uint8_t *)&_samplersCount, sizeof(uint32_t)));
 		break;
+	case gl::PredefinedConstant::SamplersDescriptorIdx:
+		intData = 0;
+		return Device_emplaceConstant(data, BytesView((const uint8_t *)&intData, sizeof(uint32_t)));
+		break;
 	case gl::PredefinedConstant::TexturesArraySize:
 		return Device_emplaceConstant(data, BytesView((const uint8_t *)&_textureSetLayout->getImageCount(), sizeof(uint32_t)));
+		break;
+	case gl::PredefinedConstant::TexturesDescriptorIdx:
+		intData = 1;
+		return Device_emplaceConstant(data, BytesView((const uint8_t *)&intData, sizeof(uint32_t)));
 		break;
 	}
 	return BytesView();

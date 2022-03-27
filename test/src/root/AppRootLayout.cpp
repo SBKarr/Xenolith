@@ -64,6 +64,7 @@ bool RootLayout::init() {
 	auto fontController = app->getFontController();
 
 	_label = addChild(Rc<Label>::create(fontController), 5);
+	_label->setScale(0.5f);
 	_label->setAnchorPoint(Anchor::Middle);
 	_label->setColor(Color::Green_500, true);
 	_label->setOpacity(0.75f);
@@ -72,6 +73,12 @@ bool RootLayout::init() {
 	_label->setFontSize(48);
 	_label->appendTextWithStyle("Hello", Label::Style({font::FontStyle::Italic}));
 	_label->appendTextWithStyle("World", Label::Style({font::FontWeight::Bold}));
+
+	auto label1Listener = _label->addInputListener(Rc<InputListener>::create());
+	label1Listener->addTouchRecognizer([] (GestureEvent event, const InputEvent &ev) {
+		std::cout << "Touch (Label1): " << event << ": " << ev.currentLocation << "\n";
+		return true;
+	}, InputListener::makeButtonMask({InputMouseButton::MouseRight}));
 
 	_label2 = addChild(Rc<Label>::create(fontController), 5);
 	_label2->setAnchorPoint(Anchor::Middle);
@@ -82,6 +89,12 @@ bool RootLayout::init() {
 	_label2->setFontSize(48);
 	_label2->appendTextWithStyle("Hello", Label::Style({font::FontStyle::Italic, Label::TextDecoration::LineThrough}));
 	_label2->appendTextWithStyle("\nWorld", Label::Style({font::FontWeight::Bold, Color::Red_500, Label::TextDecoration::Underline}));
+
+	auto label2Listener = _label2->addInputListener(Rc<InputListener>::create());
+	label2Listener->addTouchRecognizer([] (GestureEvent event, const InputEvent &ev) {
+		std::cout << "Touch (Label2): " << event << ": " << ev.currentLocation << "\n";
+		return true;
+	}, InputListener::makeButtonMask({InputMouseButton::MouseRight}));
 
 	_cursor = addChild(Rc<Layer>::create(Color::Blue_500), 10);
 	_cursor->setContentSize(Size(10, 10));
@@ -103,11 +116,11 @@ bool RootLayout::init() {
 	});
 	l->addTouchRecognizer([] (GestureEvent event, const InputEvent &ev) {
 		std::cout << "Touch (right): " << event << ": " << ev.currentLocation << "\n";
-
 		return true;
 	}, InputListener::makeButtonMask({InputMouseButton::MouseRight}));
 	l->addMoveRecognizer([this] (GestureEvent event, const InputEvent &ev) {
-		_cursor->setPosition(ev.currentLocation);
+		auto pos = convertToNodeSpace(ev.currentLocation);
+		_cursor->setPosition(pos);
 		return true;
 	});
 

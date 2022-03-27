@@ -585,6 +585,7 @@ void LabelParameters::updateFormatSpec(FormatSpec *format, const StyleVec &compi
 		formatter.setOpticalAlignment(_opticalAlignment);
 		formatter.setFillerChar(_fillerChar);
 		formatter.setEmplaceAllChars(_emplaceAllChars);
+		formatter.setFontScale(density);
 
 		if (_lineHeight != 0.0f) {
 			if (_isLineHeightAbsolute) {

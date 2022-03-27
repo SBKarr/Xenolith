@@ -43,8 +43,7 @@ bool Sprite::init(StringView textureName) {
 	}
 
 	_textureName = textureName.str();
-	_vertexes.init(4, 6);
-	updateVertexes();
+	initVertexes();
 	return true;
 }
 
@@ -56,8 +55,8 @@ bool Sprite::init(Rc<Texture> &&texture) {
 	if (texture) {
 		_texture = move(texture);
 	}
-	_vertexes.init(4, 6);
-	updateVertexes();
+
+	initVertexes();
 	return true;
 }
 
@@ -99,15 +98,25 @@ void Sprite::setTexture(Rc<Texture> &&tex) {
 	}
 }
 
-void Sprite::visit(RenderFrameInfo &info, NodeFlags parentFlags) {
-	if (_contentSizeDirty) {
-		updateVertexes();
-	}
-	Node::visit(info, parentFlags);
-}
-
 void Sprite::draw(RenderFrameInfo &frame, NodeFlags flags) {
 	if (_texture) {
+		if (_autofit != Autofit::None) {
+			auto size = _texture->getSize();
+			if (_targetTextureSize != size) {
+				_vertexesDirty = true;
+			}
+		}
+
+		if (_vertexesDirty) {
+			updateVertexes();
+			_vertexesDirty = false;
+		}
+
+		if (_vertexColorDirty) {
+			updateVertexesColor();
+			_vertexColorDirty = false;
+		}
+
 		if (_materialDirty) {
 			updateBlendAndDepth();
 
@@ -122,20 +131,7 @@ void Sprite::draw(RenderFrameInfo &frame, NodeFlags flags) {
 			_materialDirty = false;
 		}
 
-		auto &modelTransform = frame.modelTransformStack.back();
-		if (_normalized) {
-			Mat4 newMV;
-			newMV.m[12] = floorf(modelTransform.m[12]);
-			newMV.m[13] = floorf(modelTransform.m[13]);
-			newMV.m[14] = floorf(modelTransform.m[14]);
-
-			frame.commands->pushVertexArray(_vertexes.pop(),
-					frame.viewProjectionStack.back() * newMV, frame.zPath, _materialId, _isSurface);
-		} else {
-			frame.commands->pushVertexArray(_vertexes.pop(),
-					frame.viewProjectionStack.back() * modelTransform, frame.zPath, _materialId, _isSurface);
-		}
-
+		pushCommands(frame, flags);
 	}
 }
 
@@ -151,6 +147,11 @@ void Sprite::onEnter(Scene *scene) {
 		}
 		_textureName.clear();
 	}
+}
+
+void Sprite::onContentSizeDirty() {
+	_vertexesDirty = true;
+	Node::onContentSizeDirty();
 }
 
 void Sprite::setColorMode(const ColorMode &mode) {
@@ -187,6 +188,36 @@ void Sprite::setNormalized(bool value) {
 	}
 }
 
+void Sprite::setAutofit(Autofit autofit) {
+	if (_autofit != autofit) {
+		_autofit = autofit;
+		_vertexesDirty = true;
+	}
+}
+
+void Sprite::setAutofitPosition(const Vec2 &vec) {
+	if (!_autofitPos.equals(vec)) {
+		_autofitPos = vec;
+		_vertexesDirty = true;
+	}
+}
+
+void Sprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
+	auto &modelTransform = frame.modelTransformStack.back();
+	if (_normalized) {
+		Mat4 newMV;
+		newMV.m[12] = floorf(modelTransform.m[12]);
+		newMV.m[13] = floorf(modelTransform.m[13]);
+		newMV.m[14] = floorf(modelTransform.m[14]);
+
+		frame.commands->pushVertexArray(_vertexes.pop(),
+				frame.viewProjectionStack.back() * newMV, frame.zPath, _materialId, _isSurface);
+	} else {
+		frame.commands->pushVertexArray(_vertexes.pop(),
+				frame.viewProjectionStack.back() * modelTransform, frame.zPath, _materialId, _isSurface);
+	}
+}
+
 MaterialInfo Sprite::getMaterialInfo() const {
 	MaterialInfo ret;
 	ret.type = gl::MaterialType::Basic2D;
@@ -204,7 +235,7 @@ Vector<gl::MaterialImage> Sprite::getMaterialImages() const {
 
 void Sprite::updateColor() {
 	if (_tmpColor != _displayedColor) {
-		updateVertexesColor();
+		_vertexColorDirty = true;
 		if (_tmpColor.a != _displayedColor.a) {
 			if (_displayedColor.a == 1.0f || _tmpColor.a == 1.0f) {
 				updateBlendAndDepth();
@@ -218,12 +249,59 @@ void Sprite::updateVertexesColor() {
 	_vertexes.updateColor(_displayedColor);
 }
 
+void Sprite::initVertexes() {
+	_vertexes.init(4, 6);
+	updateVertexes();
+}
+
 void Sprite::updateVertexes() {
 	_vertexes.clear();
+
+	if (_autofit == Autofit::None) {
+		_textureOrigin = Vec2::ZERO;
+		_textureSize = _contentSize;
+	} else {
+		auto size = _texture->getSize();
+
+		_textureOrigin = Vec2::ZERO;
+		_textureSize = _contentSize;
+		_textureRect = Rect(0, 0, size.width, size.height);
+
+		float scale = 1.0f;
+		if (_autofit == Autofit::Width) {
+			scale = size.width / _contentSize.width;
+		} else if (_autofit == Autofit::Height) {
+			scale = size.height / _contentSize.height;
+		} else if (_autofit == Autofit::Contain) {
+			scale = std::max(size.width / _contentSize.width, size.height / _contentSize.height);
+		} else if (_autofit == Autofit::Cover) {
+			scale = std::min(size.width / _contentSize.width, size.height / _contentSize.height);
+		}
+
+		auto texSizeInView = Size(size.width / scale, size.height / scale);
+		if (texSizeInView.width < _contentSize.width) {
+			_textureSize.width -= (_contentSize.width - texSizeInView.width);
+			_textureOrigin.x = (_contentSize.width - texSizeInView.width) * _autofitPos.x;
+		} else if (texSizeInView.width > _contentSize.width) {
+			_textureRect.origin.x = (_textureRect.size.width - _contentSize.width * scale) * _autofitPos.x;
+			_textureRect.size.width = _contentSize.width * scale;
+		}
+
+		if (texSizeInView.height < _contentSize.height) {
+			_textureSize.height -= (_contentSize.height - texSizeInView.height);
+			_textureOrigin.y = (_contentSize.height - texSizeInView.height) * _autofitPos.y;
+		} else if (texSizeInView.height > _contentSize.height) {
+			_textureRect.origin.y = (_textureRect.size.height - _contentSize.height * scale) * _autofitPos.y;
+			_textureRect.size.height = _contentSize.height * scale;
+		}
+	}
+
 	_vertexes.addQuad()
-		.setGeometry(Vec4::ZERO, _contentSize)
+		.setGeometry(Vec4(_textureOrigin.x, _textureOrigin.y, 0.0f, 1.0f), _textureSize)
 		.setTextureRect(_textureRect, 1.0f, 1.0f, _flippedX, _flippedY, _rotated)
 		.setColor(_displayedColor);
+
+	_vertexColorDirty = false;
 }
 
 void Sprite::updateBlendAndDepth() {

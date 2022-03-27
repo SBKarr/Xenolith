@@ -71,7 +71,8 @@ XENOLITH_INCLUDES_DIRS += \
 # non-recursive includes
 XENOLITH_INCLUDES_OBJS += \
 	$(XENOLITH_MAKEFILE_DIR)/shaders \
-	$(OSTYPE_INCLUDE)
+	$(OSTYPE_INCLUDE) \
+	components/thirdparty
 
 # shaders
 XENOLITH_SHADERS := $(wildcard $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/*)

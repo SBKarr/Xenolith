@@ -1,0 +1,84 @@
+/**
+ Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+ **/
+
+#ifndef XENOLITH_NODES_XLVECTORSPRITE_H_
+#define XENOLITH_NODES_XLVECTORSPRITE_H_
+
+#include "XLSprite.h"
+#include "XLVectorImage.h"
+
+namespace stappler::xenolith {
+
+class VectorSprite : public Sprite {
+public:
+	virtual ~VectorSprite() { }
+
+	VectorSprite();
+
+	virtual bool init(Rc<VectorImage> &&);
+	virtual bool init(Size, StringView);
+	virtual bool init(Size, layout::Path &&);
+	virtual bool init(Size);
+	virtual bool init(StringView);
+	virtual bool init(BytesView);
+	virtual bool init(FilePath);
+
+    virtual Rc<VectorPath> addPath(StringView = StringView(), Mat4 = Mat4::IDENTITY);
+    virtual Rc<VectorPath> addPath(const layout::Path & path, StringView = StringView(), Mat4 = Mat4::IDENTITY);
+    virtual Rc<VectorPath> addPath(layout::Path && path, StringView = StringView(), Mat4 = Mat4::IDENTITY);
+
+    virtual Rc<VectorPath> getPath(StringView);
+
+    virtual void removePath(const Rc<VectorPath> &);
+    virtual void removePath(StringView);
+
+    virtual void clear();
+
+    virtual void setAntialiased(bool value);
+    virtual bool isAntialiased() const;
+
+    virtual void setImage(Rc<VectorImage> &&);
+    virtual const Rc<VectorImage> &getImage() const;
+
+	virtual void onTransformDirty(const Mat4 &) override;
+
+	virtual void visit(RenderFrameInfo &, NodeFlags parentFlags) override;
+
+protected:
+	virtual void pushCommands(RenderFrameInfo &, NodeFlags flags) override;
+
+	virtual void initVertexes() override;
+	virtual void updateVertexes() override;
+	virtual void updateVertexesColor() override;
+
+	bool _async = false;
+	uint64_t _asyncJobId = 0;
+	Rect _boxRect;
+	Rc<VectorImage> _image;
+	layout::BackgroundStyle _style;
+	float _quality = 0.75f;
+	Rc<VectorCanvasResult> _result;
+};
+
+}
+
+#endif /* XENOLITH_NODES_XLVECTORSPRITE_H_ */
