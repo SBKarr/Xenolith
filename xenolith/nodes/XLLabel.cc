@@ -44,7 +44,7 @@ bool Label::init(font::FontController *source, const DescriptionStyle &style, co
 	setNormalized(true);
 
 	setColorMode(ColorMode::AlphaChannel);
-	setSurface(true);
+	setRenderingLevel(RenderingLevel::Surface);
 
 	auto el = Rc<EventListener>::create();
 	el->onEventWithObject(font::FontController::onFontSourceUpdated, source, std::bind(&Label::onFontSourceUpdated, this));
@@ -100,12 +100,12 @@ void Label::updateLabel() {
 		return;
 	}
 
-	auto spec = Rc<layout::FormatSpec>::alloc(_source, _string16.size(), _compiledStyles.size() + 1);
+	auto spec = Rc<font::FormatSpec>::alloc(Rc<font::FontController>(_source), _string16.size(), _compiledStyles.size() + 1);
 
 	_compiledStyles = compileStyle();
 	_style.text.color = _displayedColor.getColor();
 	_style.text.opacity = _displayedColor.getOpacity();
-	_style.text.whiteSpace = layout::style::WhiteSpace::PreWrap;
+	_style.text.whiteSpace = style::WhiteSpace::PreWrap;
 
 	updateFormatSpec(spec, _compiledStyles, _density, _adjustValue);
 
@@ -167,10 +167,10 @@ void Label::updateVertexesColor() {
 	}
 }
 
-static size_t Label_getQuadsCount(const layout::FormatSpec *format) {
+static size_t Label_getQuadsCount(const font::FormatSpec *format) {
 	size_t ret = 0;
 
-	const layout::RangeSpec *targetRange = nullptr;
+	const font::RangeSpec *targetRange = nullptr;
 
 	for (auto it = format->begin(); it != format->end(); ++ it) {
 		if (&(*it.range) != targetRange) {
@@ -180,7 +180,7 @@ static size_t Label_getQuadsCount(const layout::FormatSpec *format) {
 		const auto start = it.start();
 		auto end = start + it.count();
 		if (it.line->start + it.line->count == end) {
-			const layout::CharSpec &c = format->chars[end - 1];
+			const font::CharSpec &c = format->chars[end - 1];
 			if (!string::isspace(c.charID) && c.charID != char16_t(0x0A)) {
 				++ ret;
 			}
@@ -188,7 +188,7 @@ static size_t Label_getQuadsCount(const layout::FormatSpec *format) {
 		}
 
 		for (auto charIdx = start; charIdx < end; ++ charIdx) {
-			const layout::CharSpec &c = format->chars[charIdx];
+			const font::CharSpec &c = format->chars[charIdx];
 			if (!string::isspace(c.charID) && c.charID != char16_t(0x0A) && c.charID != char16_t(0x00AD)) {
 				++ ret;
 			}
@@ -198,8 +198,8 @@ static size_t Label_getQuadsCount(const layout::FormatSpec *format) {
 	return ret;
 }
 
-static void Label_writeTextureQuad(const layout::FormatSpec *format, const layout::Metrics &m, const layout::CharSpec &c,
-		const font::FontCharLayout &l, const layout::RangeSpec &range, const layout::LineSpec &line, Vector<ColorMask> &cMap,
+static void Label_writeTextureQuad(const font::FormatSpec *format, const font::Metrics &m, const font::CharSpec &c,
+		const font::CharLayout &l, const font::RangeSpec &range, const font::LineSpec &line, Vector<ColorMask> &cMap,
 		uint16_t face, VertexArray::Quad &quad) {
 	ColorMask mask = ColorMask::None;
 	if (range.colorDirty) {
@@ -211,10 +211,10 @@ static void Label_writeTextureQuad(const layout::FormatSpec *format, const layou
 	cMap.push_back(mask);
 
 	switch (range.align) {
-	case layout::VerticalAlign::Sub:
+	case style::VerticalAlign::Sub:
 		quad.drawChar(m, l, c.pos, format->height - line.pos + m.descender / 2, range.color, range.decoration, face);
 		break;
-	case layout::VerticalAlign::Super:
+	case style::VerticalAlign::Super:
 		quad.drawChar(m, l, c.pos, format->height - line.pos + m.ascender / 2, range.color, range.decoration, face);
 		break;
 	default:
@@ -228,8 +228,8 @@ void Label::updateQuadsForeground(font::FontController *controller, FormatSpec *
 	colorMap.clear();
 	colorMap.reserve(quadsCount);
 
-	const layout::RangeSpec *targetRange = nullptr;
-	layout::Metrics metrics;
+	const font::RangeSpec *targetRange = nullptr;
+	font::Metrics metrics;
 
 	_vertexes.clear();
 
@@ -247,13 +247,13 @@ void Label::updateQuadsForeground(font::FontController *controller, FormatSpec *
 		auto end = start + it.count();
 
 		for (auto charIdx = start; charIdx < end; ++ charIdx) {
-			const layout::CharSpec &c = format->chars[charIdx];
+			const font::CharSpec &c = format->chars[charIdx];
 			if (!string::isspace(c.charID) && c.charID != char16_t(0x0A) && c.charID != char16_t(0x00AD)) {
 
 				uint16_t face = 0;
-				auto ch = controller->getFullChar(targetRange->layout, c.charID, face);
+				auto ch = controller->getChar(targetRange->layout, c.charID, face);
 
-				if (ch.layout.charID == c.charID) {
+				if (ch.charID == c.charID) {
 					auto quad = _vertexes.addQuad();
 					Label_writeTextureQuad(format, metrics, c, ch, *it.range, *it.line, colorMap, face, quad);
 				}
@@ -261,12 +261,12 @@ void Label::updateQuadsForeground(font::FontController *controller, FormatSpec *
 		}
 
 		if (it.line->start + it.line->count == end) {
-			const layout::CharSpec &c = format->chars[end - 1];
+			const font::CharSpec &c = format->chars[end - 1];
 			if (c.charID == char16_t(0x00AD)) {
 				uint16_t face = 0;
-				auto ch = controller->getFullChar(targetRange->layout, c.charID, face);
+				auto ch = controller->getChar(targetRange->layout, c.charID, face);
 
-				if (ch.layout.charID == c.charID) {
+				if (ch.charID == c.charID) {
 					auto quad = _vertexes.addQuad();
 					Label_writeTextureQuad(format, metrics, c, ch, *it.range, *it.line, colorMap, face, quad);
 				}
@@ -274,9 +274,9 @@ void Label::updateQuadsForeground(font::FontController *controller, FormatSpec *
 			end -= 1;
 		}
 
-		if (it.count() > 0 && it.range->decoration != layout::style::TextDecoration::None) {
-			const layout::CharSpec &firstChar = format->chars[it.start()];
-			const layout::CharSpec &lastChar = format->chars[it.start() + it.count() - 1];
+		if (it.count() > 0 && it.range->decoration != style::TextDecoration::None) {
+			const font::CharSpec &firstChar = format->chars[it.start()];
+			const font::CharSpec &lastChar = format->chars[it.start() + it.count() - 1];
 
 			auto color = it.range->color;
 			color.a = uint8_t(0.75f * color.a);
@@ -284,14 +284,14 @@ void Label::updateQuadsForeground(font::FontController *controller, FormatSpec *
 
 			float offset = 0.0f;
 			switch (it.range->decoration) {
-			case layout::style::TextDecoration::None: break;
-			case layout::style::TextDecoration::Overline:
+			case style::TextDecoration::None: break;
+			case style::TextDecoration::Overline:
 				offset = metrics.height;
 				break;
-			case layout::style::TextDecoration::LineThrough:
+			case style::TextDecoration::LineThrough:
 				offset = (metrics.height * 11.0f) / 24.0f;
 				break;
-			case layout::style::TextDecoration::Underline:
+			case style::TextDecoration::Underline:
 				offset = metrics.height / 8.0f;
 				break;
 			}
@@ -382,7 +382,7 @@ void Label::updateVertexes() {
 
 	if (!_standalone) {
 		for (auto &it : _format->ranges) {
-			_source->addTextureChars(it.layout, SpanView<layout::CharSpec>(_format->chars, it.start, it.count));
+			_source->addTextureChars(it.layout, SpanView<font::CharSpec>(_format->chars, it.start, it.count));
 		}
 
 		updateQuadsForeground(_source, _format, _colorMap);

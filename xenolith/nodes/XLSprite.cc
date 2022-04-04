@@ -34,7 +34,7 @@ Sprite::Sprite() {
 }
 
 bool Sprite::init() {
-	return init(SolidTextureName);
+	return Sprite::init(SolidTextureName);
 }
 
 bool Sprite::init(StringView textureName) {
@@ -98,11 +98,19 @@ void Sprite::setTexture(Rc<Texture> &&tex) {
 	}
 }
 
+void Sprite::setTextureRect(const Rect &rect) {
+	if (!_textureRect.equals(rect)) {
+		_textureRect = rect;
+		_vertexesDirty = true;
+	}
+}
+
 void Sprite::draw(RenderFrameInfo &frame, NodeFlags flags) {
 	if (_texture) {
 		if (_autofit != Autofit::None) {
 			auto size = _texture->getSize();
 			if (_targetTextureSize != size) {
+				_targetTextureSize = size;
 				_vertexesDirty = true;
 			}
 		}
@@ -168,16 +176,9 @@ void Sprite::setBlendInfo(const BlendInfo &info) {
 	}
 }
 
-void Sprite::setForceSolid(bool val) {
-	if (_forceSolid != val) {
-		_forceSolid = val;
-		updateBlendAndDepth();
-	}
-}
-
-void Sprite::setSurface(bool value) {
-	if (_isSurface != value) {
-		_isSurface = value;
+void Sprite::setRenderingLevel(RenderingLevel level) {
+	if (_renderingLevel != level) {
+		_renderingLevel = level;
 		updateBlendAndDepth();
 	}
 }
@@ -198,7 +199,9 @@ void Sprite::setAutofit(Autofit autofit) {
 void Sprite::setAutofitPosition(const Vec2 &vec) {
 	if (!_autofitPos.equals(vec)) {
 		_autofitPos = vec;
-		_vertexesDirty = true;
+		if (_autofit != Autofit::None) {
+			_vertexesDirty = true;
+		}
 	}
 }
 
@@ -211,10 +214,10 @@ void Sprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 		newMV.m[14] = floorf(modelTransform.m[14]);
 
 		frame.commands->pushVertexArray(_vertexes.pop(),
-				frame.viewProjectionStack.back() * newMV, frame.zPath, _materialId, _isSurface);
+				frame.viewProjectionStack.back() * newMV, frame.zPath, _materialId, _realRenderingLevel);
 	} else {
 		frame.commands->pushVertexArray(_vertexes.pop(),
-				frame.viewProjectionStack.back() * modelTransform, frame.zPath, _materialId, _isSurface);
+				frame.viewProjectionStack.back() * modelTransform, frame.zPath, _materialId, _realRenderingLevel);
 	}
 }
 
@@ -251,54 +254,34 @@ void Sprite::updateVertexesColor() {
 
 void Sprite::initVertexes() {
 	_vertexes.init(4, 6);
-	updateVertexes();
+	_vertexesDirty = true;
 }
 
 void Sprite::updateVertexes() {
 	_vertexes.clear();
 
-	if (_autofit == Autofit::None) {
-		_textureOrigin = Vec2::ZERO;
-		_textureSize = _contentSize;
+	Size texSize = _texture->getSize();
+
+	texSize = Size(texSize.width * _textureRect.size.width, texSize.height * _textureRect.size.height);
+
+	Rect contentRect;
+	Rect textureRect;
+
+	if (!getAutofitParams(_autofit, _autofitPos, _contentSize, texSize, contentRect, textureRect)) {
+		texSize = Size(1.0f, 1.0f);
+		contentRect = Rect(0.0f, 0.0f, _contentSize.width, _contentSize.height);
+		textureRect = _textureRect;
 	} else {
-		auto size = _texture->getSize();
-
-		_textureOrigin = Vec2::ZERO;
-		_textureSize = _contentSize;
-		_textureRect = Rect(0, 0, size.width, size.height);
-
-		float scale = 1.0f;
-		if (_autofit == Autofit::Width) {
-			scale = size.width / _contentSize.width;
-		} else if (_autofit == Autofit::Height) {
-			scale = size.height / _contentSize.height;
-		} else if (_autofit == Autofit::Contain) {
-			scale = std::max(size.width / _contentSize.width, size.height / _contentSize.height);
-		} else if (_autofit == Autofit::Cover) {
-			scale = std::min(size.width / _contentSize.width, size.height / _contentSize.height);
-		}
-
-		auto texSizeInView = Size(size.width / scale, size.height / scale);
-		if (texSizeInView.width < _contentSize.width) {
-			_textureSize.width -= (_contentSize.width - texSizeInView.width);
-			_textureOrigin.x = (_contentSize.width - texSizeInView.width) * _autofitPos.x;
-		} else if (texSizeInView.width > _contentSize.width) {
-			_textureRect.origin.x = (_textureRect.size.width - _contentSize.width * scale) * _autofitPos.x;
-			_textureRect.size.width = _contentSize.width * scale;
-		}
-
-		if (texSizeInView.height < _contentSize.height) {
-			_textureSize.height -= (_contentSize.height - texSizeInView.height);
-			_textureOrigin.y = (_contentSize.height - texSizeInView.height) * _autofitPos.y;
-		} else if (texSizeInView.height > _contentSize.height) {
-			_textureRect.origin.y = (_textureRect.size.height - _contentSize.height * scale) * _autofitPos.y;
-			_textureRect.size.height = _contentSize.height * scale;
-		}
+		textureRect = Rect(
+			_textureRect.origin.x + textureRect.origin.x / texSize.width,
+			_textureRect.origin.y + textureRect.origin.y / texSize.height,
+			textureRect.size.width / texSize.width,
+			textureRect.size.height / texSize.height);
 	}
 
 	_vertexes.addQuad()
-		.setGeometry(Vec4(_textureOrigin.x, _textureOrigin.y, 0.0f, 1.0f), _textureSize)
-		.setTextureRect(_textureRect, 1.0f, 1.0f, _flippedX, _flippedY, _rotated)
+		.setGeometry(Vec4(contentRect.origin.x, contentRect.origin.y, 0.0f, 1.0f), contentRect.size)
+		.setTextureRect(textureRect, 1.0f, 1.0f, _flippedX, _flippedY, _rotated)
 		.setColor(_displayedColor);
 
 	_vertexColorDirty = false;
@@ -308,51 +291,23 @@ void Sprite::updateBlendAndDepth() {
 	bool shouldBlendColors = false;
 	bool shouldWriteDepth = false;
 
-	auto checkBlendColors = [&]  {
-		if (_forceSolid) {
-			shouldWriteDepth = true;
-			shouldBlendColors = false;
-			return;
-		}
-		if (_displayedColor.a < 1.0f || !_texture || _isSurface) {
-			shouldBlendColors = true;
-			shouldWriteDepth = false;
-			return;
-		}
-		if (_colorMode.getMode() == ColorMode::Solid) {
-			if (_texture->hasAlpha()) {
-				shouldBlendColors = true;
-				shouldWriteDepth = false;
-			} else {
-				shouldBlendColors = false;
-				shouldWriteDepth = true;
-			}
-		} else {
-			auto alphaMapping = _colorMode.getA();
-			switch (alphaMapping) {
-			case gl::ComponentMapping::Identity:
-				if (_texture->hasAlpha()) {
-					shouldBlendColors = true;
-					shouldWriteDepth = false;
-				}
-				break;
-			case gl::ComponentMapping::Zero:
-				shouldBlendColors = true;
-				shouldWriteDepth = false;
-				break;
-			case gl::ComponentMapping::One:
-				shouldBlendColors = false;
-				shouldWriteDepth = true;
-				break;
-			default:
-				shouldBlendColors = true;
-				shouldWriteDepth = false;
-				break;
-			}
-		}
-	};
-
-	checkBlendColors();
+	_realRenderingLevel = getRealRenderingLevel();
+	switch (_realRenderingLevel) {
+	case RenderingLevel::Default:
+		break;
+	case RenderingLevel::Solid:
+		shouldWriteDepth = true;
+		shouldBlendColors = false;
+		break;
+	case RenderingLevel::Surface:
+		shouldBlendColors = true;
+		shouldWriteDepth = false;
+		break;
+	case RenderingLevel::Transparent:
+		shouldBlendColors = true;
+		shouldWriteDepth = false;
+		break;
+	}
 
 	if (shouldBlendColors) {
 		if (!_materialInfo.blend.enabled) {
@@ -376,7 +331,7 @@ void Sprite::updateBlendAndDepth() {
 			_materialDirty = true;
 		}
 	}
-	if (_isSurface) {
+	if (_realRenderingLevel == RenderingLevel::Surface) {
 		if (_materialInfo.depth.compare != toInt(gl::CompareOp::LessOrEqual)) {
 			_materialInfo.depth.compare = toInt(gl::CompareOp::LessOrEqual);
 			_materialDirty = true;
@@ -387,6 +342,81 @@ void Sprite::updateBlendAndDepth() {
 			_materialDirty = true;
 		}
 	}
+}
+
+RenderingLevel Sprite::getRealRenderingLevel() const {
+	auto level = _renderingLevel;
+	if (level == RenderingLevel::Default) {
+		if (_displayedColor.a < 1.0f || !_texture) {
+			level = RenderingLevel::Transparent;
+		} else if (_colorMode.getMode() == ColorMode::Solid) {
+			if (_texture->hasAlpha()) {
+				level = RenderingLevel::Transparent;
+			} else {
+				level = RenderingLevel::Solid;
+			}
+		} else {
+			auto alphaMapping = _colorMode.getA();
+			switch (alphaMapping) {
+			case gl::ComponentMapping::Identity:
+				if (_texture->hasAlpha()) {
+					level = RenderingLevel::Transparent;
+				} else {
+					level = RenderingLevel::Solid;
+				}
+				break;
+			case gl::ComponentMapping::Zero:
+				level = RenderingLevel::Transparent;
+				break;
+			case gl::ComponentMapping::One:
+				level = RenderingLevel::Solid;
+				break;
+			default:
+				level = RenderingLevel::Transparent;
+				break;
+			}
+		}
+	}
+	return level;
+}
+
+bool Sprite::getAutofitParams(Autofit autofit, const Vec2 &autofitPos, const Size &contentSize, const Size &texSize,
+		Rect &contentRect, Rect &textureRect) {
+
+	contentRect = Rect(Vec2::ZERO, contentSize);
+
+	float scale = 1.0f;
+	switch (autofit) {
+	case Autofit::None:
+		return false;
+		break;
+	case Autofit::Width: scale = texSize.width / contentSize.width; break;
+	case Autofit::Height: scale = texSize.height / contentSize.height; break;
+	case Autofit::Contain: scale = std::max(texSize.width / contentSize.width, texSize.height / contentSize.height); break;
+	case Autofit::Cover: scale = std::min(texSize.width / contentSize.width, texSize.height / contentSize.height); break;
+	}
+
+	contentRect = Rect(Vec2::ZERO, contentSize);
+	textureRect = Rect(0, 0, texSize.width, texSize.height);
+
+	auto texSizeInView = Size(texSize.width / scale, texSize.height / scale);
+	if (texSizeInView.width < contentSize.width) {
+		contentRect.size.width -= (contentSize.width - texSizeInView.width);
+		contentRect.origin.x = (contentSize.width - texSizeInView.width) * autofitPos.x;
+	} else if (texSizeInView.width > contentSize.width) {
+		textureRect.origin.x = (textureRect.size.width - contentSize.width * scale) * autofitPos.x;
+		textureRect.size.width = contentSize.width * scale;
+	}
+
+	if (texSizeInView.height < contentSize.height) {
+		contentRect.size.height -= (contentSize.height - texSizeInView.height);
+		contentRect.origin.y = (contentSize.height - texSizeInView.height) * autofitPos.y;
+	} else if (texSizeInView.height > contentSize.height) {
+		textureRect.origin.y = (textureRect.size.height - contentSize.height * scale) * autofitPos.y;
+		textureRect.size.height = contentSize.height * scale;
+	}
+
+	return true;
 }
 
 }

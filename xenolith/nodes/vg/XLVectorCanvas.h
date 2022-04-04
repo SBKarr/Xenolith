@@ -26,23 +26,16 @@
 #include "XLDefine.h"
 #include "XLVectorImage.h"
 #include "XLGl.h"
-#include "SLDraw.h"
 
 namespace stappler::xenolith {
 
 class VectorCanvas : public Ref {
 public:
-	constexpr static float QualityWorst = 0.25f;
-	constexpr static float QualityLow = 0.75f;
-	constexpr static float QualityNormal = 1.25f;
-	constexpr static float QualityHigh = 1.75f;
-	constexpr static float QualityPerfect = 2.25f;
-
 	static Rc<VectorCanvas> getInstance();
 
 	virtual ~VectorCanvas();
 
-	bool init(float quality = QualityLow, Color4F color = Color4F::WHITE);
+	bool init(float quality = 0.75f, Color4F color = Color4F::WHITE);
 
 	void setColor(Color4F);
 	Color4F getColor() const;
@@ -50,7 +43,7 @@ public:
 	void setQuality(float);
 	float getQuality() const;
 
-	Rc<VectorCanvasResult> draw(Rc<VectorImageData> &&, Rect boxRect, layout::BackgroundStyle);
+	Rc<VectorCanvasResult> draw(Rc<VectorImageData> &&, Size targetSize);
 
 protected:
 	struct Data;

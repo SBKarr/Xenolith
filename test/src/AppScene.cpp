@@ -36,6 +36,8 @@
 #include "XLVkMaterialRenderPass.h"
 
 #include "AppRootLayout.h"
+#include "AppAutofitTest.h"
+#include "AppVectorTest.h"
 #include "XLFontLibrary.h"
 
 namespace stappler::xenolith::app {
@@ -111,7 +113,7 @@ static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder 
 	// define internal resources (images and buffers)
 	gl::Resource::Builder resourceBuilder("LoaderResources");
 	auto initImage = resourceBuilder.addImage("Xenolith.png",
-			gl::ImageInfo(gl::ImageFormat::R8G8B8A8_UNORM, gl::ImageUsage::Sampled),
+			gl::ImageInfo(gl::ImageFormat::R8G8B8A8_UNORM, gl::ImageUsage::Sampled, gl::ImageHints::NoAlpha),
 			FilePath("resources/xenolith-1.png"));
 
 	builder.setInternalResource(Rc<gl::Resource>::create(move(resourceBuilder)));
@@ -211,8 +213,10 @@ bool AppScene::init(Application *app, Extent2 extent) {
 		return false;
 	}
 
-	_layout = addChild(Rc<RootLayout>::create());
-	_layout->setScale(0.5f);
+	//_layout = addChild(Rc<AutofitTest>::create());
+	_layout = addChild(Rc<VectorTest>::create());
+
+	// _layout = addChild(Rc<RootLayout>::create());
 
 	// _sprite = addChild(Rc<Sprite>::create("Xenolith.png"));
 
@@ -236,12 +240,6 @@ void AppScene::onFinished(Director *dir) {
 
 void AppScene::update(const UpdateTime &time) {
 	Scene::update(time);
-
-	/*auto t = time.app % 5_usec;
-
-	if (_sprite) {
-		_sprite->setRotation(M_PI * 2.0 * (float(t) / 5_usec));
-	}*/
 }
 
 void AppScene::onEnter(Scene *scene) {
@@ -260,24 +258,6 @@ void AppScene::onContentSizeDirty() {
 	_layout->setAnchorPoint(Anchor::Middle);
 	_layout->setPosition(_contentSize / 2.0f);
 	_layout->setContentSize(_contentSize);
-
-	/*if (_sprite) {
-		_sprite->setPosition(Vec2(_contentSize) / 2.0f);
-		_sprite->setAnchorPoint(Anchor::Middle);
-		_sprite->setContentSize(_contentSize / 2.0f);
-	}
-
-	if (_node1) {
-		_node1->setContentSize(Size(_contentSize.width / 2.0f, _contentSize.height / 4.0f));
-		_node1->setPosition(Vec2(_contentSize) / 2.0f - Vec2(0, _contentSize.height / 4.0f));
-		_node1->setAnchorPoint(Anchor::Middle);
-	}
-
-	if (_node2) {
-		_node2->setContentSize(Size(_contentSize.width / 2.0f, _contentSize.height / 4.0f));
-		_node2->setPosition(Vec2(_contentSize) / 2.0f + Vec2(0, _contentSize.height / 4.0f));
-		_node2->setAnchorPoint(Anchor::Middle);
-	}*/
 }
 
 void AppScene::addFontController(const Rc<font::FontController> &c) {

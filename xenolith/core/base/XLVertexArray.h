@@ -20,8 +20,8 @@
  THE SOFTWARE.
  **/
 
-#ifndef COMPONENTS_XENOLITH_CORE_BASE_XLVERTEXARRAY_H_
-#define COMPONENTS_XENOLITH_CORE_BASE_XLVERTEXARRAY_H_
+#ifndef XENOLITH_CORE_BASE_XLVERTEXARRAY_H_
+#define XENOLITH_CORE_BASE_XLVERTEXARRAY_H_
 
 #include "XLDefine.h"
 
@@ -48,8 +48,8 @@ public:
 		Quad & setColor(SpanView<Color4F>); // tl bl tr br
 		Quad & setColor(std::initializer_list<Color4F> &&); // tl bl tr br
 
-		Quad & drawChar(const font::Metrics &m, const font::FontCharLayout &l, int16_t charX, int16_t charY,
-				const Color4B &color, layout::style::TextDecoration, uint16_t face);
+		Quad & drawChar(const font::Metrics &m, const font::CharLayout &l, int16_t charX, int16_t charY,
+				const Color4B &color, style::TextDecoration, uint16_t face);
 		Quad & drawUnderlineRect(int16_t charX, int16_t charY, uint16_t width, uint16_t height, const Color4B &color);
 	};
 
@@ -59,7 +59,7 @@ public:
 
 	void reserve(uint32_t bufferCapacity, uint32_t indexCapacity);
 
-	const Rc<gl::VertexData> &pop();
+	Rc<gl::VertexData> pop();
 
 	bool empty() const;
 	void clear();
@@ -81,4 +81,4 @@ protected:
 };
 
 }
-#endif /* COMPONENTS_XENOLITH_CORE_BASE_XLVERTEXARRAY_H_ */
+#endif /* XENOLITH_CORE_BASE_XLVERTEXARRAY_H_ */

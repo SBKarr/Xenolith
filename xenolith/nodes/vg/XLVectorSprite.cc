@@ -25,19 +25,17 @@
 
 namespace stappler::xenolith {
 
-VectorSprite::VectorSprite() {
-	_style.backgroundSizeHeight.metric = layout::style::Metric::Contain;
-	_style.backgroundSizeWidth.metric = layout::style::Metric::Contain;
-}
+VectorSprite::VectorSprite() { }
 
 bool VectorSprite::init(Rc<VectorImage> &&img) {
 	XL_ASSERT(img, "Image should not be nullptr");
 
-	if (!Sprite::init() || !_image) {
+	if (!Sprite::init() || !img) {
 		return false;
 	}
 
 	_image = img;
+	_contentSize = _image->getImageSize();
 	return true;
 }
 
@@ -47,15 +45,17 @@ bool VectorSprite::init(Size size, StringView data) {
 	}
 
 	_image = Rc<VectorImage>::create(size, data);
+	_contentSize = _image->getImageSize();
 	return _image != nullptr;
 }
 
-bool VectorSprite::init(Size size, layout::Path &&path) {
+bool VectorSprite::init(Size size, VectorPath &&path) {
 	if (!Sprite::init()) {
 		return false;
 	}
 
 	_image = Rc<VectorImage>::create(size, move(path));
+	_contentSize = _image->getImageSize();
 	return _image != nullptr;
 }
 
@@ -65,6 +65,7 @@ bool VectorSprite::init(Size size) {
 	}
 
 	_image = Rc<VectorImage>::create(size);
+	_contentSize = _image->getImageSize();
 	return _image != nullptr;
 }
 
@@ -74,6 +75,7 @@ bool VectorSprite::init(StringView data) {
 	}
 
 	_image = Rc<VectorImage>::create(data);
+	_contentSize = _image->getImageSize();
 	return _image != nullptr;
 }
 
@@ -83,6 +85,7 @@ bool VectorSprite::init(BytesView data) {
 	}
 
 	_image = Rc<VectorImage>::create(data);
+	_contentSize = _image->getImageSize();
 	return _image != nullptr;
 }
 
@@ -92,26 +95,27 @@ bool VectorSprite::init(FilePath path) {
 	}
 
 	_image = Rc<VectorImage>::create(path);
+	_contentSize = _image->getImageSize();
 	return _image != nullptr;
 }
 
-Rc<VectorPath> VectorSprite::addPath(StringView id, Mat4 pos) {
+Rc<VectorPathRef> VectorSprite::addPath(StringView id, Mat4 pos) {
 	return _image->addPath(id, pos);
 }
 
-Rc<VectorPath> VectorSprite::addPath(const layout::Path & path, StringView id, Mat4 pos) {
+Rc<VectorPathRef> VectorSprite::addPath(const VectorPath & path, StringView id, Mat4 pos) {
 	return _image->addPath(path, id, pos);
 }
 
-Rc<VectorPath> VectorSprite::addPath(layout::Path && path, StringView id, Mat4 pos) {
+Rc<VectorPathRef> VectorSprite::addPath(VectorPath && path, StringView id, Mat4 pos) {
 	return _image->addPath(move(path), id, pos);
 }
 
-Rc<VectorPath> VectorSprite::getPath(StringView id) {
+Rc<VectorPathRef> VectorSprite::getPath(StringView id) {
 	return _image->getPath(id);
 }
 
-void VectorSprite::removePath(const Rc<VectorPath> &path) {
+void VectorSprite::removePath(const Rc<VectorPathRef> &path) {
 	_image->removePath(path);
 }
 
@@ -121,14 +125,6 @@ void VectorSprite::removePath(StringView id) {
 
 void VectorSprite::clear() {
 	_image->clear();
-}
-
-void VectorSprite::setAntialiased(bool value) {
-	_image->setAntialiased(value);
-}
-
-bool VectorSprite::isAntialiased() const {
-	return _image->isAntialiased();
 }
 
 void VectorSprite::setImage(Rc<VectorImage> &&img) {
@@ -144,53 +140,51 @@ const Rc<VectorImage> &VectorSprite::getImage() const {
 	return _image;
 }
 
-void VectorSprite::onTransformDirty(const Mat4 &parent) {
-	bool isDirty = false;
-	Vec3 scale;
-	parent.decompose(&scale, nullptr, nullptr);
-
-	if (_scale.x != 1.f) { scale.x *= _scale.x; }
-	if (_scale.y != 1.f) { scale.y *= _scale.y; }
-	if (_scale.z != 1.f) { scale.z *= _scale.z; }
-
-	auto boxRect = layout::calculateImageBoxRect(
-			Rect(Vec2(0.0f, 0.0f), Size(_contentSize.width * scale.x, _contentSize.height * scale.y)),
-			_image->getImageSize(), _style);
-
-	//if (boxRect != _boxRect) {
-		isDirty = true;
-		_boxRect = boxRect;
-	//}
-
-	if (isDirty || _image->isDirty()) {
-		_image->clearDirty();
-		_vertexesDirty = true;
+void VectorSprite::setQuality(float val) {
+	if (_quality != val) {
+		_quality = val;
+		_image->setDirty();
 	}
+}
 
+void VectorSprite::onTransformDirty(const Mat4 &parent) {
+	_vertexesDirty = true;
 	Sprite::onTransformDirty(parent);
 }
 
 void VectorSprite::visit(RenderFrameInfo &frame, NodeFlags parentFlags) {
 	if (_image->isDirty()) {
-		_transformDirty = true;
+		_vertexesDirty = true;
 	}
 	Sprite::visit(frame, parentFlags);
 }
 
 void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
-	auto &modelTransform = frame.modelTransformStack.back();
-	if (_normalized) {
-		Mat4 newMV;
-		newMV.m[12] = floorf(modelTransform.m[12]);
-		newMV.m[13] = floorf(modelTransform.m[13]);
-		newMV.m[14] = floorf(modelTransform.m[14]);
-
-		frame.commands->pushVertexArray(_vertexes.pop(),
-				frame.viewProjectionStack.back() * newMV, frame.zPath, _materialId, _isSurface);
-	} else {
-		frame.commands->pushVertexArray(_vertexes.pop(),
-				frame.viewProjectionStack.back() * modelTransform, frame.zPath, _materialId, _isSurface);
+	if (!_result || _result->data.empty()) {
+		return;
 	}
+
+	auto tmpData = _result->data;
+	if (_normalized) {
+		auto transform = frame.modelTransformStack.back() * _targetTransform;
+		for (auto &it : tmpData) {
+			auto modelTransform = transform * it.first;
+
+			Mat4 newMV;
+			newMV.m[12] = floorf(modelTransform.m[12]);
+			newMV.m[13] = floorf(modelTransform.m[13]);
+			newMV.m[14] = floorf(modelTransform.m[14]);
+
+			it.first = newMV;
+		}
+	} else {
+		auto transform = frame.viewProjectionStack.back() * frame.modelTransformStack.back() * _targetTransform;
+		for (auto &it : tmpData) {
+			it.first = transform * it.first;
+		}
+	}
+
+	frame.commands->pushVertexArray(tmpData, frame.zPath, _materialId, _realRenderingLevel);
 }
 
 void VectorSprite::initVertexes() {
@@ -198,13 +192,67 @@ void VectorSprite::initVertexes() {
 }
 
 void VectorSprite::updateVertexes() {
-	auto canvas = VectorCanvas::getInstance();
-	canvas->setColor(_displayedColor);
-	canvas->setQuality(_quality);
+	Vec3 viewScale;
+	_modelViewTransform.decompose(&viewScale, nullptr, nullptr);
 
-	_result = canvas->draw(_image->popData(), _boxRect, _style);
+	Size imageSize = _image->getImageSize();
+	Size targetViewSpaceSize(_contentSize.width * viewScale.x / _textureRect.size.width,
+			_contentSize.height * viewScale.y / _textureRect.size.height);
 
-	_vertexColorDirty = false; // color will be already applied
+	float targetScaleX = _textureRect.size.width;
+	float targetScaleY = _textureRect.size.height;
+	float targetOffsetX = -_textureRect.origin.x * imageSize.width;
+	float targetOffsetY = -_textureRect.origin.y * imageSize.height;
+
+	Size texSize(imageSize.width * _textureRect.size.width, imageSize.height * _textureRect.size.height);
+
+	if (_autofit != Autofit::None) {
+		float scale = 1.0f;
+		switch (_autofit) {
+		case Autofit::None: break;
+		case Autofit::Width: scale = texSize.width / _contentSize.width; break;
+		case Autofit::Height: scale = texSize.height / _contentSize.height; break;
+		case Autofit::Contain: scale = std::max(texSize.width / _contentSize.width, texSize.height / _contentSize.height); break;
+		case Autofit::Cover: scale = std::min(texSize.width / _contentSize.width, texSize.height / _contentSize.height); break;
+		}
+
+		auto texSizeInView = Size(texSize.width / scale, texSize.height / scale);
+		targetOffsetX = targetOffsetX + (_contentSize.width - texSizeInView.width) * _autofitPos.x;
+		targetOffsetY = targetOffsetY + (_contentSize.height - texSizeInView.height) * _autofitPos.y;
+
+		targetViewSpaceSize = Size(texSizeInView.width * viewScale.x,
+				texSizeInView.height * viewScale.y);
+
+		targetScaleX =_textureRect.size.width;
+		targetScaleY =_textureRect.size.height;
+	}
+
+	Mat4 targetTransform(
+		targetScaleX, 0.0f, 0.0f, targetOffsetX,
+		0.0f, targetScaleY, 0.0f, targetOffsetY,
+		0.0f, 0.0f, 1.0f, 0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f
+	);
+
+	bool isDirty = false;
+
+	if (_targetSize != targetViewSpaceSize) {
+		isDirty = true;
+		_targetSize = targetViewSpaceSize;
+	}
+
+	_targetTransform = targetTransform;
+	if (isDirty || _image->isDirty()) {
+		_image->clearDirty();
+		auto canvas = VectorCanvas::getInstance();
+		canvas->setColor(_displayedColor);
+		canvas->setQuality(_quality);
+
+		std::cout << targetTransform << " " << targetViewSpaceSize << "\n";
+
+		_result = canvas->draw(_image->popData(), targetViewSpaceSize);
+		_vertexColorDirty = false; // color will be already applied
+	}
 }
 
 void VectorSprite::updateVertexesColor() {

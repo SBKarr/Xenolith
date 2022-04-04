@@ -173,11 +173,13 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 		}
 
 		if (it != writePlan.end() && it->second.material) {
-			globalWritePlan.vertexes += cmd->vertexes->data.size();
-			globalWritePlan.indexes += cmd->vertexes->indexes.size();
+			for (auto &iit : cmd->vertexes) {
+				globalWritePlan.vertexes += iit.second->data.size();
+				globalWritePlan.indexes += iit.second->indexes.size();
 
-			it->second.vertexes += cmd->vertexes->data.size();
-			it->second.indexes += cmd->vertexes->indexes.size();
+				it->second.vertexes += iit.second->data.size();
+				it->second.indexes += iit.second->indexes.size();
+			}
 			it->second.commands.emplace_front(cmd);
 		}
 
@@ -194,7 +196,7 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 		}
 		if (material->getPipeline()->isSolid()) {
 			emplaceWritePlan(solidWritePlan, cmd);
-		} else if (cmd->isSurface) {
+		} else if (cmd->renderingLevel == RenderingLevel::Surface) {
 			emplaceWritePlan(surfaceWritePlan, cmd);
 		} else {
 			auto v = transparentWritePlan.find(cmd->zPath);
@@ -245,6 +247,53 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 	uint32_t vertexOffset = 0;
 	uint32_t indexOffset = 0;
 
+	uint32_t materialVertexes = 0;
+	uint32_t materialIndexes = 0;
+
+	auto pushVertexes = [&] (const gl::MaterialId &materialId, const MaterialWritePlan &plan,
+			const gl::CmdVertexArray *cmd, const Mat4 &transform, gl::VertexData *vertexes) {
+
+		auto target = (gl::Vertex_V4F_V4F_T2F2U *)vertexesMap.ptr + vertexOffset;
+		memcpy(target, (uint8_t *)vertexes->data.data(),
+				vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U));
+
+		if (!isGpuTransform()) {
+			float depth = 0.0f;
+			auto pathIt = paths.find(cmd->zPath);
+			if (pathIt != paths.end()) {
+				depth = pathIt->second;
+			}
+
+			size_t idx = 0;
+			for (auto &v : vertexes->data) {
+				auto &t = target[idx];
+				t.pos = transform * v.pos;
+				t.pos.z = depth;
+				t.material = materialId;
+
+				if (plan.atlas) {
+					t.tex = plan.atlas->getObjectByName(t.object);
+				}
+
+				++ idx;
+			}
+
+			auto indexTarget = (uint32_t *)indexesMap.ptr + indexOffset;
+
+			idx = 0;
+			for (auto &it : vertexes->indexes) {
+				indexTarget[idx] = it + vertexOffset;
+				++ idx;
+			}
+		}
+
+		vertexOffset += vertexes->data.size();
+		indexOffset += vertexes->indexes.size();
+
+		materialVertexes += vertexes->data.size();
+		materialIndexes += vertexes->indexes.size();
+	};
+
 	auto drawWritePlan = [&] (std::unordered_map<gl::MaterialId, MaterialWritePlan> &writePlan) {
 		// optimize draw order, minimize switching pipeline, textureSet and descriptors
 		Vector<const Pair<const gl::MaterialId, MaterialWritePlan> *> drawOrder;
@@ -272,52 +321,13 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 		}
 
 		for (auto &it : drawOrder) {
-			uint32_t materialVertexes = 0;
-			uint32_t materialIndexes = 0;
+			materialVertexes = 0;
+			materialIndexes = 0;
 
 			for (auto &cmd : it->second.commands) {
-				auto target = (gl::Vertex_V4F_V4F_T2F2U *)vertexesMap.ptr + vertexOffset;
-				memcpy(target, (uint8_t *)cmd->vertexes->data.data(),
-						cmd->vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U));
-
-				if (!isGpuTransform()) {
-					float depth = 0.0f;
-					auto pathIt = paths.find(cmd->zPath);
-					if (pathIt != paths.end()) {
-						depth = pathIt->second;
-					}
-
-					// pre-transform vertexes
-					auto transform = cmd->transform;
-
-					size_t idx = 0;
-					for (auto &v : cmd->vertexes->data) {
-						auto &t = target[idx];
-						t.pos = transform * v.pos;
-						t.pos.z = depth;
-						t.material = it->first;
-
-						if (it->second.atlas) {
-							t.tex = it->second.atlas->getObjectByName(t.object);
-						}
-
-						++ idx;
-					}
-
-					auto indexTarget = (uint32_t *)indexesMap.ptr + indexOffset;
-
-					idx = 0;
-					for (auto &it : cmd->vertexes->indexes) {
-						indexTarget[idx] = it + vertexOffset;
-						++ idx;
-					}
+				for (auto &iit : cmd->vertexes) {
+					pushVertexes(it->first, it->second, cmd, iit.first, iit.second.get());
 				}
-
-				vertexOffset += cmd->vertexes->data.size();
-				indexOffset += cmd->vertexes->indexes.size();
-
-				materialVertexes += cmd->vertexes->data.size();
-				materialIndexes += cmd->vertexes->indexes.size();
 			}
 
 			_spans.emplace_back(gl::VertexSpan({ it->first, materialIndexes, 1, indexOffset - materialIndexes}));

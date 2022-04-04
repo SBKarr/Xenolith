@@ -24,7 +24,6 @@
 #define UTILS_XLHASHTABLE_H_
 
 #include "SPCommon.h"
-#include "SPLayout.h"
 
 namespace stappler::xenolith {
 

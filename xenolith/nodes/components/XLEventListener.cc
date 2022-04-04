@@ -46,7 +46,7 @@ EventHandlerNode * EventListener::onEvent(const EventHeader &h, Callback &&callb
 			this, destroyAfterEvent);
 }
 
-EventHandlerNode * EventListener::onEventWithObject(const EventHeader &h, layout::Ref *obj, Callback &&callback, bool destroyAfterEvent) {
+EventHandlerNode * EventListener::onEventWithObject(const EventHeader &h, Ref *obj, Callback &&callback, bool destroyAfterEvent) {
 	return EventHandlerNode::onEvent(h, obj,
 			std::bind(&EventListener::onEventRecieved, this, std::placeholders::_1, std::move(callback)),
 			this, destroyAfterEvent);

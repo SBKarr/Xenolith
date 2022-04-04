@@ -52,12 +52,19 @@ bool CommandList::init(const Rc<PoolRef> &pool) {
 	return true;
 }
 
-void CommandList::pushVertexArray(const Rc<VertexData> &vert, const Mat4 &t, SpanView<int16_t> zPath, gl::MaterialId material, bool isSurface) {
+void CommandList::pushVertexArray(Rc<VertexData> &&vert, const Mat4 &t, SpanView<int16_t> zPath,
+		gl::MaterialId material, RenderingLevel level) {
 	_pool->perform([&] {
 		auto cmd = Command::create(_pool->getPool(), CommandType::VertexArray);
 		auto cmdData = (CmdVertexArray *)cmd->data;
-		cmdData->vertexes = vert;
-		cmdData->transform = t;
+
+		// pool memory is 16-bytes aligned, no problems with Mat4
+		auto p = new (memory::pool::palloc(_pool->getPool(), sizeof(Pair<Mat4, Rc<VertexData>>))) Pair<Mat4, Rc<VertexData>>();
+
+		p->first = t;
+		p->second = move(vert);
+
+		cmdData->vertexes = makeSpanView(p, 1);
 
 		while (!zPath.empty() && zPath.back() == 0) {
 			zPath.pop_back();
@@ -65,7 +72,28 @@ void CommandList::pushVertexArray(const Rc<VertexData> &vert, const Mat4 &t, Spa
 
 		cmdData->zPath = zPath.pdup(_pool->getPool());
 		cmdData->material = material;
-		cmdData->isSurface = isSurface;
+		cmdData->renderingLevel = level;
+
+		addCommand(cmd);
+	});
+}
+
+void CommandList::pushVertexArray(SpanView<Pair<Mat4, Rc<VertexData>>> data, SpanView<int16_t> zPath,
+		gl::MaterialId material, RenderingLevel level) {
+	_pool->perform([&] {
+		auto cmd = Command::create(_pool->getPool(), CommandType::VertexArray);
+		auto cmdData = (CmdVertexArray *)cmd->data;
+
+		// pool memory is 16-bytes aligned, no problems with Mat4
+		cmdData->vertexes = data.pdup(_pool->getPool());
+
+		while (!zPath.empty() && zPath.back() == 0) {
+			zPath.pop_back();
+		}
+
+		cmdData->zPath = zPath.pdup(_pool->getPool());
+		cmdData->material = material;
+		cmdData->renderingLevel = level;
 
 		addCommand(cmd);
 	});

@@ -258,7 +258,7 @@ void Node::setRotation(float rotation) {
 
 	_rotation = Vec3(0.0f, 0.0f, rotation);
 	_transformInverseDirty = _transformCacheDirty = _transformDirty = true;
-	Quaternion::createFormEulerAngles(_rotation, &_rotationQuat);
+	_rotationQuat = Quaternion(_rotation);
 }
 
 void Node::setRotation(const Vec3 &rotation) {
@@ -268,7 +268,7 @@ void Node::setRotation(const Vec3 &rotation) {
 
 	_rotation = rotation;
 	_transformInverseDirty = _transformCacheDirty = _transformDirty = true;
-	Quaternion::createFormEulerAngles(_rotation, &_rotationQuat);
+	_rotationQuat = Quaternion(_rotation);
 }
 
 void Node::setRotation(const Quaternion &quat) {
@@ -644,7 +644,7 @@ void Node::cleanup() {
 
 Rect Node::getBoundingBox() const {
 	Rect rect(0, 0, _contentSize.width, _contentSize.height);
-	return layout::TransformRect(rect, getNodeToParentTransform());
+	return TransformRect(rect, getNodeToParentTransform());
 }
 
 void Node::resume() {
@@ -719,8 +719,7 @@ const Mat4& Node::getNodeToParentTransform() const {
 
 		// If skew is needed, apply skew and then anchor point
 		if (needsSkewMatrix) {
-			float skewMatArray[16] = { 1, (float) tanf(_skew.y), 0, 0, (float) tanf(_skew.x), 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
-			Mat4 skewMatrix(skewMatArray);
+			Mat4 skewMatrix(1, (float) tanf(_skew.y), 0, 0, (float) tanf(_skew.x), 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
 
 			_transform = _transform * skewMatrix;
 
@@ -768,18 +767,12 @@ Mat4 Node::getWorldToNodeTransform() const {
 
 Vec2 Node::convertToNodeSpace(const Vec2 &worldPoint) const {
 	Mat4 tmp = getWorldToNodeTransform();
-	Vec3 vec3(worldPoint.x, worldPoint.y, 0);
-	Vec3 ret;
-	tmp.transformPoint(vec3, &ret);
-	return Vec2(ret.x, ret.y);
+	return tmp.transformPoint(worldPoint);
 }
 
 Vec2 Node::convertToWorldSpace(const Vec2 &nodePoint) const {
 	Mat4 tmp = getNodeToWorldTransform();
-	Vec3 vec3(nodePoint.x, nodePoint.y, 0);
-	Vec3 ret;
-	tmp.transformPoint(vec3, &ret);
-	return Vec2(ret.x, ret.y);
+	return tmp.transformPoint(nodePoint);
 }
 
 Vec2 Node::convertToNodeSpaceAR(const Vec2 &worldPoint) const {

@@ -20,8 +20,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **/
 
-#include "XLInputDispatcher.cc"
 #include "XLDefine.h"
+
+#include "XLInputDispatcher.cc"
 
 #include "XLEvent.cc"
 #include "XLEventHeader.cc"
@@ -33,6 +34,18 @@ THE SOFTWARE.
 #include "XLVertexArray.cc"
 
 #include "XLScheduler.cc"
+
+#include "XLSIMD.cc"
+
+#include "XLColor.cc"
+#include "XLVec2.cc"
+#include "XLVec3.cc"
+#include "XLVec4.cc"
+#include "XLGeometry.cc"
+#include "XLQuaternion.cc"
+#include "XLMat4.cc"
+
+#include "XLFontStyle.cc"
 
 namespace stappler::xenolith {
 
@@ -67,21 +80,6 @@ void end(ProfileData &data) {
 
 void store(ProfileData &data) {
 
-}
-
-}
-
-namespace stappler::xenolith::font {
-
-uint32_t FontCharLayout::getObjectId(uint16_t sourceId, char16_t ch, FontAnchor a) {
-	uint32_t ret = ch;
-	ret |= (toInt(a) << (sizeof(char16_t) * 8));
-	ret |= (sourceId << ((sizeof(char16_t) * 8) + 2));
-	return ret;
-}
-
-uint32_t FontCharLayout::getObjectId(uint32_t ret, FontAnchor a) {
-	return (ret & (~ (3 << (sizeof(char16_t) * 8)))) | (toInt(a) << (sizeof(char16_t) * 8));
 }
 
 }

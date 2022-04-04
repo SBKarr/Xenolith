@@ -20,18 +20,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **/
 
-#ifndef COMPONENTS_XENOLITH_CORE_XLFORWARD_H_
-#define COMPONENTS_XENOLITH_CORE_XLFORWARD_H_
+#ifndef XENOLITH_CORE_XLFORWARD_H_
+#define XENOLITH_CORE_XLFORWARD_H_
 
-#include "SPLayout.h"
+#include "SPCommon.h"
 #include "SPFilesystem.h"
 #include "SPThreadTask.h"
 #include "SPData.h"
 #include "SPLog.h"
 #include "SPSpanView.h"
-
-#include "SLFont.h"
-
 #include <optional>
 
 #include "XLConfig.h"
@@ -45,6 +42,17 @@ THE SOFTWARE.
 #define XLASSERT(cond, msg)
 #endif
 #endif
+
+#include "XLVec2.h"
+#include "XLVec3.h"
+#include "XLVec4.h"
+#include "XLGeometry.h"
+#include "XLQuaternion.h"
+#include "XLMat4.h"
+#include "XLPadding.h"
+#include "XLColor.h"
+#include "XLMovingAverage.h"
+#include "XLFontStyle.h"
 
 // GL thread loop debug (uncomment to enable)
 // #define XL_LOOP_DEBUG 1
@@ -64,52 +72,7 @@ THE SOFTWARE.
 
 namespace stappler::xenolith {
 
-using Vec2 = layout::Vec2;
-using Vec3 = layout::Vec3;
-using Vec4 = layout::Vec4;
-using Size = layout::Size;
-using Rect = layout::Rect;
-
-using Size2 = layout::Size2;
-using Size3 = layout::Size3;
-using Extent2 = layout::Extent2;
-using Extent3 = layout::Extent3;
-
-using Mat4 = layout::Mat4;
-using Quaternion = layout::Quaternion;
-
-using Color = layout::Color;
-using Color4B = layout::Color4B;
-using Color4F = layout::Color4F;
-using Color3B = layout::Color3B;
-
-using Padding = layout::Padding;
-using Margin = layout::Margin;
-
-struct URect {
-	uint32_t x = 0;
-	uint32_t y = 0;
-	uint32_t width = 0;
-	uint32_t height = 0;
-};
-
-template <size_t Count>
-using MovingAverage = layout::MovingAverage<Count>;
-using FilePath = layout::FilePath;
-
-namespace Anchor {
-
-constexpr const Vec2 Middle(0.5f, 0.5f);
-constexpr const Vec2 BottomLeft(0.0f, 0.0f);
-constexpr const Vec2 TopLeft(0.0f, 1.0f);
-constexpr const Vec2 BottomRight(1.0f, 0.0f);
-constexpr const Vec2 TopRight(1.0f, 1.0f);
-constexpr const Vec2 MiddleRight(1.0f, 0.5f);
-constexpr const Vec2 MiddleLeft(0.0f, 0.5f);
-constexpr const Vec2 MiddleTop(0.5f, 1.0f);
-constexpr const Vec2 MiddleBottom(0.5f, 0.0f);
-
-}
+using FilePath = ValueWrapper<StringView, class FilePathTag>;
 
 enum ScreenOrientation {
 	Landscape = 1,
@@ -118,6 +81,13 @@ enum ScreenOrientation {
 	Portrait,
 	PortraitTop,
 	PortraitBottom
+};
+
+enum class RenderingLevel {
+	Default,
+	Solid,
+	Surface,
+	Transparent
 };
 
 class Event;
@@ -179,25 +149,6 @@ class FontLibrary;
 class FontController;
 class FontFaceObject;
 
-using Metrics = layout::Metrics;
-using CharLayout = layout::CharLayout;
-
-enum FontAnchor : uint32_t {
-	BottomLeft,
-	TopLeft,
-	TopRight,
-	BottomRight
-};
-
-struct FontCharLayout {
-	static uint32_t getObjectId(uint16_t sourceId, char16_t, FontAnchor);
-	static uint32_t getObjectId(uint32_t, FontAnchor);
-
-	CharLayout layout;
-	uint16_t width;
-	uint16_t height;
-};
-
 }
 
-#endif /* COMPONENTS_XENOLITH_CORE_XLFORWARD_H_ */
+#endif /* XENOLITH_CORE_XLFORWARD_H_ */

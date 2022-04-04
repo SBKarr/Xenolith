@@ -31,7 +31,7 @@ LabelParameters::DescriptionStyle::DescriptionStyle() {
 	font.fontSize = FontSize(14);
 	text.opacity = 222;
 	text.color = Color3B::BLACK;
-	text.whiteSpace = layout::style::WhiteSpace::PreWrap;
+	text.whiteSpace = style::WhiteSpace::PreWrap;
 }
 
 String LabelParameters::DescriptionStyle::getConfigName(bool caps) const {
@@ -170,9 +170,9 @@ float LabelParameters::getStringWidth(font::FontController *source, const Descri
 		density = Application::getInstance()->getData().density;
 	}
 
-	layout::FormatSpec spec;
+	font::FormatSpec spec;
 	spec.setSource(source);
-	layout::Formatter fmt(&spec, density);
+	font::Formatter fmt(&spec, density);
 	fmt.begin(0, 0);
 
 	if (localized && locale::hasLocaleTags(str)) {
@@ -207,9 +207,9 @@ Size LabelParameters::getLabelSize(font::FontController *source, const Descripti
 		density = Application::getInstance()->getData().density;
 	}
 
-	layout::FormatSpec spec;
+	font::FormatSpec spec;
 	spec.setSource(source);
-	layout::Formatter fmt(&spec, density);
+	font::Formatter fmt(&spec, density);
 	fmt.setWidth((uint16_t)roundf(w * density));
 	fmt.begin(0, 0);
 
@@ -577,7 +577,7 @@ void LabelParameters::updateFormatSpec(FormatSpec *format, const StyleVec &compi
 
 		format->clear();
 
-		layout::Formatter formatter(format, density);
+		font::Formatter formatter(format, density);
 		formatter.setWidth((uint16_t)roundf(_width * density));
 		formatter.setTextAlignment(_alignment);
 		formatter.setMaxWidth((uint16_t)roundf(_maxWidth * density));

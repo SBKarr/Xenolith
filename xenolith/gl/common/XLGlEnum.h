@@ -603,6 +603,13 @@ enum class RenderPassType {
 	Generic
 };
 
+enum class ImageHints {
+	None = 0,
+	NoAlpha = 1 << 0
+};
+
+SP_DEFINE_ENUM_AS_MASK(ImageHints);
+
 // read-write operations on attachment within passes
 enum class AttachmentOps {
 	Undefined,

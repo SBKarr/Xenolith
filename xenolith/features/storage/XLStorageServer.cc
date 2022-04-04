@@ -88,7 +88,9 @@ const db::Scheme * ServerComponent::exportScheme(const Scheme &scheme) {
 
 Server::~Server() {
 	if (_data) {
+		auto serverPool = _data->serverPool;
 		_data->~ServerData();
+		memory::pool::destroy(serverPool);
 	}
 }
 
@@ -684,8 +686,6 @@ Server::ServerData::~ServerData() {
 		it.second->onComponentDisposed();
 	}
 	memory::pool::pop();
-
-	memory::pool::destroy(serverPool);
 }
 
 bool Server::ServerData::init() {

@@ -73,12 +73,15 @@ uint64_t Texture::getIndex() const {
 
 bool Texture::hasAlpha() const {
 	if (_dynamic) {
-		auto fmt = gl::getImagePixelFormat(_dynamic->getInfo().format);
+		auto info = _dynamic->getInfo();
+		auto fmt = gl::getImagePixelFormat(info.format);
 		switch (fmt) {
 		case gl::PixelFormat::A:
 		case gl::PixelFormat::IA:
-		case gl::PixelFormat::RGBA:
 			return true;
+			break;
+		case gl::PixelFormat::RGBA:
+			return (info.hints & gl::ImageHints::NoAlpha) == gl::ImageHints::None;
 			break;
 		default:
 			break;
@@ -89,8 +92,10 @@ bool Texture::hasAlpha() const {
 		switch (fmt) {
 		case gl::PixelFormat::A:
 		case gl::PixelFormat::IA:
-		case gl::PixelFormat::RGBA:
 			return true;
+			break;
+		case gl::PixelFormat::RGBA:
+			return (_data->hints & gl::ImageHints::NoAlpha) == gl::ImageHints::None;
 			break;
 		default:
 			break;

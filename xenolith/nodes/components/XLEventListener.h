@@ -38,7 +38,7 @@ public:
 	void onEventRecieved(const Event &ev, const Callback &);
 
 	EventHandlerNode * onEvent(const EventHeader &h, Callback &&, bool destroyAfterEvent = false);
-	EventHandlerNode * onEventWithObject(const EventHeader &h, layout::Ref *obj, Callback &&, bool destroyAfterEvent = false);
+	EventHandlerNode * onEventWithObject(const EventHeader &h, Ref *obj, Callback &&, bool destroyAfterEvent = false);
 
 	void clear();
 };

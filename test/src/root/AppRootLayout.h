@@ -30,6 +30,8 @@ namespace stappler::xenolith::app {
 
 class RootLayout : public Node {
 public:
+	virtual ~RootLayout() { }
+
 	virtual bool init() override;
 
 	virtual void onContentSizeDirty() override;

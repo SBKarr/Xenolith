@@ -22,7 +22,7 @@
 
 #include "XLVectorImage.h"
 #include "SPBitmap.h"
-#include "SLSvgReader.h"
+#include "XLVectorSvgReader.h"
 
 namespace stappler::xenolith {
 
@@ -31,36 +31,36 @@ void VectorCanvasResult::updateColor(const Color4F &color) {
 	auto target = Vec4(color.r, color.g, color.b, color.a);
 	for (auto &it : data) {
 		auto data = Rc<gl::VertexData>::alloc();
-		data->data = it.first->data;
-		data->indexes = it.first->indexes;
+		data->data = it.second->data;
+		data->indexes = it.second->indexes;
 
-		it.first = move(data);
+		it.second = move(data);
 
-		for (auto &iit : it.first->data) {
+		for (auto &iit : it.second->data) {
 			iit.color = (iit.color / origin) * target;
 		}
 	}
 }
 
-bool VectorPath::init(VectorImage *image, const String &id, const Rc<Path> &path) {
+bool VectorPathRef::init(VectorImage *image, const String &id, const Rc<VectorPath> &path) {
 	_image = image;
 	_id = id;
 	_path = path;
 	return true;
 }
 
-bool VectorPath::init(VectorImage *image, const String &id, Rc<Path> &&path) {
+bool VectorPathRef::init(VectorImage *image, const String &id, Rc<VectorPath> &&path) {
 	_image = image;
 	_id = id;
 	_path = move(path);
 	return true;
 }
 
-size_t VectorPath::count() const {
+size_t VectorPathRef::count() const {
 	return _path ? _path->count() : 0;
 }
 
-VectorPath & VectorPath::moveTo(float x, float y) {
+VectorPathRef & VectorPathRef::moveTo(float x, float y) {
 	if (_copyOnWrite) {
 		copy();
 	}
@@ -72,7 +72,7 @@ VectorPath & VectorPath::moveTo(float x, float y) {
 	return *this;
 }
 
-VectorPath & VectorPath::lineTo(float x, float y) {
+VectorPathRef & VectorPathRef::lineTo(float x, float y) {
 	if (_copyOnWrite) {
 		copy();
 	}
@@ -84,7 +84,7 @@ VectorPath & VectorPath::lineTo(float x, float y) {
 	return *this;
 }
 
-VectorPath & VectorPath::quadTo(float x1, float y1, float x2, float y2) {
+VectorPathRef & VectorPathRef::quadTo(float x1, float y1, float x2, float y2) {
 	if (_copyOnWrite) {
 		copy();
 	}
@@ -96,7 +96,7 @@ VectorPath & VectorPath::quadTo(float x1, float y1, float x2, float y2) {
 	return *this;
 }
 
-VectorPath & VectorPath::cubicTo(float x1, float y1, float x2, float y2, float x3, float y3) {
+VectorPathRef & VectorPathRef::cubicTo(float x1, float y1, float x2, float y2, float x3, float y3) {
 	if (_copyOnWrite) {
 		copy();
 	}
@@ -108,7 +108,7 @@ VectorPath & VectorPath::cubicTo(float x1, float y1, float x2, float y2, float x
 	return *this;
 }
 
-VectorPath & VectorPath::arcTo(float rx, float ry, float rotation, bool largeFlag, bool sweepFlag, float x, float y) {
+VectorPathRef & VectorPathRef::arcTo(float rx, float ry, float rotation, bool largeFlag, bool sweepFlag, float x, float y) {
 	if (_copyOnWrite) {
 		copy();
 	}
@@ -120,7 +120,7 @@ VectorPath & VectorPath::arcTo(float rx, float ry, float rotation, bool largeFla
 	return *this;
 }
 
-VectorPath & VectorPath::closePath() {
+VectorPathRef & VectorPathRef::closePath() {
 	if (_copyOnWrite) {
 		copy();
 	}
@@ -132,7 +132,7 @@ VectorPath & VectorPath::closePath() {
 	return *this;
 }
 
-VectorPath & VectorPath::addRect(const Rect& rect) {
+VectorPathRef & VectorPathRef::addRect(const Rect& rect) {
 	if (_copyOnWrite) {
 		copy();
 	}
@@ -144,7 +144,7 @@ VectorPath & VectorPath::addRect(const Rect& rect) {
 	return *this;
 }
 
-VectorPath & VectorPath::addOval(const Rect& oval) {
+VectorPathRef & VectorPathRef::addOval(const Rect& oval) {
 	if (_copyOnWrite) {
 		copy();
 	}
@@ -156,7 +156,7 @@ VectorPath & VectorPath::addOval(const Rect& oval) {
 	return *this;
 }
 
-VectorPath & VectorPath::addCircle(float x, float y, float radius) {
+VectorPathRef & VectorPathRef::addCircle(float x, float y, float radius) {
 	if (_copyOnWrite) {
 		copy();
 	}
@@ -168,7 +168,7 @@ VectorPath & VectorPath::addCircle(float x, float y, float radius) {
 	return *this;
 }
 
-VectorPath & VectorPath::addArc(const Rect& oval, float startAngleInRadians, float sweepAngleInRadians) {
+VectorPathRef & VectorPathRef::addArc(const Rect& oval, float startAngleInRadians, float sweepAngleInRadians) {
 	if (_copyOnWrite) {
 		copy();
 	}
@@ -180,7 +180,7 @@ VectorPath & VectorPath::addArc(const Rect& oval, float startAngleInRadians, flo
 	return *this;
 }
 
-VectorPath & VectorPath::setFillColor(const Color4B &color) {
+VectorPathRef & VectorPathRef::setFillColor(const Color4B &color) {
 	if (_path && _path->getFillColor() == color) {
 		return *this;
 	}
@@ -196,11 +196,11 @@ VectorPath & VectorPath::setFillColor(const Color4B &color) {
 	return *this;
 }
 
-const Color4B &VectorPath::getFillColor() const {
+const Color4B &VectorPathRef::getFillColor() const {
 	return _path ? _path->getFillColor() : Color4B::BLACK;
 }
 
-VectorPath & VectorPath::setStrokeColor(const Color4B &color) {
+VectorPathRef & VectorPathRef::setStrokeColor(const Color4B &color) {
 	if (_path && _path->getStrokeColor() == color) {
 		return *this;
 	}
@@ -216,11 +216,11 @@ VectorPath & VectorPath::setStrokeColor(const Color4B &color) {
 	return *this;
 }
 
-const Color4B &VectorPath::getStrokeColor() const {
+const Color4B &VectorPathRef::getStrokeColor() const {
 	return _path ? _path->getStrokeColor() : Color4B::BLACK;
 }
 
-VectorPath & VectorPath::setFillOpacity(uint8_t value) {
+VectorPathRef & VectorPathRef::setFillOpacity(uint8_t value) {
 	if (_path && _path->getFillOpacity() == value) {
 		return *this;
 	}
@@ -235,11 +235,11 @@ VectorPath & VectorPath::setFillOpacity(uint8_t value) {
 	}
 	return *this;
 }
-uint8_t VectorPath::getFillOpacity() const {
+uint8_t VectorPathRef::getFillOpacity() const {
 	return _path ? _path->getFillOpacity() : 0;
 }
 
-VectorPath & VectorPath::setStrokeOpacity(uint8_t value) {
+VectorPathRef & VectorPathRef::setStrokeOpacity(uint8_t value) {
 	if (_path && _path->getStrokeOpacity() == value) {
 		return *this;
 	}
@@ -255,11 +255,11 @@ VectorPath & VectorPath::setStrokeOpacity(uint8_t value) {
 	return *this;
 }
 
-uint8_t VectorPath::getStrokeOpacity() const {
+uint8_t VectorPathRef::getStrokeOpacity() const {
 	return _path ? _path->getStrokeOpacity() : 0;
 }
 
-VectorPath & VectorPath::setStrokeWidth(float width) {
+VectorPathRef & VectorPathRef::setStrokeWidth(float width) {
 	if (_path && _path->getStrokeWidth() == width) {
 		return *this;
 	}
@@ -275,11 +275,11 @@ VectorPath & VectorPath::setStrokeWidth(float width) {
 	return *this;
 }
 
-float VectorPath::getStrokeWidth() const {
+float VectorPathRef::getStrokeWidth() const {
 	return _path ? _path->getStrokeWidth() : 0.0f;
 }
 
-VectorPath & VectorPath::setStyle(DrawStyle s) {
+VectorPathRef & VectorPathRef::setStyle(DrawStyle s) {
 	if (_path && _path->getStyle() == s) {
 		return *this;
 	}
@@ -295,11 +295,11 @@ VectorPath & VectorPath::setStyle(DrawStyle s) {
 	return *this;
 }
 
-VectorPath::DrawStyle VectorPath::getStyle() const {
+DrawStyle VectorPathRef::getStyle() const {
 	return _path ? _path->getStyle() : DrawStyle::FillAndStroke;
 }
 
-VectorPath & VectorPath::setTransform(const Mat4 &t) {
+VectorPathRef & VectorPathRef::setTransform(const Mat4 &t) {
 	if (_path && _path->getTransform() == t) {
 		return *this;
 	}
@@ -315,7 +315,7 @@ VectorPath & VectorPath::setTransform(const Mat4 &t) {
 	return *this;
 }
 
-VectorPath & VectorPath::applyTransform(const Mat4 &t) {
+VectorPathRef & VectorPathRef::applyTransform(const Mat4 &t) {
 	if (_copyOnWrite) {
 		copy();
 	}
@@ -327,11 +327,11 @@ VectorPath & VectorPath::applyTransform(const Mat4 &t) {
 	return *this;
 }
 
-const Mat4 &VectorPath::getTransform() const {
+const Mat4 &VectorPathRef::getTransform() const {
 	return _path ? _path->getTransform() : Mat4::IDENTITY;
 }
 
-VectorPath & VectorPath::setAntialiased(bool value) {
+VectorPathRef & VectorPathRef::setAntialiased(bool value) {
 	if (_path && _path->isAntialiased() == value) {
 		return *this;
 	}
@@ -347,11 +347,11 @@ VectorPath & VectorPath::setAntialiased(bool value) {
 	return *this;
 }
 
-bool VectorPath::isAntialiased() const {
+bool VectorPathRef::isAntialiased() const {
 	return _path ? _path->isAntialiased() : false;
 }
 
-VectorPath & VectorPath::clear() {
+VectorPathRef & VectorPathRef::clear() {
 	if (_copyOnWrite) {
 		copy();
 	}
@@ -363,40 +363,40 @@ VectorPath & VectorPath::clear() {
 	return *this;
 }
 
-StringView VectorPath::getId() const {
+StringView VectorPathRef::getId() const {
 	return _id;
 }
 
-bool VectorPath::empty() const {
+bool VectorPathRef::empty() const {
 	return _path ? _path->empty() : true;
 }
 
-bool VectorPath::valid() const {
+bool VectorPathRef::valid() const {
 	return _path && _image;
 }
 
-VectorPath::operator bool() const {
+VectorPathRef::operator bool() const {
 	return valid() && !empty();
 }
 
-void VectorPath::setPath(Rc<Path> &&path) {
+void VectorPathRef::setPath(Rc<VectorPath> &&path) {
 	_path = move(path);
 	_copyOnWrite = false;
 }
 
-VectorPath::Path *VectorPath::getPath() const {
+VectorPath *VectorPathRef::getPath() const {
 	return _path;
 }
 
-void VectorPath::markCopyOnWrite() {
+void VectorPathRef::markCopyOnWrite() {
 	_copyOnWrite = true;
 }
 
-void VectorPath::setImage(VectorImage *image) {
+void VectorPathRef::setImage(VectorImage *image) {
 	_image = image;
 }
 
-void VectorPath::copy() {
+void VectorPathRef::copy() {
 	if (_copyOnWrite) {
 		if (_image) {
 			_path = _image->copyPath(_id, _path);
@@ -405,7 +405,7 @@ void VectorPath::copy() {
 	}
 }
 
-bool VectorImageData::init(VectorImage *image, Size size, Rect viewBox, Vector<layout::PathXRef> &&order, Map<String, layout::Path> &&paths, uint16_t ids) {
+bool VectorImageData::init(VectorImage *image, Size size, Rect viewBox, Vector<VectorPathXRef> &&order, Map<String, VectorPath> &&paths, uint16_t ids) {
 	_imageSize = size;
 	_image = image;
 
@@ -425,7 +425,7 @@ bool VectorImageData::init(VectorImage *image, Size size, Rect viewBox, Vector<l
 	_order = move(order);
 
 	for (auto &it : paths) {
-		_paths.emplace(it.first, Rc<Path>::alloc(move(it.second)));
+		_paths.emplace(it.first, Rc<VectorPath>::alloc(move(it.second)));
 	}
 
 	return true;
@@ -439,7 +439,6 @@ bool VectorImageData::init(VectorImage *image, Size size, Rect viewBox) {
 }
 
 bool VectorImageData::init(VectorImageData &data) {
-	_isAntialiased = data._isAntialiased;
 	_allowBatchDrawing = data._allowBatchDrawing;
 	_imageSize = data._imageSize;
 	_viewBox = data._viewBox;
@@ -451,14 +450,14 @@ bool VectorImageData::init(VectorImageData &data) {
 	return true;
 }
 
-const Map<String, Rc<VectorImageData::Path>> &VectorImageData::getPaths() const {
+const Map<String, Rc<VectorPath>> &VectorImageData::getPaths() const {
 	return _paths;
 }
 
-Rc<VectorImageData::Path> VectorImageData::copyPath(StringView str, const Rc<Path> &path) {
+Rc<VectorPath> VectorImageData::copyPath(StringView str, const Rc<VectorPath> &path) {
 	auto it = _paths.find(str);
 	if (it != _paths.end()) {
-		it->second = Rc<Path>::alloc(*it->second);
+		it->second = Rc<VectorPath>::alloc(*it->second);
 		return it->second;
 	}
 	return nullptr;
@@ -470,14 +469,14 @@ uint16_t VectorImageData::getNextId() {
 	return ret;
 }
 
-Rc<VectorImageData::Path> VectorImageData::addPath(StringView id, Path &&path, Mat4 mat) {
-	Rc<VectorImageData::Path> ret;
+Rc<VectorPath> VectorImageData::addPath(StringView id, VectorPath &&path, Mat4 mat) {
+	Rc<VectorPath> ret;
 	auto it = _paths.find(id);
 	if (it == _paths.end()) {
-		ret = _paths.emplace(id.str(), Rc<Path>::alloc(move(path))).first->second;
-		_order.emplace_back(layout::PathXRef{id.str(), mat});
+		ret = _paths.emplace(id.str(), Rc<VectorPath>::alloc(move(path))).first->second;
+		_order.emplace_back(VectorPathXRef{id.str(), mat});
 	} else {
-		ret = it->second = Rc<Path>::alloc(move(path));
+		ret = it->second = Rc<VectorPath>::alloc(move(path));
 		bool found = false;
 		for (auto &iit : _order) {
 			if (iit.id == id) {
@@ -486,7 +485,7 @@ Rc<VectorImageData::Path> VectorImageData::addPath(StringView id, Path &&path, M
 			}
 		}
 		if (!found) {
-			_order.emplace_back(layout::PathXRef{id.str(), mat});
+			_order.emplace_back(VectorPathXRef{id.str(), mat});
 		}
 	}
 
@@ -517,7 +516,7 @@ void VectorImageData::clear() {
 void VectorImageData::resetDrawOrder() {
 	_order.clear();
 	for (auto &it : _paths) {
-		_order.emplace_back(layout::PathXRef{it.first});
+		_order.emplace_back(VectorPathXRef{it.first});
 	}
 }
 
@@ -541,14 +540,14 @@ VectorImage::~VectorImage() {
 }
 
 bool VectorImage::init(Size size, StringView data) {
-	Path path;
+	VectorPath path;
 	if (!path.init(data)) {
 		return false;
 	}
 	return init(size, std::move(path));
 }
 
-bool VectorImage::init(Size size, Path && path) {
+bool VectorImage::init(Size size, VectorPath && path) {
 	_data = Rc<VectorImageData>::create(this, size, Rect(0, 0, size.width, size.height));
 	addPath(move(path));
 	return true;
@@ -561,14 +560,14 @@ bool VectorImage::init(Size size) {
 
 bool VectorImage::init(StringView data) {
 	String tmp = data.str();
-	layout::SvgReader reader;
-	html::parse<layout::SvgReader, StringView, layout::SvgTag>(reader, StringView(tmp));
+	VectorSvgReader reader;
+	html::parse<VectorSvgReader, StringView, VectorSvgTag>(reader, StringView(tmp));
 
 	if (!reader._paths.empty()) {
 		_data = Rc<VectorImageData>::create(this, Size(reader._width, reader._height), reader._viewBox,
 				move(reader._drawOrder), move(reader._paths), reader._nextId);
 		for (auto &it : _data->getPaths()) {
-			_paths.emplace(it.first, Rc<VectorPath>::create(this, it.first, it.second));
+			_paths.emplace(it.first, Rc<VectorPathRef>::create(this, it.first, it.second));
 		}
 		return true;
 	} else {
@@ -579,14 +578,14 @@ bool VectorImage::init(StringView data) {
 }
 
 bool VectorImage::init(BytesView data) {
-	layout::SvgReader reader;
-	html::parse<layout::SvgReader, StringView, layout::SvgTag>(reader, StringView((const char *)data.data(), data.size()));
+	VectorSvgReader reader;
+	html::parse<VectorSvgReader, StringView, VectorSvgTag>(reader, StringView((const char *)data.data(), data.size()));
 
 	if (!reader._paths.empty()) {
 		_data = Rc<VectorImageData>::create(this, Size(reader._width, reader._height), reader._viewBox,
 				move(reader._drawOrder), move(reader._paths), reader._nextId);
 		for (auto &it : _data->getPaths()) {
-			_paths.emplace(it.first, Rc<VectorPath>::create(this, it.first, it.second));
+			_paths.emplace(it.first, Rc<VectorPathRef>::create(this, it.first, it.second));
 		}
 		return true;
 	} else {
@@ -608,11 +607,11 @@ Rect VectorImage::getViewBox() const {
 	return _data->getViewBox();
 }
 
-Rc<VectorPath> VectorImage::addPath(const Path &path, StringView tag, Mat4 vec) {
-	return addPath(Path(path), tag, vec);
+Rc<VectorPathRef> VectorImage::addPath(const VectorPath &path, StringView tag, Mat4 vec) {
+	return addPath(VectorPath(path), tag, vec);
 }
 
-Rc<VectorPath> VectorImage::addPath(Path &&path, StringView tag, Mat4 vec) {
+Rc<VectorPathRef> VectorImage::addPath(VectorPath &&path, StringView tag, Mat4 vec) {
 	if (_copyOnWrite) {
 		copy();
 	}
@@ -629,7 +628,7 @@ Rc<VectorPath> VectorImage::addPath(Path &&path, StringView tag, Mat4 vec) {
 
 	auto it = _paths.find(tag);
 	if (it == _paths.end()) {
-		auto obj = Rc<VectorPath>::create(this, tag.str(), move(pathObj));
+		auto obj = Rc<VectorPathRef>::create(this, tag.str(), move(pathObj));
 		return _paths.emplace(idStr.empty() ? tag.str() : move(idStr), move(obj)).first->second;
 	} else {
 		it->second->setPath(move(pathObj));
@@ -637,11 +636,11 @@ Rc<VectorPath> VectorImage::addPath(Path &&path, StringView tag, Mat4 vec) {
 	}
 }
 
-Rc<VectorPath> VectorImage::addPath(StringView tag, Mat4 vec) {
-	return addPath(Path(), tag, vec);
+Rc<VectorPathRef> VectorImage::addPath(StringView tag, Mat4 vec) {
+	return addPath(VectorPath(), tag, vec);
 }
 
-Rc<VectorPath> VectorImage::getPath(StringView tag) const {
+Rc<VectorPathRef> VectorImage::getPath(StringView tag) const {
 	auto it = _paths.find(tag);
 	if (it != _paths.end()) {
 		return it->second;
@@ -649,7 +648,7 @@ Rc<VectorPath> VectorImage::getPath(StringView tag) const {
 	return nullptr;
 }
 
-void VectorImage::removePath(const Rc<VectorPath> &path) {
+void VectorImage::removePath(const Rc<VectorPathRef> &path) {
 	removePath(path->getId());
 }
 
@@ -681,20 +680,20 @@ void VectorImage::clear() {
 	setDirty();
 }
 
-const Vector<layout::PathXRef> &VectorImage::getDrawOrder() const {
+const Vector<VectorPathXRef> &VectorImage::getDrawOrder() const {
 	return _data->getDrawOrder();
 }
 
-void VectorImage::setDrawOrder(const Vector<layout::PathXRef> &vec) {
+void VectorImage::setDrawOrder(const Vector<VectorPathXRef> &vec) {
 	if (_copyOnWrite) {
 		copy();
 	}
 
-	_data->setDrawOrder(Vector<layout::PathXRef>(vec));
+	_data->setDrawOrder(Vector<VectorPathXRef>(vec));
 	setDirty();
 }
 
-void VectorImage::setDrawOrder(Vector<layout::PathXRef> &&vec) {
+void VectorImage::setDrawOrder(Vector<VectorPathXRef> &&vec) {
 	if (_copyOnWrite) {
 		copy();
 	}
@@ -727,22 +726,6 @@ void VectorImage::setViewBoxTransform(const Mat4 &m) {
 
 const Mat4 &VectorImage::getViewBoxTransform() const {
 	return _data->getViewBoxTransform();
-}
-
-void VectorImage::setAntialiased(bool value) {
-	if (_data->isAntialiased() == value) {
-		return;
-	}
-
-	if (_copyOnWrite) {
-		copy();
-	}
-
-	_data->setAntialiased(value);
-}
-
-bool VectorImage::isAntialiased() const {
-	return _data->isAntialiased();
 }
 
 void VectorImage::setBatchDrawing(bool value) {
@@ -792,7 +775,7 @@ void VectorImage::markCopyOnWrite() {
 	}
 }
 
-Rc<VectorImage::Path> VectorImage::copyPath(StringView str, const Rc<Path> &path) {
+Rc<VectorPath> VectorImage::copyPath(StringView str, const Rc<VectorPath> &path) {
 	copy();
 	return _data->copyPath(str, path);
 }

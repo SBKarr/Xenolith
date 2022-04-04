@@ -30,34 +30,40 @@ namespace stappler::xenolith {
 
 class VectorSprite : public Sprite {
 public:
+	constexpr static float QualityWorst = 0.25f;
+	constexpr static float QualityLow = 0.75f;
+	constexpr static float QualityNormal = 1.25f;
+	constexpr static float QualityHigh = 1.75f;
+	constexpr static float QualityPerfect = 2.25f;
+
 	virtual ~VectorSprite() { }
 
 	VectorSprite();
 
 	virtual bool init(Rc<VectorImage> &&);
 	virtual bool init(Size, StringView);
-	virtual bool init(Size, layout::Path &&);
+	virtual bool init(Size, VectorPath &&);
 	virtual bool init(Size);
 	virtual bool init(StringView);
 	virtual bool init(BytesView);
 	virtual bool init(FilePath);
 
-    virtual Rc<VectorPath> addPath(StringView = StringView(), Mat4 = Mat4::IDENTITY);
-    virtual Rc<VectorPath> addPath(const layout::Path & path, StringView = StringView(), Mat4 = Mat4::IDENTITY);
-    virtual Rc<VectorPath> addPath(layout::Path && path, StringView = StringView(), Mat4 = Mat4::IDENTITY);
+    virtual Rc<VectorPathRef> addPath(StringView = StringView(), Mat4 = Mat4::IDENTITY);
+    virtual Rc<VectorPathRef> addPath(const VectorPath & path, StringView = StringView(), Mat4 = Mat4::IDENTITY);
+    virtual Rc<VectorPathRef> addPath(VectorPath && path, StringView = StringView(), Mat4 = Mat4::IDENTITY);
 
-    virtual Rc<VectorPath> getPath(StringView);
+    virtual Rc<VectorPathRef> getPath(StringView);
 
-    virtual void removePath(const Rc<VectorPath> &);
+    virtual void removePath(const Rc<VectorPathRef> &);
     virtual void removePath(StringView);
 
     virtual void clear();
 
-    virtual void setAntialiased(bool value);
-    virtual bool isAntialiased() const;
-
     virtual void setImage(Rc<VectorImage> &&);
     virtual const Rc<VectorImage> &getImage() const;
+
+    virtual void setQuality(float);
+    virtual float getQuality() const { return _quality; }
 
 	virtual void onTransformDirty(const Mat4 &) override;
 
@@ -72,9 +78,9 @@ protected:
 
 	bool _async = false;
 	uint64_t _asyncJobId = 0;
-	Rect _boxRect;
+	Size _targetSize;
+	Mat4 _targetTransform;
 	Rc<VectorImage> _image;
-	layout::BackgroundStyle _style;
 	float _quality = 0.75f;
 	Rc<VectorCanvasResult> _result;
 };

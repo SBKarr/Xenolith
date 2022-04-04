@@ -224,7 +224,7 @@ auto PriorityList<Value>::allocate(void *ptr, int32_t p, Args && ... args) -> En
 		_free = ret->next;
 		ret->next = nullptr;
 	} else {
-		ret = (Entry *)memory::pool::palloc(_pool, sizeof(Entry));
+		ret = new (_pool) Entry;
 	}
 
 	ret->target = ptr;

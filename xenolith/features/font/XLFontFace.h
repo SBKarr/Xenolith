@@ -23,8 +23,7 @@
 #ifndef XENOLITH_FEATURES_FONT_XLFONTFACE_H_
 #define XENOLITH_FEATURES_FONT_XLFONTFACE_H_
 
-#include "XLDefine.h"
-#include "SLFont.h"
+#include "XLFontStyle.h"
 
 typedef struct FT_LibraryRec_ * FT_Library;
 typedef struct FT_FaceRec_ * FT_Face;
@@ -80,12 +79,6 @@ struct FontCharStorage {
 	std::array<CellType *, 256> cells;
 };
 
-using FontSize = layout::style::FontSize;
-using FontStyle = layout::FontStyle;
-using FontWeight = layout::FontWeight;
-using FontStretch = layout::FontStretch;
-using FontVariant = layout::style::FontVariant;
-
 class FontFaceData : public Ref {
 public:
 	virtual ~FontFaceData() { }
@@ -124,7 +117,6 @@ public:
 
 	Vector<char16_t> getRequiredChars() const;
 	CharLayout getChar(char16_t c) const;
-	FontCharLayout getFullChar(char16_t c) const;
 	int16_t getKerningAmount(char16_t first, char16_t second) const;
 
 	Metrics getMetrics() const { return _metrics; }
@@ -139,7 +131,7 @@ protected:
 	FT_Face _face = nullptr;
 	Metrics _metrics;
 	Vector<char16_t> _required;
-	FontCharStorage<FontCharLayout> _chars;
+	FontCharStorage<CharLayout> _chars;
 	HashMap<uint32_t, int16_t> _kerning;
 	Mutex _faceMutex;
 	mutable Mutex _charsMutex;

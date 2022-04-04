@@ -262,6 +262,7 @@ struct ImageInfo : NamedMem {
 
 	// on which type of RenderPass this image will be used (there is no universal usage, so, think carefully)
 	RenderPassType type = RenderPassType::Graphics;
+	ImageHints hints = ImageHints::None;
 
 	ImageInfo() = default;
 
@@ -284,6 +285,7 @@ struct ImageInfo : NamedMem {
 	void setup(ForceImageUsage value) { usage = value.get(); }
 	void setup(ImageFormat value) { format = value; }
 	void setup(RenderPassType value) { type = value; }
+	void setup(ImageHints value) { hints |= value; }
 	void setup(StringView value) { key = value; }
 
 	template <typename T>
@@ -449,6 +451,11 @@ size_t getFormatBlockSize(ImageFormat format);
 PixelFormat getImagePixelFormat(ImageFormat format);
 bool isStencilFormat(ImageFormat format);
 bool isDepthFormat(ImageFormat format);
+
+inline std::ostream & operator<<(std::ostream &stream, const Vertex_V4F_V4F_T2F2U &value) {
+	stream << "Pos: " << value.pos << "; Color:" << value.color << "; Tex:" << value.tex << "; Mat:" << value.material << "," << value.object << ";";
+	return stream;
+}
 
 }
 

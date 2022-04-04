@@ -31,7 +31,7 @@ namespace stappler::xenolith {
 
 class Sprite : public Node {
 public:
-	using Autofit = layout::style::Autofit;
+	using Autofit = style::Autofit;
 
 	Sprite();
 	virtual ~Sprite() { }
@@ -42,6 +42,10 @@ public:
 
 	virtual void setTexture(StringView);
 	virtual void setTexture(Rc<Texture> &&);
+
+	// texture rect should be normalized
+	virtual void setTextureRect(const Rect &);
+	virtual const Rect &getTextureRect() const { return _textureRect; }
 
 	virtual void draw(RenderFrameInfo &, NodeFlags flags) override;
 
@@ -54,11 +58,8 @@ public:
 	virtual void setBlendInfo(const BlendInfo &);
 	virtual const BlendInfo &getBlendInfo() const { return _materialInfo.blend; }
 
-	virtual void setForceSolid(bool);
-	virtual bool isForceSolid() const { return _forceSolid; }
-
-	virtual void setSurface(bool);
-	virtual bool isSurface() const { return _isSurface; }
+	virtual void setRenderingLevel(RenderingLevel);
+	virtual RenderingLevel getRenderingLevel() const { return _renderingLevel; }
 
 	virtual void setNormalized(bool);
 	virtual bool isNormalized() const { return _normalized; }
@@ -81,6 +82,11 @@ protected:
 
 	virtual void updateBlendAndDepth();
 
+	RenderingLevel getRealRenderingLevel() const;
+
+	static bool getAutofitParams(Autofit autofit, const Vec2 &autofitValue, const Size &contentSize, const Size &texSize,
+			Rect &contentRect, Rect &textureRect);
+
 	String _textureName;
 	Rc<Texture> _texture;
 	VertexArray _vertexes;
@@ -88,7 +94,7 @@ protected:
 	bool _flippedX = false;
 	bool _flippedY = false;
 	bool _rotated = false;
-	Rect _textureRect = Rect(0.0f, 0.0f, 1.0f, 1.0f);
+	Rect _textureRect = Rect(0.0f, 0.0f, 1.0f, 1.0f); // normalized
 
 	Autofit _autofit = Autofit::None;
 	Vec2 _autofitPos = Vec2(0.5f, 0.5f);
@@ -97,12 +103,13 @@ protected:
 	Size _textureSize;
 	Size _targetTextureSize;
 
-	bool _isSurface = false;
+	RenderingLevel _renderingLevel = RenderingLevel::Default;
+	RenderingLevel _realRenderingLevel = RenderingLevel::Default;
 	uint64_t _materialId = 0;
 
 	// mark sprite as unconditionally solid (so, alpha channel will be ignored)
 	// useful for draw optimization, solid nodes can be drown out of order
-	bool _forceSolid = false;
+
 	bool _materialDirty = true;
 	bool _normalized = false;
 	bool _vertexesDirty = true;

@@ -25,32 +25,32 @@
 
 #include "XLFontLibrary.h"
 #include "SPMetastring.h"
-#include "SLFontFormatter.h"
+#include "XLFontFormatter.h"
 
 namespace stappler::xenolith {
 
 class LabelParameters {
 public:
-	using FontParameters = layout::style::FontStyleParameters;
-	using TextParameters = layout::style::TextLayoutParameters;
+	using FontParameters = style::FontParameters;
+	using TextParameters = style::TextParameters;
 
-	using TextTransform = layout::style::TextTransform;
-	using TextDecoration = layout::style::TextDecoration;
-	using Hyphens = layout::style::Hyphens;
-	using VerticalAlign = layout::style::VerticalAlign;
+	using TextTransform = style::TextTransform;
+	using TextDecoration = style::TextDecoration;
+	using Hyphens = style::Hyphens;
+	using VerticalAlign = style::VerticalAlign;
 
-	using FontStyle = layout::style::FontStyle;
-	using FontWeight = layout::style::FontWeight;
-	using FontStretch = layout::style::FontStretch;
+	using FontStyle = style::FontStyle;
+	using FontWeight = style::FontWeight;
+	using FontStretch = style::FontStretch;
 
 	using Opacity = ValueWrapper<uint8_t, class OpacityTag>;
-	using FontSize = layout::style::FontSize;
+	using FontSize = style::FontSize;
 	using FontFamily = ValueWrapper<uint32_t, class FontFamilyTag>;
 
-	using Alignment = layout::style::TextAlign;
+	using Alignment = style::TextAlign;
 
-	using FormatSpec = layout::FormatSpec;
-	using LineSpec = layout::LineSpec;
+	using FormatSpec = font::FormatSpec;
+	using LineSpec = font::LineSpec;
 
 	struct Style {
 		enum class Name : uint16_t {
@@ -92,7 +92,7 @@ public:
 			Param(const Hyphens &val) : name(Name::Hyphens) { value.hyphens = val; }
 			Param(const VerticalAlign &val) : name(Name::VerticalAlign) { value.verticalAlign = val; }
 			Param(const Color3B &val) : name(Name::Color) { value.color = val; }
-			Param(const layout::Color &val) : name(Name::Color) { value.color = val; }
+			Param(const Color &val) : name(Name::Color) { value.color = val; }
 			Param(const Opacity &val) : name(Name::Opacity) { value.opacity = val.get(); }
 			Param(const FontSize &val) : name(Name::FontSize) { value.fontSize = val; }
 			Param(const FontStyle &val) : name(Name::FontStyle) { value.fontStyle = val; }
@@ -198,8 +198,8 @@ public:
 
 	protected:
 		bool begin = false;
-		layout::FormatSpec _spec;
-		layout::Formatter _formatter;
+		font::FormatSpec _spec;
+		font::Formatter _formatter;
 		float _density = 1.0f;
 	};
 

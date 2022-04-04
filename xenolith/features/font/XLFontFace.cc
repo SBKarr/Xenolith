@@ -195,19 +195,10 @@ Vector<char16_t> FontFaceObject::getRequiredChars() const {
 CharLayout FontFaceObject::getChar(char16_t c) const {
 	std::unique_lock<Mutex> lock(_charsMutex);
 	auto l = _chars.get(c);
-	if (l && l->layout.charID == c) {
-		return l->layout;
-	}
-	return CharLayout{0};
-}
-
-FontCharLayout FontFaceObject::getFullChar(char16_t c) const {
-	std::unique_lock<Mutex> lock(_charsMutex);
-	auto l = _chars.get(c);
-	if (l && l->layout.charID == c) {
+	if (l && l->charID == c) {
 		return *l;
 	}
-	return FontCharLayout();
+	return CharLayout{0};
 }
 
 int16_t FontFaceObject::getKerningAmount(char16_t first, char16_t second) const {
@@ -224,9 +215,9 @@ bool FontFaceObject::addChar(char16_t theChar, bool &updated) {
 	std::unique_lock<Mutex> charsLock(_charsMutex);
 	auto value = _chars.get(theChar);
 	if (value) {
-		if (value->layout.charID == theChar) {
+		if (value->charID == theChar) {
 			return true;
-		} else if (value->layout.charID == char16_t(0xFFFF)) {
+		} else if (value->charID == char16_t(0xFFFF)) {
 			return false;
 		}
 	}
@@ -234,21 +225,21 @@ bool FontFaceObject::addChar(char16_t theChar, bool &updated) {
 	std::unique_lock<Mutex> faceLock(_faceMutex);
 	int cIdx = FT_Get_Char_Index(_face, theChar);
 	if (!cIdx) {
-		_chars.emplace(theChar, FontCharLayout{ CharLayout{char16_t(0xFFFF), 0, 0, 0}, 0, 0 });
+		_chars.emplace(theChar, CharLayout{char16_t(0xFFFF), 0, 0, 0, 0, 0 });
 		return false;
 	}
 
 	auto err = FT_Load_Glyph(_face, cIdx, FT_LOAD_DEFAULT | FT_LOAD_NO_BITMAP);
 	if (err != FT_Err_Ok) {
-		_chars.emplace(theChar, FontCharLayout{ CharLayout{char16_t(0xFFFF), 0, 0, 0}, 0, 0 });
+		_chars.emplace(theChar, CharLayout{char16_t(0xFFFF), 0, 0, 0, 0, 0 });
 		return false;
 	}
 
 	// store result in the passed rectangle
-	_chars.emplace(theChar, FontCharLayout{ CharLayout{theChar,
+	_chars.emplace(theChar, CharLayout{theChar,
 		static_cast<int16_t>(_face->glyph->metrics.horiBearingX >> 6),
 		static_cast<int16_t>(- (_face->glyph->metrics.horiBearingY >> 6)),
-		static_cast<uint16_t>(_face->glyph->metrics.horiAdvance >> 6)},
+		static_cast<uint16_t>(_face->glyph->metrics.horiAdvance >> 6),
 		static_cast<uint16_t>(_face->glyph->metrics.width >> 6),
 		static_cast<uint16_t>(_face->glyph->metrics.height >> 6)});
 
@@ -257,29 +248,29 @@ bool FontFaceObject::addChar(char16_t theChar, bool &updated) {
 	}
 
 	if (FT_HAS_KERNING(_face)) {
-		_chars.foreach([&] (const FontCharLayout & it) {
-			if (it.layout.charID == 0 || it.layout.charID == char16_t(0xFFFF)) {
+		_chars.foreach([&] (const CharLayout & it) {
+			if (it.charID == 0 || it.charID == char16_t(0xFFFF)) {
 				return;
 			}
 
-			if (it.layout.charID != theChar) {
+			if (it.charID != theChar) {
 				FT_Vector kerning;
 				auto err = FT_Get_Kerning(_face, cIdx, cIdx, FT_KERNING_DEFAULT, &kerning);
 				if (err == FT_Err_Ok) {
 					auto value = (int16_t)(kerning.x >> 6);
 					if (value != 0) {
-						_kerning.emplace(theChar << 16 | (it.layout.charID & 0xffff), value);
+						_kerning.emplace(theChar << 16 | (it.charID & 0xffff), value);
 					}
 				}
 			} else {
-				auto kIdx = FT_Get_Char_Index(_face, it.layout.charID);
+				auto kIdx = FT_Get_Char_Index(_face, it.charID);
 
 				FT_Vector kerning;
 				auto err = FT_Get_Kerning(_face, cIdx, kIdx, FT_KERNING_DEFAULT, &kerning);
 				if (err == FT_Err_Ok) {
 					auto value = (int16_t)(kerning.x >> 6);
 					if (value != 0) {
-						_kerning.emplace(theChar << 16 | (it.layout.charID & 0xffff), value);
+						_kerning.emplace(theChar << 16 | (it.charID & 0xffff), value);
 					}
 				}
 
@@ -287,7 +278,7 @@ bool FontFaceObject::addChar(char16_t theChar, bool &updated) {
 				if (err == FT_Err_Ok) {
 					auto value = (int16_t)(kerning.x >> 6);
 					if (value != 0) {
-						_kerning.emplace(it.layout.charID << 16 | (theChar & 0xffff), value);
+						_kerning.emplace(it.charID << 16 | (theChar & 0xffff), value);
 					}
 				}
 			}

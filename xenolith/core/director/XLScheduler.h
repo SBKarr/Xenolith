@@ -31,9 +31,11 @@ namespace stappler::xenolith {
 using SchedulerFunc = Function<void(const UpdateTime &)>;
 
 struct SchedulerCallback {
-	SchedulerFunc callback;
+	SchedulerFunc callback = nullptr;
     bool paused = false;
     bool removed = false;
+
+    SchedulerCallback() = default;
 
     SchedulerCallback(SchedulerFunc &&fn, bool paused)
     : callback(move(fn)), paused(paused) { }

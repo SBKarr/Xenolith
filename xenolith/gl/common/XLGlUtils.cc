@@ -25,11 +25,11 @@
 namespace stappler::xenolith::gl {
 
 uint32_t RenderFontInput::getObjectId(uint16_t sourceId, char16_t ch, font::FontAnchor a) {
-	return font::FontCharLayout::getObjectId(sourceId, ch, a);
+	return font::CharLayout::getObjectId(sourceId, ch, a);
 }
 
 uint32_t RenderFontInput::getObjectId(uint32_t ret, font::FontAnchor a) {
-	return font::FontCharLayout::getObjectId(ret, a);
+	return font::CharLayout::getObjectId(ret, a);
 }
 
 String getBufferFlagsDescription(BufferFlags fmt) {

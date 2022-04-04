@@ -21,7 +21,7 @@
  **/
 
 #include "XLVectorCanvas.h"
-#include "SLTesselator.h"
+#include "XLTesselator.h"
 
 namespace stappler::xenolith {
 
@@ -33,14 +33,12 @@ struct VectorCanvasPathOutput {
 
 struct VectorCanvasPathDrawer {
 	TESSalloc tessAlloc;
-	const layout::Path *path = nullptr;
-	layout::StrokeDrawer *stroke = nullptr;
-	TESStesselator *fillTess = nullptr;
+	const VectorPath *path = nullptr;
 
 	float quality = 0.5f; // approximation level (more is better)
 	Color4F originalColor;
 
-	uint32_t draw(memory::pool_t *pool, const layout::Path &path, const Mat4 &, gl::VertexData *out);
+	uint32_t draw(memory::pool_t *pool, const VectorPath &path, const Mat4 &, gl::VertexData *out);
 };
 
 struct VectorCanvas::Data : memory::AllocPool {
@@ -56,10 +54,9 @@ struct VectorCanvas::Data : memory::AllocPool {
 	TimeInterval subAccum;
 
 	Rc<VectorImageData> image;
-	Rect boxRect;
-	layout::BackgroundStyle backgroundStyle;
+	Size targetSize;
 
-	memory::vector<Pair<Rc<gl::VertexData>, Mat4>> out;
+	Vector<Pair<Mat4, Rc<gl::VertexData>>> *out = nullptr;
 
 	Data(memory::pool_t *p) : pool(p) {
 		transactionPool = memory::pool::create(pool);
@@ -80,12 +77,12 @@ struct VectorCanvas::Data : memory::AllocPool {
 		transform *= t;
 	}
 
-	void draw(const layout::Path &);
-	void draw(const layout::Path &, const Mat4 &);
+	void draw(const VectorPath &);
+	void draw(const VectorPath &, const Mat4 &);
 
-	void doDraw(const layout::Path &);
+	void doDraw(const VectorPath &);
 
-	void pushContour(const layout::Path &path, bool closed);
+	void pushContour(const VectorPath &path, bool closed);
 };
 
 static void * staticPoolAlloc(void* userData, unsigned int size) {
@@ -112,17 +109,21 @@ static inline float canvas_dist_sq(float x1, float y1, float x2, float y2) {
 
 static void VectorCanvasPathDrawer_setVertexCount(void *ptr, int vertexes, int faces) {
 	auto out = (VectorCanvasPathOutput *)ptr;
-	out->vertexes->data.reserve(vertexes);
-	out->vertexes->indexes.reserve(faces * 3);
+	out->vertexes->data.resize(vertexes);
+	out->vertexes->indexes.resize(faces * 3);
 }
 
-static void VectorCanvasPathDrawer_pushVertex(void *ptr, TESSreal x, TESSreal y, TESSreal vertexValue) {
+static void VectorCanvasPathDrawer_pushVertex(void *ptr, TESSindex idx, TESSreal x, TESSreal y, TESSreal vertexValue) {
 	auto out = (VectorCanvasPathOutput *)ptr;
-	out->vertexes->data.emplace_back(gl::Vertex_V4F_V4F_T2F2U{
+	if (size_t(idx) >= out->vertexes->data.size()) {
+		out->vertexes->data.resize(idx + 1);
+	}
+
+	out->vertexes->data[idx] = gl::Vertex_V4F_V4F_T2F2U{
 		Vec4(x, y, 0.0f, 1.0f),
 		Vec4(out->color.r, out->color.g, out->color.b, out->color.a * vertexValue),
 		Vec2(0.0f, 0.0f), 0, 0
-	});
+	};
 }
 
 static void VectorCanvasPathDrawer_pushTriangle(void *ptr, TESSshort pt1, TESSshort pt2, TESSshort pt3) {
@@ -176,20 +177,17 @@ float VectorCanvas::getQuality() const {
 	return _data->pathDrawer.quality;
 }
 
-Rc<VectorCanvasResult> VectorCanvas::draw(Rc<VectorImageData> &&image, Rect boxRect, layout::BackgroundStyle bgStyle) {
-	_data->out.clear();
-
+Rc<VectorCanvasResult> VectorCanvas::draw(Rc<VectorImageData> &&image, Size targetSize) {
 	auto ret = Rc<VectorCanvasResult>::alloc();
+	_data->out = &ret->data;
 	_data->image = move(image);
-	_data->backgroundStyle = bgStyle;
-	ret->boxRect = _data->boxRect = boxRect;
+	ret->targetSize = _data->targetSize = targetSize;
 	ret->targetColor = getColor();
 
 	auto imageSize = _data->image->getImageSize();
 
 	Mat4 t = Mat4::IDENTITY;
-	t.translate(_data->boxRect.origin.x, _data->boxRect.origin.y, 0.0f);
-	t.scale(_data->boxRect.size.width / imageSize.width, _data->boxRect.size.height / imageSize.height, 1.0f);
+	t.scale(targetSize.width / imageSize.width, targetSize.height / imageSize.height, 1.0f);
 
 	auto &m = _data->image->getViewBoxTransform();
 	if (!m.isIdentity()) {
@@ -203,7 +201,7 @@ Rc<VectorCanvasResult> VectorCanvas::draw(Rc<VectorImageData> &&image, Rect boxR
 		_data->applyTransform(t);
 	}
 
-	_data->image->draw([&] (const layout::Path &path, const Mat4 &pos) {
+	_data->image->draw([&] (const VectorPath &path, const Mat4 &pos) {
 		if (pos.isIdentity()) {
 			_data->draw(path);
 		} else {
@@ -215,15 +213,26 @@ Rc<VectorCanvasResult> VectorCanvas::draw(Rc<VectorImageData> &&image, Rect boxR
 		_data->restore();
 	}
 
-	for (auto &it : _data->out) {
-		ret->data.emplace_back(move(it.first), move(it.second));
+	if (!_data->out->empty() && _data->out->back().second->data.empty()) {
+		_data->out->pop_back();
 	}
 
-	_data->out.clear();
+	size_t nverts = 0;
+	size_t ntriangles = 0;
+
+	for (auto &it : (*_data->out)) {
+		nverts += it.second->data.size();
+		ntriangles += it.second->indexes.size() / 3;
+	}
+
+	std::cout << "Q: " << _data->pathDrawer.quality << "; Vertexes: " << nverts << "; Triangles: " << ntriangles << "\n";
+
+	_data->out = nullptr;
+	_data->image = nullptr;
 	return ret;
 }
 
-void VectorCanvas::Data::draw(const layout::Path &path) {
+void VectorCanvas::Data::draw(const VectorPath &path) {
 	bool hasTransform = !path.getTransform().isIdentity();
 	if (hasTransform) {
 		save();
@@ -237,7 +246,7 @@ void VectorCanvas::Data::draw(const layout::Path &path) {
 	}
 }
 
-void VectorCanvas::Data::draw(const layout::Path &path, const Mat4 &mat) {
+void VectorCanvas::Data::draw(const VectorPath &path, const Mat4 &mat) {
 	auto matTransform = path.getTransform() * mat;
 	bool hasTransform = !matTransform.isIdentity();
 
@@ -253,13 +262,13 @@ void VectorCanvas::Data::draw(const layout::Path &path, const Mat4 &mat) {
 	}
 }
 
-void VectorCanvas::Data::doDraw(const layout::Path &path) {
+void VectorCanvas::Data::doDraw(const VectorPath &path) {
 	gl::VertexData *outData = nullptr;
-	if (out.empty() || !out.back().first->data.empty()) {
-		out.emplace_back(Rc<gl::VertexData>::alloc(), transform);
+	if (out->empty() || !out->back().second->data.empty()) {
+		out->emplace_back(transform, Rc<gl::VertexData>::alloc());
 	}
 
-	outData = out.back().first.get();
+	outData = out->back().second.get();
 	memory::pool::push(transactionPool);
 
 	do {
@@ -267,7 +276,7 @@ void VectorCanvas::Data::doDraw(const layout::Path &path) {
 		if (ret == 0) {
 			outData->data.clear();
 			outData->indexes.clear();
-			out.back().second = transform;
+			out->back().first = transform;
 		}
 	} while (0);
 
@@ -275,7 +284,7 @@ void VectorCanvas::Data::doDraw(const layout::Path &path) {
 	memory::pool::clear(transactionPool);
 }
 
-uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const layout::Path &p, const Mat4 &transform, gl::VertexData *out) {
+uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const VectorPath &p, const Mat4 &transform, gl::VertexData *out) {
 	path = &p;
 
 	tessAlloc.memalloc = &staticPoolAlloc;
@@ -286,14 +295,14 @@ uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const layout::Path &
 	float pathY = 0.0f;
 	float approxScale = 1.0f;
 	auto style = path->getStyle();
-	layout::LineDrawer line(pool);
+	VectorLineDrawer line(pool);
 
 	TESStesselator *fillTess = nullptr;
-	if ((style & layout::Path::Style::Fill) != 0) {
+	if ((style & DrawStyle::Fill) != 0) {
 		fillTess = tessNewTess(&tessAlloc);
 	}
 
-	memory::vector<layout::StrokeDrawer *> strokes;
+	// memory::vector<layout::StrokeDrawer *> strokes;
 
 	Vec3 scale; transform.getScale(&scale);
 	approxScale = std::max(scale.x, scale.y);
@@ -302,7 +311,7 @@ uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const layout::Path &
 	pathX = 0.0f; pathY = 0.0f;
 
 	auto pushContour = [&] (bool closed) {
-		if ((style & layout::Path::Style::Fill) != 0) {
+		if ((style & DrawStyle::Fill) != 0) {
 			size_t count = line.line.size();
 			if (closed && count >= 2) {
 				// fix tail point error - remove last point if error value is low enough
@@ -315,18 +324,18 @@ uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const layout::Path &
 			}
 
 			if (fillTess && !line.line.empty() && count > 2) {
-				tessAddContour(fillTess, line.line.data(), int(count));
+				tessAddContour(fillTess, (TESSVec2 *)line.line.data(), int(count));
 			}
 		}
 
-		if ((style & layout::Path::Style::Stroke) != 0) {
-			auto currentStroke = new (pool) layout::StrokeDrawer(path->getStrokeColor(), path->getStrokeWidth(),
+		if ((style & DrawStyle::Stroke) != 0) {
+			/*auto currentStroke = new (pool) layout::StrokeDrawer(path->getStrokeColor(), path->getStrokeWidth(),
 					path->getLineJoin(), path->getLineCup(), path->getMiterLimit());
 			if (path->isAntialiased()) {
 				currentStroke->setAntiAliased(approxScale);
 			}
 			currentStroke->draw(line.outline, closed);
-			strokes.emplace_back(currentStroke);
+			strokes.emplace_back(currentStroke);*/
 		}
 		line.clear();
 	};
@@ -371,12 +380,12 @@ uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const layout::Path &
 	auto d = path->getPoints().data();
 	for (auto &it : path->getCommands()) {
 		switch (it) {
-		case layout::Path::Command::MoveTo: pathMoveTo(d[0].p.x, d[0].p.y); ++ d; break;
-		case layout::Path::Command::LineTo: pathLineTo(d[0].p.x, d[0].p.y); ++ d; break;
-		case layout::Path::Command::QuadTo: pathQuadTo(d[0].p.x, d[0].p.y, d[1].p.x, d[1].p.y); d += 2; break;
-		case layout::Path::Command::CubicTo: pathCubicTo(d[0].p.x, d[0].p.y, d[1].p.x, d[1].p.y, d[2].p.x, d[2].p.y); d += 3; break;
-		case layout::Path::Command::ArcTo: pathArcTo(d[0].p.x, d[0].p.y, d[2].f.v, d[2].f.a, d[2].f.b, d[1].p.x, d[1].p.y); d += 3; break;
-		case layout::Path::Command::ClosePath: pathClose(); break;
+		case VectorPath::Command::MoveTo: pathMoveTo(d[0].p.x, d[0].p.y); ++ d; break;
+		case VectorPath::Command::LineTo: pathLineTo(d[0].p.x, d[0].p.y); ++ d; break;
+		case VectorPath::Command::QuadTo: pathQuadTo(d[0].p.x, d[0].p.y, d[1].p.x, d[1].p.y); d += 2; break;
+		case VectorPath::Command::CubicTo: pathCubicTo(d[0].p.x, d[0].p.y, d[1].p.x, d[1].p.y, d[2].p.x, d[2].p.y); d += 3; break;
+		case VectorPath::Command::ArcTo: pathArcTo(d[0].p.x, d[0].p.y, d[2].f.v, d[2].f.a, d[2].f.b, d[1].p.x, d[1].p.y); d += 3; break;
+		case VectorPath::Command::ClosePath: pathClose(); break;
 		default: break;
 		}
 	}
@@ -393,10 +402,10 @@ uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const layout::Path &
 		outPtr.color = originalColor * path->getFillColor();
 
 		TESSResultInterface interface;
-		interface.target = this;
-		interface.windingRule = (path->getWindingRule() == layout::Winding::NonZero) ? TESS_WINDING_NONZERO : TESS_WINDING_ODD;
+		interface.target = &outPtr;
+		interface.windingRule = TessWindingRule(path->getWindingRule() == Winding::NonZero);
 
-		if (path->isAntialiased() && (path->getStyle() == layout::Path::Style::Fill || path->getStrokeOpacity() < 96)) {
+		if (path->isAntialiased() && (path->getStyle() == DrawStyle::Fill || path->getStrokeOpacity() < 96)) {
 			interface.antialiasValue = approxScale * quality;
 		} else {
 			interface.antialiasValue = 0.0f;
@@ -410,6 +419,10 @@ uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const layout::Path &
 	}
 
 	return outPtr.objects;
+}
+
+SP_EXTERN_C void tessLog(const char *msg) {
+	stappler::log::text("XL-Tess", msg);
 }
 
 }

@@ -23,7 +23,6 @@
 #include "XLVkRenderFontQueue.h"
 #include "XLVkFrame.h"
 #include "XLFontFace.h"
-#include "SLFontLibrary.h"
 
 namespace stappler::xenolith::vk {
 
@@ -165,7 +164,7 @@ static Extent2 RenderFontAttachmentHandle_buildTextureData(SpanView<VkBufferImag
 		totalSquare += d.imageExtent.width * d.imageExtent.height;
 	}
 
-	layout::EmplaceCharInterface iface({
+	font::EmplaceCharInterface iface({
 		[] (void *ptr) -> uint16_t { return ((VkBufferImageCopy *)ptr)->imageOffset.x; }, // x
 		[] (void *ptr) -> uint16_t { return ((VkBufferImageCopy *)ptr)->imageOffset.y; }, // y
 		[] (void *ptr) -> uint16_t { return ((VkBufferImageCopy *)ptr)->imageExtent.width; }, // width
@@ -177,7 +176,7 @@ static Extent2 RenderFontAttachmentHandle_buildTextureData(SpanView<VkBufferImag
 
 	auto span = makeSpanView((void **)layoutData.data(), layoutData.size());
 
-	return layout::emplaceChars(iface, span, totalSquare);
+	return font::emplaceChars(iface, span, totalSquare);
 }
 
 void RenderFontAttachmentHandle::submitInput(gl::FrameQueue &handle, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {

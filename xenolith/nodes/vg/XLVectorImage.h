@@ -24,7 +24,7 @@
 #define XENOLITH_NODES_VG_XLVECTORIMAGE_H_
 
 #include "XLDefine.h"
-#include "SLPath.h"
+#include "XLVectorPath.h"
 
 namespace stappler::xenolith {
 
@@ -32,84 +32,81 @@ class VectorImage;
 class VectorImageData;
 
 struct VectorCanvasResult : public Ref {
-	Vector<Pair<Rc<gl::VertexData>, Mat4>> data;
+	Vector<Pair<Mat4, Rc<gl::VertexData>>> data;
 	Color4F targetColor;
-	Rect boxRect;
+	Size targetSize;
 
 	void updateColor(const Color4F &);
 };
 
-class VectorPath : public Ref {
+class VectorPathRef : public Ref {
 public:
-	using Path = layout::Path;
-	using DrawStyle = layout::DrawStyle;
+	virtual ~VectorPathRef() { }
 
-	virtual ~VectorPath() { }
-
-	bool init(VectorImage *, const String &, const Rc<Path> &);
-	bool init(VectorImage *, const String &, Rc<Path> &&);
+	bool init(VectorImage *, const String &, const Rc<VectorPath> &);
+	bool init(VectorImage *, const String &, Rc<VectorPath> &&);
 
 	size_t count() const;
 
-	VectorPath & moveTo(float x, float y);
-	VectorPath & moveTo(const Vec2 &point) {
+	VectorPathRef & moveTo(float x, float y);
+	VectorPathRef & moveTo(const Vec2 &point) {
 		return this->moveTo(point.x, point.y);
 	}
 
-	VectorPath & lineTo(float x, float y);
-	VectorPath & lineTo(const Vec2 &point) {
+	VectorPathRef & lineTo(float x, float y);
+	VectorPathRef & lineTo(const Vec2 &point) {
 		return this->lineTo(point.x, point.y);
 	}
 
-	VectorPath & quadTo(float x1, float y1, float x2, float y2);
-	VectorPath & quadTo(const Vec2& p1, const Vec2& p2) {
+	VectorPathRef & quadTo(float x1, float y1, float x2, float y2);
+	VectorPathRef & quadTo(const Vec2& p1, const Vec2& p2) {
 		return this->quadTo(p1.x, p1.y, p2.x, p2.y);
 	}
 
-	VectorPath & cubicTo(float x1, float y1, float x2, float y2, float x3, float y3);
-	VectorPath & cubicTo(const Vec2& p1, const Vec2& p2, const Vec2& p3) {
+	VectorPathRef & cubicTo(float x1, float y1, float x2, float y2, float x3, float y3);
+	VectorPathRef & cubicTo(const Vec2& p1, const Vec2& p2, const Vec2& p3) {
 		return this->cubicTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
 	}
 
 	// use _to_rad user suffix to convert from degrees to radians
-	VectorPath & arcTo(float rx, float ry, float rotation, bool largeFlag, bool sweepFlag, float x, float y);
-	VectorPath & arcTo(const Vec2 & r, float rotation, bool largeFlag, bool sweepFlag, const Vec2 &target) {
+	VectorPathRef & arcTo(float rx, float ry, float rotation, bool largeFlag, bool sweepFlag, float x, float y);
+	VectorPathRef & arcTo(const Vec2 & r, float rotation, bool largeFlag, bool sweepFlag, const Vec2 &target) {
 		return this->arcTo(r.x, r.y, rotation, largeFlag, sweepFlag, target.x, target.y);
 	}
 
-	VectorPath & closePath();
+	VectorPathRef & closePath();
 
-	VectorPath & addRect(const Rect& rect);
-	VectorPath & addOval(const Rect& oval);
-	VectorPath & addCircle(float x, float y, float radius);
-	VectorPath & addArc(const Rect& oval, float startAngleInRadians, float sweepAngleInRadians);
+	VectorPathRef & addRect(const Rect& rect);
+	VectorPathRef & addOval(const Rect& oval);
+	VectorPathRef & addCircle(float x, float y, float radius);
+	VectorPathRef & addArc(const Rect& oval, float startAngleInRadians, float sweepAngleInRadians);
 
-	VectorPath & setFillColor(const Color4B &color);
+	VectorPathRef & setFillColor(const Color4B &color);
 	const Color4B &getFillColor() const;
 
-	VectorPath & setStrokeColor(const Color4B &color);
+	VectorPathRef & setStrokeColor(const Color4B &color);
 	const Color4B &getStrokeColor() const;
 
-	VectorPath & setFillOpacity(uint8_t value);
+	VectorPathRef & setFillOpacity(uint8_t value);
 	uint8_t getFillOpacity() const;
 
-	VectorPath & setStrokeOpacity(uint8_t value);
+	VectorPathRef & setStrokeOpacity(uint8_t value);
 	uint8_t getStrokeOpacity() const;
 
-	VectorPath & setStrokeWidth(float width);
+	VectorPathRef & setStrokeWidth(float width);
 	float getStrokeWidth() const;
 
-	VectorPath & setStyle(DrawStyle s);
+	VectorPathRef & setStyle(DrawStyle s);
 	DrawStyle getStyle() const;
 
-	VectorPath & setTransform(const Mat4 &);
-	VectorPath & applyTransform(const Mat4 &);
+	VectorPathRef & setTransform(const Mat4 &);
+	VectorPathRef & applyTransform(const Mat4 &);
 	const Mat4 &getTransform() const;
 
-	VectorPath & setAntialiased(bool value);
+	VectorPathRef & setAntialiased(bool value);
 	bool isAntialiased() const;
 
-	VectorPath & clear();
+	VectorPathRef & clear();
 
 	StringView getId() const;
 
@@ -118,8 +115,8 @@ public:
 
 	operator bool() const;
 
-	void setPath(Rc<Path> &&);
-	Path *getPath() const;
+	void setPath(Rc<VectorPath> &&);
+	VectorPath *getPath() const;
 
 	void markCopyOnWrite();
 	void setImage(VectorImage *);
@@ -129,43 +126,37 @@ protected:
 
 	bool _copyOnWrite = false;
 	String _id;
-	Rc<Path> _path;
+	Rc<VectorPath> _path;
 	VectorImage *_image;
 };
 
 class VectorImageData : public Ref {
 public:
-	using Path = layout::Path;
-
 	virtual ~VectorImageData() { }
 
-	bool init(VectorImage *, Size size, Rect viewBox, Vector<layout::PathXRef> &&, Map<String, layout::Path> &&, uint16_t ids);
+	bool init(VectorImage *, Size size, Rect viewBox, Vector<VectorPathXRef> &&, Map<String, VectorPath> &&, uint16_t ids);
 	bool init(VectorImage *, Size size, Rect viewBox);
 	bool init(VectorImageData &);
 
 	Size getImageSize() const { return _imageSize; }
 	Rect getViewBox() const { return _viewBox; }
-	const Map<String, Rc<Path>> &getPaths() const;
+	const Map<String, Rc<VectorPath>> &getPaths() const;
 
-	Rc<Path> copyPath(StringView, const Rc<Path> &);
+	Rc<VectorPath> copyPath(StringView, const Rc<VectorPath> &);
 
 	uint16_t getNextId();
 
-	Rc<Path> addPath(StringView, Path &&, Mat4 mat = Mat4::IDENTITY);
+	Rc<VectorPath> addPath(StringView, VectorPath &&, Mat4 mat = Mat4::IDENTITY);
 	void removePath(StringView);
 
 	void clear();
 
-	const Vector<layout::PathXRef> &getDrawOrder() const { return _order; }
-	void setDrawOrder(Vector<layout::PathXRef> &&order) { _order = move(order); }
+	const Vector<VectorPathXRef> &getDrawOrder() const { return _order; }
+	void setDrawOrder(Vector<VectorPathXRef> &&order) { _order = move(order); }
 	void resetDrawOrder();
 
 	void setViewBoxTransform(const Mat4 &m) { _viewBoxTransform = m; }
 	const Mat4 &getViewBoxTransform() const { return _viewBoxTransform; }
-
-	// general antialiasing settings used when paths drawn in batch
-	void setAntialiased(bool value) { _isAntialiased = value; }
-	bool isAntialiased() const { return _isAntialiased; }
 
 	void setBatchDrawing(bool value) { _allowBatchDrawing = value; }
 	bool isBatchDrawing() const { return _allowBatchDrawing; }
@@ -174,21 +165,18 @@ public:
 	void draw(const Callback &) const;
 
 protected:
-	bool _isAntialiased = true;
 	bool _allowBatchDrawing = true;
 	Size _imageSize;
 	Rect _viewBox;
 	Mat4 _viewBoxTransform = Mat4::IDENTITY;
-	Vector<layout::PathXRef> _order;
-	Map<String, Rc<Path>> _paths;
+	Vector<VectorPathXRef> _order;
+	Map<String, Rc<VectorPath>> _paths;
 	uint16_t _nextId = 0;
 	VectorImage *_image = nullptr;
 };
 
 class VectorImage : public Ref {
 public:
-	using Path = layout::Path;
-
 	static bool isSvg(StringView);
 	static bool isSvg(BytesView);
 	static bool isSvg(FilePath);
@@ -196,7 +184,7 @@ public:
 	virtual ~VectorImage();
 
 	bool init(Size, StringView);
-	bool init(Size, Path &&);
+	bool init(Size, VectorPath &&);
 	bool init(Size);
 	bool init(StringView);
 	bool init(BytesView);
@@ -205,29 +193,26 @@ public:
 	Size getImageSize() const;
 	Rect getViewBox() const;
 
-	Rc<VectorPath> addPath(const Path &, StringView = StringView(), Mat4 = Mat4::IDENTITY);
-	Rc<VectorPath> addPath(Path &&, StringView = StringView(), Mat4 = Mat4::IDENTITY);
-	Rc<VectorPath> addPath(StringView = StringView(), Mat4 = Mat4::IDENTITY);
+	Rc<VectorPathRef> addPath(const VectorPath &, StringView = StringView(), Mat4 = Mat4::IDENTITY);
+	Rc<VectorPathRef> addPath(VectorPath &&, StringView = StringView(), Mat4 = Mat4::IDENTITY);
+	Rc<VectorPathRef> addPath(StringView = StringView(), Mat4 = Mat4::IDENTITY);
 
-	Rc<VectorPath> getPath(StringView) const;
-	const Map<String, Rc<VectorPath>> &getPaths() const { return _paths; }
+	Rc<VectorPathRef> getPath(StringView) const;
+	const Map<String, Rc<VectorPathRef>> &getPaths() const { return _paths; }
 
-	void removePath(const Rc<VectorPath> &);
+	void removePath(const Rc<VectorPathRef> &);
 	void removePath(StringView);
 
 	void clear();
 
-	const Vector<layout::PathXRef> &getDrawOrder() const;
-	void setDrawOrder(const Vector<layout::PathXRef> &);
-	void setDrawOrder(Vector<layout::PathXRef> &&);
+	const Vector<VectorPathXRef> &getDrawOrder() const;
+	void setDrawOrder(const Vector<VectorPathXRef> &);
+	void setDrawOrder(Vector<VectorPathXRef> &&);
 
 	void resetDrawOrder();
 
 	void setViewBoxTransform(const Mat4 &);
 	const Mat4 &getViewBoxTransform() const;
-
-	void setAntialiased(bool value);
-	bool isAntialiased() const;
 
 	void setBatchDrawing(bool value);
 	bool isBatchDrawing() const;
@@ -239,17 +224,17 @@ public:
 	void clearDirty();
 
 protected:
-	friend class VectorPath;
+	friend class VectorPathRef;
 
 	void copy();
 	void markCopyOnWrite();
 
-	Rc<Path> copyPath(StringView, const Rc<Path> &);
+	Rc<VectorPath> copyPath(StringView, const Rc<VectorPath> &);
 
 	bool _dirty = false;
 	bool _copyOnWrite = false;
 	Rc<VectorImageData> _data;
-	Map<String, Rc<VectorPath>> _paths;
+	Map<String, Rc<VectorPathRef>> _paths;
 };
 
 template <typename Callback>

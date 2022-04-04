@@ -33,11 +33,10 @@ enum class CommandType {
 };
 
 struct CmdVertexArray {
-	Mat4 transform = Mat4::IDENTITY;
 	gl::MaterialId material = 0;
-	Rc<VertexData> vertexes;
+	SpanView<Pair<Mat4, Rc<VertexData>>> vertexes;
 	SpanView<int16_t> zPath;
-	bool isSurface = false;
+	RenderingLevel renderingLevel = RenderingLevel::Solid;
 };
 
 struct Command {
@@ -52,7 +51,8 @@ class CommandList : public gl::AttachmentInputData {
 public:
 	bool init(const Rc<PoolRef> &);
 
-	void pushVertexArray(const Rc<VertexData> &, const Mat4 &, SpanView<int16_t> zPath, gl::MaterialId material, bool isSurface);
+	void pushVertexArray(Rc<VertexData> &&, const Mat4 &, SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel);
+	void pushVertexArray(SpanView<Pair<Mat4, Rc<VertexData>>>, SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel);
 
 	const Command *getFirst() const { return _first; }
 	const Command *getLast() const { return _last; }

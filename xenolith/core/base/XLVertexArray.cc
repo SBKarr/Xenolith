@@ -161,10 +161,10 @@ VertexArray::Quad & VertexArray::Quad::setColor(std::initializer_list<Color4F> &
 	return setColor(SpanView<Color4F>(colors.begin(), colors.size()));
 }
 
-VertexArray::Quad & VertexArray::Quad::drawChar(const font::Metrics &m, const font::FontCharLayout &l, int16_t charX, int16_t charY,
-		const Color4B &color, layout::style::TextDecoration, uint16_t face) {
+VertexArray::Quad & VertexArray::Quad::drawChar(const font::Metrics &m, const font::CharLayout &l, int16_t charX, int16_t charY,
+		const Color4B &color, style::TextDecoration, uint16_t face) {
 
-	setGeometry(Vec4(charX + l.layout.xOffset, charY - (l.layout.yOffset + l.height) - m.descender, 0.0f, 1.0f),
+	setGeometry(Vec4(charX + l.xOffset, charY - (l.yOffset + l.height) - m.descender, 0.0f, 1.0f),
 			Size(l.width, l.height));
 	setColor(Color4F(color));
 
@@ -180,10 +180,10 @@ VertexArray::Quad & VertexArray::Quad::drawChar(const font::Metrics &m, const fo
 	data[2].tex = Vec2(texRight, texTop);
 	data[3].tex = Vec2(texRight, texBottom);
 
-	data[0].object = font::FontCharLayout::getObjectId(face, l.layout.charID, font::FontAnchor::BottomLeft);
-	data[1].object = font::FontCharLayout::getObjectId(face, l.layout.charID, font::FontAnchor::TopLeft);
-	data[2].object = font::FontCharLayout::getObjectId(face, l.layout.charID, font::FontAnchor::BottomRight);
-	data[3].object = font::FontCharLayout::getObjectId(face, l.layout.charID, font::FontAnchor::TopRight);
+	data[0].object = font::CharLayout::getObjectId(face, l.charID, font::FontAnchor::BottomLeft);
+	data[1].object = font::CharLayout::getObjectId(face, l.charID, font::FontAnchor::TopLeft);
+	data[2].object = font::CharLayout::getObjectId(face, l.charID, font::FontAnchor::BottomRight);
+	data[3].object = font::CharLayout::getObjectId(face, l.charID, font::FontAnchor::TopRight);
 
 	return *this;
 }
@@ -204,10 +204,10 @@ VertexArray::Quad & VertexArray::Quad::drawUnderlineRect(int16_t charX, int16_t 
 	data[2].tex = Vec2(texRight, texTop);
 	data[3].tex = Vec2(texRight, texBottom);
 
-	data[0].object = font::FontCharLayout::getObjectId(0, 0, font::FontAnchor::BottomLeft);
-	data[1].object = font::FontCharLayout::getObjectId(0, 0, font::FontAnchor::TopLeft);
-	data[2].object = font::FontCharLayout::getObjectId(0, 0, font::FontAnchor::BottomRight);
-	data[3].object = font::FontCharLayout::getObjectId(0, 0, font::FontAnchor::TopRight);
+	data[0].object = font::CharLayout::getObjectId(0, 0, font::FontAnchor::BottomLeft);
+	data[1].object = font::CharLayout::getObjectId(0, 0, font::FontAnchor::TopLeft);
+	data[2].object = font::CharLayout::getObjectId(0, 0, font::FontAnchor::BottomRight);
+	data[3].object = font::CharLayout::getObjectId(0, 0, font::FontAnchor::TopRight);
 
 	return *this;
 }
@@ -232,7 +232,7 @@ void VertexArray::reserve(uint32_t bufferCapacity, uint32_t indexCapacity) {
 	}
 }
 
-const Rc<gl::VertexData> &VertexArray::pop() {
+Rc<gl::VertexData> VertexArray::pop() {
 	_copyOnWrite = true;
 	return _data;
 }

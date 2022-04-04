@@ -32,11 +32,7 @@ class FontFaceObject;
 class FontFaceData;
 class FontLibrary;
 
-using FontLayoutId = layout::FontLayoutId;
-using FontParameters = layout::style::FontStyleParameters;
-using FontCharString = layout::FontCharString;
-
-class FontController : public layout::FormatterSourceInterface {
+class FontController : public Ref {
 public:
 	static EventHeader onLoaded;
 	static EventHeader onFontSourceUpdated;
@@ -86,16 +82,15 @@ public:
 	const Rc<gl::DynamicImage> &getImage() const { return _image; }
 	const Rc<Texture> &getTexture() const { return _texture; }
 
-	virtual FontLayoutId getLayout(const FontParameters &f, float scale) override;
-	virtual void addString(FontLayoutId, const FontCharString &) override;
-	virtual uint16_t getFontHeight(FontLayoutId) override;
-	virtual int16_t getKerningAmount(FontLayoutId, char16_t first, char16_t second, uint16_t face) const override;
-	virtual Metrics getMetrics(FontLayoutId) override;
-	virtual CharLayout getChar(FontLayoutId, char16_t, uint16_t &face) override;
-	virtual StringView getFontName(FontLayoutId) override;
+	FontLayoutId getLayout(const FontParameters &f, float scale);
+	void addString(FontLayoutId, const FontCharString &);
+	uint16_t getFontHeight(FontLayoutId);
+	int16_t getKerningAmount(FontLayoutId, char16_t first, char16_t second, uint16_t face) const;
+	Metrics getMetrics(FontLayoutId);
+	CharLayout getChar(FontLayoutId, char16_t, uint16_t &face);
+	StringView getFontName(FontLayoutId);
 
-	FontCharLayout getFullChar(FontLayoutId, char16_t, uint16_t &face);
-	void addTextureChars(FontLayoutId, SpanView<layout::CharSpec>);
+	void addTextureChars(FontLayoutId, SpanView<CharSpec>);
 
 	uint32_t getFamilyIndex(StringView) const;
 	StringView getFamilyName(uint32_t idx) const;

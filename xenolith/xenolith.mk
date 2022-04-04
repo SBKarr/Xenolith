@@ -42,13 +42,11 @@ XENOLITH_LDFLAGS := $(OSTYPE_LDFLAGS)
 # precompiled headers list
 XENOLITH_PRECOMPILED_HEADERS += \
 	$(XENOLITH_MAKEFILE_DIR)/core/XLDefine.h \
-	components/layout/SPLayout.h \
 	components/common/core/SPCommon.h
 
 # sources, common and layout for stappler
 XENOLITH_SRCS_DIRS += \
 	components/common \
-	components/layout \
 	components/stellator/db \
 	$(XENOLITH_MAKEFILE_DIR)/core \
 	$(XENOLITH_MAKEFILE_DIR)/gl \
@@ -64,7 +62,6 @@ XENOLITH_SRCS_OBJS += \
 # recursive includes
 XENOLITH_INCLUDES_DIRS += \
 	components/common \
-	components/layout \
 	components/stellator/db \
 	$(XENOLITH_MAKEFILE_DIR) \
 
@@ -77,6 +74,8 @@ XENOLITH_INCLUDES_OBJS += \
 # shaders
 XENOLITH_SHADERS := $(wildcard $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/*)
 XENOLITH_SHADERS_COMPILED := $(subst /glsl/,/compiled/shader_,$(XENOLITH_SHADERS))
+
+XENOLITH_FLAGS :=
 
 # cleanable output
 TOOLKIT_CLEARABLE_OUTPUT := $(XENOLITH_OUTPUT_DIR) $(XENOLITH_OUTPUT_STATIC) $(XENOLITH_SHADERS_COMPILED)
@@ -99,7 +98,7 @@ ifndef LOCAL_MAIN
 XENOLITH_SRCS_DIRS += $(XENOLITH_MAKEFILE_DIR)/platform/win32_main
 endif
 
-XENOLITH_FLAGS := -I$(shell cygpath -u $(VULKAN_SDK))/Include
+XENOLITH_FLAGS += -I$(shell cygpath -u $(VULKAN_SDK))/Include
 
 # Windows - Msys
 else ifeq ($(UNAME),Msys)
@@ -108,7 +107,7 @@ ifndef LOCAL_MAIN
 XENOLITH_SRCS_DIRS += $(XENOLITH_MAKEFILE_DIR)/platform/win32_main
 endif
 
-XENOLITH_FLAGS := -I$(shell cygpath -u $(VULKAN_SDK))/Include
+XENOLITH_FLAGS += -I$(shell cygpath -u $(VULKAN_SDK))/Include
 
 # Linux
 else

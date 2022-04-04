@@ -22,7 +22,7 @@
 
 #include "XLGlView.h"
 
-#include "../../core/director/XLInputDispatcher.h"
+#include "XLInputDispatcher.h"
 #include "XLGlLoop.h"
 #include "XLScene.h"
 

@@ -51,10 +51,9 @@ public:
 	int16_t getKerningAmount(char16_t first, char16_t second, uint16_t face) const;
 	Metrics getMetrics();
 	CharLayout getChar(char16_t, uint16_t &face);
-	FontCharLayout getFullChar(char16_t, uint16_t &face);
 	StringView getFontName();
 
-	bool addTextureChars(SpanView<layout::CharSpec>);
+	bool addTextureChars(SpanView<CharSpec>);
 
 	const Vector<Rc<FontFaceObject>> &getFaces() const { return _faces; }
 
@@ -183,22 +182,11 @@ CharLayout FontController::FontSizedLayout::getChar(char16_t ch, uint16_t &face)
 	return CharLayout();
 }
 
-FontCharLayout FontController::FontSizedLayout::getFullChar(char16_t ch, uint16_t &face) {
-	for (auto &it : _faces) {
-		auto l = it->getFullChar(ch);
-		if (l.layout.charID != 0) {
-			face = it->getId();
-			return l;
-		}
-	}
-	return FontCharLayout();
-}
-
 StringView FontController::FontSizedLayout::getFontName() {
 	return _name;
 }
 
-bool FontController::FontSizedLayout::addTextureChars(SpanView<layout::CharSpec> chars) {
+bool FontController::FontSizedLayout::addTextureChars(SpanView<CharSpec> chars) {
 	bool ret = false;
 	for (auto &it : chars) {
 		if (chars::isspace(it.charID) || it.charID == char16_t(0x0A) || it.charID == char16_t(0x00AD)) {
@@ -224,7 +212,7 @@ void FontController::FontSizedLayout::prefixFonts(size_t count) {
 }
 
 String FontController::FontLayout::constructName(StringView family, FontStyle style, FontWeight weight, FontStretch stretch) {
-	return layout::style::getFontConfigName(family, FontSize(0), style, weight, stretch, layout::style::FontVariant::Normal, false);
+	return getFontConfigName(family, FontSize(0), style, weight, stretch, style::FontVariant::Normal, false);
 }
 
 bool FontController::FontLayout::init(String &&name, StringView family, FontStyle style, FontWeight weight, FontStretch stretch,
@@ -453,17 +441,7 @@ StringView FontController::getFontName(FontLayoutId id) {
 	return StringView();
 }
 
-FontCharLayout FontController::getFullChar(FontLayoutId id, char16_t ch, uint16_t &face) {
-	if (id.get() < _sizes.size()) {
-		auto l = _sizes.at(id.get());
-		if (l) {
-			return l->getFullChar(ch, face);
-		}
-	}
-	return FontCharLayout();
-}
-
-void FontController::addTextureChars(FontLayoutId id, SpanView<layout::CharSpec> chars) {
+void FontController::addTextureChars(FontLayoutId id, SpanView<CharSpec> chars) {
 	if (id.get() < _sizes.size()) {
 		auto l = _sizes.at(id.get());
 		if (l) {
@@ -850,8 +828,8 @@ Rc<FontController> FontLibrary::acquireController(StringView key, FontController
 				for (auto &iit : it.chars) {
 					auto lId = controller->getLayout(FontParameters{
 						it.style, it.weight, it.stretch,
-						layout::style::FontVariant::Normal,
-						layout::style::ListStyleType::None,
+						style::FontVariant::Normal,
+						style::ListStyleType::None,
 						iit.first, it.family
 					}, 1.0f);
 					controller->addString(lId, iit.second);
