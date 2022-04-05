@@ -73,6 +73,7 @@ static TESShalfEdge *MakeEdge( TESSmesh* mesh, TESShalfEdge *eNext )
 	e->winding = 0;
 	e->activeRegion = NULL;
 	e->mark = 0;
+	e->sub = NULL;
 
 	eSym->Sym = e;
 	eSym->Onext = eSym;
@@ -82,6 +83,7 @@ static TESShalfEdge *MakeEdge( TESSmesh* mesh, TESShalfEdge *eNext )
 	eSym->winding = 0;
 	eSym->activeRegion = NULL;
 	eSym->mark = 0;
+	eSym->sub = NULL;
 
 	return e;
 }
@@ -437,6 +439,8 @@ TESShalfEdge *tessMeshAddEdgeVertex( TESSmesh *mesh, TESShalfEdge *eOrg )
 */
 TESShalfEdge *tessMeshSplitEdge( TESSmesh *mesh, TESShalfEdge *eOrg )
 {
+	printf("Split: %f %f -> %f %f; ", eOrg->Org->s, eOrg->Org->t, eOrg->Dst->s, eOrg->Dst->t);
+
 	TESShalfEdge *eNew;
 	TESShalfEdge *tempHalfEdge= tessMeshAddEdgeVertex( mesh, eOrg );
 	if (tempHalfEdge == NULL) return NULL;
@@ -453,6 +457,10 @@ TESShalfEdge *tessMeshSplitEdge( TESSmesh *mesh, TESShalfEdge *eOrg )
 	eNew->Rface = eOrg->Rface;
 	eNew->winding = eOrg->winding;	/* copy old winding information */
 	eNew->Sym->winding = eOrg->Sym->winding;
+
+	printf("Result: %f %f -> %f %f : %f %f -> %f %f\n",
+			eOrg->Org->s, eOrg->Org->t, eOrg->Dst->s, eOrg->Dst->t,
+			eNew->Org->s, eNew->Org->t, eNew->Dst->s, eNew->Dst->t);
 
 	return eNew;
 }

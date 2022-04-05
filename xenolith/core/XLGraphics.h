@@ -162,6 +162,7 @@ struct PipelineMaterialInfo {
 	bool stencil = false;
 	StencilInfo front;
 	StencilInfo back;
+	float lineWidth = 0.0f; // 0.0f - draw triangles, < 0.0f - points,  > 0.0f - lines with width
 
 	size_t hash() const {
 		auto tmp = normalize();
@@ -172,14 +173,16 @@ struct PipelineMaterialInfo {
 		auto tmp1 = normalize();
 		auto tmp2 = other.normalize();
 		return tmp1.blend == tmp2.blend && tmp1.depth == tmp2.depth && tmp1.bounds == tmp2.bounds
-				&& tmp1.stencil == tmp2.stencil && (!tmp1.stencil || (tmp1.front == tmp2.front && tmp1.back == tmp2.back));
+				&& tmp1.stencil == tmp2.stencil && (!tmp1.stencil || (tmp1.front == tmp2.front && tmp1.back == tmp2.back))
+				&& tmp1.lineWidth == tmp2.lineWidth;
 	}
 
 	bool operator!=(const PipelineMaterialInfo &other) const {
 		auto tmp1 = normalize();
 		auto tmp2 = other.normalize();
 		return tmp1.blend != tmp2.blend || tmp1.depth != tmp2.depth || tmp1.bounds != tmp2.bounds
-				|| tmp1.stencil != tmp2.stencil || (tmp1.stencil && (tmp1.front != tmp2.front || tmp1.back != tmp2.back));
+				|| tmp1.stencil != tmp2.stencil || (tmp1.stencil && (tmp1.front != tmp2.front || tmp1.back != tmp2.back))
+				|| tmp1.lineWidth != tmp2.lineWidth;
 	}
 
 	String data() const {
@@ -223,6 +226,7 @@ struct PipelineMaterialInfo {
 			ret.front = front;
 			ret.back = back;
 		}
+		ret.lineWidth = lineWidth;
 		return ret;
 	}
 };

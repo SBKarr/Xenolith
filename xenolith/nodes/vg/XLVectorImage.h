@@ -96,6 +96,9 @@ public:
 	VectorPathRef & setStrokeWidth(float width);
 	float getStrokeWidth() const;
 
+	VectorPathRef &setWindingRule(Winding);
+	Winding getWindingRule() const;
+
 	VectorPathRef & setStyle(DrawStyle s);
 	DrawStyle getStyle() const;
 

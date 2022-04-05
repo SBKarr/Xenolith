@@ -116,8 +116,18 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 	rasterizer.pNext = nullptr;
 	rasterizer.depthClampEnable = VK_FALSE;
 	rasterizer.rasterizerDiscardEnable = VK_FALSE;
-	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-	rasterizer.lineWidth = 1.0f;
+
+	if (params.material.lineWidth == 0.0f) {
+		rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+		rasterizer.lineWidth = 1.0f;
+	} else if (params.material.lineWidth > 0.0f) {
+		rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
+		rasterizer.lineWidth = params.material.lineWidth;
+	} else if (params.material.lineWidth < 0.0f) {
+		rasterizer.polygonMode = VK_POLYGON_MODE_POINT;
+		rasterizer.lineWidth = - params.material.lineWidth;
+	}
+
 	rasterizer.cullMode = VK_CULL_MODE_NONE;
 	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
 	rasterizer.depthBiasEnable = VK_FALSE;

@@ -67,6 +67,7 @@ typedef struct TESSVec2 {
 } TESSVec2;
 
 #define TESS_UNDEF (~(TESSshort)0)
+#define TESS_SENTINEL (~(int)0)
 
 #define TESS_NOTUSED(v) do { (void)(1 ? (void)0 : ( (void)(v) ) ); } while(0)
 

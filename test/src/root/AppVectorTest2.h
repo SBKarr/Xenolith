@@ -20,8 +20,28 @@
  THE SOFTWARE.
  **/
 
-#include "XLDefine.h"
+#ifndef TEST_SRC_ROOT_APPVECTORTEST2_H_
+#define TEST_SRC_ROOT_APPVECTORTEST2_H_
 
-#include "AppAutofitTest.cc"
-#include "AppVectorTest.cc"
-#include "AppVectorTest2.cc"
+#include "XLLayer.h"
+#include "XLLabel.h"
+#include "XLVectorSprite.h"
+
+namespace stappler::xenolith::app {
+
+class VectorTest2 : public Node {
+public:
+	virtual ~VectorTest2() { }
+
+	virtual bool init() override;
+
+	virtual void onContentSizeDirty() override;
+
+protected:
+	VectorSprite *_sprite = nullptr;
+	VectorSprite *_sprite2 = nullptr;
+};
+
+}
+
+#endif /* TEST_SRC_ROOT_APPVECTORTEST2_H_ */

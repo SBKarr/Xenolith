@@ -187,6 +187,7 @@ int pqIsEmpty( PriorityQ *pq );
 
 typedef struct TESSmesh TESSmesh;
 typedef struct TESSvertex TESSvertex;
+typedef struct TESSsubvertex TESSsubvertex;
 typedef struct TESSface TESSface;
 typedef struct TESShalfEdge TESShalfEdge;
 typedef struct ActiveRegion ActiveRegion;
@@ -264,11 +265,19 @@ struct TESSvertex {
 	TESShalfEdge *anEdge;    /* a half-edge with this origin */
 
 	/* Internal data (keep hidden) */
-	//TESSreal coords[3];  /* vertex location in 3D */
-	TESSreal s, t;       /* projection onto the sweep plane */
+	TESSreal s, t;
 	int pqHandle;   /* to allow deletion from priority queue */
 	TESSindex n;			/* to allow identify unique vertices */
 	TESSindex idx;			/* to allow map result to original verts */
+};
+
+struct TESSsubvertex {
+	TESSsubvertex *next;
+	TESSsubvertex *prev;
+	TESSreal inside[2];
+	TESSreal outside[2];
+	TESSindex n[2];
+	int sended;
 };
 
 struct TESSface {
@@ -296,6 +305,7 @@ struct TESShalfEdge {
 	int winding;    /* change in winding number when crossing
 						  from the right face to the left face */
 	int mark; /* Used by the Edge Flip algorithm */
+	TESSsubvertex *sub;
 };
 
 #define Rface   Sym->Lface

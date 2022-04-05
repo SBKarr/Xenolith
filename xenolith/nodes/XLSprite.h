@@ -58,6 +58,13 @@ public:
 	virtual void setBlendInfo(const BlendInfo &);
 	virtual const BlendInfo &getBlendInfo() const { return _materialInfo.blend; }
 
+	// used for debug purposes only, follow rules from PipelineMaterialInfo.lineWidth:
+	// 0.0f - draw triangles, < 0.0f - points,  > 0.0f - lines with width
+	// corresponding pipeline should be precompiled
+	// points and lines are always RenderingLevel::Transparent, when Default level resolves
+	virtual void setLineWidth(float);
+	virtual float getLineWidth() const { return _materialInfo.lineWidth; }
+
 	virtual void setRenderingLevel(RenderingLevel);
 	virtual RenderingLevel getRenderingLevel() const { return _renderingLevel; }
 
@@ -106,9 +113,6 @@ protected:
 	RenderingLevel _renderingLevel = RenderingLevel::Default;
 	RenderingLevel _realRenderingLevel = RenderingLevel::Default;
 	uint64_t _materialId = 0;
-
-	// mark sprite as unconditionally solid (so, alpha channel will be ignored)
-	// useful for draw optimization, solid nodes can be drown out of order
 
 	bool _materialDirty = true;
 	bool _normalized = false;

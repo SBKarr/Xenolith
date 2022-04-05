@@ -279,6 +279,26 @@ float VectorPathRef::getStrokeWidth() const {
 	return _path ? _path->getStrokeWidth() : 0.0f;
 }
 
+VectorPathRef &VectorPathRef::setWindingRule(Winding value) {
+	if (_path && _path->getWindingRule() == value) {
+		return *this;
+	}
+
+	if (_copyOnWrite) {
+		copy();
+	}
+
+	if (_path) {
+		_path->setWindingRule(value);
+		if (_image) { _image->setDirty(); }
+	}
+	return *this;
+}
+
+Winding VectorPathRef::getWindingRule() const {
+	return _path ? _path->getWindingRule() : Winding::EvenOdd;
+}
+
 VectorPathRef & VectorPathRef::setStyle(DrawStyle s) {
 	if (_path && _path->getStyle() == s) {
 		return *this;

@@ -110,7 +110,7 @@ static inline float canvas_dist_sq(float x1, float y1, float x2, float y2) {
 static void VectorCanvasPathDrawer_setVertexCount(void *ptr, int vertexes, int faces) {
 	auto out = (VectorCanvasPathOutput *)ptr;
 	out->vertexes->data.resize(vertexes);
-	out->vertexes->indexes.resize(faces * 3);
+	out->vertexes->indexes.reserve(faces * 3);
 }
 
 static void VectorCanvasPathDrawer_pushVertex(void *ptr, TESSindex idx, TESSreal x, TESSreal y, TESSreal vertexValue) {
@@ -370,6 +370,7 @@ uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const VectorPath &p,
 	};
 
 	auto pathClose = [&] () {
+		line.drawClose();
 		if (!line.empty()) {
 			pushContour(true);
 		}
@@ -406,7 +407,7 @@ uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const VectorPath &p,
 		interface.windingRule = TessWindingRule(path->getWindingRule() == Winding::NonZero);
 
 		if (path->isAntialiased() && (path->getStyle() == DrawStyle::Fill || path->getStrokeOpacity() < 96)) {
-			interface.antialiasValue = approxScale * quality;
+			interface.antialiasValue = approxScale;
 		} else {
 			interface.antialiasValue = 0.0f;
 		}

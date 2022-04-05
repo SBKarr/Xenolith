@@ -176,6 +176,13 @@ void Sprite::setBlendInfo(const BlendInfo &info) {
 	}
 }
 
+void Sprite::setLineWidth(float value) {
+	if (_materialInfo.lineWidth != value) {
+		_materialInfo.lineWidth = value;
+		_materialDirty = true;
+	}
+}
+
 void Sprite::setRenderingLevel(RenderingLevel level) {
 	if (_renderingLevel != level) {
 		_renderingLevel = level;
@@ -347,7 +354,7 @@ void Sprite::updateBlendAndDepth() {
 RenderingLevel Sprite::getRealRenderingLevel() const {
 	auto level = _renderingLevel;
 	if (level == RenderingLevel::Default) {
-		if (_displayedColor.a < 1.0f || !_texture) {
+		if (_displayedColor.a < 1.0f || !_texture || _materialInfo.lineWidth != 0.0f) {
 			level = RenderingLevel::Transparent;
 		} else if (_colorMode.getMode() == ColorMode::Solid) {
 			if (_texture->hasAlpha()) {

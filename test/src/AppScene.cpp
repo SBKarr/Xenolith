@@ -37,7 +37,7 @@
 
 #include "AppRootLayout.h"
 #include "AppAutofitTest.h"
-#include "AppVectorTest.h"
+#include "AppVectorTest2.h"
 #include "XLFontLibrary.h"
 
 namespace stappler::xenolith::app {
@@ -109,6 +109,15 @@ static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder 
 				gl::BlendFactor::One, gl::BlendFactor::Zero, gl::BlendOp::Add),
 		DepthInfo(false, true, gl::CompareOp::LessOrEqual)
 	}));
+
+	PipelineMaterialInfo debugLinesMaterialInfo({
+		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
+				gl::BlendFactor::One, gl::BlendFactor::Zero, gl::BlendOp::Add),
+		DepthInfo(false, true, gl::CompareOp::Less)
+	});
+	debugLinesMaterialInfo.lineWidth = 1.0f;
+
+	builder.addPipeline(pass, 0, "DebugTriangles", shaderSpecInfo, debugLinesMaterialInfo);
 
 	// define internal resources (images and buffers)
 	gl::Resource::Builder resourceBuilder("LoaderResources");
@@ -214,7 +223,7 @@ bool AppScene::init(Application *app, Extent2 extent) {
 	}
 
 	//_layout = addChild(Rc<AutofitTest>::create());
-	_layout = addChild(Rc<VectorTest>::create());
+	_layout = addChild(Rc<VectorTest2>::create());
 
 	// _layout = addChild(Rc<RootLayout>::create());
 

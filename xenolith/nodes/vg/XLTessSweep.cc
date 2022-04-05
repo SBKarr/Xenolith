@@ -1107,6 +1107,8 @@ static int AddSentinel( TESStesselator *tess, TESSreal smin, TESSreal smax, TESS
 	e = tessMeshMakeEdge( tess->mesh );
 	if (e == NULL) return TESS_ERROR;
 
+	e->mark = e->Sym->mark = TESS_SENTINEL;
+
 	e->Org->s = smax;
 	e->Org->t = t;
 	e->Dst->s = smin;

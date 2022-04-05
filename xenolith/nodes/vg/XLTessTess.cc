@@ -167,17 +167,17 @@ struct EdgeStack {
 	TESSalloc *alloc;
 };
 
-void stackInit( EdgeStack *stack, TESSalloc *alloc ) {
+static void stackInit( EdgeStack *stack, TESSalloc *alloc ) {
 	stack->top = NULL;
 	stack->free = NULL;
 	stack->alloc = alloc;
 }
 
-int stackEmpty( EdgeStack *stack ) {
+static int stackEmpty( EdgeStack *stack ) {
 	return stack->top == NULL;
 }
 
-void stackPush( EdgeStack *stack, TESShalfEdge *e ) {
+static void stackPush( EdgeStack *stack, TESShalfEdge *e ) {
 	EdgeStackNode *node;
 	if (stack->free) {
 		node = stack->free;
@@ -191,7 +191,7 @@ void stackPush( EdgeStack *stack, TESShalfEdge *e ) {
 	stack->top = node;
 }
 
-TESShalfEdge *stackPop( EdgeStack *stack )
+static TESShalfEdge *stackPop( EdgeStack *stack )
 {
 	TESShalfEdge *e = NULL;
 	EdgeStackNode *node = stack->top;
@@ -318,17 +318,12 @@ int tessMeshSetWindingNumber( TESSmesh *mesh, int value,
 	return 1;
 }
 
-void* heapAlloc(void* userData, unsigned int size) {
+static void* heapAlloc(void* userData, unsigned int size) {
 	TESS_NOTUSED( userData );
 	return malloc( size );
 }
 
-void* heapRealloc(void *userData, void* ptr, unsigned int size) {
-	TESS_NOTUSED( userData );
-	return realloc( ptr, size );
-}
-
-void heapFree( void* userData, void* ptr ) {
+static void heapFree( void* userData, void* ptr ) {
 	TESS_NOTUSED( userData );
 	free( ptr );
 }
@@ -338,12 +333,9 @@ static TESSalloc defaulAlloc = { heapAlloc, heapFree, 0 };
 TESStesselator* tessNewTess(TESSalloc* alloc) {
 	TESStesselator* tess;
 
-	if (alloc == NULL)
+	if (alloc == NULL) {
 		alloc = &defaulAlloc;
-
-	/* Only initialize fields which can be changed by the api.  Other fields
-	* are initialized where they are used.
-	*/
+	}
 
 	tess = (TESStesselator *)alloc->memalloc( alloc->userData, sizeof( TESStesselator ));
 	if ( tess == NULL ) {
