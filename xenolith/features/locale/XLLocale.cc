@@ -263,7 +263,7 @@ public:
 	WideString resolveLocaleTags(WideStringView r) {
 		if (r.is(u"@Locale:")) { // raw locale string
 			r += "@Locale:"_len;
-			return string(r).str();
+			return string(r).str<memory::StandartInterface>();
 		} else {
 			WideString ret; ret.reserve(r.size());
 			while (!r.empty()) {
@@ -321,7 +321,7 @@ public:
 							ret.append(token.data(), token.size());
 							ret.push_back(u'%');
 						} else {
-							ret.append(replacement.str());
+							ret.append(replacement.str<memory::StandartInterface>());
 						}
 					} else {
 						ret.push_back(u'%');
@@ -343,15 +343,15 @@ public:
 		return String();
 	}
 
-	String common(const String &locale) {
-		String ret = string::tolower(locale);
+	String common(const StringView &locale) {
+		String ret = string::StringTraits<memory::StandartInterface>::tolower(locale);
 		if (ret.size() == 2) {
 			if (ret == "en") {
 				ret.reserve(5);
 				ret.append("-gb");
 			} else {
 				ret.reserve(5);
-				ret.append("-").append(string::tolower(locale));
+				ret.append("-").append(string::StringTraits<memory::StandartInterface>::tolower(locale));
 			}
 		}
 

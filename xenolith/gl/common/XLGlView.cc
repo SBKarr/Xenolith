@@ -38,7 +38,7 @@ View::View() { }
 View::~View() { }
 
 bool View::init(const Rc<EventLoop> &ev, const Rc<gl::Loop> &loop) {
-	if (!FrameEmitter::init(loop, 1'000'000 / 60)) {
+	if (!FrameEmitter::init(loop, /*1'000'000 / 60*/ 0)) {
 		return false;
 	}
 

@@ -21,7 +21,7 @@
  **/
 
 #include "XLVectorCanvas.h"
-#include "XLTesselator.h"
+#include "SPTess.h"
 
 namespace stappler::xenolith {
 
@@ -32,13 +32,12 @@ struct VectorCanvasPathOutput {
 };
 
 struct VectorCanvasPathDrawer {
-	TESSalloc tessAlloc;
 	const VectorPath *path = nullptr;
 
 	float quality = 0.5f; // approximation level (more is better)
 	Color4F originalColor;
 
-	uint32_t draw(memory::pool_t *pool, const VectorPath &path, const Mat4 &, gl::VertexData *out);
+	uint32_t draw(memory::pool_t *pool, const VectorPath &p, const Mat4 &transform, gl::VertexData *);
 };
 
 struct VectorCanvas::Data : memory::AllocPool {
@@ -54,7 +53,7 @@ struct VectorCanvas::Data : memory::AllocPool {
 	TimeInterval subAccum;
 
 	Rc<VectorImageData> image;
-	Size targetSize;
+	Size2 targetSize;
 
 	Vector<Pair<Mat4, Rc<gl::VertexData>>> *out = nullptr;
 
@@ -85,53 +84,34 @@ struct VectorCanvas::Data : memory::AllocPool {
 	void pushContour(const VectorPath &path, bool closed);
 };
 
-static void * staticPoolAlloc(void* userData, unsigned int size) {
-	memory::pool_t *pool = (memory::pool_t *)userData;
-	size_t s = size;
-	return memory::pool::palloc(pool, s);
-}
-
-static void staticPoolFree(void * userData, void * ptr) {
-	// empty
-	TESS_NOTUSED(userData);
-	TESS_NOTUSED(ptr);
-}
-
-static inline float canvas_approx_err_sq(float e) {
-	e = (1.0f / e);
-	return e * e;
-}
-
-static inline float canvas_dist_sq(float x1, float y1, float x2, float y2) {
-	const float dx = x2 - x1, dy = y2 - y1;
-	return dx * dx + dy * dy;
-}
-
-static void VectorCanvasPathDrawer_setVertexCount(void *ptr, int vertexes, int faces) {
-	auto out = (VectorCanvasPathOutput *)ptr;
-	out->vertexes->data.resize(vertexes);
-	out->vertexes->indexes.reserve(faces * 3);
-}
-
-static void VectorCanvasPathDrawer_pushVertex(void *ptr, TESSindex idx, TESSreal x, TESSreal y, TESSreal vertexValue) {
+static void VectorCanvasPathDrawer_pushVertex(void *ptr, uint32_t idx, const Vec2 &pt, float vertexValue) {
 	auto out = (VectorCanvasPathOutput *)ptr;
 	if (size_t(idx) >= out->vertexes->data.size()) {
 		out->vertexes->data.resize(idx + 1);
 	}
 
 	out->vertexes->data[idx] = gl::Vertex_V4F_V4F_T2F2U{
-		Vec4(x, y, 0.0f, 1.0f),
+		Vec4(pt, 0.0f, 1.0f),
 		Vec4(out->color.r, out->color.g, out->color.b, out->color.a * vertexValue),
 		Vec2(0.0f, 0.0f), 0, 0
 	};
+
+	std::cout << "Vertex: " << idx << ": " << pt << "\n";
+	/*out->vertexes->data[idx] = gl::Vertex_V4F_V4F_T2F2U{
+		Vec4(x, y, 0.0f, 1.0f),
+		Vec4(out->color.r, out->color.g, vertexValue, out->color.a),
+		Vec2(0.0f, 0.0f), 0, 0
+	};*/
 }
 
-static void VectorCanvasPathDrawer_pushTriangle(void *ptr, TESSshort pt1, TESSshort pt2, TESSshort pt3) {
+static void VectorCanvasPathDrawer_pushTriangle(void *ptr, uint32_t pt[3]) {
 	auto out = (VectorCanvasPathOutput *)ptr;
-	out->vertexes->indexes.emplace_back(pt1);
-	out->vertexes->indexes.emplace_back(pt2);
-	out->vertexes->indexes.emplace_back(pt3);
+	out->vertexes->indexes.emplace_back(pt[0]);
+	out->vertexes->indexes.emplace_back(pt[1]);
+	out->vertexes->indexes.emplace_back(pt[2]);
 	++ out->objects;
+
+	std::cout << "Face: " << pt[0] << " " << pt[1] << " " << pt[2] << "\n";
 }
 
 Rc<VectorCanvas> VectorCanvas::getInstance() {
@@ -177,7 +157,7 @@ float VectorCanvas::getQuality() const {
 	return _data->pathDrawer.quality;
 }
 
-Rc<VectorCanvasResult> VectorCanvas::draw(Rc<VectorImageData> &&image, Size targetSize) {
+Rc<VectorCanvasResult> VectorCanvas::draw(Rc<VectorImageData> &&image, Size2 targetSize) {
 	auto ret = Rc<VectorCanvasResult>::alloc();
 	_data->out = &ret->data;
 	_data->image = move(image);
@@ -287,139 +267,70 @@ void VectorCanvas::Data::doDraw(const VectorPath &path) {
 uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const VectorPath &p, const Mat4 &transform, gl::VertexData *out) {
 	path = &p;
 
-	tessAlloc.memalloc = &staticPoolAlloc;
-	tessAlloc.memfree = &staticPoolFree;
-	tessAlloc.userData = (void*)pool;
-
-	float pathX = 0.0f;
-	float pathY = 0.0f;
 	float approxScale = 1.0f;
 	auto style = path->getStyle();
-	VectorLineDrawer line(pool);
 
-	TESStesselator *fillTess = nullptr;
-	if ((style & DrawStyle::Fill) != 0) {
-		fillTess = tessNewTess(&tessAlloc);
-	}
+	Rc<geom::Tesselator> strokeTess = ((style & geom::DrawStyle::Stroke) != geom::DrawStyle::None) ? Rc<geom::Tesselator>::create(pool) : nullptr;
+	Rc<geom::Tesselator> fillTess = ((style & geom::DrawStyle::Fill) != geom::DrawStyle::None) ? Rc<geom::Tesselator>::create(pool) : nullptr;
 
-	// memory::vector<layout::StrokeDrawer *> strokes;
+	geom::LineDrawer line(approxScale * quality, Rc<geom::Tesselator>(fillTess), Rc<geom::Tesselator>(strokeTess),
+			path->getStrokeWidth());
 
 	Vec3 scale; transform.getScale(&scale);
 	approxScale = std::max(scale.x, scale.y);
-	line.setStyle(style, approxScale * quality, path->getStrokeWidth());
-
-	pathX = 0.0f; pathY = 0.0f;
-
-	auto pushContour = [&] (bool closed) {
-		if ((style & DrawStyle::Fill) != 0) {
-			size_t count = line.line.size();
-			if (closed && count >= 2) {
-				// fix tail point error - remove last point if error value is low enough
-				const float dist = canvas_dist_sq(line.line[0].x, line.line[0].y, line.line[count - 1].x, line.line[count - 1].y);
-				const float err = canvas_approx_err_sq(approxScale * quality);
-
-				if (dist < err) {
-					-- count;
-				}
-			}
-
-			if (fillTess && !line.line.empty() && count > 2) {
-				tessAddContour(fillTess, (TESSVec2 *)line.line.data(), int(count));
-			}
-		}
-
-		if ((style & DrawStyle::Stroke) != 0) {
-			/*auto currentStroke = new (pool) layout::StrokeDrawer(path->getStrokeColor(), path->getStrokeWidth(),
-					path->getLineJoin(), path->getLineCup(), path->getMiterLimit());
-			if (path->isAntialiased()) {
-				currentStroke->setAntiAliased(approxScale);
-			}
-			currentStroke->draw(line.outline, closed);
-			strokes.emplace_back(currentStroke);*/
-		}
-		line.clear();
-	};
-
-	auto pathMoveTo = [&] (float x, float y) {
-		if (!line.empty()) {
-			pushContour(false);
-		}
-
-		line.drawLine(x, y);
-		pathX = x; pathY = y;
-	};
-
-	auto pathLineTo = [&] (float x, float y) {
-		line.drawLine(x, y);
-		pathX = x; pathY = y;
-	};
-
-	auto pathQuadTo = [&] (float x1, float y1, float x2, float y2) {
-		line.drawQuadBezier(pathX, pathY, x1, y1, x2, y2);
-		pathX = x2; pathY = y2;
-	};
-
-	auto pathCubicTo = [&] (float x1, float y1, float x2, float y2, float x3, float y3) {
-		line.drawCubicBezier(pathX, pathY, x1, y1, x2, y2, x3, y3);
-		pathX = x3; pathY = y3;
-	};
-
-	auto pathArcTo = [&] (float rx, float ry, float rot, bool fa, bool fs, float x2, float y2) {
-		line.drawArc(pathX, pathY, rx, ry, rot, fa, fs, x2, y2);
-		pathX = x2; pathY = y2;
-	};
-
-	auto pathClose = [&] () {
-		line.drawClose();
-		if (!line.empty()) {
-			pushContour(true);
-		}
-
-		pathX = 0; pathY = 0;
-	};
 
 	auto d = path->getPoints().data();
 	for (auto &it : path->getCommands()) {
 		switch (it) {
-		case VectorPath::Command::MoveTo: pathMoveTo(d[0].p.x, d[0].p.y); ++ d; break;
-		case VectorPath::Command::LineTo: pathLineTo(d[0].p.x, d[0].p.y); ++ d; break;
-		case VectorPath::Command::QuadTo: pathQuadTo(d[0].p.x, d[0].p.y, d[1].p.x, d[1].p.y); d += 2; break;
-		case VectorPath::Command::CubicTo: pathCubicTo(d[0].p.x, d[0].p.y, d[1].p.x, d[1].p.y, d[2].p.x, d[2].p.y); d += 3; break;
-		case VectorPath::Command::ArcTo: pathArcTo(d[0].p.x, d[0].p.y, d[2].f.v, d[2].f.a, d[2].f.b, d[1].p.x, d[1].p.y); d += 3; break;
-		case VectorPath::Command::ClosePath: pathClose(); break;
+		case VectorPath::Command::MoveTo: line.drawBegin(d[0].p.x, d[0].p.y); ++ d; break;
+		case VectorPath::Command::LineTo: line.drawLine(d[0].p.x, d[0].p.y); ++ d; break;
+		case VectorPath::Command::QuadTo: line.drawQuadBezier(d[0].p.x, d[0].p.y, d[1].p.x, d[1].p.y); d += 2; break;
+		case VectorPath::Command::CubicTo: line.drawCubicBezier(d[0].p.x, d[0].p.y, d[1].p.x, d[1].p.y, d[2].p.x, d[2].p.y); d += 3; break;
+		case VectorPath::Command::ArcTo: line.drawArc(d[0].p.x, d[0].p.y, d[2].f.v, d[2].f.a, d[2].f.b, d[1].p.x, d[1].p.y); d += 3; break;
+		case VectorPath::Command::ClosePath: line.drawClose(true); break;
 		default: break;
 		}
 	}
 
-	if (!line.empty()) {
-		pushContour(false);
-	}
+	line.drawClose(false);
 
-	VectorCanvasPathOutput outPtr;
-	outPtr.vertexes = out;
-	outPtr.objects = 0;
+	VectorCanvasPathOutput target { out };
+	geom::TessResult result;
+	result.target = &target;
+	result.pushVertex = VectorCanvasPathDrawer_pushVertex;
+	result.pushTriangle = VectorCanvasPathDrawer_pushTriangle;
 
 	if (fillTess) {
-		outPtr.color = originalColor * path->getFillColor();
-
-		TESSResultInterface interface;
-		interface.target = &outPtr;
-		interface.windingRule = TessWindingRule(path->getWindingRule() == Winding::NonZero);
-
-		if (path->isAntialiased() && (path->getStyle() == DrawStyle::Fill || path->getStrokeOpacity() < 96)) {
-			interface.antialiasValue = approxScale;
-		} else {
-			interface.antialiasValue = 0.0f;
+		if (path->isAntialiased() && (path->getStyle() == vg::DrawStyle::Fill || path->getStrokeOpacity() < 96)) {
+			fillTess->setAntialiasValue(config::VGAntialiasFactor * approxScale);
 		}
-
-		interface.setVertexCount = VectorCanvasPathDrawer_setVertexCount;
-		interface.pushVertex = VectorCanvasPathDrawer_pushVertex;
-		interface.pushTriangle = VectorCanvasPathDrawer_pushTriangle;
-
-		tessExport(fillTess, &interface);
+		fillTess->setWindingRule(path->getWindingRule());
+		fillTess->prepare(result);
 	}
 
-	return outPtr.objects;
+	if (strokeTess) {
+		if (path->isAntialiased()) {
+			strokeTess->setAntialiasValue(config::VGAntialiasFactor * approxScale);
+		}
+
+		strokeTess->setWindingRule(vg::Winding::EvenOdd);
+		strokeTess->prepare(result);
+	}
+
+	out->data.resize(result.nvertexes);
+	out->indexes.reserve(result.nfaces * 3);
+
+	if (fillTess) {
+		target.color = originalColor * path->getFillColor();
+		fillTess->write(result);
+	}
+
+	if (strokeTess) {
+		target.color = originalColor * path->getStrokeColor();
+		strokeTess->write(result);
+	}
+
+	return target.objects;
 }
 
 SP_EXTERN_C void tessLog(const char *msg) {

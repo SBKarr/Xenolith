@@ -69,6 +69,10 @@ protected:
 
 	bool presentImmediate(const Rc<PresentTask> &);
 
+	virtual bool isRetainTrackerEnabled() const override {
+		return true;
+	}
+
 	VkSurfaceKHR _surface = VK_NULL_HANDLE;
 	Rc<SwapchainHandle> _swapchain;
 

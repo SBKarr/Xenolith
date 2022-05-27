@@ -43,7 +43,7 @@ bool Scene::init(Application *app, gl::RenderQueue::Builder &&builder) {
 	return true;
 }
 
-bool Scene::init(Application *app, gl::RenderQueue::Builder &&builder, Size size) {
+bool Scene::init(Application *app, gl::RenderQueue::Builder &&builder, Size2 size) {
 	if (!Node::init()) {
 		return false;
 	}
@@ -86,11 +86,13 @@ void Scene::onContentSizeDirty() {
 
 void Scene::onPresented(Director *dir) {
 	_director = dir;
-	if (getContentSize() == Size::ZERO) {
+	if (getContentSize() == Size2::ZERO) {
 		setContentSize(dir->getScreenSize());
 	}
 
-	dir->getResourceCache()->addResource(_queue->getInternalResource());
+	if (auto res = _queue->getInternalResource()) {
+		dir->getResourceCache()->addResource(res);
+	}
 	if (_materials.empty()) {
 		readInitialMaterials();
 	}
@@ -101,8 +103,10 @@ void Scene::onPresented(Director *dir) {
 void Scene::onFinished(Director *dir) {
 	onExit();
 
-	dir->getResourceCache()->removeResource(_queue->getInternalResource()->getName());
 	if (_director == dir) {
+		if (auto res = _queue->getInternalResource()) {
+			dir->getResourceCache()->removeResource(res->getName());
+		}
 		_director = nullptr;
 	}
 }
@@ -123,6 +127,10 @@ void Scene::on2dVertexInput(gl::FrameQueue &frame, const Rc<gl::AttachmentHandle
 
 	_director->getApplication()->performOnMainThread(
 			[this, frame = Rc<gl::FrameQueue>(&frame), attachment = attachment, cb = move(cb)] () mutable {
+		if (!_director) {
+			return;
+		}
+
 		RenderFrameInfo info;
 		info.pool = frame->getPool()->getPool();
 		info.commands = Rc<gl::CommandList>::create(frame->getPool());
@@ -257,7 +265,7 @@ MaterialInfo Scene::getMaterialInfo(gl::MaterialType type, const Rc<gl::Material
 		++ idx;
 	}
 
-	ret.pipeline = material->getPipeline()->material.normalize();
+	ret.pipeline = material->getPipeline()->material;
 
 	return ret;
 }

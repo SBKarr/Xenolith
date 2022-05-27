@@ -38,6 +38,7 @@ namespace stappler::xenolith::vk {
 Device::Device() { }
 
 Device::~Device() {
+	log::text("vk::Device", "~Device - begin");
 	if (_vkInstance && _device) {
 		if (_renderQueueCompiler) {
 			_renderQueueCompiler = nullptr;
@@ -66,6 +67,7 @@ Device::~Device() {
 		_device = nullptr;
 		_table = nullptr;
 	}
+	log::text("vk::Device", "~Device - end");
 }
 
 bool Device::init(const vk::Instance *inst, DeviceInfo && info, const Features &features) {
@@ -83,10 +85,10 @@ bool Device::init(const vk::Instance *inst, DeviceInfo && info, const Features &
 		_families.emplace_back(DeviceQueueFamily({ info.index, count, preferred, info.ops, info.minImageTransferGranularity}));
 	};
 
-	emplaceQueueFamily(info.graphicsFamily, std::thread::hardware_concurrency(), QueueOperations::Graphics);
+	emplaceQueueFamily(info.graphicsFamily, 1 /* std::thread::hardware_concurrency() */, QueueOperations::Graphics);
 	emplaceQueueFamily(info.presentFamily, 1, QueueOperations::Present);
 	emplaceQueueFamily(info.transferFamily, 2, QueueOperations::Transfer);
-	emplaceQueueFamily(info.computeFamily, std::thread::hardware_concurrency(), QueueOperations::Compute);
+	emplaceQueueFamily(info.computeFamily, 1/* std::thread::hardware_concurrency() */, QueueOperations::Compute);
 
 	Vector<const char *> extensions;
 	for (auto &it : s_requiredDeviceExtensions) {
@@ -190,7 +192,7 @@ VkPhysicalDevice Device::getPhysicalDevice() const {
 	return _info.device;
 }
 
-void Device::begin(const Application *app, thread::TaskQueue &q) {
+void Device::begin(const Application *app, gl::TaskQueue &q) {
 	if (!isSamplersCompiled()) {
 		compileSamplers(*app->getQueue(), true);
 	}
@@ -202,8 +204,8 @@ void Device::begin(const Application *app, thread::TaskQueue &q) {
 	_transferQueue = Rc<TransferQueue>::create();
 }
 
-void Device::end(thread::TaskQueue &q) {
-	waitIdle();
+void Device::end(gl::Loop &loop, gl::TaskQueue &q) {
+	waitIdle(loop);
 
 	for (auto &it : _families) {
 		for (auto &b : it.pools) {
@@ -228,12 +230,12 @@ void Device::end(thread::TaskQueue &q) {
 	}
 	_samplers.clear();
 
-	gl::Device::end(q);
+	gl::Device::end(loop, q);
 }
 
-void Device::waitIdle() {
+void Device::waitIdle(gl::Loop &loop) {
 	for (auto &it : _scheduled) {
-		it->check(false);
+		it->check(loop, false);
 	}
 	_scheduled.clear();
 	getTable()->vkDeviceWaitIdle(_device);
@@ -264,7 +266,7 @@ const DeviceTable * Device::getTable() const {
 		if (std::this_thread::get_id() == dev->_loopThreadId) {
 			if (fn != (PFN_vkVoidFunction)dev->_original->vkCreateFence
 					&& fn != (PFN_vkVoidFunction)dev->_original->vkGetFenceStatus) {
-				//log::text("Vk-Call", name);
+				log::text("Vk-Call-Loop", name);
 			}
 		}
 		if (fn == (PFN_vkVoidFunction)dev->_original->vkQueueSubmit
@@ -272,11 +274,15 @@ const DeviceTable * Device::getTable() const {
 				|| fn == (PFN_vkVoidFunction)dev->_original->vkAcquireNextImageKHR
 				|| fn == (PFN_vkVoidFunction)dev->_original->vkCreateSwapchainKHR
 				|| fn == (PFN_vkVoidFunction)dev->_original->vkDestroySwapchainKHR) {
-			log::text("Vk-Call", name);
+			//log::text("Vk-Call", name);
 		}
 		s_vkFnCallStart = platform::device::_clock();
 	}, [] (void *ctx, const char *name, PFN_vkVoidFunction fn) {
 		auto dt = platform::device::_clock() - s_vkFnCallStart;
+		auto dev = (Device *)ctx;
+		if (std::this_thread::get_id() == dev->_loopThreadId) {
+			log::vtext("Vk-Call-Timeout", name, ": ", dt);
+		}
 		if (dt > 200000) {
 			log::vtext("Vk-Call-Timeout", name, ": ", dt);
 		}
@@ -364,6 +370,7 @@ bool Device::acquireQueue(QueueOperations ops, gl::FrameHandle &handle, Function
 	}
 
 	if (queue) {
+		queue->setOwner(handle);
 		acquire(handle, queue);
 	}
 	return true;
@@ -406,6 +413,8 @@ void Device::releaseQueue(Rc<DeviceQueue> &&queue) {
 		return;
 	}
 
+	queue->reset();
+
 	std::unique_lock<Mutex> lock(_resourceMutex);
 	if (family->waiters.empty()) {
 		family->queues.emplace_back(move(queue));
@@ -424,6 +433,7 @@ void Device::releaseQueue(Rc<DeviceQueue> &&queue) {
 
 			if (handle && handle->isValid()) {
 				if (cb) {
+					queue->setOwner(*handle);
 					cb(*handle, queue);
 				}
 			} else if (invalidate) {
@@ -491,7 +501,7 @@ Rc<CommandPool> Device::acquireCommandPool(uint32_t familyIndex) {
 }
 
 void Device::releaseCommandPool(gl::Loop &loop, Rc<CommandPool> &&pool) {
-	pool->reset(*this);
+	pool->reset(*this, true);
 
 	std::unique_lock<Mutex> lock(_resourceMutex);
 	_families[pool->getFamilyIdx()].pools.emplace_back(Rc<CommandPool>(pool));
@@ -544,7 +554,7 @@ void Device::releaseFenceUnsafe(Rc<Fence> &&ref) {
 }
 
 void Device::scheduleFence(gl::Loop &loop, Rc<Fence> &&fence) {
-	if (!fence->isArmed() || fence->check()) {
+	if (!fence->isArmed() || fence->check(loop)) {
 		releaseFence(loop, move(fence));
 		return;
 	}
@@ -554,7 +564,7 @@ void Device::scheduleFence(gl::Loop &loop, Rc<Fence> &&fence) {
 		if (_scheduled.find(fence) == _scheduled.end()) {
 			return true;
 		}
-		if (fence->check()) {
+		if (fence->check(*ctx.loop)) {
 			_scheduled.erase(fence);
 			releaseFence(*ctx.loop, Rc<Fence>(fence));
 			return true;
@@ -686,6 +696,10 @@ Rc<gl::Semaphore> Device::makeSemaphore() {
 Rc<gl::ImageView> Device::makeImageView(const Rc<gl::ImageObject> &img, const gl::ImageViewInfo &info) {
 	auto ret = Rc<ImageView>::create(*this, (Image *)img.get(), info);
 	return ret;
+}
+
+bool Device::hasNonSolidFillMode() const {
+	return _info.features.device10.features.fillModeNonSolid;
 }
 
 void Device::compileResource(gl::Loop &loop, const Rc<gl::Resource> &req, Function<void(bool)> &&complete) {

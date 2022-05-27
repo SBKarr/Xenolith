@@ -24,6 +24,7 @@
 #define XENOLITH_GL_COMMON_XLGLFRAMEEMITTER_H_
 
 #include "XLGlFrameCache.h"
+#include "SPMovingAverage.h"
 
 namespace stappler::xenolith::gl {
 
@@ -84,7 +85,7 @@ protected:
 	Extent2 _extent;
 	Map<const Attachment *, Rc<AttachmentInputData>> _input;
 	bool _readyForSubmit = true; // if true, do not wait synchronization with other active frames in emitter
-	bool _persistentMappings = true; // try to map per-frame GPU memory persistently
+	bool _persistentMappings = true; // true; // try to map per-frame GPU memory persistently
 	uint32_t _sceneId = 0;
 
 	// return true to setaside output
@@ -121,6 +122,12 @@ public:
 
 	const Rc<Loop> &getLoop() const { return _loop; }
 
+	uint64_t getLastFrameInterval() const { return _lastFrameInterval; }
+	uint64_t getAvgFrameInterval() const { return _avgFrameInterval.getAverage(); }
+
+	uint64_t getLastFrameTime() const { return _lastFrameTime; }
+	uint64_t getAvgFrameTime() const { return _avgFrameTime.getAverage(); }
+
 protected:
 	virtual void onFrameEmitted(gl::FrameHandle &);
 	virtual void onFrameSubmitted(gl::FrameHandle &);
@@ -147,9 +154,19 @@ protected:
 	bool _nextFrameAcquired = false;
 	Rc<FrameRequest> _nextFrameRequest;
 	std::deque<Rc<FrameHandle>> _frames;
+	std::deque<Rc<FrameHandle>> _framesPending;
 
 	Rc<Loop> _loop;
 	Map<const RenderQueue *, Rc<FrameCacheStorage>> _frameCache;
+
+	uint64_t _lastSubmit = 0;
+	uint64_t _lastFrameInterval = 0;
+	math::MovingAverage<16, uint64_t> _avgFrameInterval;
+
+	uint64_t _lastFrameTime = 0;
+	math::MovingAverage<16, uint64_t> _avgFrameTime;
+
+	uint64_t _lastTotalFrameTime = 0;
 };
 
 }

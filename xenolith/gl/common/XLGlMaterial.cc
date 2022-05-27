@@ -215,6 +215,10 @@ Vector<Material *> MaterialSet::updateMaterials(const Vector<Rc<Material>> &mate
 	}
 
 	_info.size = _objectSize * _materials.size();
+
+	if (_info.size == 0 || ret.size() == 0) {
+		return Vector<Material *>();
+	}
 	return ret;
 }
 
@@ -526,7 +530,7 @@ bool Material::init(const Material *master, Rc<ImageObject> &&image, Rc<ImageAtl
 bool Material::init(const Material *master, Vector<MaterialImage> &&images) {
 	_id = master->getId();
 	_pipeline = master->getPipeline();
-	_data = master->getData().bytes();
+	_data = master->getData().bytes<Interface>();
 	_images = move(images);
 	for (auto &it : _images) {
 		if (it.image->atlas) {

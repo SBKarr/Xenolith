@@ -44,18 +44,18 @@ bool Device::init(const Instance *instance) {
 	return true;
 }
 
-void Device::begin(const Application *, thread::TaskQueue &) {
+void Device::begin(const Application *, TaskQueue &) {
 	_started = true;
 }
 
-void Device::end(thread::TaskQueue &) {
+void Device::end(Loop &, TaskQueue &) {
 	_started = false;
 
 	if (isRetainTrackerEnabled()) {
 		log::vtext("Gl-Device", "Backtrace for ", (void *)this);
 		foreachBacktrace([] (uint64_t id, Time time, const std::vector<std::string> &vec) {
 			StringStream stream;
-			stream << "[" << id << ":" << time.toHttp() << "]:\n";
+			stream << "[" << id << ":" << time.toHttp<Interface>() << "]:\n";
 			for (auto &it : vec) {
 				stream << "\t" << it << "\n";
 			}
@@ -64,7 +64,7 @@ void Device::end(thread::TaskQueue &) {
 	}
 }
 
-void Device::waitIdle() {
+void Device::waitIdle(Loop &) {
 
 }
 
@@ -103,7 +103,7 @@ Rc<Shader> Device::addProgram(Rc<Shader> program) {
 	std::unique_lock<Mutex> lock(_shaderMutex);
 	auto it = _shaders.find(program->getName());
 	if (it == _shaders.end()) {
-		_shaders.emplace(program->getName().str(), program);
+		_shaders.emplace(program->getName().str<Interface>(), program);
 		return program;
 	} else {
 		return it->second;
@@ -177,7 +177,7 @@ void Device::invalidateObjects() {
 			log::vtext("Gl-Device", "Backtrace for ", (void *)it);
 			ref->foreachBacktrace([] (uint64_t id, Time time, const std::vector<std::string> &vec) {
 				StringStream stream;
-				stream << "[" << id << ":" << time.toHttp() << "]:\n";
+				stream << "[" << id << ":" << time.toHttp<Interface>() << "]:\n";
 				for (auto &it : vec) {
 					stream << "\t" << it << "\n";
 				}

@@ -31,7 +31,7 @@ LabelParameters::DescriptionStyle::DescriptionStyle() {
 	font.fontSize = FontSize(14);
 	text.opacity = 222;
 	text.color = Color3B::BLACK;
-	text.whiteSpace = style::WhiteSpace::PreWrap;
+	text.whiteSpace = font::WhiteSpace::PreWrap;
 }
 
 String LabelParameters::DescriptionStyle::getConfigName(bool caps) const {
@@ -125,7 +125,7 @@ void LabelParameters::ExternalFormatter::reserve(size_t chars, size_t ranges) {
 }
 
 void LabelParameters::ExternalFormatter::addString(const DescriptionStyle &style, const StringView &str, bool localized) {
-	addString(style, string::toUtf16(str), localized);
+	addString(style, string::toUtf16<Interface>(str), localized);
 }
 void LabelParameters::ExternalFormatter::addString(const DescriptionStyle &style, const WideStringView &str, bool localized) {
 	if (!begin) {
@@ -140,24 +140,24 @@ void LabelParameters::ExternalFormatter::addString(const DescriptionStyle &style
 	}
 }
 
-Size LabelParameters::ExternalFormatter::finalize() {
+Size2 LabelParameters::ExternalFormatter::finalize() {
 	_formatter.finalize();
-	return Size(_spec.width / _density, _spec.height / _density);
+	return Size2(_spec.width / _density, _spec.height / _density);
 }
 
 WideString LabelParameters::getLocalizedString(const StringView &s) {
-	return getLocalizedString(string::toUtf16(s));
+	return getLocalizedString(string::toUtf16<Interface>(s));
 }
 WideString LabelParameters::getLocalizedString(const WideStringView &s) {
 	if (locale::hasLocaleTags(s)) {
 		return locale::resolveLocaleTags(s);
 	}
-	return s.str();
+	return s.str<Interface>();
 }
 
 float LabelParameters::getStringWidth(font::FontController *source, const DescriptionStyle &style,
 		const StringView &str, float density, bool localized) {
-	return getStringWidth(source, style, string::toUtf16(str), density, localized);
+	return getStringWidth(source, style, string::toUtf16<Interface>(str), density, localized);
 }
 
 float LabelParameters::getStringWidth(font::FontController *source, const DescriptionStyle &style,
@@ -188,19 +188,19 @@ float LabelParameters::getStringWidth(font::FontController *source, const Descri
 	return spec.width / density;
 }
 
-Size LabelParameters::getLabelSize(font::FontController *source, const DescriptionStyle &style,
+Size2 LabelParameters::getLabelSize(font::FontController *source, const DescriptionStyle &style,
 		const StringView &s, float w, float density, bool localized) {
-	return getLabelSize(source, style, string::toUtf16(s), w, density, localized);
+	return getLabelSize(source, style, string::toUtf16<Interface>(s), w, density, localized);
 }
 
-Size LabelParameters::getLabelSize(font::FontController *source, const DescriptionStyle &style,
+Size2 LabelParameters::getLabelSize(font::FontController *source, const DescriptionStyle &style,
 		const WideStringView &str, float w, float density, bool localized) {
 	if (str.empty()) {
-		return Size(0.0f, 0.0f);
+		return Size2(0.0f, 0.0f);
 	}
 
 	if (!source) {
-		return Size(0.0f, 0.0f);
+		return Size2(0.0f, 0.0f);
 	}
 
 	if (density == 0.0f) {
@@ -223,7 +223,7 @@ Size LabelParameters::getLabelSize(font::FontController *source, const Descripti
 	}
 
 	fmt.finalize();
-	return Size(spec.maxLineX / density, spec.height / density);
+	return Size2(spec.maxLineX / density, spec.height / density);
 }
 
 void LabelParameters::setAlignment(Alignment alignment) {
@@ -341,7 +341,7 @@ LabelParameters::FontStretch LabelParameters::getFontStretch() const {
 
 void LabelParameters::setFontFamily(const StringView &value) {
 	if (value != _style.font.fontFamily) {
-		_fontFamilyStorage = value.str();
+		_fontFamilyStorage = value.str<Interface>();
 		_style.font.fontFamily = _fontFamilyStorage;
 		_labelDirty = true;
 	}
@@ -436,8 +436,8 @@ void LabelParameters::setString(const StringView &newString) {
 		return;
 	}
 
-	_string8 = newString.str();
-	_string16 = string::toUtf16(newString);
+	_string8 = newString.str<Interface>();
+	_string16 = string::toUtf16<Interface>(newString);
 	if (!_localeEnabled && locale::hasLocaleTagsFast(_string16)) {
 		setLocaleEnabled(true);
 	}
@@ -450,8 +450,8 @@ void LabelParameters::setString(const WideStringView &newString) {
 		return;
 	}
 
-	_string8 = string::toUtf8(newString);
-	_string16 = newString.str();
+	_string8 = string::toUtf8<Interface>(newString);
+	_string16 = newString.str<Interface>();
 	if (!_localeEnabled && locale::hasLocaleTagsFast(_string16)) {
 		setLocaleEnabled(true);
 	}
@@ -478,7 +478,7 @@ void LabelParameters::erase16(size_t start, size_t len) {
 	}
 
 	_string16.erase(start, len);
-	_string8 = string::toUtf8(_string16);
+	_string8 = string::toUtf8<Interface>(_string16);
 	_labelDirty = true;
 }
 
@@ -488,29 +488,29 @@ void LabelParameters::erase8(size_t start, size_t len) {
 	}
 
 	_string8.erase(start, len);
-	_string16 = string::toUtf16(_string8);
+	_string16 = string::toUtf16<Interface>(_string8);
 	_labelDirty = true;
 }
 
 void LabelParameters::append(const String& value) {
 	_string8.append(value);
-	_string16 = string::toUtf16(_string8);
+	_string16 = string::toUtf16<Interface>(_string8);
 	_labelDirty = true;
 }
 void LabelParameters::append(const WideString& value) {
 	_string16.append(value);
-	_string8 = string::toUtf8(_string16);
+	_string8 = string::toUtf8<Interface>(_string16);
 	_labelDirty = true;
 }
 
 void LabelParameters::prepend(const String& value) {
 	_string8 = value + _string8;
-	_string16 = string::toUtf16(_string8);
+	_string16 = string::toUtf16<Interface>(_string8);
 	_labelDirty = true;
 }
 void LabelParameters::prepend(const WideString& value) {
 	_string16 = value + _string16;
-	_string8 = string::toUtf8(_string16);
+	_string8 = string::toUtf8<Interface>(_string16);
 	_labelDirty = true;
 }
 
@@ -565,7 +565,8 @@ void LabelParameters::setStyles(const StyleVec &vec) {
 	_labelDirty = true;
 }
 
-void LabelParameters::updateFormatSpec(FormatSpec *format, const StyleVec &compiledStyles, float density, uint8_t _adjustValue) {
+bool LabelParameters::updateFormatSpec(FormatSpec *format, const StyleVec &compiledStyles, float density, uint8_t _adjustValue) {
+	bool success = true;
 	uint16_t adjustValue = maxOf<uint16_t>();
 
 	do {
@@ -618,6 +619,7 @@ void LabelParameters::updateFormatSpec(FormatSpec *format, const StyleVec &compi
 				}
 				if (!formatter.read(params.font, params.text, start, len)) {
 					drawedChars += len;
+					success = false;
 					break;
 				}
 			} else {
@@ -626,6 +628,7 @@ void LabelParameters::updateFormatSpec(FormatSpec *format, const StyleVec &compi
 				}
 				if (!formatter.read(params.font, params.text, start, len)) {
 					drawedChars += len;
+					success = false;
 					break;
 				}
 			}
@@ -637,6 +640,8 @@ void LabelParameters::updateFormatSpec(FormatSpec *format, const StyleVec &compi
 		}
 		formatter.finalize();
 	} while (format->overflow && adjustValue < _adjustValue);
+
+	return success;
 }
 
 LabelParameters::~LabelParameters() { }

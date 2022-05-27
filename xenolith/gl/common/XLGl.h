@@ -25,11 +25,16 @@
 
 #include "XLDefine.h"
 #include "SPBitmap.h"
+#include "SPThread.h"
 #include "SPThreadTaskQueue.h"
+#include "SPEventTaskQueue.h"
 #include "XLHashTable.h"
 #include <optional>
 
 namespace stappler::xenolith::gl {
+
+using TaskQueue = thread::TaskQueue;
+// using TaskQueue = thread::EventTaskQueue;
 
 class Device;
 class RenderQueue;
@@ -172,10 +177,10 @@ struct ProgramData : ProgramInfo {
 
 struct SpecializationInfo {
 	const ProgramData *data = nullptr;
-	Vector<PredefinedConstant> constants;
+	memory::vector<PredefinedConstant> constants;
 
 	SpecializationInfo(const ProgramData *);
-	SpecializationInfo(const ProgramData *, Vector<PredefinedConstant> &&);
+	SpecializationInfo(const ProgramData *, SpanView<PredefinedConstant>);
 };
 
 struct PipelineInfo : NamedMem {
@@ -422,9 +427,6 @@ struct VertexData : public AttachmentInputData {
 
 struct RenderFontInput : public AttachmentInputData {
 	using FontRequest = Pair<Rc<font::FontFaceObject>, Vector<char16_t>>;
-
-	static uint32_t getObjectId(uint16_t sourceId, char16_t, font::FontAnchor);
-	static uint32_t getObjectId(uint32_t, font::FontAnchor);
 
 	Rc<DynamicImage> image;
 	Vector<FontRequest> requests;

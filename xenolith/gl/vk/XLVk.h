@@ -41,17 +41,19 @@ THE SOFTWARE.
 namespace stappler::xenolith::vk {
 
 #if DEBUG
+#define VK_DEBUG_LOG 0
 #define VK_HOOK_DEBUG 0 // enable engine hooks for Vulkan calls
-static constexpr bool s_enableValidationLayers = true;
-static const char * const s_validationLayers[] = {
-    "VK_LAYER_KHRONOS_validation"
-};
+static constexpr bool s_enableValidationLayers = false;
 
 #else
-#define VK_HOOK_DEBUG 0
+#define VK_DEBUG_LOG 0
+#define VK_HOOK_DEBUG 0 // enable engine hooks for Vulkan calls
 static constexpr bool s_enableValidationLayers = false;
-static const char * const * s_validationLayers = nullptr;
 #endif
+
+[[maybe_unused]] static const char * const s_validationLayers[] = {
+    "VK_LAYER_KHRONOS_validation"
+};
 
 }
 
@@ -212,6 +214,11 @@ bool isPromotedExtension(uint32_t apiVersion, StringView name);
 size_t getFormatBlockSize(VkFormat);
 
 VkPresentModeKHR getVkPresentMode(gl::PresentMode presentMode);
+
+template <typename T>
+void sanitizeVkStruct(T &t) {
+	::memset(&t, 0, sizeof(T));
+}
 
 }
 

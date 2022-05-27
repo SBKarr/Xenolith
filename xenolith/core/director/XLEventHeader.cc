@@ -44,17 +44,17 @@ struct EventList {
 	Set<const EventHeader *> _knownEvents;
 };
 
-EventHeader::Category EventHeader::getCategoryForName(const String &catName) {
+EventHeader::Category EventHeader::getCategoryForName(StringView catName) {
 	return string::hash32(catName);
 }
 
-EventHeader::EventHeader(Category cat, const String &name)
+EventHeader::EventHeader(Category cat, StringView name)
 : _category(cat), _name(name) {
 	assert(!name.empty());
 	_id = EventList::getInstance()->addEventHeader(this);
 }
 
-EventHeader::EventHeader(const String &catName, const String &eventName)
+EventHeader::EventHeader(StringView catName, StringView eventName)
 : EventHeader(string::hash32(catName), eventName) { }
 
 EventHeader::EventHeader(const EventHeader &other) : _category(other._category), _id(other._id), _name(other._name) { }
@@ -85,7 +85,7 @@ EventHeader::EventID EventHeader::getEventID() const {
 	return _id;
 }
 
-const String &EventHeader::getName() const {
+StringView EventHeader::getName() const {
 	return _name;
 }
 
@@ -122,7 +122,7 @@ void EventHeader::send(Ref *object, const String &value) const {
 void EventHeader::send(Ref *object, const StringView &value) const {
 	Event::send(*this, object, value);
 }
-void EventHeader::send(Ref *object, const data::Value &value) const {
+void EventHeader::send(Ref *object, const Value &value) const {
 	Event::send(*this, object, value);
 }
 void EventHeader::send(Ref *object) const {

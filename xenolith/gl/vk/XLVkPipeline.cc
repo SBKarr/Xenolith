@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +27,7 @@ namespace stappler::xenolith::vk {
 
 bool Shader::init(Device &dev, const gl::ProgramData &data) {
 	_stage = data.stage;
-	_name = data.key.str();
+	_name = data.key.str<Interface>();
 
 	if (!data.data.empty()) {
 		return setup(dev, data, data.data);
@@ -43,7 +43,7 @@ bool Shader::init(Device &dev, const gl::ProgramData &data) {
 }
 
 bool Shader::setup(Device &dev, const gl::ProgramData &programData, SpanView<uint32_t> data) {
-	VkShaderModuleCreateInfo createInfo = {};
+	VkShaderModuleCreateInfo createInfo{}; sanitizeVkStruct(createInfo);
 	createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 	createInfo.codeSize = data.size() * sizeof(uint32_t);
 	createInfo.flags = 0;
@@ -59,13 +59,13 @@ bool Shader::setup(Device &dev, const gl::ProgramData &programData, SpanView<uin
 }
 
 bool Pipeline::comparePipelineOrdering(const gl::PipelineInfo &l, const gl::PipelineInfo &r) {
-	if (l.material.depth.writeEnabled != r.material.depth.writeEnabled) {
-		if (l.material.depth.writeEnabled) {
+	if (l.material.getDepthInfo().writeEnabled != r.material.getDepthInfo().writeEnabled) {
+		if (l.material.getDepthInfo().writeEnabled) {
 			return true; // pipelines with depth write comes first
 		}
 		return false;
-	} else if (l.material.blend.enabled != r.material.blend.enabled) {
-		if (!l.material.blend.enabled) {
+	} else if (l.material.getBlendInfo().enabled != r.material.getBlendInfo().enabled) {
+		if (!l.material.getBlendInfo().enabled) {
 			return true; // pipelines without blending comes first
 		}
 		return false;
@@ -75,7 +75,7 @@ bool Pipeline::comparePipelineOrdering(const gl::PipelineInfo &l, const gl::Pipe
 }
 
 bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::RenderSubpassData &pass, const gl::RenderQueue &queue) {
-	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+	VkPipelineVertexInputStateCreateInfo vertexInputInfo{}; sanitizeVkStruct(vertexInputInfo);
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	vertexInputInfo.pNext = nullptr;
 	vertexInputInfo.vertexBindingDescriptionCount = 0;
@@ -83,13 +83,14 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 	vertexInputInfo.vertexAttributeDescriptionCount = 0;
 	vertexInputInfo.pVertexAttributeDescriptions = nullptr; // Optional
 
-	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+	VkPipelineInputAssemblyStateCreateInfo inputAssembly{}; sanitizeVkStruct(inputAssembly);
 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
 	inputAssembly.pNext = nullptr;
+	inputAssembly.flags = 0;
 	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 	inputAssembly.primitiveRestartEnable = VK_FALSE;
 
-	VkViewport viewport{};
+	VkViewport viewport{}; sanitizeVkStruct(viewport);
 	viewport.x = 0.0f;
 	viewport.y = 0.0f;
 	viewport.width = 0.0f;
@@ -97,49 +98,52 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 	viewport.minDepth = 0.0f;
 	viewport.maxDepth = 1.0f;
 
-	VkRect2D scissor{};
+	VkRect2D scissor{}; sanitizeVkStruct(scissor);
 	scissor.offset.x = 0;
 	scissor.offset.y = 0;
 	scissor.extent.width = 0;
 	scissor.extent.height = 0;
 
-	VkPipelineViewportStateCreateInfo viewportState{};
+	VkPipelineViewportStateCreateInfo viewportState{}; sanitizeVkStruct(viewportState);
 	viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
 	viewportState.pNext = nullptr;
+	viewportState.flags = 0;
 	viewportState.viewportCount = 1;
 	viewportState.pViewports = &viewport;
 	viewportState.scissorCount = 1;
 	viewportState.pScissors = &scissor;
 
-	VkPipelineRasterizationStateCreateInfo rasterizer{};
+	VkPipelineRasterizationStateCreateInfo rasterizer{}; sanitizeVkStruct(rasterizer);
 	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 	rasterizer.pNext = nullptr;
+	rasterizer.flags = 0;
 	rasterizer.depthClampEnable = VK_FALSE;
 	rasterizer.rasterizerDiscardEnable = VK_FALSE;
 
-	if (params.material.lineWidth == 0.0f) {
+	if (params.material.getLineWidth() == 0.0f || !dev.hasNonSolidFillMode()) {
 		rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 		rasterizer.lineWidth = 1.0f;
-	} else if (params.material.lineWidth > 0.0f) {
+	} else if (params.material.getLineWidth() > 0.0f) {
 		rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
-		rasterizer.lineWidth = params.material.lineWidth;
-	} else if (params.material.lineWidth < 0.0f) {
+		rasterizer.lineWidth = params.material.getLineWidth();
+	} else if (params.material.getLineWidth() < 0.0f) {
 		rasterizer.polygonMode = VK_POLYGON_MODE_POINT;
-		rasterizer.lineWidth = - params.material.lineWidth;
+		rasterizer.lineWidth = - params.material.getLineWidth();
 	}
 
 	rasterizer.cullMode = VK_CULL_MODE_NONE;
-	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+	rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 	rasterizer.depthBiasEnable = VK_FALSE;
 	rasterizer.depthBiasConstantFactor = 0.0f; // Optional
 	rasterizer.depthBiasClamp = 0.0f; // Optional
 	rasterizer.depthBiasSlopeFactor = 0.0f; // Optional
 
-	VkPipelineMultisampleStateCreateInfo multisampling{};
+	VkPipelineMultisampleStateCreateInfo multisampling{}; sanitizeVkStruct(multisampling);
 	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 	multisampling.pNext = nullptr;
-	multisampling.sampleShadingEnable = VK_FALSE;
+	multisampling.flags = 0;
 	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	multisampling.sampleShadingEnable = VK_FALSE;
 	multisampling.minSampleShading = 1.0f; // Optional
 	multisampling.pSampleMask = nullptr; // Optional
 	multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
@@ -147,20 +151,23 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 
 	Vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments;
 	for (size_t i = 0; i < pass.outputImages.size(); ++ i) {
+		auto &blend = params.material.getBlendInfo();
 		colorBlendAttachments.emplace_back(VkPipelineColorBlendAttachmentState{
-			params.material.blend.isEnabled() ? VK_TRUE : VK_FALSE,
-			VkBlendFactor(params.material.blend.srcColor),
-			VkBlendFactor(params.material.blend.dstColor),
-			VkBlendOp(params.material.blend.opColor),
-			VkBlendFactor(params.material.blend.srcAlpha),
-			VkBlendFactor(params.material.blend.dstAlpha),
-			VkBlendOp(params.material.blend.opAlpha),
-			VkColorComponentFlags(params.material.blend.writeMask),
+			blend.isEnabled() ? VK_TRUE : VK_FALSE,
+			VkBlendFactor(blend.srcColor),
+			VkBlendFactor(blend.dstColor),
+			VkBlendOp(blend.opColor),
+			VkBlendFactor(blend.srcAlpha),
+			VkBlendFactor(blend.dstAlpha),
+			VkBlendOp(blend.opAlpha),
+			VkColorComponentFlags(blend.writeMask),
 		});
 	}
 
-	VkPipelineColorBlendStateCreateInfo colorBlending{};
+	VkPipelineColorBlendStateCreateInfo colorBlending{}; sanitizeVkStruct(colorBlending);
 	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	colorBlending.pNext = nullptr;
+	colorBlending.flags = 0;
 	colorBlending.logicOpEnable = VK_FALSE;
 	colorBlending.logicOp = VK_LOGIC_OP_COPY; // Optional
 	colorBlending.attachmentCount = colorBlendAttachments.size();
@@ -180,8 +187,10 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 		dynamicStates.emplace_back(VK_DYNAMIC_STATE_SCISSOR);
 	}
 
-	VkPipelineDynamicStateCreateInfo dynamicState{};
+	VkPipelineDynamicStateCreateInfo dynamicState{}; sanitizeVkStruct(dynamicState);
 	dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	dynamicState.pNext = nullptr;
+	dynamicState.flags = 0;
 	dynamicState.dynamicStateCount = dynamicStates.size();
 	dynamicState.pDynamicStates = dynamicStates.data();
 
@@ -203,7 +212,7 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 	specs.reserve(constants);
 
 	for (auto &shader : params.shaders) {
-		VkPipelineShaderStageCreateInfo info;
+		VkPipelineShaderStageCreateInfo info; sanitizeVkStruct(info);
 		info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 		info.pNext = nullptr;
 		info.flags = 0;
@@ -236,19 +245,21 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 		shaderStages.emplace_back(info);
 	}
 
-	VkPipelineDepthStencilStateCreateInfo depthState;
+	VkPipelineDepthStencilStateCreateInfo depthState; sanitizeVkStruct(depthState);
 	depthState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 	depthState.pNext = nullptr;
 	depthState.flags = 0;
 	if (pass.depthStencil) {
 		if (gl::isDepthFormat(pass.depthStencil->getInfo().format)) {
-			depthState.depthTestEnable = params.material.depth.testEnabled ? VK_TRUE : VK_FALSE;
-			depthState.depthWriteEnable = params.material.depth.writeEnabled ? VK_TRUE : VK_FALSE;
-			depthState.depthCompareOp = VkCompareOp(params.material.depth.compare);
+			auto &depth = params.material.getDepthInfo();
+			auto &bounds = params.material.getDepthBounds();
+			depthState.depthTestEnable = depth.testEnabled ? VK_TRUE : VK_FALSE;
+			depthState.depthWriteEnable = depth.writeEnabled ? VK_TRUE : VK_FALSE;
+			depthState.depthCompareOp = VkCompareOp(depth.compare);
 
-			depthState.depthBoundsTestEnable = params.material.bounds.enabled ? VK_TRUE : VK_FALSE;
-			depthState.minDepthBounds = params.material.bounds.min;
-			depthState.maxDepthBounds = params.material.bounds.max;
+			depthState.depthBoundsTestEnable = bounds.enabled ? VK_TRUE : VK_FALSE;
+			depthState.minDepthBounds = bounds.min;
+			depthState.maxDepthBounds = bounds.max;
 		} else {
 			depthState.depthTestEnable = VK_FALSE;
 			depthState.depthWriteEnable = VK_FALSE;
@@ -260,23 +271,26 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 		}
 
 		if (gl::isStencilFormat(pass.depthStencil->getInfo().format)) {
-			depthState.stencilTestEnable = params.material.stencil ? VK_TRUE : VK_FALSE;
+			auto &front = params.material.getStencilInfoFront();
+			auto &back = params.material.getStencilInfoBack();
 
-			depthState.front.failOp = VkStencilOp(params.material.front.fail);
-			depthState.front.passOp = VkStencilOp(params.material.front.pass);
-			depthState.front.depthFailOp = VkStencilOp(params.material.front.depthFail);
-			depthState.front.compareOp = VkCompareOp(params.material.front.compare);
-			depthState.front.compareMask = params.material.front.compareMask;
-			depthState.front.writeMask = params.material.front.writeMask;
-			depthState.front.reference = params.material.front.reference;
+			depthState.stencilTestEnable = params.material.isStancilEnabled() ? VK_TRUE : VK_FALSE;
 
-			depthState.back.failOp = VkStencilOp(params.material.back.fail);
-			depthState.back.passOp = VkStencilOp(params.material.back.pass);
-			depthState.back.depthFailOp = VkStencilOp(params.material.back.depthFail);
-			depthState.back.compareOp = VkCompareOp(params.material.back.compare);
-			depthState.back.compareMask = params.material.back.compareMask;
-			depthState.back.writeMask = params.material.back.writeMask;
-			depthState.back.reference = params.material.back.reference;
+			depthState.front.failOp = VkStencilOp(front.fail);
+			depthState.front.passOp = VkStencilOp(front.pass);
+			depthState.front.depthFailOp = VkStencilOp(front.depthFail);
+			depthState.front.compareOp = VkCompareOp(front.compare);
+			depthState.front.compareMask = front.compareMask;
+			depthState.front.writeMask = front.writeMask;
+			depthState.front.reference = front.reference;
+
+			depthState.back.failOp = VkStencilOp(back.fail);
+			depthState.back.passOp = VkStencilOp(back.pass);
+			depthState.back.depthFailOp = VkStencilOp(back.depthFail);
+			depthState.back.compareOp = VkCompareOp(back.compare);
+			depthState.back.compareMask = back.compareMask;
+			depthState.back.writeMask = back.writeMask;
+			depthState.back.reference = back.reference;
 		} else {
 			depthState.stencilTestEnable = VK_FALSE;
 
@@ -298,8 +312,10 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 		}
 	}
 
-	VkGraphicsPipelineCreateInfo pipelineInfo{};
+	VkGraphicsPipelineCreateInfo pipelineInfo{}; sanitizeVkStruct(pipelineInfo);
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+	pipelineInfo.pNext = nullptr;
+	pipelineInfo.flags = 0;
 	pipelineInfo.stageCount = shaderStages.size();
 	pipelineInfo.pStages = shaderStages.data();
 	pipelineInfo.pVertexInputState = &vertexInputInfo;
@@ -317,7 +333,7 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 	pipelineInfo.basePipelineIndex = -1;
 
 	if (dev.getTable()->vkCreateGraphicsPipelines(dev.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_pipeline) == VK_SUCCESS) {
-		_name = params.key.str();
+		_name = params.key.str<Interface>();
 		return gl::Pipeline::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
 			auto d = ((Device *)dev);
 			d->getTable()->vkDestroyPipeline(d->getDevice(), (VkPipeline)ptr, nullptr);

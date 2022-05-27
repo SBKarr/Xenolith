@@ -31,40 +31,69 @@ bool VectorTest2::init() {
 		return false;
 	}
 
-	auto app = (AppDelegate *)Application::getInstance();
-	auto fontController = app->getFontController();
-
 	do {
-		auto image = Rc<VectorImage>::create(Size(100, 150));
+		/*auto image = Rc<VectorImage>::create(Size(100, 150));
 		auto path = image->addPath();
 		path->setFillColor(Color::Red_500);
-		path->moveTo(100, 150).lineTo(0, 150).lineTo(100, 0).lineTo(0, 0).closePath();
+		path->setStrokeColor(Color::Green_500);
+		path->setStrokeWidth(5.0f);
+		path->setStyle(DrawStyle::FillAndStroke);
+		//path->moveTo(100, 150).lineTo(0, 150).lineTo(100, 0).lineTo(0, 0).closePath();
+		path->moveTo(0, 0).lineTo(0, 75).lineTo(0, 150).lineTo(100, 150).lineTo(100, 75).lineTo(100, 0).closePath();
+		//path->moveTo(0, 0).lineTo(0, 75).lineTo(0, 150).lineTo(100, 150).lineTo(100, 0).lineTo(50, 0).closePath();
 		//path->addOval(Rect(0, 0, 100, 100));
 		//path->addOval(Rect(0, 50, 100, 100));
+		//path->addRect(Rect(0, 0, 100, 150));
 		path->setWindingRule(Winding::EvenOdd);
-		path->setAntialiased(false);
+		path->setAntialiased(true);
 
 		_sprite = addChild(Rc<VectorSprite>::create(move(image)));
 		_sprite->setAnchorPoint(Anchor::Middle);
 		_sprite->setQuality(VectorSprite::QualityLow);
-		//_sprite->setLineWidth(1.0f);
+		//_sprite->setLineWidth(1.0f);*/
 	} while (0);
 
-	/*do {
-		auto image = Rc<VectorImage>::create(Size(100, 150));
+	do {
+		/*auto image = Rc<VectorImage>::create(Size(100, 150));
 		auto path = image->addPath();
 		path->setFillColor(Color::Red_500);
-		path->moveTo(0, 0).lineTo(100, 150).lineTo(0, 150).lineTo(100, 0).closePath();
+		path->setStrokeColor(Color::Green_500);
+		path->setStrokeWidth(10.0f);
+		path->setStyle(DrawStyle::FillAndStroke);
+		path->moveTo(0, 0).lineTo(50, 100).lineTo(100, 0).moveTo(0, 150).lineTo(100, 150).lineTo(50, 50).closePath();
 		//path->addOval(Rect(0, 0, 100, 100));
 		//path->addOval(Rect(0, 50, 100, 100));
-		path->setWindingRule(Winding::NonZero);
+		path->setWindingRule(Winding::EvenOdd);
 		path->setAntialiased(false);
 
 		_sprite2 = addChild(Rc<VectorSprite>::create(move(image)));
 		_sprite2->setAnchorPoint(Anchor::Middle);
 		_sprite2->setQuality(VectorSprite::QualityLow);
 		_sprite2->setLineWidth(1.0f);
-	} while (0);*/
+		//_sprite2->setScale(2.0f);*/
+	} while (0);
+
+	do {
+		auto image = Rc<VectorImage>::create(Size(100, 150));
+		auto path = image->addPath();
+		path->setFillColor(Color::Red_500);
+		path->setStrokeColor(Color::Green_500);
+		path->setStrokeWidth(5.0f);
+		path->setStyle(DrawStyle::Stroke);
+		//path->moveTo(0, 0).lineTo(100, 0).lineTo(25, 75).lineTo(100, 150).lineTo(0, 150).closePath();
+		path->moveTo(100, 150).lineTo(0, 150).lineTo(100, 0).lineTo(0, 0).closePath();
+		//path->moveTo(0, 0).lineTo(100, 150).lineTo(0, 150).lineTo(100, 0).closePath();
+		//path->addOval(Rect(0, 0, 100, 100));
+		//path->addOval(Rect(0, 50, 100, 100));
+		//path->addRect(Rect(0, 0, 100, 150));
+		path->setWindingRule(Winding::EvenOdd);
+		path->setAntialiased(false);
+
+		_sprite3 = addChild(Rc<VectorSprite>::create(move(image)));
+		_sprite3->setAnchorPoint(Anchor::Middle);
+		_sprite3->setQuality(VectorSprite::QualityLow);
+		//_sprite3->setLineWidth(1.0f);
+	} while (0);
 
 	return true;
 }
@@ -73,8 +102,15 @@ void VectorTest2::onContentSizeDirty() {
 	Node::onContentSizeDirty();
 
 	Size size(_contentSize * 0.3f);
-	_sprite->setPosition(Vec2(_contentSize / 2.0f) - Vec2(_contentSize.width / 4.0f, 0.0f));
-	//_sprite2->setPosition(Vec2(_contentSize / 2.0f) + Vec2(_contentSize.width / 4.0f, 0.0f));
+	if (_sprite) {
+		_sprite->setPosition(Vec2(_contentSize / 2.0f) - Vec2(_contentSize.width / 4.0f, 0.0f));
+	}
+	if (_sprite2) {
+		_sprite2->setPosition(Vec2(_contentSize / 2.0f) + Vec2(_contentSize.width / 4.0f, 0.0f));
+	}
+	if (_sprite3) {
+		_sprite3->setPosition(Vec2(_contentSize / 2.0f));
+	}
 }
 
 }

@@ -42,6 +42,8 @@ struct CmdVertexArray {
 struct Command {
 	static Command *create(memory::pool_t *, CommandType t);
 
+	void release();
+
 	Command *next;
 	CommandType type;
 	void *data;
@@ -49,9 +51,12 @@ struct Command {
 
 class CommandList : public gl::AttachmentInputData {
 public:
+	virtual ~CommandList();
 	bool init(const Rc<PoolRef> &);
 
 	void pushVertexArray(Rc<VertexData> &&, const Mat4 &, SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel);
+
+	// data should be preallocated from frame's pool
 	void pushVertexArray(SpanView<Pair<Mat4, Rc<VertexData>>>, SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel);
 
 	const Command *getFirst() const { return _first; }

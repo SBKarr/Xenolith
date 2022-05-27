@@ -32,6 +32,20 @@ THE SOFTWARE.
 
 namespace stappler::xenolith::vk {
 
+static Rc<LinuxViewInterface> ViewImpl_makeXcbView(const Instance *instance, Device *device, ViewImpl *view,
+		StringView name, URect rect) {
+	auto v = Rc<XcbView>::alloc(instance, view, name, rect);
+	if (!v->isAvailableOnDevice(*device)) {
+		return nullptr;
+	}
+	return v;
+}
+
+static Rc<LinuxViewInterface> ViewImpl_makeWaylandView(const Instance *instance, Device *device, ViewImpl *view,
+		StringView name, URect rect) {
+	return nullptr;
+}
+
 ViewImpl::ViewImpl() { }
 
 ViewImpl::~ViewImpl() {
@@ -48,12 +62,33 @@ bool ViewImpl::init(const Rc<EventLoop> &ev, const Rc<gl::Loop> &loop, StringVie
 		return false;
 	}
 
-	auto v = Rc<XcbView>::alloc(_vkInstance, this, viewName, rect);
-	if (!v->isAvailableOnDevice(*_vkDevice)) {
+	// try wayland
+	auto d = getenv("WAYLAND_DISPLAY");
+	/*if (d) {
+		_view = ViewImpl_makeWaylandView(_vkInstance, _vkDevice, this, viewName, rect);
+		if (_view) {
+			return gl::View::init(ev, loop);
+		}
+		log::text("VkView", "Fail to initialize Wayland window");
 		return false;
 	}
 
-	_view = v.get();
+	d = getenv("XDG_SESSION_TYPE");
+	if (strcasecmp("wayland", d)) {
+		_view = ViewImpl_makeWaylandView(_vkInstance, _vkDevice, this, viewName, rect);
+		if (_view) {
+			return gl::View::init(ev, loop);
+		}
+		log::text("VkView", "Fail to initialize Wayland window");
+		return false;
+	}*/
+
+	// try X11
+	_view = ViewImpl_makeXcbView(_vkInstance, _vkDevice, this, viewName, rect);
+	if (!_view) {
+		log::text("VkView", "Fail to initialize xcb window");
+		return false;
+	}
 	return gl::View::init(ev, loop);
 }
 
@@ -85,6 +120,7 @@ bool ViewImpl::begin(const Rc<Director> &director, Function<void()> &&cb) {
 void ViewImpl::end() {
 	View::end();
 	_swapchain->invalidate(*_vkDevice);
+	_swapchain = nullptr;
 }
 
 bool ViewImpl::isAvailableOnDevice(VkSurfaceKHR surface) const {

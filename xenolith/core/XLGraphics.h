@@ -155,14 +155,87 @@ struct StencilInfo {
 	friend bool operator!=(const StencilInfo &l, const StencilInfo &r) = default;
 };
 
-struct PipelineMaterialInfo {
+using LineWidth = ValueWrapper<float, class LineWidthFlag>;
+
+class PipelineMaterialInfo {
+public:
+	PipelineMaterialInfo();
+	PipelineMaterialInfo(const PipelineMaterialInfo &) = default;
+	PipelineMaterialInfo &operator=(const PipelineMaterialInfo &) = default;
+
+	template <typename T, typename ... Args, typename = std::enable_if_t<std::negation_v<std::is_same<T, PipelineMaterialInfo>>> >
+	PipelineMaterialInfo(T &&t, Args && ... args) : PipelineMaterialInfo() {
+		setup(std::forward<T>(t));
+		setup(std::forward<Args>(args)...);
+	}
+
+	void setBlendInfo(const BlendInfo &);
+	void setDepthInfo(const DepthInfo &);
+	void setDepthBounds(const DepthBounds &);
+	void enableStencil(const StencilInfo &);
+	void enableStencil(const StencilInfo &front, const StencilInfo &back);
+	void disableStancil();
+	void setLineWidth(float lineWidth);
+
+	const BlendInfo &getBlendInfo() const { return blend; }
+	const DepthInfo &getDepthInfo() const { return depth; }
+	const DepthBounds &getDepthBounds() const { return bounds; }
+
+	bool isStancilEnabled() const { return stencil; }
+	const StencilInfo &getStencilInfoFront() const { return front; }
+	const StencilInfo &getStencilInfoBack() const { return back; }
+
+	float getLineWidth() const { return lineWidth; }
+
+	bool operator==(const PipelineMaterialInfo &tmp2) const {
+		return this->blend == tmp2.blend && this->depth == tmp2.depth && this->bounds == tmp2.bounds
+				&& this->stencil == tmp2.stencil && (!this->stencil || (this->front == tmp2.front && this->back == tmp2.back))
+				&& this->lineWidth == tmp2.lineWidth;
+	}
+
+	bool operator!=(const PipelineMaterialInfo &tmp2) const {
+		return this->blend != tmp2.blend || this->depth != tmp2.depth || this->bounds != tmp2.bounds
+				|| this->stencil != tmp2.stencil || (this->stencil && (this->front != tmp2.front || this->back != tmp2.back))
+				|| this->lineWidth != tmp2.lineWidth;
+	}
+
+	size_t hash() const {
+		return hash::hashSize((const char *)this, sizeof(PipelineMaterialInfo));
+	}
+
+	String data() const;
+	String description() const;
+
+protected:
+	void _setup(const BlendInfo &);
+	void _setup(const DepthInfo &);
+	void _setup(const DepthBounds &);
+	void _setup(const StencilInfo &);
+	void _setup(LineWidth lineWidth);
+
+	template <typename T>
+	void setup(T &&t) {
+		_setup(std::forward<T>(t));
+	}
+
+	template <typename T, typename ... Args>
+	void setup(T &&t, Args && ... args) {
+		setup(std::forward<T>(t));
+		setup(std::forward<Args>(args)...);
+	}
+
+	void setup() { }
+
 	BlendInfo blend;
 	DepthInfo depth;
 	DepthBounds bounds;
-	bool stencil = false;
 	StencilInfo front;
 	StencilInfo back;
+	uint32_t stencil = 0;
 	float lineWidth = 0.0f; // 0.0f - draw triangles, < 0.0f - points,  > 0.0f - lines with width
+};
+
+/*struct PipelineMaterialInfo {
 
 	size_t hash() const {
 		auto tmp = normalize();
@@ -187,7 +260,7 @@ struct PipelineMaterialInfo {
 
 	String data() const {
 		auto tmp = normalize();
-		return base16::encode(BytesView((const uint8_t *)&tmp, sizeof(PipelineMaterialInfo)));
+		return base16::encode<Interface>(BytesView((const uint8_t *)&tmp, sizeof(PipelineMaterialInfo)));
 	}
 
 	String description() const {
@@ -229,7 +302,7 @@ struct PipelineMaterialInfo {
 		ret.lineWidth = lineWidth;
 		return ret;
 	}
-};
+};*/
 
 enum class ColorMask : uint8_t {
 	None = 0,
@@ -353,6 +426,21 @@ struct InputEvent {
 	uint64_t previousTime = 0;
 	InputModifier originalModifiers = InputModifier::None;
 	InputModifier previousModifiers = InputModifier::None;
+};
+
+struct ZIndexLess {
+	bool operator()(const SpanView<int16_t> &l, const SpanView<int16_t> &r) const noexcept {
+		auto len = std::max(l.size(), r.size());
+		for (size_t i = 0; i < len; ++ i) {
+			auto valL = (i < l.size()) ? l.at(i) : 0;
+			auto valR = (i < r.size()) ? r.at(i) : 0;
+
+			if (valL != valR) {
+				return valL < valR;
+			}
+		}
+		return false;
+	}
 };
 
 }

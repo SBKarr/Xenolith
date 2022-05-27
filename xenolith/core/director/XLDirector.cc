@@ -55,11 +55,13 @@ const Rc<ResourceCache> &Director::getResourceCache() const {
 gl::SwapchainConfig Director::selectConfig(const gl::SurfaceInfo &info) const {
 	gl::SwapchainConfig ret;
 	ret.extent = info.currentExtent;
-	ret.imageCount = std::max(uint32_t(3), info.minImageCount);
+	ret.imageCount = std::max(uint32_t(2), info.minImageCount);
 	ret.presentMode = info.presentModes.front();
 	if (std::find(info.presentModes.begin(), info.presentModes.end(), gl::PresentMode::Immediate) != info.presentModes.end()) {
 		ret.presentModeFast = gl::PresentMode::Immediate;
 	}
+
+	ret.presentMode = gl::PresentMode::Fifo;
 
 	ret.imageFormat = info.formats.front().first;
 	ret.colorSpace = info.formats.front().second;
@@ -95,7 +97,7 @@ void Director::update() {
 
 		auto d = _view->getDensity();
 
-		_scene->setContentSize(Size(size) / d);
+		_scene->setContentSize(Size2(size) / d);
 		_scene->onPresented(this);
 		_nextScene = nullptr;
 	}
@@ -122,7 +124,7 @@ void Director::begin(gl::View *view) {
 			auto &size = _view->getScreenExtent();
 			auto d = _view->getDensity();
 
-			_scene->setContentSize(Size(size) / d);
+			_scene->setContentSize(Size2(size) / d);
 
 			updateGeneralTransform();
 		}
@@ -135,7 +137,7 @@ void Director::begin(gl::View *view) {
 		auto d = _view->getDensity();
 
 		_scene = move(_nextScene);
-		_scene->setContentSize(Size(size) / d);
+		_scene->setContentSize(Size2(size) / d);
 		_scene->onPresented(this);
 		_nextScene = nullptr;
 	}
@@ -150,7 +152,7 @@ void Director::end() {
 	_view = nullptr;
 }
 
-Size Director::getScreenSize() const {
+Size2 Director::getScreenSize() const {
 	return _view->getScreenExtent();
 }
 
@@ -174,6 +176,22 @@ void Director::runScene(Rc<Scene> &&scene) {
 	});*/
 }
 
+float Director::getFps() const {
+	return 1.0f / (_view->getLastFrameInterval() / 1000000.0f);
+}
+
+float Director::getAvgFps() const {
+	return 1.0f / (_view->getAvgFrameInterval() / 1000000.0f);
+}
+
+float Director::getSpf() const {
+	return _view->getLastFrameInterval() / 1000.0f;
+}
+
+float Director::getLocalFrameTime() const {
+	return _view->getLastFrameTime() / 1000.0f;
+}
+
 void Director::invalidate() {
 
 }
@@ -188,7 +206,7 @@ static inline int32_t sp_gcd (int16_t a, int16_t b) {
 
 void Director::updateGeneralTransform() {
 	auto d = _view->getDensity();
-	auto size = Size(_view->getScreenExtent()) / d;
+	auto size = Size2(_view->getScreenExtent()) / d;
 
 	Mat4 proj;
 	proj.scale(2.0f / size.width, -2.0f / size.height, -1.0);

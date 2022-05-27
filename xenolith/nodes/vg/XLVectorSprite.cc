@@ -39,7 +39,7 @@ bool VectorSprite::init(Rc<VectorImage> &&img) {
 	return true;
 }
 
-bool VectorSprite::init(Size size, StringView data) {
+bool VectorSprite::init(Size2 size, StringView data) {
 	if (!Sprite::init()) {
 		return false;
 	}
@@ -49,7 +49,7 @@ bool VectorSprite::init(Size size, StringView data) {
 	return _image != nullptr;
 }
 
-bool VectorSprite::init(Size size, VectorPath &&path) {
+bool VectorSprite::init(Size2 size, VectorPath &&path) {
 	if (!Sprite::init()) {
 		return false;
 	}
@@ -59,7 +59,7 @@ bool VectorSprite::init(Size size, VectorPath &&path) {
 	return _image != nullptr;
 }
 
-bool VectorSprite::init(Size size) {
+bool VectorSprite::init(Size2 size) {
 	if (!Sprite::init()) {
 		return false;
 	}
@@ -164,10 +164,14 @@ void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 		return;
 	}
 
-	auto tmpData = _result->data;
+	auto reqMemSize = sizeof(Pair<Mat4, Rc<gl::VertexData>>) * _result->data.size();
+
+	// pool memory is 16-bytes aligned, no problems with Mat4
+	auto tmpData = new (memory::pool::palloc(frame.pool, reqMemSize)) Pair<Mat4, Rc<gl::VertexData>>[_result->data.size()];
+	auto target = tmpData;
 	if (_normalized) {
 		auto transform = frame.modelTransformStack.back() * _targetTransform;
-		for (auto &it : tmpData) {
+		for (auto &it : _result->data) {
 			auto modelTransform = transform * it.first;
 
 			Mat4 newMV;
@@ -175,16 +179,21 @@ void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 			newMV.m[13] = floorf(modelTransform.m[13]);
 			newMV.m[14] = floorf(modelTransform.m[14]);
 
-			it.first = newMV;
+			target->first = newMV;
+			target->second = it.second;
+			++ target;
 		}
 	} else {
 		auto transform = frame.viewProjectionStack.back() * frame.modelTransformStack.back() * _targetTransform;
-		for (auto &it : tmpData) {
-			it.first = transform * it.first;
+		for (auto &it : _result->data) {
+			// TODO: fix scaling
+			target->first = transform * it.first;
+			target->second = it.second;
+			++ target;
 		}
 	}
 
-	frame.commands->pushVertexArray(tmpData, frame.zPath, _materialId, _realRenderingLevel);
+	frame.commands->pushVertexArray(makeSpanView(tmpData, _result->data.size()), frame.zPath, _materialId, _realRenderingLevel);
 }
 
 void VectorSprite::initVertexes() {
@@ -195,8 +204,8 @@ void VectorSprite::updateVertexes() {
 	Vec3 viewScale;
 	_modelViewTransform.decompose(&viewScale, nullptr, nullptr);
 
-	Size imageSize = _image->getImageSize();
-	Size targetViewSpaceSize(_contentSize.width * viewScale.x / _textureRect.size.width,
+	Size2 imageSize = _image->getImageSize();
+	Size2 targetViewSpaceSize(_contentSize.width * viewScale.x / _textureRect.size.width,
 			_contentSize.height * viewScale.y / _textureRect.size.height);
 
 	float targetScaleX = _textureRect.size.width;
@@ -204,7 +213,7 @@ void VectorSprite::updateVertexes() {
 	float targetOffsetX = -_textureRect.origin.x * imageSize.width;
 	float targetOffsetY = -_textureRect.origin.y * imageSize.height;
 
-	Size texSize(imageSize.width * _textureRect.size.width, imageSize.height * _textureRect.size.height);
+	Size2 texSize(imageSize.width * _textureRect.size.width, imageSize.height * _textureRect.size.height);
 
 	if (_autofit != Autofit::None) {
 		float scale = 1.0f;
@@ -216,11 +225,11 @@ void VectorSprite::updateVertexes() {
 		case Autofit::Cover: scale = std::min(texSize.width / _contentSize.width, texSize.height / _contentSize.height); break;
 		}
 
-		auto texSizeInView = Size(texSize.width / scale, texSize.height / scale);
+		auto texSizeInView = Size2(texSize.width / scale, texSize.height / scale);
 		targetOffsetX = targetOffsetX + (_contentSize.width - texSizeInView.width) * _autofitPos.x;
 		targetOffsetY = targetOffsetY + (_contentSize.height - texSizeInView.height) * _autofitPos.y;
 
-		targetViewSpaceSize = Size(texSizeInView.width * viewScale.x,
+		targetViewSpaceSize = Size2(texSizeInView.width * viewScale.x,
 				texSizeInView.height * viewScale.y);
 
 		targetScaleX =_textureRect.size.width;

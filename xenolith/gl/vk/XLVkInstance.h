@@ -29,7 +29,7 @@ THE SOFTWARE.
 
 namespace stappler::xenolith::vk {
 
-#if DEBUG
+#if VK_DEBUG_LOG
 
 VKAPI_ATTR VkBool32 VKAPI_CALL s_debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 		VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
@@ -81,7 +81,7 @@ private:
 	friend class Allocator;
 	friend class ViewImpl;
 
-#if DEBUG
+#if VK_DEBUG_LOG
 	VkDebugUtilsMessengerEXT debugMessenger;
 #endif
 

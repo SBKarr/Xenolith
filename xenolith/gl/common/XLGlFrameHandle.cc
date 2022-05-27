@@ -26,6 +26,14 @@
 
 namespace stappler::xenolith::gl {
 
+static constexpr platform::device::ClockType FrameClockType = platform::device::ClockType::Monotonic;
+
+#ifdef XL_FRAME_LOG
+#define XL_FRAME_LOG_INFO _request->getEmitter() ? "[Emitted] " : "", \
+	"[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), \
+	"] [", platform::device::_clock(FrameClockType) - _timeStart, "] "
+#endif
+
 static std::atomic<uint32_t> s_frameCount = 0;
 
 uint32_t FrameHandle::GetActiveFramesCount() {
@@ -33,25 +41,26 @@ uint32_t FrameHandle::GetActiveFramesCount() {
 }
 
 FrameHandle::~FrameHandle() {
-	XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] Destroy");
+	XL_FRAME_LOG(XL_FRAME_LOG_INFO, "Destroy");
 
 	-- s_frameCount;
 
 	_request->finalize();
+	_pool = nullptr;
 }
 
 bool FrameHandle::init(Loop &loop, Rc<FrameRequest> &&req, uint64_t gen) {
 	++ s_frameCount;
 	_loop = &loop;
 	_request = move(req);
-	_timeStart = platform::device::_clock(platform::device::Process);
+	_timeStart = platform::device::_clock(FrameClockType);
 	if (!_request || !_request->getQueue()) {
 		return false;
 	}
 
 	_gen = gen;
 	_order = _request->getQueue()->incrementOrder();
-	XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] Init (", loop.getDevice()->getFramesActive(), ")");
+	XL_FRAME_LOG(XL_FRAME_LOG_INFO, "Init; ready: ", _request->isReadyForSubmit());
 	_device = loop.getDevice();
 	_request->acquireInput(_inputData);
 	return setup();
@@ -61,6 +70,8 @@ void FrameHandle::update(bool init) {
 	if (!_valid) {
 		return;
 	}
+
+	XL_FRAME_LOG(XL_FRAME_LOG_INFO, "update");
 
 	for (auto &it : _queues) {
 		it->update();
@@ -96,7 +107,7 @@ void FrameHandle::performInQueue(Function<void(FrameHandle &)> &&cb, Ref *ref, S
 		cb(*this);
 		return true;
 	}, [this, linkId, tag] (const thread::Task &, bool) {
-		XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] thread performed: '", tag, "'");
+		XL_FRAME_LOG(XL_FRAME_LOG_INFO, "thread performed: '", tag, "'");
 		release(linkId);
 	}, ref));
 }
@@ -108,7 +119,7 @@ void FrameHandle::performInQueue(Function<bool(FrameHandle &)> &&perform, Functi
 		return perform(*this);
 	}, [this, complete = move(complete), linkId, tag] (const thread::Task &, bool success) {
 		XL_FRAME_PROFILE(complete(*this, success), tag, 1000);
-		XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] thread performed: '", tag, "'");
+		XL_FRAME_LOG(XL_FRAME_LOG_INFO, "thread performed: '", tag, "'");
 		release(linkId);
 	}, ref));
 }
@@ -120,7 +131,7 @@ void FrameHandle::performOnGlThread(Function<void(FrameHandle &)> &&cb, Ref *ref
 		auto linkId = retain();
 		_loop->getQueue()->onMainThread(Rc<thread::Task>::create([this, cb = move(cb), linkId, tag] (const thread::Task &, bool success) {
 			XL_FRAME_PROFILE(if (success) { cb(*this); }, tag, 1000);
-			XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] thread performed: '", tag, "'");
+			XL_FRAME_LOG(XL_FRAME_LOG_INFO, "thread performed: '", tag, "'");
 			release(linkId);
 		}, ref));
 	}
@@ -133,7 +144,7 @@ void FrameHandle::performRequiredTask(Function<void(FrameHandle &)> &&cb, Ref *r
 		cb(*this);
 		return true;
 	}, [this, linkId, tag] (const thread::Task &, bool) {
-		XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] thread performed: '", tag, "'");
+		XL_FRAME_LOG(XL_FRAME_LOG_INFO, "thread performed: '", tag, "'");
 		onRequiredTaskCompleted(tag);
 		release(linkId);
 	}, ref));
@@ -147,7 +158,7 @@ void FrameHandle::performRequiredTask(Function<bool(FrameHandle &)> &&perform, F
 		return perform(*this);
 	}, [this, complete = move(complete), linkId, tag] (const thread::Task &, bool success) {
 		XL_FRAME_PROFILE(complete(*this, success), tag, 1000);
-		XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] thread performed: '", tag, "'");
+		XL_FRAME_LOG(XL_FRAME_LOG_INFO, "thread performed: '", tag, "'");
 		onRequiredTaskCompleted(tag);
 		release(linkId);
 	}, ref));
@@ -155,6 +166,10 @@ void FrameHandle::performRequiredTask(Function<bool(FrameHandle &)> &&perform, F
 
 bool FrameHandle::isValid() const {
 	return _valid && (!_request->getEmitter() || _request->getEmitter()->isFrameValid(*this));
+}
+
+bool FrameHandle::isPersistentMapping() const {
+	return _request->isPersistentMapping();
 }
 
 Rc<AttachmentInputData> FrameHandle::getInputData(const Attachment *attachment) {
@@ -169,11 +184,11 @@ Rc<AttachmentInputData> FrameHandle::getInputData(const Attachment *attachment) 
 
 void FrameHandle::setReadyForSubmit(bool value) {
 	if (!isValid()) {
-		XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] [invalid] frame ready to submit");
+		XL_FRAME_LOG(XL_FRAME_LOG_INFO, "[invalid] frame ready to submit");
 		return;
 	}
 
-	XL_FRAME_LOG("[", _loop->getClock(), "] [", _order, "] [", s_frameCount.load(), "] frame ready to submit");
+	XL_FRAME_LOG(XL_FRAME_LOG_INFO, "frame ready to submit");
 	_request->setReadyForSubmit(value);
 	if (_request->isReadyForSubmit()) {
 		_loop->pushContextEvent(Loop::EventName::FrameUpdate, this);
@@ -184,7 +199,11 @@ void FrameHandle::invalidate() {
 	if (_loop->isOnThread()) {
 		if (_valid) {
 			if (!_timeEnd) {
-				_timeEnd = platform::device::_clock(platform::device::Process);
+				_timeEnd = platform::device::_clock(FrameClockType);
+			}
+
+			if (auto e = _request->getEmitter()) {
+				XL_FRAME_LOG(XL_FRAME_LOG_INFO, "complete: ", e->getFrameTime());
 			}
 
 			_valid = false;
@@ -277,9 +296,9 @@ void FrameHandle::tryComplete() {
 
 void FrameHandle::onComplete() {
 	if (!_completed && _valid) {
-		_timeEnd = platform::device::_clock(platform::device::Process);
+		_timeEnd = platform::device::_clock(FrameClockType);
 		if (auto e = getEmitter()) {
-			XL_FRAME_LOG("FrameTime:         ", e->getFrameTime(), "   ", _timeEnd - _timeStart, " mks");
+			XL_FRAME_LOG(XL_FRAME_LOG_INFO, "complete: ", e->getFrameTime());
 		}
 		_completed = true;
 

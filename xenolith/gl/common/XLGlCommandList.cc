@@ -27,11 +27,6 @@ namespace stappler::xenolith::gl {
 Command *Command::create(memory::pool_t *p, CommandType t) {
 	auto commandSize = sizeof(Command);
 
-	switch (t) {
-	case CommandType::CommandGroup: break;
-	case CommandType::VertexArray: break;
-	}
-
 	auto bytes = memory::pool::palloc(p, commandSize);
 	auto c = new (bytes) Command;
 	c->next = nullptr;
@@ -45,6 +40,36 @@ Command *Command::create(memory::pool_t *p, CommandType t) {
 		break;
 	}
 	return c;
+}
+
+void Command::release() {
+	switch (type) {
+	case CommandType::CommandGroup:
+		break;
+	case CommandType::VertexArray:
+		if (CmdVertexArray *d = (CmdVertexArray *)data) {
+			for (auto &it : d->vertexes) {
+				const_cast<Pair<Mat4, Rc<VertexData>> &>(it).second = nullptr;
+			}
+		}
+		break;
+	}
+}
+
+CommandList::~CommandList() {
+	if (!_first) {
+		return;
+	}
+
+	memory::pool::push(_pool->getPool());
+
+	auto cmd = _first;
+	do {
+		cmd->release();
+		cmd = cmd->next;
+	} while (cmd);
+
+	memory::pool::pop();
 }
 
 bool CommandList::init(const Rc<PoolRef> &pool) {
@@ -84,8 +109,7 @@ void CommandList::pushVertexArray(SpanView<Pair<Mat4, Rc<VertexData>>> data, Spa
 		auto cmd = Command::create(_pool->getPool(), CommandType::VertexArray);
 		auto cmdData = (CmdVertexArray *)cmd->data;
 
-		// pool memory is 16-bytes aligned, no problems with Mat4
-		cmdData->vertexes = data.pdup(_pool->getPool());
+		cmdData->vertexes = data;
 
 		while (!zPath.empty() && zPath.back() == 0) {
 			zPath.pop_back();

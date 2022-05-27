@@ -23,10 +23,18 @@ THE SOFTWARE.
 #include "XLDefine.h"
 #include "XLVk.h"
 
+#define XL_VKAPI_DEBUG 1
+
 #ifdef XL_VK_DEBUG
 #define XL_VK_LOG(...) log::vtext("Vk::Loop", __VA_ARGS__)
 #else
 #define XL_VK_LOG(...)
+#endif
+
+#ifdef XL_VKAPI_DEBUG
+#define XL_VKAPI_LOG(...) log::vtext("vk::Api", __VA_ARGS__)
+#else
+#define XL_VKAPI_LOG(...)
 #endif
 
 #include "XLVkDeviceQueue.cc"

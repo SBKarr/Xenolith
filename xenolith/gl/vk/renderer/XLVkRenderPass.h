@@ -24,6 +24,7 @@
 #define XENOLITH_GL_VK_RENDERER_XLVKRENDERPASS_H_
 
 #include "XLVkSync.h"
+#include "XLVkObject.h"
 #include "XLGlRenderQueue.h"
 
 namespace stappler::xenolith::vk {
@@ -67,7 +68,8 @@ public:
 
 protected:
 	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &);
-	virtual bool doSubmit();
+	virtual bool doSubmit(gl::FrameHandle &frame, Function<void(bool)> &&onSubmited);
+	virtual bool doSubmitPresent(gl::FrameHandle &frame, SwapchainSync *sync, Function<void(bool)> &&onSubmited);
 
 	struct MaterialBuffers {
 		Rc<DeviceBuffer> stagingBuffer;
@@ -115,7 +117,7 @@ public:
 
 protected:
 	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &) override;
-	virtual bool doSubmit() override;
+	virtual bool doSubmit(gl::FrameHandle &frame, Function<void(bool)> &&onSubmited) override;
 
 	VertexBufferAttachmentHandle *_mainBuffer;
 };

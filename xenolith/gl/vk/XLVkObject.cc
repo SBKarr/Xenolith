@@ -113,7 +113,7 @@ void Buffer::dropPendingBarrier() {
 }
 
 bool ImageView::init(Device &dev, VkImage image, VkFormat format) {
-	VkImageViewCreateInfo createInfo = { };
+	VkImageViewCreateInfo createInfo{}; sanitizeVkStruct(createInfo);
 	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	createInfo.image = image;
 	createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
@@ -140,7 +140,7 @@ bool ImageView::init(Device &dev, VkImage image, VkFormat format) {
 bool ImageView::init(Device &dev, const gl::ImageAttachmentDescriptor &desc, Image *image) {
 	gl::ImageViewInfo info(desc);
 
-	VkImageViewCreateInfo createInfo = { };
+	VkImageViewCreateInfo createInfo{};  sanitizeVkStruct(createInfo);
 	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	createInfo.image = image->getImage();
 	createInfo.viewType = VkImageViewType(info.type);
@@ -192,7 +192,7 @@ bool ImageView::init(Device &dev, const gl::ImageAttachmentDescriptor &desc, Ima
 }
 
 bool ImageView::init(Device &dev, Image *image, const gl::ImageViewInfo &info) {
-	VkImageViewCreateInfo createInfo = { };
+	VkImageViewCreateInfo createInfo{}; sanitizeVkStruct(createInfo);
 	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	createInfo.image = image->getImage();
 
@@ -310,7 +310,7 @@ bool ImageView::init(Device &dev, Image *image, const gl::ImageViewInfo &info) {
 }
 
 bool Sampler::init(Device &dev, const gl::SamplerInfo &info) {
-	VkSamplerCreateInfo createInfo;
+	VkSamplerCreateInfo createInfo; sanitizeVkStruct(createInfo);
 	createInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 	createInfo.pNext = nullptr;
 	createInfo.flags = 0;
@@ -342,7 +342,7 @@ bool Sampler::init(Device &dev, const gl::SamplerInfo &info) {
 
 bool SwapchainHandle::init(Device &dev, const gl::SwapchainConfig &cfg, gl::ImageInfo &&swapchainImageInfo,
 		gl::PresentMode presentMode, VkSurfaceKHR surface, uint32_t families[2], Function<void(gl::SwapchanCreationMode)> &&cb, SwapchainHandle *old) {
-	VkSwapchainCreateInfoKHR swapChainCreateInfo = { };
+	VkSwapchainCreateInfoKHR swapChainCreateInfo{}; sanitizeVkStruct(swapChainCreateInfo);
 	swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 	swapChainCreateInfo.surface = surface;
 	swapChainCreateInfo.minImageCount = cfg.imageCount;
@@ -462,7 +462,7 @@ void SwapchainHandle::releaseUsage() {
 }
 
 VkResult SwapchainHandle::present(Device &dev, DeviceQueue &queue, VkSemaphore presentSem, uint32_t imageIdx) {
-	VkPresentInfoKHR presentInfo{};
+	VkPresentInfoKHR presentInfo{}; sanitizeVkStruct(presentInfo);
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
 	presentInfo.waitSemaphoreCount = 1;
@@ -475,7 +475,14 @@ VkResult SwapchainHandle::present(Device &dev, DeviceQueue &queue, VkSemaphore p
 
 	VkResult result = VK_ERROR_UNKNOWN;
 	dev.makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+#ifdef XL_VKAPI_DEBUG
+		auto t = platform::device::_clock(platform::device::Monotonic);
 		result = table.vkQueuePresentKHR(queue.getQueue(), &presentInfo);
+		XL_VKAPI_LOG("[", queue.getFrameIndex(), "] vkQueuePresentKHR: ", imageIdx, " ", result,
+				" [", platform::device::_clock(platform::device::Monotonic) - t, "]");
+#else
+		result = table.vkQueuePresentKHR(queue.getQueue(), &presentInfo);
+#endif
 	});
 
 	if (result == VK_SUCCESS) {

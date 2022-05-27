@@ -1262,7 +1262,7 @@ bool RenderQueue::Builder::setPipelineOption(PipelineData &f, const Vector<Speci
 }
 
 bool RenderQueue::Builder::setPipelineOption(PipelineData &f, const PipelineMaterialInfo &info) {
-	f.material = info.normalize();
+	f.material = info;
 	return true;
 }
 

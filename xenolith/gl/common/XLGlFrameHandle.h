@@ -72,6 +72,8 @@ public:
 	virtual bool isValid() const;
 	virtual bool isValidFlag() const { return _valid; }
 
+	virtual bool isPersistentMapping() const;
+
 	virtual Rc<AttachmentInputData> getInputData(const Attachment *);
 
 	virtual bool isReadyForSubmit() const { return _request->isReadyForSubmit(); }

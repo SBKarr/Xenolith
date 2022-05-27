@@ -46,9 +46,9 @@ public:
 
 	virtual bool init(const Instance *instance);
 
-	virtual void begin(const Application *, thread::TaskQueue &);
-	virtual void end(thread::TaskQueue &);
-	virtual void waitIdle();
+	virtual void begin(const Application *, TaskQueue &);
+	virtual void end(gl::Loop &, TaskQueue &);
+	virtual void waitIdle(gl::Loop &);
 
 	virtual uint32_t addSampler(const SamplerInfo &);
 

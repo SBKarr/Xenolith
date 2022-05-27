@@ -91,8 +91,8 @@ public:
 	 *
 	 * @param contentSize   The untransformed size of the node.
 	 */
-	virtual void setContentSize(const Size& contentSize);
-	virtual const Size& getContentSize() const { return _contentSize; }
+	virtual void setContentSize(const Size2& contentSize);
+	virtual const Size2& getContentSize() const { return _contentSize; }
 
 	virtual void setVisible(bool visible);
 	virtual bool isVisible() const { return _visible; }
@@ -245,6 +245,13 @@ public:
 	void unscheduleUpdate();
 
 	virtual bool isTouched(const Vec2 &location, float padding = 0.0f);
+	virtual bool isTouchedNodeSpace(const Vec2 &location, float padding = 0.0f);
+
+	virtual void setOnEnterCallback(Function<void(Scene *)> &&);
+	virtual void setOnExitCallback(Function<void()> &&);
+	virtual void setOnContentSizeDirtyCallback(Function<void()> &&);
+	virtual void setOnTransformDirtyCallback(Function<void(const Mat4 &)> &&);
+	virtual void setOnReorderChildDirtyCallback(Function<void()> &&);
 
 protected:
 	virtual void updateCascadeOpacity();
@@ -254,7 +261,7 @@ protected:
 	virtual void updateColor() { }
 
 	Mat4 transform(const Mat4 &parentTransform);
-	NodeFlags processParentFlags(RenderFrameInfo &info, NodeFlags parentFlags);
+	virtual NodeFlags processParentFlags(RenderFrameInfo &info, NodeFlags parentFlags);
 
 	bool _is3d = false;
 	bool _running = false;
@@ -276,7 +283,7 @@ protected:
 
 	Vec2 _skew;
 	Vec2 _anchorPoint;
-	Size _contentSize;
+	Size2 _contentSize;
 
 	Vec3 _position;
 	Vec3 _scale = Vec3(1.0f, 1.0f, 1.0f);

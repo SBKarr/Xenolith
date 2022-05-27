@@ -141,8 +141,6 @@ bool FrameQueue::setup() {
 }
 
 void FrameQueue::update() {
-	XL_FRAME_LOG("[", _loop->getClock(), "] [", _frame->getOrder(), "] [", FrameHandle::GetActiveFramesCount(), "] update");
-
 	for (auto &it : _attachmentsInitial) {
 		if (it->handle->setup(*this, [this, guard = Rc<FrameQueue>(this), attachment = it] (bool success) {
 			_loop->performOnThread([this, attachment, success] {
@@ -187,12 +185,12 @@ void FrameQueue::update() {
 				auto v = *it;
 				onRenderPassPrepared(*v);
 				if (v->state != FrameRenderPassState::Prepared) {
-					it = _renderPassesInitial.erase(it);
+					it = _renderPassesPrepared.erase(it);
 				} else {
 					++ it;
 				}
 			} else {
-				it = _renderPassesInitial.erase(it);
+				it = _renderPassesPrepared.erase(it);
 			}
 		}
 	} while(0);

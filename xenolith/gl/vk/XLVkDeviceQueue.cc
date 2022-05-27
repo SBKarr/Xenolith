@@ -67,12 +67,26 @@ bool DeviceQueue::submit(const gl::FrameSync &sync, Fence &fence, SpanView<VkCom
 	submitInfo.signalSemaphoreCount = signalSem.size();
 	submitInfo.pSignalSemaphores = signalSem.data();
 
-	VkResult result = VK_ERROR_UNKNOWN;
+#ifdef XL_VKAPI_DEBUG
+	auto t = platform::device::_clock(platform::device::Monotonic);
+	fence.addRelease([frameIdx = _frameIdx, t] (bool success) {
+		XL_VKAPI_LOG("[", frameIdx,  "] vkQueueSubmit [complete]",
+				" [", platform::device::_clock(platform::device::Monotonic) - t, "]");
+	}, nullptr, "DeviceQueue::submit");
+#endif
+
 	_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+#ifdef XL_VKAPI_DEBUG
+		auto t = platform::device::_clock(platform::device::Monotonic);
+		_result = table.vkQueueSubmit(_queue, 1, &submitInfo, fence.getFence());
+		XL_VKAPI_LOG("[", _frameIdx,  "] vkQueueSubmit: ", _result, " ", (void *)_queue,
+				" [", platform::device::_clock(platform::device::Monotonic) - t, "]");
+#else
 		result = table.vkQueueSubmit(_queue, 1, &submitInfo, fence.getFence());
+#endif
 	});
 
-	if (result == VK_SUCCESS) {
+	if (_result == VK_SUCCESS) {
 		// mark semaphores
 
 		fence.setArmed(*this);
@@ -100,18 +114,32 @@ bool DeviceQueue::submit(Fence &fence, SpanView<VkCommandBuffer> buffers) {
 	submitInfo.pNext = nullptr;
 	submitInfo.waitSemaphoreCount = 0;
 	submitInfo.pWaitSemaphores = nullptr;
-	submitInfo.pWaitDstStageMask = nullptr;
+	submitInfo.pWaitDstStageMask = 0;
 	submitInfo.commandBufferCount = buffers.size();
 	submitInfo.pCommandBuffers = buffers.data();
 	submitInfo.signalSemaphoreCount = 0;
 	submitInfo.pSignalSemaphores = nullptr;
 
-	VkResult result = VK_ERROR_UNKNOWN;
+#ifdef XL_VKAPI_DEBUG
+	auto t = platform::device::_clock(platform::device::Monotonic);
+	fence.addRelease([frameIdx = _frameIdx, t] (bool success) {
+		XL_VKAPI_LOG("[", frameIdx,  "] vkQueueSubmit [complete]",
+				" [", platform::device::_clock(platform::device::Monotonic) - t, "]");
+	}, nullptr, "DeviceQueue::submit");
+#endif
+
 	_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+#ifdef XL_VKAPI_DEBUG
+		auto t = platform::device::_clock(platform::device::Monotonic);
+		_result = table.vkQueueSubmit(_queue, 1, &submitInfo, fence.getFence());
+		XL_VKAPI_LOG("[", _frameIdx,  "] vkQueueSubmit: ", _result, " ", (void *)_queue,
+				" [", platform::device::_clock(platform::device::Monotonic) - t, "]");
+#else
 		result = table.vkQueueSubmit(_queue, 1, &submitInfo, fence.getFence());
+#endif
 	});
 
-	if (result == VK_SUCCESS) {
+	if (_result == VK_SUCCESS) {
 		fence.setArmed(*this);
 		return true;
 	}
@@ -136,6 +164,15 @@ void DeviceQueue::releaseFence(const Fence &fence) {
 	-- _nfences;
 }
 
+void DeviceQueue::setOwner(gl::FrameHandle &frame) {
+	_frameIdx = frame.getOrder();
+}
+
+void DeviceQueue::reset() {
+	_result = VK_ERROR_UNKNOWN;
+	_frameIdx = 0;
+}
+
 CommandPool::~CommandPool() {
 	if (_commandPool) {
 		log::vtext("VK-Error", "CommandPool was not destroyed");
@@ -147,8 +184,9 @@ bool CommandPool::init(Device &dev, uint32_t familyIdx, QueueOperations c, bool 
 	_class = c;
 	VkCommandPoolCreateInfo poolInfo{};
 	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	poolInfo.pNext = nullptr;
 	poolInfo.queueFamilyIndex = familyIdx;
-	poolInfo.flags = transient ? VK_COMMAND_POOL_CREATE_TRANSIENT_BIT : 0;
+	poolInfo.flags = 0; // transient ? VK_COMMAND_POOL_CREATE_TRANSIENT_BIT : 0;
 
 	return dev.getTable()->vkCreateCommandPool(dev.getDevice(), &poolInfo, nullptr, &_commandPool) == VK_SUCCESS;
 }
@@ -205,7 +243,17 @@ void CommandPool::freeDefaultBuffers(Device &dev, Vector<VkCommandBuffer> &vec) 
 
 void CommandPool::reset(Device &dev, bool release) {
 	if (_commandPool) {
-		dev.getTable()->vkResetCommandPool(dev.getDevice(), _commandPool, release ? VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT : 0);
+		//dev.getTable()->vkResetCommandPool(dev.getDevice(), _commandPool, release ? VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT : 0);
+
+		dev.getTable()->vkDestroyCommandPool(dev.getDevice(), _commandPool, nullptr);
+
+		VkCommandPoolCreateInfo poolInfo{};
+		poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		poolInfo.pNext = nullptr;
+		poolInfo.queueFamilyIndex = _familyIdx;
+		poolInfo.flags = 0; // transient ? VK_COMMAND_POOL_CREATE_TRANSIENT_BIT : 0;
+
+		dev.getTable()->vkCreateCommandPool(dev.getDevice(), &poolInfo, nullptr, &_commandPool);
 	}
 }
 

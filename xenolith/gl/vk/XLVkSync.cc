@@ -71,6 +71,11 @@ void Fence::setArmed(DeviceQueue &q) {
 	_state = Armed;
 	_queue = &q;
 	_queue->retainFence(*this);
+	_armedTime = platform::device::_clock(platform::device::ClockType::Monotonic);
+}
+
+void Fence::setTag(StringView tag) {
+	_tag = tag;
 }
 
 void Fence::addRelease(Function<void(bool)> &&cb, Ref *ref, StringView tag) {
@@ -78,7 +83,7 @@ void Fence::addRelease(Function<void(bool)> &&cb, Ref *ref, StringView tag) {
 	_release.emplace_back(ReleaseHandle({move(cb), ref, tag}));
 }
 
-bool Fence::check(bool lockfree) {
+bool Fence::check(gl::Loop &loop, bool lockfree) {
 	std::unique_lock<Mutex> lock(_mutex);
 	if (_state != Armed) {
 		if (_state == Delayed) {
@@ -102,6 +107,7 @@ bool Fence::check(bool lockfree) {
 	switch (status) {
 	case VK_SUCCESS:
 		_state = Signaled;
+		// log::vtext("vk::Fence", "[", loop.getClock(), "] ",  _tag, ": signaled: ", platform::device::_clock(platform::device::ClockType::Monotonic) - _armedTime);
 		doRelease(true);
 		return true;
 		break;
@@ -193,6 +199,8 @@ void Fence::doRelease(bool success) {
 		XL_PROFILE_END(total);
 		_release.clear();
 	}
+
+	_tag = StringView();
 }
 
 

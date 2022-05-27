@@ -25,7 +25,7 @@
 #include "XLVkRenderPassImpl.h"
 #include "XLGlRenderQueue.h"
 #include "XLVkRenderQueueCompiler.h"
-#include "../../common/XLGlFrameHandle.h"
+#include "XLGlFrameHandle.h"
 
 namespace stappler::xenolith::vk {
 
@@ -291,7 +291,18 @@ bool RenderQueueRenderPassHandle::prepare(gl::FrameQueue &frame, Function<void(b
 	_device = (Device *)frame.getFrame().getDevice();
 	_queue = _attachment->getRenderQueue();
 
-	if (auto &res = _attachment->getTransferResource()) {
+	auto hasMaterials = false;
+	auto &res = _attachment->getTransferResource();
+	for (auto &it : _queue->getAttachments()) {
+		if (auto v = it.cast<gl::MaterialAttachment>()) {
+			if (!v->getInitialMaterials().empty()) {
+				hasMaterials = true;
+				break;
+			}
+		}
+	}
+
+	if (hasMaterials || res) {
 		_resource = res;
 		_pool = _device->acquireCommandPool(QueueOperations::Transfer);
 		if (!_pool) {
@@ -299,7 +310,7 @@ bool RenderQueueRenderPassHandle::prepare(gl::FrameQueue &frame, Function<void(b
 			return false;
 		}
 
-		frame.getFrame().performInQueue([this] (gl::FrameHandle &frame) {
+		frame.getFrame().performInQueue([this, hasMaterials] (gl::FrameHandle &frame) {
 			auto buf = _pool->allocBuffer(*_device);
 			auto table = _device->getTable();
 
@@ -311,18 +322,21 @@ bool RenderQueueRenderPassHandle::prepare(gl::FrameQueue &frame, Function<void(b
 			Vector<VkImageMemoryBarrier> outputImageBarriers;
 			Vector<VkBufferMemoryBarrier> outputBufferBarriers;
 
-			if (!_resource->prepareCommands(_pool->getFamilyIdx(), buf, outputImageBarriers, outputBufferBarriers)) {
-				log::vtext("vk::RenderQueueCompiler", "Fail to compile resource for ", _queue->getName());
-				return false;
+			if (_resource) {
+				if (!_resource->prepareCommands(_pool->getFamilyIdx(), buf, outputImageBarriers, outputBufferBarriers)) {
+					log::vtext("vk::RenderQueueCompiler", "Fail to compile resource for ", _queue->getName());
+					return false;
+				}
+				_resource->compile();
 			}
 
-			_resource->compile();
-
-			for (auto &it : _queue->getAttachments()) {
-				if (auto v = it.cast<gl::MaterialAttachment>()) {
-					if (!prepareMaterials(frame, buf, v, outputBufferBarriers)) {
-						log::vtext("vk::RenderQueueCompiler", "Fail to compile predefined materials for ", _queue->getName());
-						return false;
+			if (hasMaterials) {
+				for (auto &it : _queue->getAttachments()) {
+					if (auto v = it.cast<gl::MaterialAttachment>()) {
+						if (!prepareMaterials(frame, buf, v, outputBufferBarriers)) {
+							log::vtext("vk::RenderQueueCompiler", "Fail to compile predefined materials for ", _queue->getName());
+							return false;
+						}
 					}
 				}
 			}

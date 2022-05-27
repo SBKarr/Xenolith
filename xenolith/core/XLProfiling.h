@@ -39,6 +39,8 @@ ProfileData begin(StringView tag, StringView variant, uint64_t limit);
 void end(ProfileData &);
 void store(ProfileData &);
 
+#define XL_PROFILE_DEBUG 0
+
 #if XL_PROFILE_DEBUG
 #define XL_PROFILE_BEGIN(name, tag, variant, limit) \
 	auto __xl_profile__ ## name = stappler::xenolith::profiling::begin(tag, variant, limit);

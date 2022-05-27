@@ -171,7 +171,7 @@ bool EventLoopLinux::run() {
 		}
 	}
 
-	return !_shouldClose;
+	return _shouldClose;
 }
 
 void EventLoopLinux::addView(gl::View *view) {
@@ -282,7 +282,7 @@ String _userAgent() {
 }
 
 String _deviceIdentifier() {
-	auto path = stappler::platform::filesystem::_getCachesPath();
+	/*auto path = stappler::platform::filesystem::_getCachesPath();
 	auto devIdPath = path + "/.devid";
 	if (stappler::filesystem::exists(devIdPath)) {
 		auto data = stappler::filesystem::readIntoMemory(devIdPath);
@@ -297,7 +297,8 @@ String _deviceIdentifier() {
 
 		stappler::filesystem::write(devIdPath, data);
 		return base16::encode(data);
-	}
+	}*/
+	return String();
 }
 
 uint64_t _clock(ClockType type) {

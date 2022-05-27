@@ -89,10 +89,12 @@ public:
 	bool isArmed() const { return _state == Armed; }
 	void setArmed(DeviceQueue &);
 
+	void setTag(StringView);
+
 	// function will be called and ref will be released on fence's signal
 	void addRelease(Function<void(bool)> &&, Ref *, StringView tag);
 
-	bool check(bool lockfree = true);
+	bool check(gl::Loop &loop, bool lockfree = true);
 	bool checkDelayed(bool lockfree = true);
 
 	void reset(gl::Loop &, Function<void(Rc<Fence> &&)> &&);
@@ -113,6 +115,8 @@ protected:
 	Vector<ReleaseHandle> _release;
 	Mutex _mutex;
 	DeviceQueue *_queue = nullptr;
+	uint64_t _armedTime = 0;
+	StringView _tag;
 };
 
 }

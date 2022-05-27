@@ -22,7 +22,7 @@
 
 #include "XLVectorImage.h"
 #include "SPBitmap.h"
-#include "XLVectorSvgReader.h"
+#include "XLSvgReader.h"
 
 namespace stappler::xenolith {
 
@@ -279,7 +279,7 @@ float VectorPathRef::getStrokeWidth() const {
 	return _path ? _path->getStrokeWidth() : 0.0f;
 }
 
-VectorPathRef &VectorPathRef::setWindingRule(Winding value) {
+VectorPathRef &VectorPathRef::setWindingRule(vg::Winding value) {
 	if (_path && _path->getWindingRule() == value) {
 		return *this;
 	}
@@ -295,11 +295,11 @@ VectorPathRef &VectorPathRef::setWindingRule(Winding value) {
 	return *this;
 }
 
-Winding VectorPathRef::getWindingRule() const {
-	return _path ? _path->getWindingRule() : Winding::EvenOdd;
+vg::Winding VectorPathRef::getWindingRule() const {
+	return _path ? _path->getWindingRule() : vg::Winding::NonZero;
 }
 
-VectorPathRef & VectorPathRef::setStyle(DrawStyle s) {
+VectorPathRef & VectorPathRef::setStyle(vg::DrawStyle s) {
 	if (_path && _path->getStyle() == s) {
 		return *this;
 	}
@@ -315,8 +315,8 @@ VectorPathRef & VectorPathRef::setStyle(DrawStyle s) {
 	return *this;
 }
 
-DrawStyle VectorPathRef::getStyle() const {
-	return _path ? _path->getStyle() : DrawStyle::FillAndStroke;
+vg::DrawStyle VectorPathRef::getStyle() const {
+	return _path ? _path->getStyle() : vg::DrawStyle::FillAndStroke;
 }
 
 VectorPathRef & VectorPathRef::setTransform(const Mat4 &t) {
@@ -425,7 +425,7 @@ void VectorPathRef::copy() {
 	}
 }
 
-bool VectorImageData::init(VectorImage *image, Size size, Rect viewBox, Vector<VectorPathXRef> &&order, Map<String, VectorPath> &&paths, uint16_t ids) {
+bool VectorImageData::init(VectorImage *image, Size2 size, Rect viewBox, Vector<vg::PathXRef> &&order, Map<String, VectorPath> &&paths, uint16_t ids) {
 	_imageSize = size;
 	_image = image;
 
@@ -451,7 +451,7 @@ bool VectorImageData::init(VectorImage *image, Size size, Rect viewBox, Vector<V
 	return true;
 }
 
-bool VectorImageData::init(VectorImage *image, Size size, Rect viewBox) {
+bool VectorImageData::init(VectorImage *image, Size2 size, Rect viewBox) {
 	_imageSize = size;
 	_image = image;
 	_viewBox = viewBox;
@@ -493,8 +493,8 @@ Rc<VectorPath> VectorImageData::addPath(StringView id, VectorPath &&path, Mat4 m
 	Rc<VectorPath> ret;
 	auto it = _paths.find(id);
 	if (it == _paths.end()) {
-		ret = _paths.emplace(id.str(), Rc<VectorPath>::alloc(move(path))).first->second;
-		_order.emplace_back(VectorPathXRef{id.str(), mat});
+		ret = _paths.emplace(id.str<Interface>(), Rc<VectorPath>::alloc(move(path))).first->second;
+		_order.emplace_back(vg::PathXRef{id.str<Interface>(), mat});
 	} else {
 		ret = it->second = Rc<VectorPath>::alloc(move(path));
 		bool found = false;
@@ -505,7 +505,7 @@ Rc<VectorPath> VectorImageData::addPath(StringView id, VectorPath &&path, Mat4 m
 			}
 		}
 		if (!found) {
-			_order.emplace_back(VectorPathXRef{id.str(), mat});
+			_order.emplace_back(vg::PathXRef{id.str<Interface>(), mat});
 		}
 	}
 
@@ -536,21 +536,21 @@ void VectorImageData::clear() {
 void VectorImageData::resetDrawOrder() {
 	_order.clear();
 	for (auto &it : _paths) {
-		_order.emplace_back(VectorPathXRef{it.first});
+		_order.emplace_back(vg::PathXRef{it.first});
 	}
 }
 
 bool VectorImage::isSvg(StringView str) {
-	return Bitmap::check(Bitmap::FileFormat::Svg, (const uint8_t *)str.data(), str.size());
+	return bitmap::check(bitmap::FileFormat::Svg, (const uint8_t *)str.data(), str.size());
 }
 
 bool VectorImage::isSvg(BytesView data) {
-	return Bitmap::check(Bitmap::FileFormat::Svg, data.data(), data.size());
+	return bitmap::check(bitmap::FileFormat::Svg, data.data(), data.size());
 }
 
 bool VectorImage::isSvg(FilePath file) {
-	auto d = filesystem::readIntoMemory(file.get(), 0, 512);
-	return Bitmap::check(Bitmap::FileFormat::Svg, d.data(), d.size());
+	auto d = filesystem::readIntoMemory<Interface>(file.get(), 0, 512);
+	return bitmap::check(bitmap::FileFormat::Svg, d.data(), d.size());
 }
 
 VectorImage::~VectorImage() {
@@ -559,7 +559,7 @@ VectorImage::~VectorImage() {
 	}
 }
 
-bool VectorImage::init(Size size, StringView data) {
+bool VectorImage::init(Size2 size, StringView data) {
 	VectorPath path;
 	if (!path.init(data)) {
 		return false;
@@ -567,24 +567,24 @@ bool VectorImage::init(Size size, StringView data) {
 	return init(size, std::move(path));
 }
 
-bool VectorImage::init(Size size, VectorPath && path) {
+bool VectorImage::init(Size2 size, VectorPath && path) {
 	_data = Rc<VectorImageData>::create(this, size, Rect(0, 0, size.width, size.height));
 	addPath(move(path));
 	return true;
 }
 
-bool VectorImage::init(Size size) {
+bool VectorImage::init(Size2 size) {
 	_data = Rc<VectorImageData>::create(this, size, Rect(0, 0, size.width, size.height));
 	return true;
 }
 
 bool VectorImage::init(StringView data) {
-	String tmp = data.str();
-	VectorSvgReader reader;
-	html::parse<VectorSvgReader, StringView, VectorSvgTag>(reader, StringView(tmp));
+	String tmp = data.str<Interface>();
+	vg::SvgReader reader;
+	html::parse<vg::SvgReader, StringView, vg::SvgTag>(reader, StringView(tmp));
 
 	if (!reader._paths.empty()) {
-		_data = Rc<VectorImageData>::create(this, Size(reader._width, reader._height), reader._viewBox,
+		_data = Rc<VectorImageData>::create(this, Size2(reader._width, reader._height), reader._viewBox,
 				move(reader._drawOrder), move(reader._paths), reader._nextId);
 		for (auto &it : _data->getPaths()) {
 			_paths.emplace(it.first, Rc<VectorPathRef>::create(this, it.first, it.second));
@@ -598,11 +598,11 @@ bool VectorImage::init(StringView data) {
 }
 
 bool VectorImage::init(BytesView data) {
-	VectorSvgReader reader;
-	html::parse<VectorSvgReader, StringView, VectorSvgTag>(reader, StringView((const char *)data.data(), data.size()));
+	vg::SvgReader reader;
+	html::parse<vg::SvgReader, StringView, vg::SvgTag>(reader, StringView((const char *)data.data(), data.size()));
 
 	if (!reader._paths.empty()) {
-		_data = Rc<VectorImageData>::create(this, Size(reader._width, reader._height), reader._viewBox,
+		_data = Rc<VectorImageData>::create(this, Size2(reader._width, reader._height), reader._viewBox,
 				move(reader._drawOrder), move(reader._paths), reader._nextId);
 		for (auto &it : _data->getPaths()) {
 			_paths.emplace(it.first, Rc<VectorPathRef>::create(this, it.first, it.second));
@@ -616,10 +616,10 @@ bool VectorImage::init(BytesView data) {
 }
 
 bool VectorImage::init(FilePath path) {
-	return init(filesystem::readTextFile(path.get()));
+	return init(filesystem::readTextFile<Interface>(path.get()));
 }
 
-Size VectorImage::getImageSize() const {
+Size2 VectorImage::getImageSize() const {
 	return _data->getImageSize();
 }
 
@@ -648,8 +648,8 @@ Rc<VectorPathRef> VectorImage::addPath(VectorPath &&path, StringView tag, Mat4 v
 
 	auto it = _paths.find(tag);
 	if (it == _paths.end()) {
-		auto obj = Rc<VectorPathRef>::create(this, tag.str(), move(pathObj));
-		return _paths.emplace(idStr.empty() ? tag.str() : move(idStr), move(obj)).first->second;
+		auto obj = Rc<VectorPathRef>::create(this, tag.str<Interface>(), move(pathObj));
+		return _paths.emplace(idStr.empty() ? tag.str<Interface>() : move(idStr), move(obj)).first->second;
 	} else {
 		it->second->setPath(move(pathObj));
 		return it->second;
@@ -700,20 +700,20 @@ void VectorImage::clear() {
 	setDirty();
 }
 
-const Vector<VectorPathXRef> &VectorImage::getDrawOrder() const {
+const Vector<vg::PathXRef> &VectorImage::getDrawOrder() const {
 	return _data->getDrawOrder();
 }
 
-void VectorImage::setDrawOrder(const Vector<VectorPathXRef> &vec) {
+void VectorImage::setDrawOrder(const Vector<vg::PathXRef> &vec) {
 	if (_copyOnWrite) {
 		copy();
 	}
 
-	_data->setDrawOrder(Vector<VectorPathXRef>(vec));
+	_data->setDrawOrder(Vector<vg::PathXRef>(vec));
 	setDirty();
 }
 
-void VectorImage::setDrawOrder(Vector<VectorPathXRef> &&vec) {
+void VectorImage::setDrawOrder(Vector<vg::PathXRef> &&vec) {
 	if (_copyOnWrite) {
 		copy();
 	}

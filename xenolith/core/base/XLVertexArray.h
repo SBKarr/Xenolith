@@ -24,6 +24,7 @@
 #define XENOLITH_CORE_BASE_XLVERTEXARRAY_H_
 
 #include "XLDefine.h"
+#include "XLFontStyle.h"
 
 namespace stappler::xenolith {
 
@@ -42,24 +43,25 @@ public:
 		Quad & setTexturePoints(const Vec2 &tl, const Vec2 &bl, const Vec2 &tr, const Vec2 &br, float texWidth, float texHeight);
 
 		// Vec4 - you can pass whatever you want as w component to shader
-		Quad & setGeometry(const Vec4 &origin, const Size &size, const Mat4 &t);
-		Quad & setGeometry(const Vec4 &origin, const Size &size);
+		Quad & setGeometry(const Vec4 &origin, const Size2 &size, const Mat4 &t);
+		Quad & setGeometry(const Vec4 &origin, const Size2 &size);
 		Quad & setColor(const Color4F &color);
 		Quad & setColor(SpanView<Color4F>); // tl bl tr br
 		Quad & setColor(std::initializer_list<Color4F> &&); // tl bl tr br
 
 		Quad & drawChar(const font::Metrics &m, const font::CharLayout &l, int16_t charX, int16_t charY,
-				const Color4B &color, style::TextDecoration, uint16_t face);
+				const Color4B &color, font::TextDecoration, uint16_t face);
 		Quad & drawUnderlineRect(int16_t charX, int16_t charY, uint16_t width, uint16_t height, const Color4B &color);
 	};
 
-	virtual ~VertexArray() { }
+	virtual ~VertexArray();
 
 	bool init(uint32_t bufferCapacity, uint32_t indexCapacity);
 
 	void reserve(uint32_t bufferCapacity, uint32_t indexCapacity);
 
 	Rc<gl::VertexData> pop();
+	Rc<gl::VertexData> dup();
 
 	bool empty() const;
 	void clear();
@@ -72,6 +74,9 @@ public:
 	void updateColor(const Color4F &color);
 	void updateColor(const Color4F &color, const Vector<ColorMask> &);
 	void updateColorQuads(const Color4F &color, const Vector<ColorMask> &);
+
+	size_t getVertexCount() const;
+	size_t getIndexCount() const;
 
 protected:
 	void copy();

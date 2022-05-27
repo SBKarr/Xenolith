@@ -182,20 +182,31 @@ DeviceBuffer::MappedRegion DeviceBuffer::map(VkDeviceSize offset, VkDeviceSize s
 void DeviceBuffer::unmap(const MappedRegion &region, bool flush) {
 	if (_memory.ptr) {
 		// persistent mapping, no need to unmap
+		if (flush) {
+			VkMappedMemoryRange range;
+			range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+			range.pNext = nullptr;
+			range.memory = _memory.mem;
+			range.offset = region.offset;
+			range.size = math::align<VkDeviceSize>(region.size, _pool->getAllocator()->getNonCoherentAtomSize());;
+
+			_pool->getDevice()->getTable()->vkFlushMappedMemoryRanges(_pool->getDevice()->getDevice(), 1, &range);
+			_needInvalidate = true;
+		}
 	} else {
 		auto t = _pool->getAllocator()->getType(_memory.type);
 		if (!t->isHostVisible()) {
 			return;
 		}
 
-		VkMappedMemoryRange range;
-		range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-		range.pNext = nullptr;
-		range.memory = _memory.mem;
-		range.offset = region.offset;
-		range.size = region.size;
-
 		if (!t->isHostCoherent() && flush) {
+			VkMappedMemoryRange range;
+			range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+			range.pNext = nullptr;
+			range.memory = _memory.mem;
+			range.offset = region.offset;
+			range.size = region.size;
+
 			_pool->getDevice()->getTable()->vkFlushMappedMemoryRanges(_pool->getDevice()->getDevice(), 1, &range);
 			_needInvalidate = true;
 		}

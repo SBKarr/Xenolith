@@ -60,9 +60,14 @@ public:
 	virtual void begin(gl::View *view);
 	virtual void end();
 
-	Size getScreenSize() const;
+	Size2 getScreenSize() const;
 
 	void runScene(Rc<Scene> &&);
+
+	float getFps() const;
+	float getAvgFps() const;
+	float getSpf() const; // in milliseconds
+	float getLocalFrameTime() const; // in milliseconds
 
 protected:
 	// Vk Swaphain was invalidated, drop all dependent resources;

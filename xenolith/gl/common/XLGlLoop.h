@@ -32,7 +32,7 @@ namespace stappler::xenolith::gl {
 
 struct PresentationData;
 
-class Loop : public thread::ThreadHandlerInterface {
+class Loop : public thread::ThreadInterface<Interface> {
 public:
 	static constexpr uint32_t LoopThreadId = 2;
 
@@ -47,12 +47,12 @@ public:
 	};
 
 	struct Event final {
-		Event(EventName event, Rc<Ref> &&data, data::Value &&value, Function<void(bool)> &&cb = nullptr)
+		Event(EventName event, Rc<Ref> &&data, Value &&value, Function<void(bool)> &&cb = nullptr)
 		: event(event), data(move(data)), value(move(value)), callback(cb) { }
 
 		EventName event = EventName::Update;
 		Rc<Ref> data;
-		data::Value value;
+		Value value;
 		Function<void(bool)> callback;
 	};
 
@@ -77,8 +77,8 @@ public:
 	virtual void threadInit() override; // called when thread is created
 	virtual bool worker() override;
 
-	void pushEvent(EventName, Rc<Ref> && = Rc<Ref>(), data::Value && = data::Value(), Function<void(bool)> && = nullptr);
-	void pushContextEvent(EventName, Rc<Ref> && = Rc<Ref>(), data::Value && = data::Value(), Function<void(bool)> && = nullptr);
+	void pushEvent(EventName, Rc<Ref> && = Rc<Ref>(), Value && = Value(), Function<void(bool)> && = nullptr);
+	void pushContextEvent(EventName, Rc<Ref> && = Rc<Ref>(), Value && = Value(), Function<void(bool)> && = nullptr);
 
 	// callback should return true to end spinning
 	void schedule(Function<bool(Context &)> &&, StringView);
@@ -91,18 +91,18 @@ public:
 	const Rc<Device> &getDevice() const { return _device; }
 	const Application *getApplication() const { return _application; }
 	const Instance *getInstance() const;
-	const Rc<thread::TaskQueue> &getQueue() const { return _queue; }
+	const Rc<TaskQueue> &getQueue() const { return _queue; }
 	uint64_t getClock() const { return _clock; }
 	bool isRunning() const { return _running.load(); }
 
 	void performOnThread(Function<void()> &&func, Ref *target = nullptr, bool immediate = false);
 
 	void compileResource(const Rc<Resource> &req) {
-		pushEvent(EventName::CompileResource, req.get(), data::Value());
+		pushEvent(EventName::CompileResource, req.get(), Value());
 	}
 
 	void compileMaterials(const Rc<MaterialInputData> &req) {
-		pushEvent(EventName::CompileMaterials, req.get(), data::Value());
+		pushEvent(EventName::CompileMaterials, req.get(), Value());
 	}
 
 	// if called before loop is started - should compile RenderQueue in place
@@ -141,9 +141,9 @@ protected:
 
 	std::atomic<bool> _running = false;
 
-	Rc<thread::TaskQueue> _queue;
+	Rc<TaskQueue> _queue;
 	uint64_t _clock = 0;
-
+	Mutex _pendingEventMutex;
 	Vector<Event> _pendingEvents;
 };
 

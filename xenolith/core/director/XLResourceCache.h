@@ -43,7 +43,6 @@ public:
 
 	bool hasAlpha() const;
 
-	Size getSize() const;
 	Extent3 getExtent() const;
 
 protected:

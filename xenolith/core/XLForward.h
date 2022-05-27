@@ -43,16 +43,14 @@ THE SOFTWARE.
 #endif
 #endif
 
-#include "XLVec2.h"
-#include "XLVec3.h"
-#include "XLVec4.h"
-#include "XLGeometry.h"
-#include "XLQuaternion.h"
-#include "XLMat4.h"
-#include "XLPadding.h"
-#include "XLColor.h"
-#include "XLMovingAverage.h"
-#include "XLFontStyle.h"
+#include "SPVec2.h"
+#include "SPVec3.h"
+#include "SPVec4.h"
+#include "SPGeometry.h"
+#include "SPQuaternion.h"
+#include "SPMat4.h"
+#include "SPPadding.h"
+#include "SPColor.h"
 
 // GL thread loop debug (uncomment to enable)
 // #define XL_LOOP_DEBUG 1
@@ -71,6 +69,28 @@ THE SOFTWARE.
     ((((uint32_t)(variant)) << 29) | (((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
 
 namespace stappler::xenolith {
+
+// Import std memory model as default
+using namespace stappler::mem_std;
+
+using Vec2 = geom::Vec2;
+using Vec3 = geom::Vec3;
+using Vec4 = geom::Vec4;
+using Mat4 = geom::Mat4;
+using Size2 = geom::Size2;
+using Size3 = geom::Size3;
+using Extent2 = geom::Extent2;
+using Extent3 = geom::Extent3;
+using Rect = geom::Rect;
+using URect = geom::URect;
+using UVec2 = geom::UVec2;
+using Quaternion = geom::Quaternion;
+using Color = geom::Color;
+using Color3B = geom::Color3B;
+using Color4B = geom::Color4B;
+using Color4F = geom::Color4F;
+using Padding = geom::Padding;
+namespace Anchor = geom::Anchor;
 
 using FilePath = ValueWrapper<StringView, class FilePathTag>;
 
@@ -126,14 +146,16 @@ inline bool exists_ordered(memory::vector<T> &vec, const T & val) {
 
 } // stappler::xenolith
 
-
+#if MODULE_XENOLITH_NETWORK
 namespace stappler::xenolith::network {
 
 class Controller;
 
 }
+#endif
 
 
+#if MODULE_XENOLITH_STORAGE
 namespace stappler::xenolith::storage {
 
 class StorageRoot;
@@ -142,6 +164,7 @@ class Asset;
 class AssetLibrary;
 
 }
+#endif
 
 namespace stappler::xenolith::font {
 

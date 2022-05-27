@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+# Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 # 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -33,7 +33,7 @@ XENOLITH_MAKEFILE_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 XENOLITH_OUTPUT_DIR = $(abspath $(TOOLKIT_OUTPUT)/xenolith)
 XENOLITH_OUTPUT_STATIC = $(abspath $(TOOLKIT_OUTPUT)/libxenolith.a)
 
-# linker flags and extra libs (libhyphen.a and libfreetype.a from stappler)
+# linker flags and extra libs
 OSTYPE_XENOLITH_LIBS += $(OSTYPE_CLI_LIBS) -l:libfreetype.a -lX11 -lXrandr -lXi -lXinerama -lXcursor -lxcb
 
 # use default stappler LDFLAGS for OS
@@ -42,12 +42,12 @@ XENOLITH_LDFLAGS := $(OSTYPE_LDFLAGS)
 # precompiled headers list
 XENOLITH_PRECOMPILED_HEADERS += \
 	$(XENOLITH_MAKEFILE_DIR)/core/XLDefine.h \
-	components/common/core/SPCommon.h
+	common/core/SPCommon.h
 
 # sources, common and layout for stappler
 XENOLITH_SRCS_DIRS += \
-	components/common \
-	components/stellator/db \
+	common \
+	thirdparty \
 	$(XENOLITH_MAKEFILE_DIR)/core \
 	$(XENOLITH_MAKEFILE_DIR)/gl \
 	$(XENOLITH_MAKEFILE_DIR)/features \
@@ -61,15 +61,14 @@ XENOLITH_SRCS_OBJS += \
 
 # recursive includes
 XENOLITH_INCLUDES_DIRS += \
-	components/common \
-	components/stellator/db \
+	common \
 	$(XENOLITH_MAKEFILE_DIR) \
 
 # non-recursive includes
 XENOLITH_INCLUDES_OBJS += \
 	$(XENOLITH_MAKEFILE_DIR)/shaders \
 	$(OSTYPE_INCLUDE) \
-	components/thirdparty
+	thirdparty
 
 # shaders
 XENOLITH_SHADERS := $(wildcard $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/*)
@@ -122,8 +121,21 @@ endif
 # Compilation
 #
 
+include $(GLOBAL_ROOT)/common-modules.mk
+
+LOCAL_MODULES += \
+	common_data \
+	common_threads \
+	common_bitmap \
+	common_tess \
+	common_zip \
+	common_brotli_lib \
+	common_backtrace
+
+include $(GLOBAL_ROOT)/make/utils/resolve-modules.mk
+
 # Generate source compilation rules
-include $(GLOBAL_ROOT)/make/utils/toolkit.mk
+include $(GLOBAL_ROOT)/make/utils/make-toolkit.mk
 
 # Shader dependencies
 $(XENOLITH_MAKEFILE_DIR)/shaders/XLDefaultShaders.cpp : $(subst /glsl/,/compiled/shader_,$(XENOLITH_SHADERS)) 

@@ -104,11 +104,6 @@ bool Texture::hasAlpha() const {
 	}
 }
 
-Size Texture::getSize() const {
-	auto extent = getExtent();
-	return Size(extent.width, extent.height);
-}
-
 Extent3 Texture::getExtent() const {
 	if (_dynamic) {
 		return _dynamic->getExtent();

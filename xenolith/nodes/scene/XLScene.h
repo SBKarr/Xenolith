@@ -35,7 +35,7 @@ public:
 	virtual ~Scene();
 
 	virtual bool init(Application *, gl::RenderQueue::Builder &&);
-	virtual bool init(Application *, gl::RenderQueue::Builder &&, Size);
+	virtual bool init(Application *, gl::RenderQueue::Builder &&, Size2);
 
 	virtual void render(RenderFrameInfo &info);
 

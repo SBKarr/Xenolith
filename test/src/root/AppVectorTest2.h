@@ -40,6 +40,7 @@ public:
 protected:
 	VectorSprite *_sprite = nullptr;
 	VectorSprite *_sprite2 = nullptr;
+	VectorSprite *_sprite3 = nullptr;
 };
 
 }

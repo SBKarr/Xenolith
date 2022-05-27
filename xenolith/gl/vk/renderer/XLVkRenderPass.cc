@@ -142,6 +142,9 @@ void RenderPassHandle::submit(gl::FrameQueue &q, Rc<gl::FrameSync> &&sync, Funct
 	Rc<gl::FrameHandle> f = &q.getFrame(); // capture frame ref
 
 	_fence = _device->acquireFence(q.getFrame().getOrder());
+
+	_fence->setTag(getName());
+
 	_fence->addRelease([dev = _device, pool = move(_pool), loop = q.getLoop()] (bool success) {
 		dev->releaseCommandPool(*loop, Rc<CommandPool>(pool));
 	}, nullptr, "RenderPassHandle::submit dev->releaseCommandPool");
@@ -157,29 +160,11 @@ void RenderPassHandle::submit(gl::FrameQueue &q, Rc<gl::FrameSync> &&sync, Funct
 	_device->acquireQueue(ops, *f.get(), [this, onSubmited = move(onSubmited)]  (gl::FrameHandle &frame, const Rc<DeviceQueue> &queue) mutable {
 		_queue = queue;
 
-		frame.performInQueue([this] (gl::FrameHandle &frame) {
-			if (!doSubmit()) {
+		frame.performInQueue([this, onSubmited = move(onSubmited)] (gl::FrameHandle &frame) mutable {
+			if (!doSubmit(frame, move(onSubmited))) {
 				return false;
 			}
 			return true;
-		}, [this, onSubmited = move(onSubmited)] (gl::FrameHandle &frame, bool success) {
-			if (_queue) {
-				_device->releaseQueue(move(_queue));
-				_queue = nullptr;
-			}
-			if (success) {
-				onSubmited(true);
-				_device->scheduleFence(*frame.getLoop(), move(_fence));
-				_fence = nullptr;
-				invalidate();
-			} else {
-				log::vtext("VK-Error", "Fail to vkQueueSubmit");
-				_device->releaseFence(*frame.getLoop(), move(_fence));
-				_fence = nullptr;
-				onSubmited(false);
-				invalidate();
-			}
-			_sync = nullptr;
 		}, this, "RenderPass::submit");
 	}, [this] (gl::FrameHandle &frame) {
 		_sync = nullptr;
@@ -233,7 +218,7 @@ Vector<VkCommandBuffer> RenderPassHandle::doPrepareCommands(gl::FrameHandle &) {
 	return Vector<VkCommandBuffer>();
 }
 
-bool RenderPassHandle::doSubmit() {
+bool RenderPassHandle::doSubmit(gl::FrameHandle &frame, Function<void(bool)> &&onSubmited) {
 	if (_sync) {
 		gl::Attachment *swapchainAttachment = nullptr;
 		Rc<gl::SwapchainImage> swapchainImage;
@@ -247,16 +232,74 @@ bool RenderPassHandle::doSubmit() {
 		if (swapchainImage && swapchainAttachment) {
 			if (swapchainAttachment->getLastRenderPass() == getData()) {
 				auto sync = (SwapchainSync *)swapchainImage.get();
-				auto ret = sync->submitWithPresent(*_device, *_queue, *_sync, *_fence, _buffers,
-						gl::PipelineStage::ColorAttachmentOutput);
-				if (ret == VK_SUCCESS || ret == VK_SUBOPTIMAL_KHR) {
-					return true;
-				}
-				return false;
+				return doSubmitPresent(frame, sync, move(onSubmited));
 			}
 		}
 	}
-	return _queue->submit(*_sync, *_fence, _buffers);
+
+	auto success = _queue->submit(*_sync, *_fence, _buffers);
+	frame.performOnGlThread([this, success, onSubmited = move(onSubmited)] (gl::FrameHandle &frame) {
+		if (_queue) {
+			_device->releaseQueue(move(_queue));
+			_queue = nullptr;
+		}
+		if (success) {
+			onSubmited(true);
+			_device->scheduleFence(*frame.getLoop(), move(_fence));
+			_fence = nullptr;
+			invalidate();
+		} else {
+			log::vtext("VK-Error", "Fail to vkQueueSubmit");
+			_device->releaseFence(*frame.getLoop(), move(_fence));
+			_fence = nullptr;
+			onSubmited(false);
+			invalidate();
+		}
+		_sync = nullptr;
+	}, nullptr, false, "RenderPassHandle::doSubmit");
+	return success;
+}
+
+bool RenderPassHandle::doSubmitPresent(gl::FrameHandle &frame, SwapchainSync *sync, Function<void(bool)> &&onSubmited) {
+	auto ret = sync->submit(*_device, *_queue, *_sync, *_fence, _buffers, gl::PipelineStage::ColorAttachmentOutput);
+
+	bool success = (ret == VK_SUCCESS);
+	frame.performOnGlThread([this, success, onSubmited = move(onSubmited)] (gl::FrameHandle &frame) {
+		if (!success && _queue) {
+			_device->releaseQueue(move(_queue));
+			_queue = nullptr;
+		}
+		if (success) {
+			onSubmited(true);
+			_device->scheduleFence(*frame.getLoop(), move(_fence));
+			_fence = nullptr;
+			invalidate();
+		} else {
+			log::vtext("VK-Error", "Fail to vkQueueSubmit");
+			_device->releaseFence(*frame.getLoop(), move(_fence));
+			_fence = nullptr;
+			onSubmited(false);
+			invalidate();
+		}
+		_sync = nullptr;
+	}, nullptr, false, "RenderPassHandle::doSubmit");
+
+	if (!success) {
+		return false;
+	}
+
+	ret = sync->present(*_device, *_queue);
+	frame.performOnGlThread([this] (gl::FrameHandle &frame) {
+		if (_queue) {
+			_device->releaseQueue(move(_queue));
+			_queue = nullptr;
+		}
+	}, nullptr, false, "RenderPassHandle::doSubmitPresent");
+
+	if (ret == VK_SUCCESS || ret == VK_SUBOPTIMAL_KHR) {
+		return true;
+	}
+	return false;
 }
 
 RenderPassHandle::MaterialBuffers RenderPassHandle::updateMaterials(gl::FrameHandle &iframe, const Rc<gl::MaterialSet> &data,
@@ -265,9 +308,12 @@ RenderPassHandle::MaterialBuffers RenderPassHandle::updateMaterials(gl::FrameHan
 	auto &layout = _device->getTextureSetLayout();
 
 	// update list of materials in set
-	data->updateMaterials(materials, dynamicMaterials, materialsToRemove, [&] (const gl::MaterialImage &image) -> Rc<gl::ImageView> {
+	auto updated = data->updateMaterials(materials, dynamicMaterials, materialsToRemove, [&] (const gl::MaterialImage &image) -> Rc<gl::ImageView> {
 		return Rc<ImageView>::create(*_device, (Image *)image.image->image.get(), image.info);
 	});
+	if (updated.empty()) {
+		return MaterialBuffers();
+	}
 
 	for (auto &it : data->getLayouts()) {
 		iframe.performRequiredTask([layout, data, target = &it] (gl::FrameHandle &handle) {
@@ -385,8 +431,8 @@ Vector<VkCommandBuffer> VertexRenderPassHandle::doPrepareCommands(gl::FrameHandl
 	return Vector<VkCommandBuffer>();
 }
 
-bool VertexRenderPassHandle::doSubmit() {
-	return RenderPassHandle::doSubmit();
+bool VertexRenderPassHandle::doSubmit(gl::FrameHandle &frame, Function<void(bool)> &&onSubmited) {
+	return RenderPassHandle::doSubmit(frame, move(onSubmited));
 }
 
 }

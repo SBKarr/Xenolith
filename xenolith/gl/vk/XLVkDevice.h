@@ -52,9 +52,9 @@ public:
 	VkDevice getDevice() const { return _device; }
 	VkPhysicalDevice getPhysicalDevice() const;
 
-	virtual void begin(const Application *, thread::TaskQueue &) override;
-	virtual void end(thread::TaskQueue &) override;
-	virtual void waitIdle() override;
+	virtual void begin(const Application *, gl::TaskQueue &) override;
+	virtual void end() override;
+	virtual void waitIdle(gl::Loop &) override;
 
 	virtual void onLoopStarted(gl::Loop &) override;
 	virtual void onLoopEnded(gl::Loop &) override;
@@ -122,6 +122,8 @@ public:
 		//_apiMutex.unlock();
 	}
 
+	bool hasNonSolidFillMode() const;
+
 private:
 	friend class DeviceQueue;
 
@@ -138,7 +140,7 @@ private:
 
 	const vk::Instance *_vkInstance = nullptr;
 	const DeviceTable *_table = nullptr;
-#if DEBUG
+#if VK_HOOK_DEBUG
 	const DeviceTable *_original = nullptr;
 #endif
 	VkDevice _device = VK_NULL_HANDLE;

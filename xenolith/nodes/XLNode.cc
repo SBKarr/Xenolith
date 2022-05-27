@@ -232,7 +232,7 @@ void Node::setAnchorPoint(const Vec2 &point) {
 	_transformInverseDirty = _transformCacheDirty = _transformDirty = true;
 }
 
-void Node::setContentSize(const Size &size) {
+void Node::setContentSize(const Size2 &size) {
 	if (size == _contentSize) {
 		return;
 	}
@@ -975,8 +975,12 @@ void Node::unscheduleUpdate() {
 }
 
 bool Node::isTouched(const Vec2 &location, float padding) {
-	const Vec2 &point = convertToNodeSpace(location);
-	const Size &size = getContentSize();
+	Vec2 point = convertToNodeSpace(location);
+	return isTouchedNodeSpace(point, padding);
+}
+
+bool Node::isTouchedNodeSpace(const Vec2 &point, float padding) {
+	const Size2 &size = getContentSize();
 	if (point.x > -padding && point.y > -padding
 			&& point.x < size.width + padding
 			&& point.y < size.height + padding) {
@@ -984,6 +988,26 @@ bool Node::isTouched(const Vec2 &location, float padding) {
 	} else {
 		return false;
 	}
+}
+
+void Node::setOnEnterCallback(Function<void(Scene *)> &&cb) {
+	_onEnterCallback = move(cb);
+}
+
+void Node::setOnExitCallback(Function<void()> &&cb) {
+	_onExitCallback = move(cb);
+}
+
+void Node::setOnContentSizeDirtyCallback(Function<void()> &&cb) {
+	_onContentSizeDirtyCallback = move(cb);
+}
+
+void Node::setOnTransformDirtyCallback(Function<void(const Mat4 &)> &&cb) {
+	_onTransformDirtyCallback = move(cb);
+}
+
+void Node::setOnReorderChildDirtyCallback(Function<void()> &&cb) {
+	_onReorderChildDirtyCallback = move(cb);
 }
 
 Mat4 Node::transform(const Mat4 &parentTransform) {

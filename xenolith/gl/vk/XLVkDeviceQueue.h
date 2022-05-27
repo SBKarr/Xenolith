@@ -83,15 +83,22 @@ public:
 	void releaseFence(const Fence &);
 
 	uint32_t getIndex() const { return _index; }
+	uint64_t getFrameIndex() const { return _frameIdx; }
 	VkQueue getQueue() const { return _queue; }
 	QueueOperations getOps() const { return _ops; }
+	VkResult getResult() const { return _result; }
+
+	void setOwner(gl::FrameHandle &);
+	void reset();
 
 protected:
 	Device *_device = nullptr;
 	uint32_t _index = 0;
+	uint64_t _frameIdx = 0;
 	QueueOperations _ops = QueueOperations::None;
 	VkQueue _queue;
 	std::atomic<uint32_t> _nfences;
+	VkResult _result = VK_ERROR_UNKNOWN;
 };
 
 enum class BufferLevel {

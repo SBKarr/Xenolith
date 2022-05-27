@@ -96,7 +96,7 @@ void Label::updateLabel() {
 	if (_string16.empty()) {
 		_format = nullptr;
 		_vertexesDirty = true;
-		setContentSize(Size(0.0f, getFontHeight() / _density));
+		setContentSize(Size2(0.0f, getFontHeight() / _density));
 		return;
 	}
 
@@ -105,17 +105,19 @@ void Label::updateLabel() {
 	_compiledStyles = compileStyle();
 	_style.text.color = _displayedColor.getColor();
 	_style.text.opacity = _displayedColor.getOpacity();
-	_style.text.whiteSpace = style::WhiteSpace::PreWrap;
+	_style.text.whiteSpace = font::WhiteSpace::PreWrap;
 
-	updateFormatSpec(spec, _compiledStyles, _density, _adjustValue);
+	if (!updateFormatSpec(spec, _compiledStyles, _density, _adjustValue)) {
+		return;
+	}
 
 	_format = spec;
 
 	if (_format) {
 		if (_format->chars.empty()) {
-			setContentSize(Size(0.0f, getFontHeight() / _density));
+			setContentSize(Size2(0.0f, getFontHeight() / _density));
 		} else {
-			setContentSize(Size(_format->width / (_density), _format->height / (_density)));
+			setContentSize(Size2(_format->width / (_density), _format->height / (_density)));
 		}
 
 		_labelDirty = false;
@@ -211,10 +213,10 @@ static void Label_writeTextureQuad(const font::FormatSpec *format, const font::M
 	cMap.push_back(mask);
 
 	switch (range.align) {
-	case style::VerticalAlign::Sub:
+	case font::VerticalAlign::Sub:
 		quad.drawChar(m, l, c.pos, format->height - line.pos + m.descender / 2, range.color, range.decoration, face);
 		break;
-	case style::VerticalAlign::Super:
+	case font::VerticalAlign::Super:
 		quad.drawChar(m, l, c.pos, format->height - line.pos + m.ascender / 2, range.color, range.decoration, face);
 		break;
 	default:
@@ -274,7 +276,7 @@ void Label::updateQuadsForeground(font::FontController *controller, FormatSpec *
 			end -= 1;
 		}
 
-		if (it.count() > 0 && it.range->decoration != style::TextDecoration::None) {
+		if (it.count() > 0 && it.range->decoration != font::TextDecoration::None) {
 			const font::CharSpec &firstChar = format->chars[it.start()];
 			const font::CharSpec &lastChar = format->chars[it.start() + it.count() - 1];
 
@@ -284,14 +286,14 @@ void Label::updateQuadsForeground(font::FontController *controller, FormatSpec *
 
 			float offset = 0.0f;
 			switch (it.range->decoration) {
-			case style::TextDecoration::None: break;
-			case style::TextDecoration::Overline:
+			case font::TextDecoration::None: break;
+			case font::TextDecoration::Overline:
 				offset = metrics.height;
 				break;
-			case style::TextDecoration::LineThrough:
+			case font::TextDecoration::LineThrough:
 				offset = (metrics.height * 11.0f) / 24.0f;
 				break;
-			case style::TextDecoration::Underline:
+			case font::TextDecoration::Underline:
 				offset = metrics.height / 8.0f;
 				break;
 			}
@@ -316,6 +318,18 @@ void Label::updateQuadsForeground(font::FontController *controller, FormatSpec *
 			}
 		}
 	}
+}
+
+bool Label::checkVertexDirty() const {
+	return _vertexesDirty || _labelDirty;
+}
+
+NodeFlags Label::processParentFlags(RenderFrameInfo &info, NodeFlags parentFlags) {
+	if (_labelDirty) {
+		updateLabel();
+	}
+
+	return Sprite::processParentFlags(info, parentFlags);
 }
 
 void Label::setStandalone(bool value) {
@@ -374,6 +388,10 @@ uint16_t Label::getFontHeight() const {
 void Label::updateVertexes() {
 	if (!_source) {
 		return;
+	}
+
+	if (_labelDirty) {
+		updateLabel();
 	}
 
 	if (!_format || _format->chars.size() == 0) {

@@ -34,7 +34,7 @@ class VectorImageData;
 struct VectorCanvasResult : public Ref {
 	Vector<Pair<Mat4, Rc<gl::VertexData>>> data;
 	Color4F targetColor;
-	Size targetSize;
+	Size2 targetSize;
 
 	void updateColor(const Color4F &);
 };
@@ -96,11 +96,11 @@ public:
 	VectorPathRef & setStrokeWidth(float width);
 	float getStrokeWidth() const;
 
-	VectorPathRef &setWindingRule(Winding);
-	Winding getWindingRule() const;
+	VectorPathRef &setWindingRule(vg::Winding);
+	vg::Winding getWindingRule() const;
 
-	VectorPathRef & setStyle(DrawStyle s);
-	DrawStyle getStyle() const;
+	VectorPathRef & setStyle(vg::DrawStyle s);
+	vg::DrawStyle getStyle() const;
 
 	VectorPathRef & setTransform(const Mat4 &);
 	VectorPathRef & applyTransform(const Mat4 &);
@@ -137,11 +137,11 @@ class VectorImageData : public Ref {
 public:
 	virtual ~VectorImageData() { }
 
-	bool init(VectorImage *, Size size, Rect viewBox, Vector<VectorPathXRef> &&, Map<String, VectorPath> &&, uint16_t ids);
-	bool init(VectorImage *, Size size, Rect viewBox);
+	bool init(VectorImage *, Size2 size, Rect viewBox, Vector<vg::PathXRef> &&, Map<String, VectorPath> &&, uint16_t ids);
+	bool init(VectorImage *, Size2 size, Rect viewBox);
 	bool init(VectorImageData &);
 
-	Size getImageSize() const { return _imageSize; }
+	Size2 getImageSize() const { return _imageSize; }
 	Rect getViewBox() const { return _viewBox; }
 	const Map<String, Rc<VectorPath>> &getPaths() const;
 
@@ -154,8 +154,8 @@ public:
 
 	void clear();
 
-	const Vector<VectorPathXRef> &getDrawOrder() const { return _order; }
-	void setDrawOrder(Vector<VectorPathXRef> &&order) { _order = move(order); }
+	const Vector<vg::PathXRef> &getDrawOrder() const { return _order; }
+	void setDrawOrder(Vector<vg::PathXRef> &&order) { _order = move(order); }
 	void resetDrawOrder();
 
 	void setViewBoxTransform(const Mat4 &m) { _viewBoxTransform = m; }
@@ -169,10 +169,10 @@ public:
 
 protected:
 	bool _allowBatchDrawing = true;
-	Size _imageSize;
+	Size2 _imageSize;
 	Rect _viewBox;
 	Mat4 _viewBoxTransform = Mat4::IDENTITY;
-	Vector<VectorPathXRef> _order;
+	Vector<vg::PathXRef> _order;
 	Map<String, Rc<VectorPath>> _paths;
 	uint16_t _nextId = 0;
 	VectorImage *_image = nullptr;
@@ -186,14 +186,14 @@ public:
 
 	virtual ~VectorImage();
 
-	bool init(Size, StringView);
-	bool init(Size, VectorPath &&);
-	bool init(Size);
+	bool init(Size2, StringView);
+	bool init(Size2, VectorPath &&);
+	bool init(Size2);
 	bool init(StringView);
 	bool init(BytesView);
 	bool init(FilePath);
 
-	Size getImageSize() const;
+	Size2 getImageSize() const;
 	Rect getViewBox() const;
 
 	Rc<VectorPathRef> addPath(const VectorPath &, StringView = StringView(), Mat4 = Mat4::IDENTITY);
@@ -208,9 +208,9 @@ public:
 
 	void clear();
 
-	const Vector<VectorPathXRef> &getDrawOrder() const;
-	void setDrawOrder(const Vector<VectorPathXRef> &);
-	void setDrawOrder(Vector<VectorPathXRef> &&);
+	const Vector<vg::PathXRef> &getDrawOrder() const;
+	void setDrawOrder(const Vector<vg::PathXRef> &);
+	void setDrawOrder(Vector<vg::PathXRef> &&);
 
 	void resetDrawOrder();
 

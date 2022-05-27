@@ -33,6 +33,9 @@ static constexpr size_t NodePreallocateChilds = 4;
 /* Presentation Scheduler interval, used for non-blocking vkWaitForFence */
 static constexpr uint64_t PresentationSchedulerInterval = 500; // 500 ms or 1/32 of 60fps frame
 
+/* Minimal safe interval offset for frame timeout scheduling, to ensure, that actual timeout is less then nominal */
+static constexpr uint64_t FrameIntervalSafeOffset = 200;
+
 /* Max sampled image descriptors per material texture set (can be actually lower due maxPerStageDescriptorSampledImages) */
 static constexpr uint32_t MaxTextureSetImages = 1024;
 
@@ -49,10 +52,15 @@ static constexpr uint64_t MaxDirectorDeltaTime = 100'000'000 / 16;
 #endif
 
 /* Enable hooking output image with swapchain image when possible, can improve performance */
-static constexpr bool EnableSwapchainHook = true;
+static constexpr bool EnableSwapchainHook = false;
 
 // max chars count, used by locale::hasLocaleTagsFast
 static constexpr size_t MaxFastLocaleChars = size_t(127);
+
+// offset for vertex-based antialiasing in vector images
+static constexpr float VGAntialiasFactor = 0.5f;
+
+static constexpr bool VGProcessIntersectsInDrawer = false;
 
 }
 

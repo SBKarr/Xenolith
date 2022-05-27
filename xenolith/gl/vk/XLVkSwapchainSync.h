@@ -48,10 +48,10 @@ public:
 	virtual void cleanup() override;
 
 	VkResult acquireImage(Device &, bool sync = false);
-	VkResult present(Device &, DeviceQueue &);
 
-	VkResult submitWithPresent(Device &, DeviceQueue &, gl::FrameSync &,
-			Fence &, SpanView<VkCommandBuffer>, gl::PipelineStage waitStage);
+	VkResult submit(Device &dev, DeviceQueue &queue, gl::FrameSync &sync,
+			Fence &fence, SpanView<VkCommandBuffer> buffers, gl::PipelineStage waitStage);
+	VkResult present(Device &, DeviceQueue &);
 
 	uint32_t getImageIndex() const { return _imageIndex; }
 	void clearImageIndex();

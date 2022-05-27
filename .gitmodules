@@ -1,3 +1,6 @@
 [submodule "resources"]
 	path = resources
 	url = https://github.com/SBKarr/Xenolith-resources.git
+[submodule "libstappler"]
+	path = libstappler
+	url = git@github.com:SBKarr/libstappler-common.git

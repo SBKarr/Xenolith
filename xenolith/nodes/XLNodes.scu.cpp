@@ -21,7 +21,7 @@ THE SOFTWARE.
 **/
 
 #include "XLDefine.h"
-
+#include "vg/XLSvgReader.cc"
 #include "XLComponent.cc"
 #include "XLEventListener.cc"
 #include "XLGestureRecognizer.cc"
@@ -32,9 +32,7 @@ THE SOFTWARE.
 #include "XLSprite.cc"
 #include "XLLayer.cc"
 #include "XLLabel.cc"
-#include "XLVectorDraw.cc"
+#include "XLVectorCanvas.cc"
 #include "XLVectorPath.cc"
 #include "XLVectorImage.cc"
-#include "XLVectorCanvas.cc"
 #include "XLVectorSprite.cc"
-#include "XLVectorSvgReader.cc"

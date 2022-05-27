@@ -89,6 +89,8 @@ public:
 	const Rc<DeviceBuffer> &getVertexes() const { return _vertexes; }
 	const Rc<DeviceBuffer> &getIndexes() const { return _indexes; }
 
+	bool empty() const;
+
 protected:
 	virtual bool loadVertexes(gl::FrameHandle &, const Rc<gl::CommandList> &);
 

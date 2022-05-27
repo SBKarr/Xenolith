@@ -177,22 +177,22 @@ static void Resource_loadImageFileData(StringView path, ImageFormat fmt, const B
 		case ImageFormat::R8G8B8A8_SRGB:
 		case ImageFormat::R8G8B8A8_UNORM:
 		case ImageFormat::R8G8B8A8_UINT:
-			bmp.convert(Bitmap::PixelFormat::RGBA8888);
+			bmp.convert(bitmap::PixelFormat::RGBA8888);
 			break;
 		case ImageFormat::R8G8B8_SRGB:
 		case ImageFormat::R8G8B8_UNORM:
 		case ImageFormat::R8G8B8_UINT:
-			bmp.convert(Bitmap::PixelFormat::RGB888);
+			bmp.convert(bitmap::PixelFormat::RGB888);
 			break;
 		case ImageFormat::R8G8_SRGB:
 		case ImageFormat::R8G8_UNORM:
 		case ImageFormat::R8G8_UINT:
-			bmp.convert(Bitmap::PixelFormat::IA88);
+			bmp.convert(bitmap::PixelFormat::IA88);
 			break;
 		case ImageFormat::R8_SRGB:
 		case ImageFormat::R8_UNORM:
 		case ImageFormat::R8_UINT:
-			bmp.convert(Bitmap::PixelFormat::A8);
+			bmp.convert(bitmap::PixelFormat::A8);
 			break;
 		default:
 			availableFormat = false;
@@ -257,9 +257,9 @@ const BufferData *Resource::Builder::addBuffer(StringView key, BufferInfo &&info
 
 	String npath;
 	if (filesystem::exists(path.get())) {
-		npath = path.get().str();
+		npath = path.get().str<Interface>();
 	} else if (!filepath::isAbsolute(path.get())) {
-		npath = filesystem::currentDir(path.get());
+		npath = filesystem::currentDir<Interface>(path.get());
 		if (!filesystem::exists(npath)) {
 			npath.clear();
 		}
@@ -278,7 +278,10 @@ const BufferData *Resource::Builder::addBuffer(StringView key, BufferInfo &&info
 		buf->callback = [fpath] (const BufferData::DataCallback &dcb) {
 			Resource_loadFileData(fpath, dcb);
 		};
-		buf->size = filesystem::size(path.get());
+		filesystem::Stat stat;
+		if (filesystem::stat(path.get(), stat)) {
+			buf->size = stat.size;
+		}
 		return buf;
 	}, _data->pool);
 	if (!p) {
@@ -356,9 +359,9 @@ const ImageData *Resource::Builder::addImage(StringView key, ImageInfo &&img, Fi
 
 	String npath;
 	if (filesystem::exists(path.get())) {
-		npath = path.get().str();
+		npath = path.get().str<Interface>();
 	} else if (!filepath::isAbsolute(path.get())) {
-		npath = filesystem::currentDir(path.get());
+		npath = filesystem::currentDir<Interface>(path.get());
 		if (!filesystem::exists(npath)) {
 			npath.clear();
 		}
@@ -370,7 +373,7 @@ const ImageData *Resource::Builder::addImage(StringView key, ImageInfo &&img, Fi
 	}
 
 	size_t width, height, depth = 1;
-	if (!Bitmap::getImageSize(StringView(npath), width, height)) {
+	if (!bitmap::getImageSize(StringView(npath), width, height)) {
 		return nullptr;
 	}
 

@@ -272,6 +272,9 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(g
 	auto &inputData = _materialAttachment->getInputData();
 	auto buffers = updateMaterials(handle, _outputData, inputData->materialsToAddOrUpdate,
 			inputData->dynamicMaterialsToUpdate, inputData->materialsToRemove);
+	if (!buffers.targetBuffer) {
+		return Vector<VkCommandBuffer>();
+	}
 
 	QueueOperations ops = QueueOperations::None;
 	for (auto &it : inputData->attachment->getRenderPasses()) {

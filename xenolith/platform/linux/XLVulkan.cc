@@ -22,6 +22,7 @@ THE SOFTWARE.
 
 #include "XLPlatform.h"
 #include "XLApplication.h"
+#include "XLVk.h"
 
 #if (LINUX)
 
@@ -103,6 +104,8 @@ Rc<gl::Instance> createInstance(Application *app) {
     s_InstanceAvailableExtensions.resize(extensionCount);
     table.vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, s_InstanceAvailableExtensions.data());
 
+	Vector<const char *> enableLayers;
+
 	if constexpr (vk::s_enableValidationLayers) {
 #if DEBUG
 		for (const char *layerName : vk::s_validationLayers) {
@@ -110,6 +113,7 @@ Rc<gl::Instance> createInstance(Application *app) {
 
 			for (const auto &layerProperties : s_InstanceAvailableLayers) {
 				if (strcmp(layerName, layerProperties.layerName) == 0) {
+					enableLayers.emplace_back(layerName);
 					layerFound = true;
 					break;
 				}
@@ -121,6 +125,12 @@ Rc<gl::Instance> createInstance(Application *app) {
 			}
 		}
 #endif
+	}
+
+	for (const auto &layerProperties : s_InstanceAvailableLayers) {
+		if (app->getData().renderdoc && strcmp("VK_LAYER_RENDERDOC_Capture", layerProperties.layerName) == 0) {
+			enableLayers.emplace_back(layerProperties.layerName);
+		}
 	}
 
 	const char *waylandExt = nullptr;
@@ -235,16 +245,19 @@ Rc<gl::Instance> createInstance(Application *app) {
 		});
 	});
 
-	VkApplicationInfo appInfo = {};
+	VkApplicationInfo appInfo{}; vk::sanitizeVkStruct(appInfo);
 	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+	appInfo.pNext = nullptr;
 	appInfo.pApplicationName = name.data();
 	appInfo.applicationVersion = VK_MAKE_VERSION(versionArgs[0], versionArgs[1], versionArgs[2]);
 	appInfo.pEngineName = version::_name();
 	appInfo.engineVersion = version::_version();
 	appInfo.apiVersion = targetVersion;
 
-	VkInstanceCreateInfo createInfo = {};
+	VkInstanceCreateInfo createInfo{}; vk::sanitizeVkStruct(createInfo);
 	createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+	createInfo.pNext = nullptr;
+	createInfo.flags = 0;
 	createInfo.pApplicationInfo = &appInfo;
 
 	createInfo.enabledExtensionCount = static_cast<uint32_t>(requiredExtensions.size());
@@ -252,25 +265,21 @@ Rc<gl::Instance> createInstance(Application *app) {
 
 	enum VkResult ret = VK_SUCCESS;
 	if constexpr (vk::s_enableValidationLayers) {
-#if DEBUG
+#if VK_DEBUG_LOG
 	    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo = {};
 	    debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 	    debugCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 	    debugCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 	    debugCreateInfo.pfnUserCallback = vk::s_debugCallback;
-
-		createInfo.enabledLayerCount = static_cast<uint32_t>(sizeof(vk::s_validationLayers) / sizeof(const char *));
-		createInfo.ppEnabledLayerNames = vk::s_validationLayers;
 		createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
-
-		ret = table.vkCreateInstance(&createInfo, nullptr, &instance);
 #endif
 	} else {
-		createInfo.enabledLayerCount = 0;
 		createInfo.pNext = nullptr;
-
-		ret = table.vkCreateInstance(&createInfo, nullptr, &instance);
 	}
+
+	createInfo.enabledLayerCount = enableLayers.size();
+	createInfo.ppEnabledLayerNames = enableLayers.data();
+	ret = table.vkCreateInstance(&createInfo, nullptr, &instance);
 
 	if (ret != VK_SUCCESS) {
 		log::text("Vk", "Fail to create Vulkan instance");

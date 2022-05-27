@@ -87,7 +87,10 @@ protected:
 
 	virtual void updateQuadsForeground(font::FontController *, FormatSpec *, Vector<ColorMask> &);
 
-protected:
+	virtual bool checkVertexDirty() const override;
+
+	virtual NodeFlags processParentFlags(RenderFrameInfo &info, NodeFlags parentFlags) override;
+
 	EventListener *_listener = nullptr;
 	Time _quadRequestTime;
 	Rc<font::FontController> _source;

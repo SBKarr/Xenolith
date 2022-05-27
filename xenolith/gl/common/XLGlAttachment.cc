@@ -25,7 +25,7 @@
 namespace stappler::xenolith::gl {
 
 bool Attachment::init(StringView name, AttachmentType type) {
-	_name = name.str();
+	_name = name.str<Interface>();
 	_type = type;
 	return true;
 }

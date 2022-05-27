@@ -104,7 +104,17 @@ public:
 	virtual bool isSubmitted() const;
 	virtual bool isCompleted() const;
 
+	// Run data preparation process, that do not require queuing
+	// returns true if 'prepare' completes immediately (either successful or not)
+	// returns false if 'prepare' run some subroutines, and we should wait for them
+	// To indicate success, call callback with 'true'. For failure - with 'false'
+	// To indicate immediate failure, call callback with 'false', then return true;
 	virtual bool prepare(FrameQueue &, Function<void(bool)> &&);
+
+	// Run queue submission process
+	// If submission were successful, you should call onSubmited callback with 'true'
+	// If submission failed, call onSubmited with 'false'
+	// If submission were successful, onComplete should be called when execution completes
 	virtual void submit(FrameQueue &, Rc<FrameSync> &&, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete);
 
 	// after submit

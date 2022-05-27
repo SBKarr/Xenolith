@@ -130,12 +130,17 @@ FrameEmitter::~FrameEmitter() { }
 bool FrameEmitter::init(const Rc<Loop> &loop, uint64_t frameInterval) {
 	_frameInterval = frameInterval;
 	_loop = loop;
+
+	_avgFrameInterval.reset(0);
+	_avgFrameTime.reset(0);
+
 	return true;
 }
 
 void FrameEmitter::invalidate() {
 	_valid = true;
-	for (auto &it : _frames) {
+	auto frames = _frames;
+	for (auto &it : frames) {
 		it->invalidate();
 	}
 	_frames.clear();
@@ -154,6 +159,7 @@ void FrameEmitter::setFrameSubmitted(gl::FrameHandle &frame) {
 	auto it = _frames.begin();
 	while (it != _frames.end()) {
 		if ((*it) == &frame) {
+			_framesPending.emplace_back(&frame);
 			it = _frames.erase(it);
 		} else {
 			++ it;
@@ -164,15 +170,6 @@ void FrameEmitter::setFrameSubmitted(gl::FrameHandle &frame) {
 	XL_PROFILE_BEGIN(onFrameSubmitted, "FrameEmitter::setFrameSubmitted", "onFrameSubmitted", 500);
 	onFrameSubmitted(frame);
 	XL_PROFILE_END(onFrameSubmitted)
-
-	XL_PROFILE_BEGIN(setReadyForSubmit, "FrameEmitter::setFrameSubmitted", "setReadyForSubmit", 500);
-	for (auto &it : _frames) {
-		if (!it->isReadyForSubmit()) {
-			it->setReadyForSubmit(true);
-			break;
-		}
-	}
-	XL_PROFILE_END(setReadyForSubmit)
 
 	++ _submitted;
 	XL_PROFILE_BEGIN(onFrameRequest, "FrameEmitter::setFrameSubmitted", "onFrameRequest", 500);
@@ -210,7 +207,32 @@ void FrameEmitter::onFrameEmitted(gl::FrameHandle &) { }
 
 void FrameEmitter::onFrameSubmitted(gl::FrameHandle &) { }
 
-void FrameEmitter::onFrameComplete(gl::FrameHandle &) { }
+void FrameEmitter::onFrameComplete(gl::FrameHandle &frame) {
+	_lastFrameTime = frame.getTimeEnd() - frame.getTimeStart();
+	_avgFrameTime.addValue(frame.getTimeEnd() - frame.getTimeStart());
+
+	auto it = _framesPending.begin();
+	while (it != _framesPending.end()) {
+		if ((*it) == &frame) {
+			it = _framesPending.erase(it);
+		} else {
+			++ it;
+		}
+	}
+
+	if (_framesPending.size() <= 1 && _frames.empty()) {
+		onFrameRequest(false);
+	}
+
+	if (_framesPending.empty()) {
+		for (auto &it : _frames) {
+			if (!it->isReadyForSubmit()) {
+				it->setReadyForSubmit(true);
+				break;
+			}
+		}
+	}
+}
 
 void FrameEmitter::onFrameTimeout(uint64_t order) {
 	if (order == _order) {
@@ -222,16 +244,16 @@ void FrameEmitter::onFrameTimeout(uint64_t order) {
 void FrameEmitter::onFrameRequest(bool timeout) {
 	if (canStartFrame()) {
 		auto next = platform::device::_clock();
-		if (_frame) {
-			XL_FRAME_EMITTER_LOG(timeout ? "FrameRequest [T]: " : "FrameRequest [S]: ", _frame, "   ",
-					next - _frame, " mks");
-		}
-		_frame = next;
 
 		if (_nextFrameRequest) {
 			scheduleFrameTimeout();
 			submitNextFrame(move(_nextFrameRequest));
 		} else if (!_nextFrameAcquired) {
+			if (_frame) {
+				XL_FRAME_EMITTER_LOG(timeout ? "FrameRequest [T]: " : "FrameRequest [S]: ", _frame, "   ",
+						next - _frame, " mks");
+			}
+			_frame = next;
 			_nextFrameAcquired = true;
 			scheduleFrameTimeout();
 			acquireNextFrame();
@@ -262,7 +284,7 @@ bool FrameEmitter::canStartFrame() const {
 	}
 
 	if (_frames.empty()) {
-		return true;
+		return _framesPending.size() <= 1;
 	}
 
 	for (auto &it : _frames) {
@@ -271,7 +293,7 @@ bool FrameEmitter::canStartFrame() const {
 		}
 	}
 
-	return true;
+	return _framesPending.size() <= 1;
 }
 
 void FrameEmitter::scheduleNextFrame(Rc<FrameRequest> &&req) {
@@ -282,13 +304,13 @@ void FrameEmitter::scheduleFrameTimeout() {
 	if (_valid && _frameInterval && _frameTimeoutPassed) {
 		_frameTimeoutPassed = false;
 		++ _order;
-		auto t = platform::device::_clock();
+		auto t = platform::device::_clock(platform::device::ClockType::Monotonic);
 		_loop->schedule([this, t, guard = Rc<FrameEmitter>(this), idx = _order] (Loop::Context &ctx) {
 			XL_FRAME_EMITTER_LOG("TimeoutPassed:    ", _frame, "   ", platform::device::_clock() - _frame, " (",
-					platform::device::_clock() - t, ") mks");
+					platform::device::_clock(platform::device::ClockType::Monotonic) - t, ") mks");
 			guard->onFrameTimeout(idx);
 			return true; // end spinning
-		}, _frameInterval, "FrameEmitter::scheduleFrameTimeout");
+		}, _frameInterval - config::FrameIntervalSafeOffset, "FrameEmitter::scheduleFrameTimeout");
 	}
 }
 
@@ -297,9 +319,14 @@ Rc<gl::FrameHandle> FrameEmitter::submitNextFrame(Rc<FrameRequest> &&req) {
 		return nullptr;
 	}
 
-	auto frame = makeFrame(move(req), _frames.empty());
+	auto frame = makeFrame(move(req), _frames.empty() && _framesPending.empty());
 	_nextFrameRequest = nullptr;
 	if (frame && frame->isValidFlag()) {
+		auto now = platform::device::_clock();
+		_lastFrameInterval = now - _lastSubmit;
+		_avgFrameInterval.addValue(_lastFrameInterval);
+		_lastSubmit = now;
+
 		frame->setCompleteCallback([this] (FrameHandle &frame) {
 			onFrameComplete(frame);
 		});
@@ -313,7 +340,12 @@ Rc<gl::FrameHandle> FrameEmitter::submitNextFrame(Rc<FrameRequest> &&req) {
 			onFrameEmitted(*frame);
 			frame->update(true);
 			if (frame->isValidFlag()) {
-				_frames.push_back(move(frame));
+				if (_frames.empty() && _framesPending.empty() && !frame->isReadyForSubmit()) {
+					_frames.push_back(frame);
+					frame->setReadyForSubmit(true);
+				} else {
+					_frames.push_back(frame);
+				}
 			}
 		}, this, true);
 		return frame;

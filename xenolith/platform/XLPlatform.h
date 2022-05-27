@@ -24,8 +24,6 @@ THE SOFTWARE.
 #define COMPONENTS_XENOLITH_PLATFORM_COMMON_XLPLATFORM_H_
 
 #include "XLDefine.h"
-#include "SPCommonPlatform.h"
-
 
 namespace stappler::xenolith {
 
@@ -90,7 +88,7 @@ namespace statusbar {
 	void _setEnabled(bool enabled);
 	bool _isEnabled();
 	void _setColor(_StatusBarColor color);
-	float _getHeight(const Size &screenSize, bool isTablet);
+	float _getHeight(const Size2 &screenSize, bool isTablet);
 }
 
 namespace graphic {

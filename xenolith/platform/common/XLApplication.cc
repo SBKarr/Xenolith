@@ -25,9 +25,6 @@ THE SOFTWARE.
 #include "XLDirector.h"
 #include "XLEvent.h"
 #include "XLEventHandler.h"
-#include "XLNetworkController.h"
-#include "XLAssetLibrary.h"
-#include "XLFontFace.h"
 
 namespace stappler::log {
 
@@ -95,7 +92,7 @@ Application *Application::getInstance() {
 	return s_application;
 }
 
-int Application::parseOptionString(data::Value &ret, const StringView &str, int argc, const char * argv[]) {
+int Application::parseOptionString(Value &ret, const StringView &str, int argc, const char * argv[]) {
 	if (str.starts_with("w=") == 0) {
 		auto s = str.sub(2).readInteger().get(0);
 		if (s > 0) {
@@ -119,6 +116,8 @@ int Application::parseOptionString(data::Value &ret, const StringView &str, int 
 		ret.setString(argv[0], "package");
 	} else if (str == "fixed") {
 		ret.setBool(true, "fixed");
+	} else if (str == "renderdoc") {
+		ret.setBool(true, "renderdoc");
 	}
 	return 1;
 }
@@ -154,18 +153,20 @@ Application::Application() : _appLog(&log::__xenolith_log) {
 
 	s_application = this;
 
+#if MODULE_XNOLITH_STORAGE
 	db::setStorageRoot(&_storageRoot);
 
 	_networkController = Rc<network::Controller>::alloc(this, "Root");
 
-	auto libpath = filesystem::writablePath("library");
+	auto libpath = filesystem::writablePath<Interface>("library");
 	filesystem::mkdir(libpath);
 
-	_assetLibrary = Rc<storage::AssetLibrary>::create(this, data::Value({
+	_assetLibrary = Rc<storage::AssetLibrary>::create(this, Value({
 		pair("driver", data::Value("sqlite")),
 		pair("dbname", data::Value(toString(libpath, "/assets.v2.db"))),
 		pair("serverName", data::Value("AssetStorage"))
 	}));
+#endif
 }
 
 Application::~Application() {
@@ -208,9 +209,11 @@ bool Application::onFinishLaunching() {
 	return true;
 }
 
+#if MODULE_XENOLITH_STORAGE
 bool Application::onBuildStorage(storage::Server::Builder &builder) {
 	return true;
 }
+#endif
 
 bool Application::onMainLoop() {
 	return false;
@@ -220,13 +223,16 @@ void Application::onMemoryWarning() {
 
 }
 
-int Application::run(data::Value &&data) {
+int Application::run(Value &&data) {
 	memory::pool::push(_updatePool);
+
+#if MODULE_XENOLITH_STORAGE
 	_dbParams = data::Value({
 		pair("driver", data::Value("sqlite")),
 		pair("dbname", data::Value(filesystem::cachesPath("root.sqlite"))),
 		pair("serverName", data::Value("RootStorage"))
 	});
+#endif
 
 	for (auto &it : data.asDict()) {
 		if (it.first == "width") {
@@ -259,9 +265,12 @@ int Application::run(data::Value &&data) {
 			_data.isPhone = it.second.getBool();
 		} else if (it.first == "fixed") {
 			_data.isFixed = it.second.getBool();
+		} else if (it.first == "renderdoc") {
+			_data.renderdoc = true;
 		}
 	}
 
+#if MODULE_XENOLITH_STORAGE
 	_storageServer = Rc<storage::Server>::create(this, _dbParams, [&] (storage::Server::Builder &builder) {
 		return onBuildStorage(builder);
 	});
@@ -271,6 +280,7 @@ int Application::run(data::Value &&data) {
 		memory::pool::pop();
 		return 1;
 	}
+#endif
 
 	if (!onFinishLaunching()) {
 		log::text("Application", "Fail to launch application: onFinishLaunching failed");
@@ -285,7 +295,14 @@ int Application::run(data::Value &&data) {
 	_glLoop->end();
 	_glLoop = nullptr;
 
-	_instance = nullptr;
+	if (_queue) {
+		_queue->cancelWorkers();
+		_queue = nullptr;
+	}
+
+	if (_instance) {
+		_instance = nullptr;
+	}
 
 	memory::pool::pop();
     return ret ? 0 : -1;
@@ -326,7 +343,7 @@ void Application::updateQueue() {
 }
 
 void Application::registerDeviceToken(const uint8_t *data, size_t len) {
-    registerDeviceToken(base16::encode(CoderSource(data, len)));
+    registerDeviceToken(base16::encode<Interface>(CoderSource(data, len)));
 }
 
 void Application::registerDeviceToken(const String &data) {
@@ -368,18 +385,24 @@ std::pair<uint64_t, uint64_t> Application::getTotalDiskSpace() {
 }
 
 uint64_t Application::getApplicationDiskSpace() {
-	auto path = filesystem::writablePath(_data.bundleName);
+	auto path = filesystem::writablePath<Interface>(_data.bundleName);
 	uint64_t size = 0;
 	filesystem::ftw(path, [&size] (const StringView &path, bool isFile) {
 		if (isFile) {
-			size += filesystem::size(path);
+			filesystem::Stat stat;
+			if (filesystem::stat(path, stat)) {
+				size += stat.size;
+			}
 		}
 	});
 
-	path = filesystem::cachesPath(_data.bundleName);
+	path = filesystem::cachesPath<Interface>(_data.bundleName);
 	filesystem::ftw(path, [&size] (const StringView &path, bool isFile) {
 		if (isFile) {
-			size += filesystem::size(path);
+			filesystem::Stat stat;
+			if (filesystem::stat(path, stat)) {
+				size += stat.size;
+			}
 		}
 	});
 
@@ -418,11 +441,11 @@ void Application::notification(const String &title, const String &text) {
 }
 
 void Application::setLaunchUrl(const StringView &url) {
-    _data.launchUrl = url.str();
+    _data.launchUrl = url.str<Interface>();
 }
 
 void Application::processLaunchUrl(const StringView &url) {
-	_data.launchUrl = url.str();
+	_data.launchUrl = url.str<Interface>();
     onLaunchUrl(this, url);
 }
 

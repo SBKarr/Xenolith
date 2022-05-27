@@ -24,6 +24,7 @@
 #define XENOLITH_FEATURES_FONT_XLFONTFORMATTER_H_
 
 #include "XLDefine.h"
+#include "XLFontStyle.h"
 
 typedef struct _HyphenDict HyphenDict;
 

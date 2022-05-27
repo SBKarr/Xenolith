@@ -23,29 +23,13 @@ THE SOFTWARE.
 #include "XLDefine.h"
 
 #include "XLInputDispatcher.cc"
-
 #include "XLEvent.cc"
 #include "XLEventHeader.cc"
 #include "XLEventHandler.cc"
-
 #include "XLDirector.cc"
 #include "XLResourceCache.cc"
-
 #include "XLVertexArray.cc"
-
 #include "XLScheduler.cc"
-
-#include "XLSIMD.cc"
-
-#include "XLColor.cc"
-#include "XLVec2.cc"
-#include "XLVec3.cc"
-#include "XLVec4.cc"
-#include "XLGeometry.cc"
-#include "XLQuaternion.cc"
-#include "XLMat4.cc"
-
-#include "XLFontStyle.cc"
 
 namespace stappler::xenolith {
 

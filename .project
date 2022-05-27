@@ -3,7 +3,6 @@
 	<name>Xenolith</name>
 	<comment></comment>
 	<projects>
-		<project>libstappler</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>
@@ -25,8 +24,15 @@
 		<nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature>
 		<nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
 	</natures>
-	<linkedResources>
-	</linkedResources>
-	<variableList>
-	</variableList>
+	<filteredResources>
+		<filter>
+			<id>1651560596143</id>
+			<name>libstappler/libs</name>
+			<type>10</type>
+			<matcher>
+				<id>org.eclipse.ui.ide.multiFilter</id>
+				<arguments>1.0-name-matches-false-false-src</arguments>
+			</matcher>
+		</filter>
+	</filteredResources>
 </projectDescription>

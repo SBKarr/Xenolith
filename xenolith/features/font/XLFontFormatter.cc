@@ -22,7 +22,7 @@
 
 #include "XLFontFormatter.h"
 #include "XLFontLibrary.h"
-#include "hyphen.h"
+#include "hyphen/hyphen.h"
 
 namespace stappler::xenolith::font {
 
@@ -272,7 +272,8 @@ bool Formatter::pushChar(char16_t ch) {
 		if (ch == (char16_t)0x00AD) {
 			charDef = output->source->getChar(primaryFontId, '-', faceId);
 		} else {
-			log::format("RichTextFormatter", "%s: Attempted to use undefined character: %d '%s'", output->source->getFontName(primaryFontId).data(), ch, string::toUtf8(ch).c_str());
+			log::format("RichTextFormatter", "%s: Attempted to use undefined character: %d '%s'",
+					output->source->getFontName(primaryFontId).data(), ch, string::toUtf8<Interface>(ch).c_str());
 			return true;
 		}
 	}
@@ -669,8 +670,15 @@ bool Formatter::read(const FontParameters &f, const TextParameters &s, const cha
 	primaryFontId = FontLayoutIdInvalid;
 
 	primary = output->source->getLayout(f, fontScale);
+	if (primary.get() == 0) {
+		return false;
+	}
+
 	if (f.fontVariant == FontVariant::SmallCaps) {
 		secondary = output->source->getLayout(f.getSmallCaps(), fontScale);
+		if (secondary.get() == 0) {
+			return false;
+		}
 
 		FontCharString primaryStr;
 		FontCharString secondaryStr;
@@ -1281,7 +1289,7 @@ bool HyphenMap::init() {
 }
 
 void HyphenMap::addHyphenDict(CharGroupId id, FilePath file) {
-	auto data = filesystem::readTextFile(file.get());
+	auto data = filesystem::readTextFile<Interface>(file.get());
 	if (!data.empty()) {
 		auto dict = hnj_hyphen_load_data(data.data(), data.size());
 		if (dict) {
@@ -1364,10 +1372,10 @@ void HyphenMap::purgeHyphenDicts() {
 
 String HyphenMap::convertWord(HyphenDict *dict, const char16_t *ptr, size_t len) {
 	if (dict->utf8) {
-		return string::toUtf8(WideStringView(ptr, len));
+		return string::toUtf8<Interface>(WideStringView(ptr, len));
 	} else {
 		if (strcmp("KOI8-R", dict->cset) == 0) {
-			return string::toKoi8r(WideStringView(ptr, len));
+			return string::toKoi8r<Interface>(WideStringView(ptr, len));
 		}
 
 		return String();
@@ -1381,7 +1389,7 @@ static Rect getLabelLineStartRect(const FormatSpec &f, uint16_t lineId, float de
 		const CharSpec & firstChar = f.chars.at(std::max(line.start, c));
 		const CharSpec & lastChar = f.chars.at(line.start + line.count - 1);
 		rect.origin = Vec2((firstChar.pos) / density, (line.pos) / density - line.height / density);
-		rect.size = Size((lastChar.pos + lastChar.advance - firstChar.pos) / density, line.height / density);
+		rect.size = Size2((lastChar.pos + lastChar.advance - firstChar.pos) / density, line.height / density);
 	}
 
 	return rect;
@@ -1394,7 +1402,7 @@ static Rect getLabelLineEndRect(const FormatSpec &f, uint16_t lineId, float dens
 		const CharSpec & firstChar = f.chars.at(line.start);
 		const CharSpec & lastChar = f.chars.at(std::min(line.start + line.count - 1, c));
 		rect.origin = Vec2((firstChar.pos) / density, (line.pos) / density - line.height / density);
-		rect.size = Size((lastChar.pos + lastChar.advance - firstChar.pos) / density, line.height / density);
+		rect.size = Size2((lastChar.pos + lastChar.advance - firstChar.pos) / density, line.height / density);
 	}
 	return rect;
 }
@@ -1405,7 +1413,7 @@ static Rect getCharsRect(const FormatSpec &f, uint32_t lineId, uint32_t firstCha
 	const CharSpec & firstChar = f.chars.at(firstCharId);
 	const CharSpec & lastChar = f.chars.at(lastCharId);
 	rect.origin = Vec2((firstChar.pos) / density, (line.pos) / density - line.height / density);
-	rect.size = Size((lastChar.pos + lastChar.advance - firstChar.pos) / density, line.height / density);
+	rect.size = Size2((lastChar.pos + lastChar.advance - firstChar.pos) / density, line.height / density);
 	return rect;
 }
 
@@ -1422,7 +1430,7 @@ Rect FormatSpec::getLineRect(const LineSpec &line, float density, const Vec2 &or
 		const CharSpec & firstChar = chars.at(line.start);
 		const CharSpec & lastChar = chars.at(line.start + line.count - 1);
 		rect.origin = Vec2((firstChar.pos) / density + origin.x, (line.pos) / density - line.height / density + origin.y);
-		rect.size = Size((lastChar.pos + lastChar.advance - firstChar.pos) / density, line.height / density);
+		rect.size = Size2((lastChar.pos + lastChar.advance - firstChar.pos) / density, line.height / density);
 	}
 	return rect;
 }

@@ -43,7 +43,7 @@ public:
 	void setQuality(float);
 	float getQuality() const;
 
-	Rc<VectorCanvasResult> draw(Rc<VectorImageData> &&, Size targetSize);
+	Rc<VectorCanvasResult> draw(Rc<VectorImageData> &&, Size2 targetSize);
 
 protected:
 	struct Data;

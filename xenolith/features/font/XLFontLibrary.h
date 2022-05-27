@@ -45,16 +45,16 @@ public:
 		Function<Bytes()> fontCallback;
 
 		FontQuery(StringView name, BytesView data)
-		: name(name.str()), fontExternalData(data) { }
+		: name(name.str<Interface>()), fontExternalData(data) { }
 
 		FontQuery(StringView name, Bytes && data)
-		: name(name.str()), fontMemoryData(move(data)) { }
+		: name(name.str<Interface>()), fontMemoryData(move(data)) { }
 
 		FontQuery(StringView name, FilePath data)
-		: name(name.str()), fontFilePath(data.get().str()) { }
+		: name(name.str<Interface>()), fontFilePath(data.get().str<Interface>()) { }
 
 		FontQuery(StringView name, Function<Bytes()> &&cb)
-		: name(name.str()), fontCallback(move(cb)) { }
+		: name(name.str<Interface>()), fontCallback(move(cb)) { }
 	};
 
 	struct FamilyQuery {
@@ -138,7 +138,7 @@ public:
 			if (persistent) {
 				view = v;
 			} else {
-				bytes = v.bytes();
+				bytes = v.bytes<Interface>();
 				view = bytes;
 			}
 		}

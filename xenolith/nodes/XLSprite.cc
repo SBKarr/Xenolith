@@ -28,9 +28,10 @@
 namespace stappler::xenolith {
 
 Sprite::Sprite() {
-	_materialInfo.blend = BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
+	_blendInfo = BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
 			gl::BlendFactor::One, gl::BlendFactor::Zero, gl::BlendOp::Add);
-	_materialInfo.depth = DepthInfo(false, true, gl::CompareOp::Less);
+	_materialInfo.setBlendInfo(_blendInfo);
+	_materialInfo.setDepthInfo(DepthInfo(false, true, gl::CompareOp::Less));
 }
 
 bool Sprite::init() {
@@ -42,7 +43,7 @@ bool Sprite::init(StringView textureName) {
 		return false;
 	}
 
-	_textureName = textureName.str();
+	_textureName = textureName.str<Interface>();
 	initVertexes();
 	return true;
 }
@@ -62,7 +63,7 @@ bool Sprite::init(Rc<Texture> &&texture) {
 
 void Sprite::setTexture(StringView textureName) {
 	if (!_running) {
-		_textureName = textureName.str();
+		_textureName = textureName.str<Interface>();
 	} else {
 		if (textureName.empty()) {
 			if (_texture) {
@@ -86,13 +87,13 @@ void Sprite::setTexture(Rc<Texture> &&tex) {
 			_materialDirty = true;
 		} else if (_texture->getName() != tex->getName()) {
 			_texture = move(tex);
-			_textureName = _texture->getName().str();
+			_textureName = _texture->getName().str<Interface>();
 			_materialDirty = true;
 		}
 	} else {
 		if (tex) {
 			_texture = move(tex);
-			_textureName = _texture->getName().str();
+			_textureName = _texture->getName().str<Interface>();
 			_materialDirty = true;
 		}
 	}
@@ -108,14 +109,14 @@ void Sprite::setTextureRect(const Rect &rect) {
 void Sprite::draw(RenderFrameInfo &frame, NodeFlags flags) {
 	if (_texture) {
 		if (_autofit != Autofit::None) {
-			auto size = _texture->getSize();
+			auto size = _texture->getExtent();
 			if (_targetTextureSize != size) {
 				_targetTextureSize = size;
 				_vertexesDirty = true;
 			}
 		}
 
-		if (_vertexesDirty) {
+		if (checkVertexDirty()) {
 			updateVertexes();
 			_vertexesDirty = false;
 		}
@@ -170,15 +171,16 @@ void Sprite::setColorMode(const ColorMode &mode) {
 }
 
 void Sprite::setBlendInfo(const BlendInfo &info) {
-	if (_materialInfo.blend != info) {
-		_materialInfo.blend = info;
+	if (_blendInfo != info) {
+		_blendInfo = info;
+		_materialInfo.setBlendInfo(info);
 		_materialDirty = true;
 	}
 }
 
 void Sprite::setLineWidth(float value) {
-	if (_materialInfo.lineWidth != value) {
-		_materialInfo.lineWidth = value;
+	if (_materialInfo.getLineWidth() != value) {
+		_materialInfo.setLineWidth(value);
 		_materialDirty = true;
 	}
 }
@@ -220,10 +222,10 @@ void Sprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 		newMV.m[13] = floorf(modelTransform.m[13]);
 		newMV.m[14] = floorf(modelTransform.m[14]);
 
-		frame.commands->pushVertexArray(_vertexes.pop(),
+		frame.commands->pushVertexArray(_vertexes.dup(),
 				frame.viewProjectionStack.back() * newMV, frame.zPath, _materialId, _realRenderingLevel);
 	} else {
-		frame.commands->pushVertexArray(_vertexes.pop(),
+		frame.commands->pushVertexArray(_vertexes.dup(),
 				frame.viewProjectionStack.back() * modelTransform, frame.zPath, _materialId, _realRenderingLevel);
 	}
 }
@@ -233,7 +235,7 @@ MaterialInfo Sprite::getMaterialInfo() const {
 	ret.type = gl::MaterialType::Basic2D;
 	ret.images[0] = _texture->getIndex();
 	ret.colorModes[0] = _colorMode;
-	ret.pipeline = _materialInfo.normalize();
+	ret.pipeline = _materialInfo;
 	return ret;
 }
 
@@ -267,15 +269,16 @@ void Sprite::initVertexes() {
 void Sprite::updateVertexes() {
 	_vertexes.clear();
 
-	Size texSize = _texture->getSize();
+	auto texExtent = _texture->getExtent();
+	auto texSize = Size2(texExtent.width, texExtent.height);
 
-	texSize = Size(texSize.width * _textureRect.size.width, texSize.height * _textureRect.size.height);
+	texSize = Size2(texSize.width * _textureRect.size.width, texSize.height * _textureRect.size.height);
 
 	Rect contentRect;
 	Rect textureRect;
 
-	if (!getAutofitParams(_autofit, _autofitPos, _contentSize, texSize, contentRect, textureRect)) {
-		texSize = Size(1.0f, 1.0f);
+	if (!getAutofitParams(_autofit, _autofitPos, _contentSize, Size2(texSize.width, texSize.height), contentRect, textureRect)) {
+		texSize = Size2(1.0f, 1.0f);
 		contentRect = Rect(0.0f, 0.0f, _contentSize.width, _contentSize.height);
 		textureRect = _textureRect;
 	} else {
@@ -317,44 +320,49 @@ void Sprite::updateBlendAndDepth() {
 	}
 
 	if (shouldBlendColors) {
-		if (!_materialInfo.blend.enabled) {
-			_materialInfo.blend.enabled = 1;
+		if (!_blendInfo.enabled) {
+			_blendInfo.enabled = 1;
 			_materialDirty = true;
 		}
 	} else {
-		if (_materialInfo.blend.enabled) {
-			_materialInfo.blend.enabled = 0;
+		if (_blendInfo.enabled) {
+			_blendInfo.enabled = 0;
 			_materialDirty = true;
 		}
 	}
+
+	_materialInfo.setBlendInfo(_blendInfo);
+
+	auto depth = _materialInfo.getDepthInfo();
 	if (shouldWriteDepth) {
-		if (!_materialInfo.depth.writeEnabled) {
-			_materialInfo.depth.writeEnabled = 1;
+		if (!depth.writeEnabled) {
+			depth.writeEnabled = 1;
 			_materialDirty = true;
 		}
 	} else {
-		if (_materialInfo.depth.writeEnabled) {
-			_materialInfo.depth.writeEnabled = 0;
+		if (depth.writeEnabled) {
+			depth.writeEnabled = 0;
 			_materialDirty = true;
 		}
 	}
 	if (_realRenderingLevel == RenderingLevel::Surface) {
-		if (_materialInfo.depth.compare != toInt(gl::CompareOp::LessOrEqual)) {
-			_materialInfo.depth.compare = toInt(gl::CompareOp::LessOrEqual);
+		if (depth.compare != toInt(gl::CompareOp::LessOrEqual)) {
+			depth.compare = toInt(gl::CompareOp::LessOrEqual);
 			_materialDirty = true;
 		}
 	} else {
-		if (_materialInfo.depth.compare != toInt(gl::CompareOp::Less)) {
-			_materialInfo.depth.compare = toInt(gl::CompareOp::Less);
+		if (depth.compare != toInt(gl::CompareOp::Less)) {
+			depth.compare = toInt(gl::CompareOp::Less);
 			_materialDirty = true;
 		}
 	}
+	_materialInfo.setDepthInfo(depth);
 }
 
 RenderingLevel Sprite::getRealRenderingLevel() const {
 	auto level = _renderingLevel;
 	if (level == RenderingLevel::Default) {
-		if (_displayedColor.a < 1.0f || !_texture || _materialInfo.lineWidth != 0.0f) {
+		if (_displayedColor.a < 1.0f || !_texture || _materialInfo.getLineWidth() != 0.0f) {
 			level = RenderingLevel::Transparent;
 		} else if (_colorMode.getMode() == ColorMode::Solid) {
 			if (_texture->hasAlpha()) {
@@ -387,7 +395,11 @@ RenderingLevel Sprite::getRealRenderingLevel() const {
 	return level;
 }
 
-bool Sprite::getAutofitParams(Autofit autofit, const Vec2 &autofitPos, const Size &contentSize, const Size &texSize,
+bool Sprite::checkVertexDirty() const {
+	return _vertexesDirty;
+}
+
+bool Sprite::getAutofitParams(Autofit autofit, const Vec2 &autofitPos, const Size2 &contentSize, const Size2 &texSize,
 		Rect &contentRect, Rect &textureRect) {
 
 	contentRect = Rect(Vec2::ZERO, contentSize);
@@ -406,7 +418,7 @@ bool Sprite::getAutofitParams(Autofit autofit, const Vec2 &autofitPos, const Siz
 	contentRect = Rect(Vec2::ZERO, contentSize);
 	textureRect = Rect(0, 0, texSize.width, texSize.height);
 
-	auto texSizeInView = Size(texSize.width / scale, texSize.height / scale);
+	auto texSizeInView = Size2(texSize.width / scale, texSize.height / scale);
 	if (texSizeInView.width < contentSize.width) {
 		contentRect.size.width -= (contentSize.width - texSizeInView.width);
 		contentRect.origin.x = (contentSize.width - texSizeInView.width) * autofitPos.x;

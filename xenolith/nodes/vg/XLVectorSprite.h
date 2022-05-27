@@ -41,9 +41,9 @@ public:
 	VectorSprite();
 
 	virtual bool init(Rc<VectorImage> &&);
-	virtual bool init(Size, StringView);
-	virtual bool init(Size, VectorPath &&);
-	virtual bool init(Size);
+	virtual bool init(Size2, StringView);
+	virtual bool init(Size2, VectorPath &&);
+	virtual bool init(Size2);
 	virtual bool init(StringView);
 	virtual bool init(BytesView);
 	virtual bool init(FilePath);
@@ -78,7 +78,7 @@ protected:
 
 	bool _async = false;
 	uint64_t _asyncJobId = 0;
-	Size _targetSize;
+	Size2 _targetSize;
 	Mat4 _targetTransform;
 	Rc<VectorImage> _image;
 	float _quality = 0.75f;

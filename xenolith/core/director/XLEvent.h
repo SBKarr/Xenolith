@@ -85,24 +85,24 @@ public:
 	inline StringView getStringValue() const {
 		return (_type == Type::String)?(*_value.strValue):ZERO_STRING;
 	}
-	inline const data::Value &getDataValue() const {
-		return (_type == Type::Data)?(*_value.dataValue):data::Value::Null;
+	inline const Value &getDataValue() const {
+		return (_type == Type::Data)?(*_value.dataValue):Value::Null;
 	}
 
 protected:
-	union Value {
+	union EventValue {
 		int64_t intValue;
 		double floatValue;
 		bool boolValue;
 		Ref *objValue;
 		const String *strValue;
-		const data::Value * dataValue;
+		const Value * dataValue;
 	};
 
-	Event(const EventHeader &header, Ref *object, Value val, Type type);
+	Event(const EventHeader &header, Ref *object, EventValue val, Type type);
 	Event(const EventHeader &header, Ref *object);
 
-	static void send(const EventHeader &header, Ref *object, Value val, Type type);
+	static void send(const EventHeader &header, Ref *object, EventValue val, Type type);
 	static void send(const EventHeader &header, Ref *object, int64_t value);
 	static void send(const EventHeader &header, Ref *object, double value);
 	static void send(const EventHeader &header, Ref *object, bool value);
@@ -110,7 +110,7 @@ protected:
 	static void send(const EventHeader &header, Ref *object, const char *value);
 	static void send(const EventHeader &header, Ref *object, const String &value);
 	static void send(const EventHeader &header, Ref *object, const StringView &value);
-	static void send(const EventHeader &header, Ref *object, const data::Value &value);
+	static void send(const EventHeader &header, Ref *object, const Value &value);
 	static void send(const EventHeader &header, Ref *object);
 
 protected:
@@ -119,7 +119,7 @@ protected:
 	const EventHeader &_header;
 	Type _type = Type::None;
 	Ref *_object = nullptr;
-	Value _value;
+	EventValue _value;
 
 	friend class EventHeader;
 

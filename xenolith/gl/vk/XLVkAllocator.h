@@ -55,6 +55,7 @@ class Allocator : public Ref {
 public:
 	static constexpr uint64_t PageSize = 8_MiB;
 	static constexpr uint64_t MaxIndex = 20; // Largest block
+	static constexpr uint64_t PreservePages = 20;
 
 	enum MemHeapType {
 		HostLocal,
@@ -94,8 +95,8 @@ public:
 		VkMemoryType type;
 		uint64_t min = 2; // in PageSize
 		uint64_t last = 0; // largest used index into free
-		uint64_t max = 20; // Pages to preserve, 0 - do not preserve
-		uint64_t current = 20; // current allocated size in BOUNDARY_SIZE
+		uint64_t max = PreservePages; // Pages to preserve, 0 - do not preserve
+		uint64_t current = PreservePages; // current allocated size in BOUNDARY_SIZE
 		std::array<Vector<MemNode>, MaxIndex> buf;
 
 		bool isDeviceLocal() const { return (type.propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0; }

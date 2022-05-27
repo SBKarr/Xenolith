@@ -48,10 +48,10 @@ bool FontFaceData::init(StringView name, BytesView data, bool persistent) {
 	if (persistent) {
 		_view = data;
 		_persistent = true;
-		_name = name.str();
+		_name = name.str<Interface>();
 		return true;
 	} else {
-		return init(name, data.bytes());
+		return init(name, data.bytes<Interface>());
 	}
 }
 
@@ -59,7 +59,7 @@ bool FontFaceData::init(StringView name, Bytes &&data) {
 	_persistent = false;
 	_data = move(data);
 	_view = _data;
-	_name = name.str();
+	_name = name.str<Interface>();
 	return true;
 }
 
@@ -67,7 +67,7 @@ bool FontFaceData::init(StringView name, Function<Bytes()> &&cb) {
 	_persistent = true;
 	_data = cb();
 	_view = _data;
-	_name = name.str();
+	_name = name.str<Interface>();
 	return true;
 }
 
@@ -97,7 +97,7 @@ bool FontFaceObject::init(StringView name, const Rc<FontFaceData> &data, FT_Face
 	_metrics.underlinePosition = face->underline_position >> 6;
 	_metrics.underlineThickness = face->underline_thickness >> 6;
 
-	_name = name.str();
+	_name = name.str<Interface>();
 	_id = id;
 	_data = data;
 	_size = fontSize;
@@ -128,7 +128,7 @@ bool FontFaceObject::acquireTexture(char16_t theChar, const Callback<void(uint8_
 		}
 	} else {
 		if (!string::isspace(theChar) && theChar != char16_t(0x0A)) {
-			log::format("Font", "error: no bitmap for (%d) '%s'", theChar, string::toUtf8(theChar).data());
+			log::format("Font", "error: no bitmap for (%d) '%s'", theChar, string::toUtf8<Interface>(theChar).data());
 		}
 	}
 	return false;

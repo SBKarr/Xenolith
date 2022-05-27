@@ -47,12 +47,12 @@ public:
 	using Category = int;
 	using EventID = int;
 
-	static Category getCategoryForName(const String &catName);
+	static Category getCategoryForName(StringView catName);
 public:
 
 	EventHeader() = delete;
-	EventHeader(const String &catName, const String &eventName);
-	EventHeader(Category cat, const String &eventName);
+	EventHeader(StringView catName, StringView eventName);
+	EventHeader(Category cat, StringView eventName);
 	~EventHeader();
 
 	EventHeader(const EventHeader &other);
@@ -63,7 +63,7 @@ public:
 
 	Category getCategory() const;
 	EventID getEventID() const;
-	const String &getName() const;
+	StringView getName() const;
 
 	bool isInCategory(Category cat) const;
 
@@ -84,12 +84,12 @@ protected:
 	void send(Ref *object, const char *value) const;
 	void send(Ref *object, const String &value) const;
 	void send(Ref *object, const StringView &value) const;
-	void send(Ref *object, const data::Value &value) const;
+	void send(Ref *object, const Value &value) const;
 	void send(Ref *object = nullptr) const;
 
 	Category _category = 0;
 	EventID _id = 0;
-	String _name;
+	StringView _name;
 };
 
 }

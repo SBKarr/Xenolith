@@ -49,11 +49,11 @@ struct PresentationData {
 
 	uint64_t getLastUpdateInterval() {
 		auto tmp = lastUpdate;
-		lastUpdate = platform::device::_clock();
+		lastUpdate = platform::device::_clock(platform::device::ClockType::Monotonic);
 		return lastUpdate - tmp;
 	}
 
-	uint64_t now = platform::device::_clock();
+	uint64_t now = platform::device::_clock(platform::device::ClockType::Monotonic);
 	uint64_t last = 0;
 	uint64_t updateInterval = config::PresentationSchedulerInterval;
 	uint64_t lastUpdate = 0;
@@ -66,9 +66,10 @@ struct PresentationData {
 
 Loop::Loop(Application *app, const Rc<Device> &dev)
 : _application(app), _device(dev) {
-	_queue = Rc<thread::TaskQueue>::alloc("Gl::Loop::Queue");
-	_queue->spawnWorkers(thread::TaskQueue::Flags::Waitable | thread::TaskQueue::Flags::Cancelable, LoopThreadId,
+	_queue = Rc<TaskQueue>::alloc("Gl::Loop::Queue");
+	_queue->spawnWorkers(TaskQueue::Flags::Waitable | TaskQueue::Flags::Cancelable, LoopThreadId,
 			math::clamp(uint16_t(std::thread::hardware_concurrency()), uint16_t(4), uint16_t(16)));
+	//_queue->spawnWorkers(LoopThreadId, math::clamp(uint16_t(std::thread::hardware_concurrency()), uint16_t(4), uint16_t(16)));
 }
 
 Loop::~Loop() {
@@ -103,13 +104,13 @@ bool Loop::worker() {
 
 	_running.store(true);
 
-	_queue->lock();
+	_pendingEventMutex.lock();
 	for (auto &it : _pendingEvents) {
 		_internal->events->emplace_back(move(it));
 	}
 
 	_pendingEvents.clear();
-	_queue->unlock();
+	_pendingEventMutex.unlock();
 
 	_device->onLoopStarted(*this);
 
@@ -236,7 +237,7 @@ bool Loop::worker() {
 	_queue->lock();
 
 	_device->onLoopEnded(*this);
-	_device->waitIdle();
+	_device->waitIdle(*this);
 
 	_running.store(false);
 	_queue->unlock();
@@ -245,7 +246,7 @@ bool Loop::worker() {
 
 	_queue->lock();
 	memory::pool::push(_pool);
-	_device->end(*_queue);
+	_device->end(*this, *_queue);
 	memory::pool::pop();
 	_queue->unlock();
 
@@ -259,6 +260,10 @@ bool Loop::worker() {
 	_internal = nullptr;
 	_queue->unlock();
 
+	_pendingEventMutex.lock();
+	_pendingEvents.clear();
+	_pendingEventMutex.unlock();
+
 	_queue->cancelWorkers();
 
 	memory::pool::destroy(_pool);
@@ -267,19 +272,19 @@ bool Loop::worker() {
 	return false;
 }
 
-void Loop::pushEvent(EventName event, Rc<Ref> && data, data::Value &&value, Function<void(bool)> &&cb) {
+void Loop::pushEvent(EventName event, Rc<Ref> && data, Value &&value, Function<void(bool)> &&cb) {
 	if (_running.load()) {
 		performOnThread([this, event, data = move(data), value = move(value), cb = move(cb)] () mutable {
 			_internal->events->emplace_back(event, move(data), move(value), move(cb));
 		});
 	} else {
-		_queue->lock();
+		_pendingEventMutex.lock();
 		_pendingEvents.emplace_back(event, move(data), move(value), move(cb));
-		_queue->unlock();
+		_pendingEventMutex.unlock();
 	}
 }
 
-void Loop::pushContextEvent(EventName event, Rc<Ref> && ref, data::Value && data, Function<void(bool)> &&cb) {
+void Loop::pushContextEvent(EventName event, Rc<Ref> && ref, Value && data, Function<void(bool)> &&cb) {
 	if (std::this_thread::get_id() == _thread.get_id() && _currentContext) {
 		for (auto &it : *_currentContext->events) {
 			if (it.event == event && it.data == ref) {
@@ -323,7 +328,7 @@ void Loop::begin() {
 	_device->begin(_application, *_queue);
 
 	// then start loop itself
-	_thread = StdThread(thread::ThreadHandlerInterface::workerThread, this, nullptr);
+	_thread = std::thread(Loop::workerThread, this, nullptr);
 }
 
 void Loop::compileRenderQueue(const Rc<RenderQueue> &req, Function<void(bool)> &&complete) {
@@ -335,11 +340,11 @@ void Loop::compileImage(const Rc<DynamicImage> &image, Function<void(bool)> &&co
 }
 
 void Loop::runRenderQueue(Rc<FrameRequest> &&req, uint64_t gen, Function<void(bool)> &&complete) {
-	pushEvent(EventName::RunRenderQueue, move(req), data::Value(gen), move(complete));
+	pushEvent(EventName::RunRenderQueue, move(req), Value(gen), move(complete));
 }
 
 void Loop::end(bool success) {
-	pushEvent(EventName::Exit, nullptr, data::Value(success));
+	pushEvent(EventName::Exit, nullptr, Value(success));
 	_thread.join();
 }
 
@@ -376,12 +381,12 @@ bool Loop::pollEvents(PresentationData &data) {
 		_queue->update(&data.tasks);
 		XL_PROFILE_END(queue)
 
-		data.now = platform::device::_clock();
+		data.now = platform::device::_clock(platform::device::ClockType::Monotonic);
 		if (data.now - data.last > data.updateInterval) {
 			timerPassed = true;
 		}
 	} else {
-		data.now = platform::device::_clock();
+		data.now = platform::device::_clock(platform::device::ClockType::Monotonic);
 		if (data.now - data.last > data.updateInterval) {
 			timerPassed = true;
 		} else {
@@ -391,7 +396,7 @@ bool Loop::pollEvents(PresentationData &data) {
 				_queue->wait(TimeInterval::microseconds(t));
 			} else {
 				if (!_queue->wait(TimeInterval::microseconds(data.updateInterval - (data.now - data.last)))) {
-					data.now = platform::device::_clock();
+					data.now = platform::device::_clock(platform::device::ClockType::Monotonic);
 					timerPassed = true;
 				}
 			}

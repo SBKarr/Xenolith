@@ -31,6 +31,8 @@ class Instance : public Ref {
 public:
 	using TerminateCallback = Function<void()>;
 
+	static constexpr uint32_t DefaultDevice = maxOf<uint32_t>();
+
 	static String getVersionDescription(uint32_t);
 
 	Instance(TerminateCallback &&);
@@ -38,7 +40,7 @@ public:
 
 	bool hasDevices() const { return _hasDevices; }
 
-	virtual Rc<Device> makeDevice(uint32_t deviceIndex = maxOf<uint32_t>()) const;
+	virtual Rc<Device> makeDevice(uint32_t deviceIndex = DefaultDevice) const;
 
 protected:
 	TerminateCallback _terminate;

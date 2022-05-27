@@ -212,13 +212,13 @@ void FontController::FontSizedLayout::prefixFonts(size_t count) {
 }
 
 String FontController::FontLayout::constructName(StringView family, FontStyle style, FontWeight weight, FontStretch stretch) {
-	return getFontConfigName(family, FontSize(0), style, weight, stretch, style::FontVariant::Normal, false);
+	return getFontConfigName(family, FontSize(0), style, weight, stretch, FontVariant::Normal, false);
 }
 
 bool FontController::FontLayout::init(String &&name, StringView family, FontStyle style, FontWeight weight, FontStretch stretch,
 		Rc<FontFaceData> &&data, FontLibrary *c) {
 	_name = move(name);
-	_family = family.str();
+	_family = family.str<Interface>();
 	_fontStyle = style;
 	_fontWeight = weight;
 	_fontStretch = stretch;
@@ -230,7 +230,7 @@ bool FontController::FontLayout::init(String &&name, StringView family, FontStyl
 bool FontController::FontLayout::init(String &&name, StringView family, FontStyle style, FontWeight weight, FontStretch stretch,
 		Vector<Rc<FontFaceData>> &&data, FontLibrary *c) {
 	_name = move(name);
-	_family = family.str();
+	_family = family.str<Interface>();
 	_fontStyle = style;
 	_fontWeight = weight;
 	_fontStretch = stretch;
@@ -828,8 +828,8 @@ Rc<FontController> FontLibrary::acquireController(StringView key, FontController
 				for (auto &iit : it.chars) {
 					auto lId = controller->getLayout(FontParameters{
 						it.style, it.weight, it.stretch,
-						style::FontVariant::Normal,
-						style::ListStyleType::None,
+						font::FontVariant::Normal,
+						font::ListStyleType::None,
 						iit.first, it.family
 					}, 1.0f);
 					controller->addString(lId, iit.second);
@@ -889,7 +889,7 @@ Rc<FontController> FontLibrary::acquireController(StringView key, FontController
 				} else if (!sourcePtr->fontMemoryData.empty()) {
 					return FontData(move(sourcePtr->fontMemoryData));
 				} else if (!sourcePtr->fontFilePath.empty()) {
-					auto d = filesystem::readIntoMemory(sourcePtr->fontFilePath);
+					auto d = filesystem::readIntoMemory<Interface>(sourcePtr->fontFilePath);
 					if (!d.empty()) {
 						return FontData(move(d));
 					}

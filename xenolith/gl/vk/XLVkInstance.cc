@@ -26,13 +26,10 @@ THE SOFTWARE.
 
 namespace stappler::xenolith::vk {
 
-#if DEBUG
+#if VK_DEBUG_LOG
 
 static VkResult s_createDebugUtilsMessengerEXT(VkInstance instance, const PFN_vkGetInstanceProcAddr getInstanceProcAddr,
 	const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger);
-
-static void s_destroyDebugUtilsMessengerEXT(VkInstance instance, const PFN_vkGetInstanceProcAddr getInstanceProcAddr,
-	VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
 
 VKAPI_ATTR VkBool32 VKAPI_CALL s_debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 		VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
@@ -74,11 +71,12 @@ Instance::Instance(VkInstance inst, const PFN_vkGetInstanceProcAddr getInstanceP
 , _optionals(move(optionals))
 , _checkPresentSupport(move(present)) {
 	if constexpr (s_enableValidationLayers) {
+#if VK_DEBUG_LOG
 		VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo = { };
 		debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 		debugCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 		debugCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-#if DEBUG
+
 		debugCreateInfo.pfnUserCallback = s_debugCallback;
 
 		if (s_createDebugUtilsMessengerEXT(_instance, vkGetInstanceProcAddr, &debugCreateInfo, nullptr, &debugMessenger) != VK_SUCCESS) {
@@ -105,11 +103,12 @@ Instance::Instance(VkInstance inst, const PFN_vkGetInstanceProcAddr getInstanceP
 
 Instance::~Instance() {
 	if constexpr (s_enableValidationLayers) {
-#if DEBUG
-		s_destroyDebugUtilsMessengerEXT(_instance, vkGetInstanceProcAddr, debugMessenger, nullptr);
+#if VK_DEBUG_LOG
+		vkDestroyDebugUtilsMessengerEXT(_instance, debugMessenger, nullptr);
 #endif
 	}
 	vkDestroyInstance(_instance, nullptr);
+	log::text("vk::Instance", "~Instance");
 }
 
 Rc<gl::Device> Instance::makeDevice(uint32_t deviceIndex) const {

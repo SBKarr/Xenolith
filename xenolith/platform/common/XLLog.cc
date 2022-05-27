@@ -44,7 +44,7 @@ static void __log2(const StringView &tag, const StringView &text) {
 		sCustomFn(tag, text);
 	}
 
-	StringStream stream;
+	std::stringstream stream;
 
 	if (auto local = thread::ThreadInfo::getThreadLocal()) {
 		if (!local->managed) {
@@ -66,7 +66,7 @@ static void __log2(const StringView &tag, const StringView &text) {
 #ifndef __apple__
 	stream << "\n";
 #endif
-	String str = stream.str();
+	auto str = stream.str();
 
 #if ANDROID
 	__android_log_print(ANDROID_LOG_DEBUG, tag.data(), "%s", str.c_str());
@@ -77,7 +77,7 @@ static void __log2(const StringView &tag, const StringView &text) {
 }
 
 void __xenolith_log(const StringView &tag, CustomLog::Type t, CustomLog::VA &va) {
-#if DEBUG
+// #if DEBUG
 	if (t == CustomLog::Text) {
 		__log2(tag, va.text);
 	} else {
@@ -98,7 +98,7 @@ void __xenolith_log(const StringView &tag, CustomLog::Type t, CustomLog::VA &va)
 			__log2(tag, StringView(stackBuf, size));
 		}
 	}
-#endif // DEBUG
+// #endif // DEBUG
 }
 
 }

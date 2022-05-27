@@ -31,23 +31,23 @@ namespace stappler::xenolith {
 
 class LabelParameters {
 public:
-	using FontParameters = style::FontParameters;
-	using TextParameters = style::TextParameters;
+	using FontParameters = font::FontParameters;
+	using TextParameters = font::TextParameters;
 
-	using TextTransform = style::TextTransform;
-	using TextDecoration = style::TextDecoration;
-	using Hyphens = style::Hyphens;
-	using VerticalAlign = style::VerticalAlign;
+	using TextTransform = font::TextTransform;
+	using TextDecoration = font::TextDecoration;
+	using Hyphens = font::Hyphens;
+	using VerticalAlign = font::VerticalAlign;
 
-	using FontStyle = style::FontStyle;
-	using FontWeight = style::FontWeight;
-	using FontStretch = style::FontStretch;
+	using FontStyle = font::FontStyle;
+	using FontWeight = font::FontWeight;
+	using FontStretch = font::FontStretch;
 
 	using Opacity = ValueWrapper<uint8_t, class OpacityTag>;
-	using FontSize = style::FontSize;
+	using FontSize = font::FontSize;
 	using FontFamily = ValueWrapper<uint32_t, class FontFamilyTag>;
 
-	using Alignment = style::TextAlign;
+	using Alignment = font::TextAlign;
 
 	using FormatSpec = font::FormatSpec;
 	using LineSpec = font::LineSpec;
@@ -194,7 +194,7 @@ public:
 		void addString(const DescriptionStyle &, const StringView &, bool localized = false);
 		void addString(const DescriptionStyle &, const WideStringView &, bool localized = false);
 
-		Size finalize();
+		Size2 finalize();
 
 	protected:
 		bool begin = false;
@@ -209,9 +209,9 @@ public:
 	static WideString getLocalizedString(const StringView &);
 	static WideString getLocalizedString(const WideStringView &);
 
-	static Size getLabelSize(font::FontController *, const DescriptionStyle &,
+	static Size2 getLabelSize(font::FontController *, const DescriptionStyle &,
 			const StringView &, float w = 0.0f, float density = 0.0f, bool localized = false);
-	static Size getLabelSize(font::FontController *, const DescriptionStyle &,
+	static Size2 getLabelSize(font::FontController *, const DescriptionStyle &,
 			const WideStringView &, float w = 0.0f, float density = 0.0f, bool localized = false);
 
 	static float getStringWidth(font::FontController *, const DescriptionStyle &,
@@ -262,7 +262,7 @@ public:
 	virtual void setStyles(StyleVec &&);
 	virtual void setStyles(const StyleVec &);
 
-	virtual void updateFormatSpec(FormatSpec *, const StyleVec &, float density, uint8_t adjustValue);
+	virtual bool updateFormatSpec(FormatSpec *, const StyleVec &, float density, uint8_t adjustValue);
 
 	virtual bool empty() const { return _string16.empty(); }
 

@@ -22,15 +22,115 @@
 
 #include "XLGl.h"
 
+namespace stappler::xenolith {
+
+String PipelineMaterialInfo::data() const {
+	BytesView view((const uint8_t *)this, sizeof(PipelineMaterialInfo));
+	return toString(
+		base16::encode<Interface>(view.sub(0, sizeof(BlendInfo))), "'",
+		base16::encode<Interface>(view.sub(sizeof(BlendInfo), sizeof(DepthInfo))), "'",
+		base16::encode<Interface>(view.sub(sizeof(BlendInfo) + sizeof(DepthInfo), sizeof(DepthBounds))), "'",
+		base16::encode<Interface>(view.sub(sizeof(BlendInfo) + sizeof(DepthInfo) + sizeof(DepthBounds), sizeof(StencilInfo))), "'",
+		base16::encode<Interface>(view.sub(sizeof(BlendInfo) + sizeof(DepthInfo) + sizeof(DepthBounds) + sizeof(StencilInfo), sizeof(StencilInfo))), "'",
+		base16::encode<Interface>(view.sub(sizeof(BlendInfo) + sizeof(DepthInfo) + sizeof(DepthBounds) + sizeof(StencilInfo) * 2))
+	);
+}
+
+String PipelineMaterialInfo::description() const {
+	StringStream stream;
+	stream << "{" << blend.enabled << "," << blend.srcColor << "," << blend.dstColor << "," << blend.opColor << ","
+			<< blend.srcAlpha << "," << blend.dstAlpha << "," << blend.opAlpha << "," << blend.writeMask
+			<< "},{" << depth.writeEnabled << "," << depth.testEnabled << "," << depth.compare
+			<< "},{" << bounds.enabled << "," << bounds.min << "," << bounds.max
+			<< "},{" << stencil << "}";
+	return stream.str();
+}
+
+PipelineMaterialInfo::PipelineMaterialInfo() {
+	memset(this, 0, sizeof(PipelineMaterialInfo));
+}
+
+void PipelineMaterialInfo::setBlendInfo(const BlendInfo &info) {
+	if (info.isEnabled()) {
+		blend = info;
+	} else {
+		blend = BlendInfo();
+		blend.writeMask = info.writeMask;
+	}
+}
+
+void PipelineMaterialInfo::setDepthInfo(const DepthInfo &info) {
+	if (info.testEnabled) {
+		depth.testEnabled = 1;
+		depth.compare = info.compare;
+	} else {
+		depth.testEnabled = 0;
+		depth.compare = 0;
+	}
+	if (info.writeEnabled) {
+		depth.writeEnabled = 1;
+	} else {
+		depth.writeEnabled = 0;
+	}
+}
+
+void PipelineMaterialInfo::setDepthBounds(const DepthBounds &b) {
+	if (b.enabled) {
+		bounds = b;
+	} else {
+		bounds = DepthBounds();
+	}
+}
+
+void PipelineMaterialInfo::enableStencil(const StencilInfo &info) {
+	stencil = 1;
+	front = info;
+	back = info;
+}
+
+void PipelineMaterialInfo::enableStencil(const StencilInfo &f, const StencilInfo &b) {
+	stencil = 1;
+	front = f;
+	back = b;
+}
+
+void PipelineMaterialInfo::disableStancil() {
+	stencil = 0;
+	memset(&front, 0, sizeof(StencilInfo));
+	memset(&back, 0, sizeof(StencilInfo));
+}
+
+void PipelineMaterialInfo::setLineWidth(float width) {
+	if (width == 0.0f) {
+		memset(&lineWidth, 0, sizeof(float));
+	} else {
+		lineWidth = width;
+	}
+}
+
+void PipelineMaterialInfo::_setup(const BlendInfo &info) {
+	setBlendInfo(info);
+}
+
+void PipelineMaterialInfo::_setup(const DepthInfo &info) {
+	setDepthInfo(info);
+}
+
+void PipelineMaterialInfo::_setup(const DepthBounds &bounds) {
+	setDepthBounds(bounds);
+}
+
+void PipelineMaterialInfo::_setup(const StencilInfo &info) {
+	enableStencil(info);
+}
+
+void PipelineMaterialInfo::_setup(LineWidth width) {
+	setLineWidth(width.get());
+}
+
+}
+
 namespace stappler::xenolith::gl {
-
-uint32_t RenderFontInput::getObjectId(uint16_t sourceId, char16_t ch, font::FontAnchor a) {
-	return font::CharLayout::getObjectId(sourceId, ch, a);
-}
-
-uint32_t RenderFontInput::getObjectId(uint32_t ret, font::FontAnchor a) {
-	return font::CharLayout::getObjectId(ret, a);
-}
 
 String getBufferFlagsDescription(BufferFlags fmt) {
 	StringStream stream;
@@ -532,10 +632,11 @@ void ProgramData::inspect(SpanView<uint32_t> data) {
 
 SpecializationInfo::SpecializationInfo(const ProgramData *data) : data(data) { }
 
-SpecializationInfo::SpecializationInfo(const ProgramData *data, Vector<PredefinedConstant> &&c) : data(data), constants(move(c)) { }
+SpecializationInfo::SpecializationInfo(const ProgramData *data, SpanView<PredefinedConstant> c)
+: data(data), constants(c.vec<memory::PoolInterface>()) { }
 
 bool PipelineInfo::isSolid() const {
-	if (material.depth.writeEnabled || !material.blend.enabled) {
+	if (material.getDepthInfo().writeEnabled || !material.getBlendInfo().enabled) {
 		return true;
 	}
 	return false;

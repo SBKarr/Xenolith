@@ -28,7 +28,6 @@ THE SOFTWARE.
 #include "XLGlView.h"
 #include "XLGlInstance.h"
 #include "XLGlRenderQueue.h"
-#include "XLStorageServer.h"
 #include "SPThreadTaskQueue.h"
 
 namespace stappler::xenolith {
@@ -80,17 +79,18 @@ public:
 
 		String launchUrl;
 
-		Size screenSize = Size(1024, 768);
+		Size2 screenSize = Size2(1024, 768);
 		bool isPhone = false;
 		bool isFixed = false;
 		float density = 1.0f;
+
+		bool renderdoc = false;
 	};
 
 	static Application *getInstance();
 
-	static int parseOptionString(data::Value &ret, const StringView &str, int argc, const char * argv[]);
+	static int parseOptionString(Value &ret, const StringView &str, int argc, const char * argv[]);
 
-public:
 	Application();
 	virtual ~Application();
 
@@ -100,9 +100,6 @@ public:
 	// - start GL loop
 	// - load resource cache
 	virtual bool onFinishLaunching();
-
-	// initialize components, that use persistent data storage
-	virtual bool onBuildStorage(storage::Server::Builder &);
 
 	// start main application loop, returns when loop is terminated and application should be closed
 	virtual bool onMainLoop();
@@ -120,7 +117,7 @@ public:
 	virtual void updateQueue();
 
 	// Run application with parsed command line data
-	virtual int run(data::Value &&);
+	virtual int run(Value &&);
 
 	// Open external URL from within application
 	virtual bool openURL(const StringView &url);
@@ -223,14 +220,34 @@ public: // Threading, Events
 	const Rc<thread::TaskQueue> &getQueue() const { return _queue; }
 	const gl::Instance *getGlInstance() const { return _instance; }
 	const Rc<ResourceCache> &getResourceCache() const { return _resourceCache; }
-	const Rc<storage::Server> &getStorageServer() const { return _storageServer; }
-	const Rc<network::Controller> &getNetworkController() const { return _networkController; }
+
 	const Rc<EventLoop> &getEventLoop() const { return _loop; }
 	const Rc<gl::Loop> &getGlLoop() const { return _glLoop; }
 
+#if MODULE_XENOLITH_STORAGE
+public:
+	// initialize components, that use persistent data storage
+	virtual bool onBuildStorage(storage::Server::Builder &);
+
+	const Rc<storage::Server> &getStorageServer() const { return _storageServer; }
+
+protected:
+	Value _dbParams;
+	storage::StorageRoot _storageRoot;
+	Rc<storage::AssetLibrary> _assetLibrary;
+	Rc<storage::Server> _storageServer;
+#endif
+
+#if MODULE_XENOLITH_NETWORK
+public:
+	const Rc<network::Controller> &getNetworkController() const { return _networkController; }
+
+protected:
+	Rc<network::Controller> _networkController;
+#endif
+
 protected:
 	uint64_t _clockStart = 0;
-	data::Value _dbParams;
 	String _userAgent;
 	String _deviceIdentifier;
 	String _deviceToken;
@@ -251,11 +268,6 @@ protected:
 	Rc<gl::Instance> _instance; // api instance
 	Rc<gl::Loop> _glLoop;
 	log::CustomLog _appLog;
-
-	storage::StorageRoot _storageRoot;
-	Rc<storage::AssetLibrary> _assetLibrary;
-	Rc<storage::Server> _storageServer;
-	Rc<network::Controller> _networkController;
 
 	memory::pool_t *_rootPool = nullptr;
 	memory::pool_t *_updatePool = nullptr;

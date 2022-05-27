@@ -72,7 +72,7 @@ VertexArray::Quad & VertexArray::Quad::setTexturePoints(
 	return *this;
 }
 
-VertexArray::Quad & VertexArray::Quad::setGeometry(const Vec4 &pos, const Size &size, const Mat4 &transform) {
+VertexArray::Quad & VertexArray::Quad::setGeometry(const Vec4 &pos, const Size2 &size, const Mat4 &transform) {
 	const float x1 = pos.x;
 	const float y1 = pos.y;
 
@@ -113,7 +113,7 @@ VertexArray::Quad & VertexArray::Quad::setGeometry(const Vec4 &pos, const Size &
 	return *this;
 }
 
-VertexArray::Quad & VertexArray::Quad::setGeometry(const Vec4 &pos, const Size &size) {
+VertexArray::Quad & VertexArray::Quad::setGeometry(const Vec4 &pos, const Size2 &size) {
 	const float x1 = pos.x;
 	const float y1 = pos.y;
 
@@ -162,10 +162,10 @@ VertexArray::Quad & VertexArray::Quad::setColor(std::initializer_list<Color4F> &
 }
 
 VertexArray::Quad & VertexArray::Quad::drawChar(const font::Metrics &m, const font::CharLayout &l, int16_t charX, int16_t charY,
-		const Color4B &color, style::TextDecoration, uint16_t face) {
+		const Color4B &color, font::TextDecoration, uint16_t face) {
 
 	setGeometry(Vec4(charX + l.xOffset, charY - (l.yOffset + l.height) - m.descender, 0.0f, 1.0f),
-			Size(l.width, l.height));
+			Size2(l.width, l.height));
 	setColor(Color4F(color));
 
 	gl::Vertex_V4F_V4F_T2F2U *data = const_cast<gl::Vertex_V4F_V4F_T2F2U *>(vertexes.data());
@@ -189,7 +189,7 @@ VertexArray::Quad & VertexArray::Quad::drawChar(const font::Metrics &m, const fo
 }
 
 VertexArray::Quad & VertexArray::Quad::drawUnderlineRect(int16_t charX, int16_t charY, uint16_t width, uint16_t height, const Color4B &color) {
-	setGeometry(Vec4(charX, charY, 0.0f, 1.0f), Size(width, height));
+	setGeometry(Vec4(charX, charY, 0.0f, 1.0f), Size2(width, height));
 	setColor(Color4F(color));
 
 	gl::Vertex_V4F_V4F_T2F2U *data = const_cast<gl::Vertex_V4F_V4F_T2F2U *>(vertexes.data());
@@ -210,6 +210,10 @@ VertexArray::Quad & VertexArray::Quad::drawUnderlineRect(int16_t charX, int16_t 
 	data[3].object = font::CharLayout::getObjectId(0, 0, font::FontAnchor::TopRight);
 
 	return *this;
+}
+
+VertexArray::~VertexArray() {
+	_data = nullptr;
 }
 
 bool VertexArray::init(uint32_t bufferCapacity, uint32_t indexCapacity) {
@@ -237,17 +241,24 @@ Rc<gl::VertexData> VertexArray::pop() {
 	return _data;
 }
 
+Rc<gl::VertexData> VertexArray::dup() {
+	auto data = Rc<gl::VertexData>::alloc();
+	data->data = _data->data;
+	data->indexes = _data->indexes;
+	return data;
+}
+
 bool VertexArray::empty() const {
 	return _data->indexes.empty() || _data->data.empty();
 }
 
 void VertexArray::clear() {
 	if (_copyOnWrite) {
-		copy();
+		_data = Rc<gl::VertexData>::alloc();
+	} else {
+		_data->data.clear();
+		_data->indexes.clear();
 	}
-
-	_data->data.clear();
-	_data->indexes.clear();
 }
 
 VertexArray::Quad VertexArray::addQuad() {
@@ -370,6 +381,14 @@ void VertexArray::updateColorQuads(const Color4F &color, const Vector<ColorMask>
 			break;
 		}
 	}
+}
+
+size_t VertexArray::getVertexCount() const {
+	return _data->data.size();
+}
+
+size_t VertexArray::getIndexCount() const {
+	return _data->indexes.size();
 }
 
 void VertexArray::copy() {

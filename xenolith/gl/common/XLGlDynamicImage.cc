@@ -124,9 +124,9 @@ const ImageData * DynamicImage::Builder::setImageByRef(StringView key, ImageInfo
 const ImageData * DynamicImage::Builder::setImage(StringView key, ImageInfo &&info, FilePath path, Rc<ImageAtlas> &&atlas) {
 	String npath;
 	if (filesystem::exists(path.get())) {
-		npath = path.get().str();
+		npath = path.get().str<Interface>();
 	} else if (!filepath::isAbsolute(path.get())) {
-		npath = filesystem::currentDir(path.get());
+		npath = filesystem::currentDir<Interface>(path.get());
 		if (!filesystem::exists(npath)) {
 			npath.clear();
 		}
@@ -137,7 +137,7 @@ const ImageData * DynamicImage::Builder::setImage(StringView key, ImageInfo &&in
 		return nullptr;
 	}
 
-	_data->_keyData = key.str();
+	_data->_keyData = key.str<Interface>();
 	static_cast<ImageInfo &>(_data->_data) = info;
 	_data->_data.key = _data->_keyData;
 	_data->_data.stdCallback = [npath, format = info.format] (const ImageData::DataCallback &dcb) {
@@ -148,8 +148,8 @@ const ImageData * DynamicImage::Builder::setImage(StringView key, ImageInfo &&in
 }
 
 const ImageData * DynamicImage::Builder::setImage(StringView key, ImageInfo &&info, BytesView data, Rc<ImageAtlas> &&atlas) {
-	_data->_keyData = key.str();
-	_data->_imageData = data.bytes();
+	_data->_keyData = key.str<Interface>();
+	_data->_imageData = data.bytes<Interface>();
 	static_cast<ImageInfo &>(_data->_data) = info;
 	_data->_data.key = _data->_keyData;
 	_data->_data.data = _data->_imageData;
@@ -159,7 +159,7 @@ const ImageData * DynamicImage::Builder::setImage(StringView key, ImageInfo &&in
 
 const ImageData * DynamicImage::Builder::setImage(StringView key, ImageInfo &&info,
 		Function<void(const ImageData::DataCallback &)> &&cb, Rc<ImageAtlas> &&atlas) {
-	_data->_keyData = key.str();
+	_data->_keyData = key.str<Interface>();
 	static_cast<ImageInfo &>(_data->_data) = info;
 	_data->_data.key = _data->_keyData;
 	_data->_data.stdCallback = cb;

@@ -27,7 +27,7 @@
 namespace stappler::xenolith::gl {
 
 SwapchainImage::~SwapchainImage() {
-	setImage(nullptr);
+	_image = nullptr;
 }
 
 bool SwapchainImage::init(Device &dev) {
@@ -49,13 +49,15 @@ void SwapchainImage::setImage(const Rc<gl::ImageAttachmentObject> &image) {
 		_image->signalSem = nullptr;
 		_image->swapchainImage = nullptr;
 	}
-	_image = image;
-	if (_image) {
+	if (image) {
+		_image = image;
 		// semaphores will be inverted on rearm call
 		_image->waitSem = _imageReady;
 		_image->signalSem = _renderFinished;
 		_image->swapchainImage = this;
 		_image->layout = gl::AttachmentLayout::Undefined;
+	} else {
+		_image = nullptr;
 	}
 }
 

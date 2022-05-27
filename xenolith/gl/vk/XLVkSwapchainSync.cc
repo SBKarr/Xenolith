@@ -47,7 +47,10 @@ bool SwapchainSync::init(Device &dev, const Rc<SwapchainHandle> &swapchain, Mute
 }
 
 void SwapchainSync::disable() {
-	_handle = nullptr;
+	if (_handle) {
+		_handle->releaseUsage();
+		_handle = nullptr;
+	}
 }
 
 void SwapchainSync::reset(Device &dev, const Rc<SwapchainHandle> &swapchain, uint64_t gen) {
@@ -87,10 +90,6 @@ void SwapchainSync::cleanup() {
 
 VkResult SwapchainSync::acquireImage(Device &dev, bool sync) {
 	VkResult result = VK_ERROR_UNKNOWN;
-	/*std::unique_lock<Mutex> lock(*_mutex, std::try_to_lock_t());
-	if (!lock.owns_lock()) {
-		return VK_ERROR_UNKNOWN;
-	}*/
 
 	if (_imageIndex != maxOf<uint32_t>()) {
 		return VK_SUCCESS;
@@ -100,22 +99,33 @@ VkResult SwapchainSync::acquireImage(Device &dev, bool sync) {
 		_imageReady = dev.makeSemaphore();
 	}
 	dev.makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+#ifdef XL_VKAPI_DEBUG
+		auto t = platform::device::_clock(platform::device::Monotonic);
 		result = table.vkAcquireNextImageKHR(device, _handle->getSwapchain(),
-					sync ? maxOf<uint64_t>() : 0, VkSemaphore(_imageReady->getObject()), VK_NULL_HANDLE, &_imageIndex);
+					sync ? maxOf<uint64_t>() : 1000000, VkSemaphore(_imageReady->getObject()), VK_NULL_HANDLE, &_imageIndex);
+		XL_VKAPI_LOG("vkAcquireNextImageKHR: ", _imageIndex, " ", result,
+				" [", platform::device::_clock(platform::device::Monotonic) - t, "]");
+#else
+		result = table.vkAcquireNextImageKHR(device, _handle->getSwapchain(),
+					sync ? maxOf<uint64_t>() : 1000000, VkSemaphore(_imageReady->getObject()), VK_NULL_HANDLE, &_imageIndex);
+#endif
 	});
 
 	switch (result) {
 	case VK_SUCCESS:
 		_imageReady->setSignaled(true);
 		setImage(_handle->getImage(_imageIndex));
+		// log::vtext("Swapchain", "vkAcquireNextImageKHR: ", _imageIndex, " VK_SUCCESS");
 		break;
 	case VK_SUBOPTIMAL_KHR:
 		_imageReady->setSignaled(true);
 		setImage(_handle->getImage(_imageIndex));
 		_handle->deprecate();
+		// log::vtext("Swapchain", "vkAcquireNextImageKHR: ", _imageIndex, " VK_SUBOPTIMAL_KHR");
 		break;
 	case VK_NOT_READY:
 	case VK_TIMEOUT:
+		log::vtext("Swapchain", "vkAcquireNextImageKHR: ", -1, " VK_NOT_READY");
 		break;
 	case VK_ERROR_OUT_OF_DATE_KHR:
 		if (!_handle->deprecate()) {
@@ -130,28 +140,7 @@ VkResult SwapchainSync::acquireImage(Device &dev, bool sync) {
 	return result;
 }
 
-VkResult SwapchainSync::present(Device &dev, DeviceQueue &queue) {
-	/*std::unique_lock<Mutex> lock(*_mutex, std::try_to_lock_t());
-	if (!lock.owns_lock()) {
-		return VK_ERROR_UNKNOWN;
-	}*/
-
-	_result = doPresent(dev, queue);
-	if (_result == VK_ERROR_OUT_OF_DATE_KHR || _handle->isDeprecated()) {
-		queue.waitIdle();
-	}
-	if (_result == VK_SUCCESS || _result == VK_SUBOPTIMAL_KHR) {
-		if (_present) {
-			_present(this);
-		}
-		_presented = true;
-	} else {
-		releaseForSwapchain();
-	}
-	return _result;
-}
-
-VkResult SwapchainSync::submitWithPresent(Device &dev, DeviceQueue &queue, gl::FrameSync &sync,
+VkResult SwapchainSync::submit(Device &dev, DeviceQueue &queue, gl::FrameSync &sync,
 		Fence &fence, SpanView<VkCommandBuffer> buffers, gl::PipelineStage waitStage) {
 	bool addImageReady = true;
 	bool addRenderFinished = true;
@@ -177,30 +166,32 @@ VkResult SwapchainSync::submitWithPresent(Device &dev, DeviceQueue &queue, gl::F
 		sync.signalAttachments.emplace_back(gl::FrameSyncAttachment{nullptr, _renderFinished});
 	}
 
-	/*std::unique_lock<Mutex> lock(*_mutex, std::try_to_lock_t());
-	if (!lock.owns_lock()) {
-		return VK_ERROR_UNKNOWN;
-	}*/
-
 	if (!queue.submit(sync, fence, buffers)) {
+		_result = queue.getResult();
 		releaseForSwapchain();
-		return VK_ERROR_UNKNOWN;
+		return _result;
 	}
 
+	_result = queue.getResult();
 	_waitForSubmission = true;
-	fence.addRelease([this, fence = &fence] (bool success) {
+	fence.addRelease([this] (bool success) {
 		setSubmitCompleted(true);
 	}, this, "SwapchainSync::submitWithPresent");
+	return _result;
+}
 
+VkResult SwapchainSync::present(Device &dev, DeviceQueue &queue) {
 	_result = doPresent(dev, queue);
+	if (_result == VK_ERROR_OUT_OF_DATE_KHR || _handle->isDeprecated()) {
+		queue.waitIdle();
+	}
 	if (_result == VK_SUCCESS || _result == VK_SUBOPTIMAL_KHR) {
 		if (_present) {
 			_present(this);
 		}
 		_presented = true;
-	}
-	if (_result == VK_ERROR_OUT_OF_DATE_KHR || _handle->isDeprecated()) {
-		queue.waitIdle();
+	} else {
+		releaseForSwapchain();
 	}
 	return _result;
 }
@@ -242,9 +233,13 @@ Extent3 SwapchainSync::getImageExtent() const {
 VkResult SwapchainSync::doPresent(Device &dev, DeviceQueue &queue) {
 	auto presentSem = VkSemaphore(_renderFinished->getObject());
 
-	VkResult result = _handle->present(dev, queue, presentSem, _imageIndex);
+	auto imageIndex = _imageIndex;
+
+	VkResult result = _handle->present(dev, queue, presentSem, imageIndex);
 
 	clearImageIndex();
+
+	// log::vtext("Swapchain", "vkQueuePresentKHR: ", imageIndex);
 
 	if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
 		_renderFinished->setWaited(true);
@@ -264,6 +259,7 @@ VkResult SwapchainSync::doPresent(Device &dev, DeviceQueue &queue) {
 
 void SwapchainSync::releaseForSwapchain() {
 	if (_handle) {
+		log::vtext("Vk-SwapchainSync", "releaseForSwapchain: ", (void *)this);
 		_handle->releaseUsage();
 		_handle = nullptr;
 	}

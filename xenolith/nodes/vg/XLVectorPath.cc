@@ -33,7 +33,7 @@ class SVGPathReader : public ReaderClassBase<char> {
 public:
 	static bool readFile(VectorPath *p, const StringView &str) {
 		if (!str.empty()) {
-			auto content = filesystem::readTextFile(str);
+			auto content = filesystem::readTextFile<Interface>(str);
 			StringView r(content);
 			r.skipUntilString("<path ");
 			if (!r.is("<path ")) {
@@ -802,7 +802,7 @@ VectorPath &VectorPath::setWindingRule(Winding value) {
 	_params.winding = value;
 	return *this;
 }
-Winding VectorPath::getWindingRule() const {
+vg::Winding VectorPath::getWindingRule() const {
 	return _params.winding;
 }
 
@@ -810,7 +810,7 @@ VectorPath &VectorPath::setLineCup(LineCup value) {
 	_params.lineCup = value;
 	return *this;
 }
-LineCup VectorPath::getLineCup() const {
+vg::LineCup VectorPath::getLineCup() const {
 	return _params.lineCup;
 }
 
@@ -818,7 +818,7 @@ VectorPath &VectorPath::setLineJoin(LineJoin value) {
 	_params.lineJoin = value;
 	return *this;
 }
-LineJoin VectorPath::getLineJoin() const {
+vg::LineJoin VectorPath::getLineJoin() const {
 	return _params.lineJoin;
 }
 
@@ -835,7 +835,7 @@ VectorPath & VectorPath::setStyle(DrawStyle s) {
 	return *this;
 }
 
-DrawStyle VectorPath::getStyle() const {
+vg::DrawStyle VectorPath::getStyle() const {
 	return _params.style;
 }
 

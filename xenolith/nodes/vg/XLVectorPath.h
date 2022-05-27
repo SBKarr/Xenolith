@@ -23,12 +23,33 @@
 #ifndef XENOLITH_NODES_VG_XLVECTORPATH_H_
 #define XENOLITH_NODES_VG_XLVECTORPATH_H_
 
-#include "XLVectorDraw.h"
+#include "XLDefine.h"
+#include "SPTessLine.h"
+
+namespace stappler::xenolith::vg {
+
+using DrawStyle = geom::DrawStyle;
+using Winding = geom::Winding;
+using LineCup = geom::LineCup;
+using LineJoin = geom::LineJoin;
+using Winding = geom::Winding;
+
+struct PathXRef {
+	String id;
+	Mat4 mat;
+};
+
+}
 
 namespace stappler::xenolith {
 
 class VectorPath : public Ref {
 public:
+	using DrawStyle = geom::DrawStyle;
+	using Winding = geom::Winding;
+	using LineCup = geom::LineCup;
+	using LineJoin = geom::LineJoin;
+
 	struct Params {
 		Mat4 transform;
 		Color4B fillColor = Color4B(0, 0, 0, 255);

@@ -935,7 +935,7 @@ TransferRenderPassHandle::~TransferRenderPassHandle() { }
 
 Vector<VkCommandBuffer> TransferRenderPassHandle::doPrepareCommands(gl::FrameHandle &) {
 	auto pass = (TransferRenderPass *)_renderPass.get();
-	TransferAttachmentHandle *transfer;
+	TransferAttachmentHandle *transfer = nullptr;
 	for (auto &it : _queueData->attachments) {
 		if (it.first->getAttachment() == pass->getAttachment()) {
 			transfer = (TransferAttachmentHandle *)it.second->handle.get();

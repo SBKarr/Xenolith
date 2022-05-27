@@ -22,6 +22,9 @@
 
 #include "XLDefine.h"
 
+#define XL_FRAME_EMITTER_DEBUG 1
+//#define XL_FRAME_DEBUG 1
+
 #ifdef XL_LOOP_DEBUG
 #define XL_LOOP_LOG(...) log::vtext("gl::Loop", __VA_ARGS__)
 #else

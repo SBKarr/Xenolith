@@ -18,12 +18,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-STAPPLER_ROOT ?= ../../stappler
+STAPPLER_ROOT ?= ../libstappler
 
 LOCAL_OUTDIR := stappler-build
 LOCAL_EXECUTABLE := testapp
 
-LOCAL_TOOLKIT_EXTERNAL := $(abspath ../xenolith/xenolith.mk)
+LOCAL_TOOLKIT := $(abspath ../xenolith/xenolith.mk)
 
 LOCAL_ROOT = .
 

@@ -328,6 +328,7 @@ struct SwapchainPresentFrame : public Ref {
 		}
 
 		fence = device->acquireFence(order);
+		fence->setTag("SwapchainPresentFrame");
 		fence->addRelease([device = device, pool = move(pool), loop = loop] (bool success) {
 			device->releaseCommandPool(*loop, Rc<CommandPool>(pool));
 		}, this, "Swapchain::perform releaseCommandPool");
@@ -340,9 +341,10 @@ struct SwapchainPresentFrame : public Ref {
 			frameSync.waitAttachments.emplace_back(gl::FrameSyncAttachment{nullptr, sourceObject->object->waitSem, gl::PipelineStage::Transfer});
 			frameSync.signalAttachments.emplace_back(gl::FrameSyncAttachment{nullptr, sourceObject->object->signalSem});
 
-			result = sync->submitWithPresent(*device, *queue, frameSync, *fence, buffers, waitStages);
+			result = sync->submit(*device, *queue, frameSync, *fence, buffers, waitStages);
 			if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
-				return true;
+				result = sync->present(*device, *queue);
+				return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
 			}
 			return false;
 		}, [this] (const Task &, bool success) {
@@ -445,7 +447,7 @@ bool Swapchain::createSwapchain(Device &device, gl::SwapchainConfig &&cfg, gl::P
 				_view->pushEvent(AppEvent::SwapchainRecreation);
 				break;
 			}
-		}, oldSwapchain.get());
+		}, oldSwapchain ? oldSwapchain.get() : nullptr);
 
 		_config = move(cfg);
 
@@ -554,7 +556,8 @@ Rc<SwapchainSync> Swapchain::acquireSwapchainSync(Device &dev, bool lock) {
 }
 
 void Swapchain::releaseSync(Rc<SwapchainSync> &&ref) {
-	if (_view->getLoop()->isOnThread()) {
+	auto &loop = _view->getLoop();
+	if (!loop || loop->isOnThread()) {
 		ref->disable();
 		_syncs.emplace_back(move(ref));
 	} else {
@@ -566,7 +569,8 @@ void Swapchain::releaseSync(Rc<SwapchainSync> &&ref) {
 }
 
 void Swapchain::presentSync(Rc<SwapchainSync> &&sync) {
-	if (_view->getLoop()->isOnThread()) {
+	auto &loop = _view->getLoop();
+	if (!loop || loop->isOnThread()) {
 		std::unique_lock<Mutex> lock(_presentCurrentMutex);
 		if (_presentCurrent && _presentCurrent->order < _order) {
 			_presentCurrent = nullptr;
@@ -754,19 +758,23 @@ bool Swapchain::presentImmediate(const Rc<PresentTask> &task) {
 	frameSync.waitAttachments.emplace_back(gl::FrameSyncAttachment{nullptr, task->object->waitSem, gl::PipelineStage::Transfer});
 	frameSync.signalAttachments.emplace_back(gl::FrameSyncAttachment{nullptr, task->object->signalSem});
 
-	result = sync->submitWithPresent(*dev, *queue, frameSync, *fence, buffers, waitStages);
+	result = sync->submit(*dev, *queue, frameSync, *fence, buffers, waitStages);
+	if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
+		result = sync->present(*dev, *queue);
+	}
+
 	if (queue) {
 		dev->releaseQueue(move(queue));
 		queue = nullptr;
 	}
 	if (result == VK_SUCCESS) {
-		fence->check(false);
+		fence->check(*_view->getLoop(), false);
 		dev->releaseFenceUnsafe(move(fence));
 		dev->releaseCommandPoolUnsafe(move(pool));
 		return true;
 	} else {
 		if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-			fence->check(false);
+			fence->check(*_view->getLoop(), false);
 
 			dev->releaseFenceUnsafe(move(fence));
 			fence = nullptr;

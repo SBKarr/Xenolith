@@ -24,6 +24,7 @@
 #define XENOLITH_NODES_XLSPRITE_H_
 
 #include "XLNode.h"
+#include "XLFontStyle.h"
 #include "XLResourceCache.h"
 #include "XLVertexArray.h"
 
@@ -31,7 +32,7 @@ namespace stappler::xenolith {
 
 class Sprite : public Node {
 public:
-	using Autofit = style::Autofit;
+	using Autofit = font::Autofit;
 
 	Sprite();
 	virtual ~Sprite() { }
@@ -56,14 +57,14 @@ public:
 	virtual const ColorMode &getColorMode() const { return _colorMode; }
 
 	virtual void setBlendInfo(const BlendInfo &);
-	virtual const BlendInfo &getBlendInfo() const { return _materialInfo.blend; }
+	virtual const BlendInfo &getBlendInfo() const { return _materialInfo.getBlendInfo(); }
 
 	// used for debug purposes only, follow rules from PipelineMaterialInfo.lineWidth:
 	// 0.0f - draw triangles, < 0.0f - points,  > 0.0f - lines with width
 	// corresponding pipeline should be precompiled
 	// points and lines are always RenderingLevel::Transparent, when Default level resolves
 	virtual void setLineWidth(float);
-	virtual float getLineWidth() const { return _materialInfo.lineWidth; }
+	virtual float getLineWidth() const { return _materialInfo.getLineWidth(); }
 
 	virtual void setRenderingLevel(RenderingLevel);
 	virtual RenderingLevel getRenderingLevel() const { return _renderingLevel; }
@@ -91,8 +92,10 @@ protected:
 
 	RenderingLevel getRealRenderingLevel() const;
 
-	static bool getAutofitParams(Autofit autofit, const Vec2 &autofitValue, const Size &contentSize, const Size &texSize,
+	static bool getAutofitParams(Autofit autofit, const Vec2 &autofitValue, const Size2 &contentSize, const Size2 &texSize,
 			Rect &contentRect, Rect &textureRect);
+
+	virtual bool checkVertexDirty() const;
 
 	String _textureName;
 	Rc<Texture> _texture;
@@ -107,8 +110,8 @@ protected:
 	Vec2 _autofitPos = Vec2(0.5f, 0.5f);
 
 	Vec2 _textureOrigin;
-	Size _textureSize;
-	Size _targetTextureSize;
+	Size2 _textureSize;
+	Extent3 _targetTextureSize;
 
 	RenderingLevel _renderingLevel = RenderingLevel::Default;
 	RenderingLevel _realRenderingLevel = RenderingLevel::Default;
@@ -121,6 +124,7 @@ protected:
 
 	Color4F _tmpColor;
 	ColorMode _colorMode;
+	BlendInfo _blendInfo;
 	PipelineMaterialInfo _materialInfo;
 };
 

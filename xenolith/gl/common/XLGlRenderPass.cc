@@ -28,7 +28,7 @@ namespace stappler::xenolith::gl {
 RenderPass::~RenderPass() { }
 
 bool RenderPass::init(StringView name, RenderPassType type, RenderOrdering order, size_t subpassCount) {
-	_name = name.str();
+	_name = name.str<Interface>();
 	_type = type;
 	_ordering = order;
 	_subpassCount = subpassCount;
@@ -60,7 +60,7 @@ bool RenderPass::acquireForFrame(gl::FrameQueue &frame, Function<void(bool)> &&o
 }
 
 bool RenderPass::releaseForFrame(gl::FrameQueue &frame) {
-	if (_owner.get() == &frame) {
+	if (_owner == &frame) {
 		if (_next.queue) {
 			_owner = move(_next.queue);
 			_next.acquired(true);
@@ -70,7 +70,7 @@ bool RenderPass::releaseForFrame(gl::FrameQueue &frame) {
 			_owner = nullptr;
 		}
 		return true;
-	} else if (_next.queue.get() == &frame) {
+	} else if (_next.queue == &frame) {
 		auto tmp = move(_next.acquired);
 		_next.queue = nullptr;
 		_next.acquired = nullptr;

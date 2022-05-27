@@ -427,6 +427,11 @@ bool XcbView::poll() {
 			printf("XCB_PROPERTY_NOTIFY: %d of property %d\n", ev->window, ev->atom);
 			break;
         }
+        case XCB_MAPPING_NOTIFY : {
+        	xcb_mapping_notify_event_t *ev = (xcb_mapping_notify_event_t*) e;
+			printf("XCB_MAPPING_NOTIFY: %d %d %d\n", (int)ev->request, (int)ev->first_keycode, (int)ev->count);
+			break;
+        }
 		default:
 			/* Unknown event type, ignore it */
 			printf("Unknown event: %d\n", et);
