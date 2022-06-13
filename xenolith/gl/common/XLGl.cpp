@@ -22,45 +22,18 @@
 
 #include "XLDefine.h"
 
-#define XL_FRAME_EMITTER_DEBUG 1
-//#define XL_FRAME_DEBUG 1
-
 #ifdef XL_LOOP_DEBUG
 #define XL_LOOP_LOG(...) log::vtext("gl::Loop", __VA_ARGS__)
 #else
 #define XL_LOOP_LOG(...)
 #endif
 
-#ifdef XL_FRAME_DEBUG
-#define XL_FRAME_LOG(...) log::vtext("gl::Frame", __VA_ARGS__)
-#else
-#define XL_FRAME_LOG(...)
-#endif
-
-#ifdef XL_FRAME_EMITTER_DEBUG
-#define XL_FRAME_EMITTER_LOG(...) log::vtext("gl::FrameEmitter", __VA_ARGS__)
-#else
-#define XL_FRAME_EMITTER_LOG(...)
-#endif
-
-#define XL_FRAME_PROFILE(fn, tag, max) \
-	do { XL_PROFILE_BEGIN(frame, "gl::FrameHandle", tag, max); fn; XL_PROFILE_END(frame); } while (0);
-
-#include "XLGlDevice.cc"
-#include "XLGlCommandList.cc"
-#include "XLGlLoop.cc"
 #include "XLGlView.cc"
+#include "XLGlCommandList.cc"
 #include "XLGlObject.cc"
-#include "XLGlResource.cc"
-#include "XLGlAttachment.cc"
-#include "XLGlRenderQueue.cc"
 #include "XLGlMaterial.cc"
-#include "XLGlInstance.cc"
-#include "XLGlFrameCache.cc"
-#include "XLGlFrameEmitter.cc"
-#include "XLGlFrameHandle.cc"
-#include "XLGlFrameQueue.cc"
-#include "XLGlRenderPass.cc"
-#include "XLGlUtils.cc"
-#include "XLGlSwapchain.cc"
 #include "XLGlDynamicImage.cc"
+#include "XLGlInstance.cc"
+#include "XLGlUtils.cc"
+#include "XLGlDevice.cc"
+#include "XLGlLoop.cc"

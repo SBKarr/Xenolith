@@ -25,6 +25,8 @@ THE SOFTWARE.
 #include "XLDirector.h"
 #include "XLEvent.h"
 #include "XLEventHandler.h"
+#include "XLGlInstance.h"
+#include "XLGlLoop.h"
 
 namespace stappler::log {
 
@@ -34,57 +36,10 @@ void __xenolith_log(const StringView &tag, CustomLog::Type t, CustomLog::VA &va)
 
 namespace stappler::xenolith {
 
-EventLoop::EventLoop() { }
-
-EventLoop::~EventLoop() { }
-
-bool EventLoop::init(Application *app) {
-	_application = app;
-	return true;
-}
-
-bool EventLoop::run() {
-	return false;
-}
-
-uint64_t EventLoop::getMinFrameTime() const {
-	return 1000'000ULL / 60;
-}
-
-uint64_t EventLoop::getClock() {
-	return 0;
-}
-
-void EventLoop::sleep(uint64_t) {
-	// do nothing
-}
-
-Pair<uint64_t, uint64_t> EventLoop::getDiskSpace() const {
-	return pair(0, 0);
-}
-
-void EventLoop::pushEvent(AppEvent::Value events) {
-	_events |= events;
-}
-
-AppEvent::Value EventLoop::popEvents() {
-	return _events.exchange(AppEvent::None);
-}
-
-void EventLoop::addView(gl::View *) {
-
-}
-
-void EventLoop::removeView(gl::View *) {
-
-}
-
 XL_DECLARE_EVENT_CLASS(Application, onDeviceToken);
 XL_DECLARE_EVENT_CLASS(Application, onNetwork);
 XL_DECLARE_EVENT_CLASS(Application, onUrlOpened);
 XL_DECLARE_EVENT_CLASS(Application, onError);
-XL_DECLARE_EVENT_CLASS(Application, onRemoteNotification);
-XL_DECLARE_EVENT_CLASS(Application, onLaunchUrl);
 
 static Application * s_application = nullptr;
 
@@ -122,14 +77,6 @@ int Application::parseOptionString(Value &ret, const StringView &str, int argc, 
 	return 1;
 }
 
-void Application::sleep(uint64_t v) {
-	_loop->sleep(v);
-}
-
-uint64_t Application::getClock() const {
-	return _loop->getClock();
-}
-
 Application::Application() : _appLog(&log::__xenolith_log) {
 	XLASSERT(s_application == nullptr, "Application should be only one");
 
@@ -138,8 +85,7 @@ Application::Application() : _appLog(&log::__xenolith_log) {
 	_rootPool = memory::pool::create(memory::pool::acquire());
 	_updatePool = memory::pool::create(_rootPool);
 
-	_loop = platform::device::createEventLoop(this);
-	_clockStart = _loop->getClock();
+	_clockStart = platform::device::_clock(platform::device::Monotonic);
 
 	_userAgent = platform::device::_userAgent();
 	_deviceIdentifier  = platform::device::_deviceIdentifier();
@@ -180,11 +126,10 @@ bool Application::onFinishLaunching() {
 
 	thread::ThreadInfo::setMainThread();
 
-	_queue = Rc<thread::TaskQueue>::alloc("Main", [this] {
-		_loop->pushEvent(AppEvent::Thread);
-	});
-	if (!_queue->spawnWorkers(thread::TaskQueue::Flags::Cancelable, ApplicationThreadId,
-			math::clamp(uint16_t(std::thread::hardware_concurrency() / 2), uint16_t(2), uint16_t(16)), _queue->getName())) {
+	_queue = Rc<thread::TaskQueue>::alloc("Main");
+
+	if (!_queue->spawnWorkers(thread::TaskQueue::Flags::Waitable, ApplicationThreadId,
+			config::getMainThreadCount(), _queue->getName())) {
 		log::text("Application", "Fail to spawn worker threads");
 		return false;
 	}
@@ -193,20 +138,19 @@ bool Application::onFinishLaunching() {
 
 	if (!_instance) {
 		_instance = nullptr;
-		log::text("Application", "Fail to create vulkan instance");
+		log::text("Application", "Fail to create graphic api instance");
 		return false;
 	}
 
-	if (!_instance->hasDevices()) {
+	if (_instance->getAvailableDevices().empty()) {
 		_instance = nullptr;
-		log::text("Application", "No devices for presentation found");
+		log::text("Application", "No devices found");
 		return false;
 	}
 
-	auto device = _instance->makeDevice();
-	_glLoop = Rc<gl::Loop>::alloc(this, device);
-	_resourceCache = Rc<ResourceCache>::create(*device);
-	return true;
+	_glLoop = _instance->makeLoop(this, gl::Instance::DefaultDevice);
+
+	return _glLoop != nullptr;
 }
 
 #if MODULE_XENOLITH_STORAGE
@@ -270,6 +214,14 @@ int Application::run(Value &&data) {
 		}
 	}
 
+	if (!onFinishLaunching()) {
+		log::text("Application", "Fail to launch application: onFinishLaunching failed");
+		memory::pool::pop();
+		return 1;
+	}
+
+	// all init parallel with gl-loop init goes here
+
 #if MODULE_XENOLITH_STORAGE
 	_storageServer = Rc<storage::Server>::create(this, _dbParams, [&] (storage::Server::Builder &builder) {
 		return onBuildStorage(builder);
@@ -282,18 +234,18 @@ int Application::run(Value &&data) {
 	}
 #endif
 
-	if (!onFinishLaunching()) {
-		log::text("Application", "Fail to launch application: onFinishLaunching failed");
-		memory::pool::pop();
-		return 1;
+	bool ret = false;
+	if (_glLoop) {
+		// ensure gl thread initialized
+		_glLoop->waitRinning();
+
+		ret = onMainLoop();
+
+		_glLoop->cancel();
+		_glLoop = nullptr;
+	} else {
+		log::text("Application", "Fail to launch gl loop: onFinishLaunching failed");
 	}
-
-	_glLoop->begin();
-	auto ret = onMainLoop();
-
-	_resourceCache->invalidate(*_glLoop->getDevice());
-	_glLoop->end();
-	_glLoop = nullptr;
 
 	if (_queue) {
 		_queue->cancelWorkers();
@@ -310,6 +262,31 @@ int Application::run(Value &&data) {
 
 bool Application::openURL(const StringView &url) {
 	return platform::interaction::_goToUrl(url, true);
+}
+
+void Application::addView(gl::ViewInfo &&view) {
+	_glLoop->addView(move(view));
+}
+
+void Application::wait(TimeInterval iv) {
+	uint64_t clock = platform::device::_clock();
+	uint64_t lastUpdate = clock;
+	do {
+		uint32_t count = 0;
+		_queue->wait(iv - TimeInterval::microseconds(clock - lastUpdate), &count);
+		clock = platform::device::_clock();
+		auto dt = TimeInterval::microseconds(clock - lastUpdate);
+		if (dt >= iv) {
+			update(dt.toMicros());
+			lastUpdate = clock;
+		}
+	} while (!_shouldEndLoop);
+}
+
+void Application::end() {
+	performOnMainThread([&] {
+		_shouldEndLoop = true;
+	}, this);
 }
 
 void Application::update(uint64_t dt) {
@@ -380,10 +357,6 @@ void Application::mailTo(const StringView &address) {
 	platform::interaction::_mailTo(address);
 }
 
-std::pair<uint64_t, uint64_t> Application::getTotalDiskSpace() {
-	return _loop->getDiskSpace();
-}
-
 uint64_t Application::getApplicationDiskSpace() {
 	auto path = filesystem::writablePath<Interface>(_data.bundleName);
 	uint64_t size = 0;
@@ -444,17 +417,12 @@ void Application::setLaunchUrl(const StringView &url) {
     _data.launchUrl = url.str<Interface>();
 }
 
-void Application::processLaunchUrl(const StringView &url) {
-	_data.launchUrl = url.str<Interface>();
-    onLaunchUrl(this, url);
-}
-
-bool Application::isMainThread() const {
+bool Application::isOnMainThread() const {
 	return _threadId == std::this_thread::get_id();
 }
 
 void Application::performOnMainThread(const Function<void()> &func, Ref *target, bool onNextFrame) const {
-	if (!_queue || ((isMainThread() || _singleThreaded) && !onNextFrame)) {
+	if (!_queue || ((isOnMainThread() || _singleThreaded) && !onNextFrame)) {
 		func();
 	} else {
 		_queue->onMainThread(Rc<thread::Task>::create([func] (const thread::Task &, bool success) {
@@ -464,7 +432,7 @@ void Application::performOnMainThread(const Function<void()> &func, Ref *target,
 }
 
 void Application::performOnMainThread(Rc<thread::Task> &&task, bool onNextFrame) const {
-	if (!_queue || ((isMainThread() || _singleThreaded) && !onNextFrame)) {
+	if (!_queue || ((isOnMainThread() || _singleThreaded) && !onNextFrame)) {
 		task->onComplete();
 	} else {
 		_queue->onMainThread(std::move(task));
@@ -554,6 +522,18 @@ void Application::dispatchEvent(const Event &ev) {
 			}
 		}
 	}
+}
+
+void Application::sleep(uint64_t ms) {
+	platform::device::_sleep(ms);
+}
+
+uint64_t Application::getClock() const {
+	return platform::device::_clock(platform::device::ClockType::Monotonic);
+}
+
+const Rc<ResourceCache> &Application::getResourceCache() const {
+	return _glLoop->getResourceCache();
 }
 
 }

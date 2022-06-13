@@ -23,7 +23,7 @@
 #ifndef UTILS_XLHASHTABLE_H_
 #define UTILS_XLHASHTABLE_H_
 
-#include "SPCommon.h"
+#include "XLDefine.h"
 
 namespace stappler::xenolith {
 

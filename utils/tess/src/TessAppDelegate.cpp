@@ -64,7 +64,6 @@ static font::FontController::FontQuery makeResourceFontQuery(resources::fonts::F
 	);
 }
 
-
 bool AppDelegate::onMainLoop() {
 	_fontLibrary = Rc<font::FontLibrary>::create(_glLoop, Rc<vk::RenderFontQueue>::create("FontQueue"));
 
@@ -288,21 +287,27 @@ bool AppDelegate::onMainLoop() {
 		}
 	});
 
-	auto scene = Rc<TessScene>::create(this, Extent2(1024, 768));
-
-	_glLoop->compileRenderQueue(scene->getRenderQueue(), [&] (bool success) {
-		performOnMainThread([&] {
-			runMainView(move(scene));
-		});
-		log::text("App", "Compiled");
+	addView(gl::ViewInfo{
+		"View-test",
+		URect{0, 0, 1024, 768},
+		0,
+		[this] (const gl::SurfaceInfo &info) -> gl::SwapchainConfig {
+			return selectConfig(info);
+		},
+		[this] (const Rc<Director> &dir) {
+			onViewCreated(dir);
+		},
+		[this] () {
+			end();
+		}
 	});
 
-	auto ret = _loop->run();
+	wait(TimeInterval::milliseconds(100));
 
 	_fontMainController = nullptr;
 	_fontLibrary = nullptr;
 
-	return ret;
+	return true;
 }
 
 void AppDelegate::update(uint64_t dt) {
@@ -315,15 +320,25 @@ void AppDelegate::update(uint64_t dt) {
 	}
 }
 
-void AppDelegate::runMainView(Rc<TessScene> &&scene) {
-	auto dir = Rc<Director>::create(this, move(scene));
+gl::SwapchainConfig AppDelegate::selectConfig(const gl::SurfaceInfo &info) {
+	gl::SwapchainConfig ret;
+	ret.extent = info.currentExtent;
+	ret.imageCount = std::max(uint32_t(2), info.minImageCount);
+	ret.presentMode = info.presentModes.front();
 
-	auto view = platform::graphic::createView(_loop, _glLoop, "Xenolith-tess",
-			URect{0, 0, uint32_t(_data.screenSize.width), uint32_t(_data.screenSize.height)});
+	if (std::find(info.presentModes.begin(), info.presentModes.end(), gl::PresentMode::Immediate) != info.presentModes.end()) {
+		ret.presentModeFast = gl::PresentMode::Immediate;
+	}
 
-	view->begin(dir, [this] {
-		_loop->pushEvent(AppEvent::Terminate);
-	});
+	ret.imageFormat = info.formats.front().first;
+	ret.colorSpace = info.formats.front().second;
+	ret.transfer = (info.supportedUsageFlags & gl::ImageUsage::TransferDst) != gl::ImageUsage::None;
+	return ret;
+}
+
+void AppDelegate::onViewCreated(const Rc<Director> &dir) {
+	auto scene = Rc<TessScene>::create(this, dir->getScreenExtent());
+	dir->runScene(move(scene));
 }
 
 }

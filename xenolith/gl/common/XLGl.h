@@ -23,60 +23,42 @@
 #ifndef XENOLITH_GL_COMMON_XLGL_H_
 #define XENOLITH_GL_COMMON_XLGL_H_
 
-#include "XLDefine.h"
+#include "XLHashTable.h"
+#include "XLPlatform.h"
+#include "XLRenderQueueEnum.h"
 #include "SPBitmap.h"
 #include "SPThread.h"
 #include "SPThreadTaskQueue.h"
 #include "SPEventTaskQueue.h"
-#include "XLHashTable.h"
 #include <optional>
+
+namespace stappler::xenolith::renderqueue {
+
+class Resource;
+class ImageAttachmentDescriptor;
+
+}
 
 namespace stappler::xenolith::gl {
 
 using TaskQueue = thread::TaskQueue;
 // using TaskQueue = thread::EventTaskQueue;
 
+class Instance;
+class Loop;
 class Device;
-class RenderQueue;
 class Shader;
 class Pipeline;
-class RenderPassImpl;
 class Framebuffer;
 class ImageObject;
 class ImageAtlas;
 class ImageView;
 class BufferObject;
-class RenderPass;
-class Resource;
 class CommandList;
 class Material;
 class MaterialAttachment;
 class DynamicImage;
 class Semaphore;
-struct ImageAttachmentObject;
-
-class FrameEmitter;
-class FrameHandle;
-class FrameQueue;
-class FrameRequest;
-
-struct RenderPassData;
-
-class Attachment;
-class AttachmentDescriptor;
-class AttachmentRef;
-
-class BufferAttachment;
-class BufferAttachmentDescriptor;
-class BufferAttachmentRef;
-
-class ImageAttachment;
-class ImageAttachmentDescriptor;
-class ImageAttachmentRef;
-
-class AttachmentHandle;
-class RenderPassHandle;
-class SwapchainImage;
 
 using MaterialId = uint32_t;
 
@@ -85,13 +67,10 @@ using ArrayLayers = ValueWrapper<uint32_t, class ArrayLayersFlag>;
 using Extent1 = ValueWrapper<uint32_t, class Extent1Flag>;
 using BaseArrayLayer = ValueWrapper<uint32_t, class BaseArrayLayerFlag>;
 
-enum class ResourceObjectType {
-	None,
-	Pipeline,
-	Program,
-	Image,
-	Buffer
-};
+using RenderPassType = renderqueue::PassType;
+using Resource = renderqueue::Resource;
+using AttachmentInputData = renderqueue::AttachmentInputData;
+using ProgramStage = renderqueue::ProgramStage;
 
 enum class ObjectType {
 	Unknown,
@@ -146,55 +125,6 @@ struct SamplerInfo {
 	bool operator==(const SamplerInfo &) const = default;
 	bool operator!=(const SamplerInfo &) const = default;
 	auto operator<=>(const SamplerInfo &) const = default;
-};
-
-struct ProgramDescriptorBinding {
-	uint32_t set = 0;
-	uint32_t descriptor = 0;
-	DescriptorType type = DescriptorType::Unknown;
-};
-
-struct ProgramPushConstantBlock {
-	uint32_t offset = 0;
-	uint32_t size = 0;
-};
-
-struct ProgramInfo : NamedMem {
-	ProgramStage stage;
-	memory::vector<ProgramDescriptorBinding> bindings;
-	memory::vector<ProgramPushConstantBlock> constants;
-};
-
-struct ProgramData : ProgramInfo {
-	using DataCallback = memory::callback<void(SpanView<uint32_t>)>;
-
-	SpanView<uint32_t> data;
-	memory::function<void(const DataCallback &)> callback = nullptr;
-	Rc<Shader> program; // GL implementation-dependent object
-
-	void inspect(SpanView<uint32_t>);
-};
-
-struct SpecializationInfo {
-	const ProgramData *data = nullptr;
-	memory::vector<PredefinedConstant> constants;
-
-	SpecializationInfo(const ProgramData *);
-	SpecializationInfo(const ProgramData *, SpanView<PredefinedConstant>);
-};
-
-struct PipelineInfo : NamedMem {
-	memory::vector<SpecializationInfo> shaders;
-	DynamicState dynamicState = DynamicState::Default;
-	PipelineMaterialInfo material;
-
-	bool isSolid() const;
-};
-
-struct PipelineData : PipelineInfo {
-	const RenderPass *renderPass = nullptr;
-	Rc<Pipeline> pipeline; // GL implementation-dependent object
-	uint32_t subpass = 0;
 };
 
 using ForceBufferFlags = ValueWrapper<BufferFlags, class ForceBufferFlagsFlag>;
@@ -254,7 +184,7 @@ using ForceImageUsage = ValueWrapper<ImageUsage, class ForceImageUsageFlag>;
 
 struct ImageViewInfo;
 
-struct ImageInfo : NamedMem {
+struct ImageInfoData {
 	ImageFormat format = ImageFormat::Undefined;
 	ImageFlags flags = ImageFlags::None;
 	ImageType imageType = ImageType::Image2D;
@@ -269,6 +199,12 @@ struct ImageInfo : NamedMem {
 	RenderPassType type = RenderPassType::Graphics;
 	ImageHints hints = ImageHints::None;
 
+	bool operator==(const ImageInfoData &) const = default;
+	bool operator!=(const ImageInfoData &) const = default;
+	auto operator<=>(const ImageInfoData &) const = default;
+};
+
+struct ImageInfo : NamedMem, ImageInfoData {
 	ImageInfo() = default;
 
 	template<typename ... Args>
@@ -351,7 +287,7 @@ struct ImageViewInfo {
 		define(std::forward<Args>(args)...);
 	}
 
-	void setup(const ImageAttachmentDescriptor &);
+	void setup(const renderqueue::ImageAttachmentDescriptor &);
 	void setup(const ImageViewInfo &);
 	void setup(const ImageInfo &);
 	void setup(ImageViewType value) { type = value; }
@@ -407,12 +343,6 @@ struct Quad_V3F_C4F_T2F {
 	Vertex_V4F_V4F_T2F2U br;
 };
 
-// dummy class for attachment input, made just to separate inputs from simple refs
-struct AttachmentInputData : public Ref {
-	virtual ~AttachmentInputData() { }
-
-};
-
 struct VertexSpan {
 	MaterialId material;
 	uint32_t indexCount;
@@ -433,6 +363,50 @@ struct RenderFontInput : public AttachmentInputData {
 	Function<void(const ImageInfo &, BytesView)> output;
 };
 
+struct SwapchainConfig {
+	PresentMode presentMode = PresentMode::Mailbox;
+	PresentMode presentModeFast = PresentMode::Unsupported;
+	ImageFormat imageFormat = platform::graphic::getCommonFormat();
+	ColorSpace colorSpace = ColorSpace::SRGB_NONLINEAR_KHR;
+	CompositeAlphaFlags alpha = CompositeAlphaFlags::Opaque;
+	SurfaceTransformFlags transform = SurfaceTransformFlags::Identity;
+	uint32_t imageCount = 3;
+	Extent2 extent;
+	bool clipped = false;
+	bool transfer = true;
+
+	String description() const;
+};
+
+struct SurfaceInfo {
+	uint32_t minImageCount;
+	uint32_t maxImageCount;
+	Extent2 currentExtent;
+	Extent2 minImageExtent;
+	Extent2 maxImageExtent;
+	uint32_t maxImageArrayLayers;
+	CompositeAlphaFlags supportedCompositeAlpha;
+	SurfaceTransformFlags supportedTransforms;
+	SurfaceTransformFlags currentTransform;
+	ImageUsage supportedUsageFlags;
+	Vector<Pair<ImageFormat, ColorSpace>> formats;
+	Vector<PresentMode> presentModes;
+
+	bool isSupported(const SwapchainConfig &) const;
+
+	String description() const;
+};
+
+struct ViewInfo {
+	String name;
+	URect rect;
+	uint64_t frameInterval = 0; // in microseconds ( 1'000'000 / 60 for 60 fps)
+	Function<SwapchainConfig (const SurfaceInfo &)> config;
+
+	Function<void(const Rc<Director> &)> onCreated;
+	Function<void()> onClosed;
+};
+
 String getBufferFlagsDescription(BufferFlags fmt);
 String getBufferUsageDescription(BufferUsage fmt);
 String getImageFlagsDescription(ImageFlags fmt);
@@ -442,13 +416,11 @@ StringView getImageViewTypeName(ImageViewType type);
 StringView getImageFormatName(ImageFormat fmt);
 StringView getImageTilingName(ImageTiling type);
 StringView getComponentMappingName(ComponentMapping);
-StringView getDescriptorTypeName(DescriptorType);
 StringView getPresentModeName(PresentMode);
 StringView getColorSpaceName(ColorSpace);
 String getCompositeAlphaFlagsDescription(CompositeAlphaFlags);
 String getSurfaceTransformFlagsDescription(SurfaceTransformFlags);
 String getImageUsageDescription(ImageUsage fmt);
-String getProgramStageDescription(ProgramStage fmt);
 size_t getFormatBlockSize(ImageFormat format);
 PixelFormat getImagePixelFormat(ImageFormat format);
 bool isStencilFormat(ImageFormat format);

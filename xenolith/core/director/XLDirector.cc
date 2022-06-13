@@ -22,7 +22,7 @@
 
 #include "XLDirector.h"
 #include "XLGlView.h"
-#include "XLGlDevice.h"
+#include "XLGlLoop.h"
 #include "XLScene.h"
 #include "XLVertexArray.h"
 #include "XLScheduler.h"
@@ -33,10 +33,10 @@ Director::Director() { }
 
 Director::~Director() { }
 
-bool Director::init(Application *app, Rc<Scene> &&scene) {
+bool Director::init(Application *app, gl::View *view) {
 	_application = app;
+	_view = view;
 	_pool = Rc<PoolRef>::alloc();
-	_nextScene = move(scene);
 	_pool->perform([&] {
 		_scheduler = Rc<Scheduler>::create();
 		_inputDispatcher = Rc<InputDispatcher>::create();
@@ -45,6 +45,25 @@ bool Director::init(Application *app, Rc<Scene> &&scene) {
 	_time.global = 0;
 	_time.app = 0;
 	_time.delta = 0;
+
+	_sizeChangedEvent = onEventWithObject(gl::View::onScreenSize, view, [&] (const Event &ev) {
+		auto s = ev.getDataValue().getValue("size");
+		_screenSize = _screenExtent = Extent2(s.getInteger(0), s.getInteger(1));
+		_density = ev.getDataValue().getDouble("density");
+
+		if (_scene) {
+			_scene->setContentSize(_screenSize / _density);
+
+			updateGeneralTransform();
+		}
+	});
+
+	_screenExtent = _view->getScreenExtent();
+	_screenSize = _view->getScreenExtent();
+	_density = _view->getDensity();
+
+	updateGeneralTransform();
+
 	return true;
 }
 
@@ -52,28 +71,26 @@ const Rc<ResourceCache> &Director::getResourceCache() const {
 	return _application->getResourceCache();
 }
 
-gl::SwapchainConfig Director::selectConfig(const gl::SurfaceInfo &info) const {
-	gl::SwapchainConfig ret;
-	ret.extent = info.currentExtent;
-	ret.imageCount = std::max(uint32_t(2), info.minImageCount);
-	ret.presentMode = info.presentModes.front();
-	if (std::find(info.presentModes.begin(), info.presentModes.end(), gl::PresentMode::Immediate) != info.presentModes.end()) {
-		ret.presentModeFast = gl::PresentMode::Immediate;
+bool Director::acquireFrame(const Rc<FrameRequest> &req) {
+	if (_screenExtent != req->getExtent() || _density != req->getDensity()) {
+		_screenSize = _screenExtent = req->getExtent();
+		_density = req->getDensity();
+		updateGeneralTransform();
+
+		if (_scene) {
+			_scene->setContentSize(_screenSize / _density);
+		}
 	}
 
-	ret.presentMode = gl::PresentMode::Fifo;
-
-	ret.imageFormat = info.formats.front().first;
-	ret.colorSpace = info.formats.front().second;
-
-	ret.transfer = (info.supportedUsageFlags & gl::ImageUsage::TransferDst) != gl::ImageUsage::None;
-
-	return ret;
+	update();
+	if (_scene) {
+		req->setQueue(_scene->getRenderQueue());
+	}
+	return true;
 }
 
 void Director::update() {
 	auto t = _application->getClock();
-	auto &size = _view->getScreenExtent();
 
 	if (_time.global) {
 		_time.delta = t - _time.global;
@@ -95,52 +112,16 @@ void Director::update() {
 		}
 		_scene = _nextScene;
 
-		auto d = _view->getDensity();
-
-		_scene->setContentSize(Size2(size) / d);
+		_scene->setContentSize(_screenSize / _density);
 		_scene->onPresented(this);
 		_nextScene = nullptr;
 	}
 
 	// log::vtext("Director", "FrameOffset: ", platform::device::_clock() - _view->getFrameTime());
 
-	_view->runFrame(_scene->getRenderQueue(), size);
+	//_view->runFrame(_scene->getRenderQueue(), _screenSize);
 	_inputDispatcher->update(_time);
 	_scheduler->update(_time);
-
-	_application->update(_time.delta);
-}
-
-void Director::begin(gl::View *view) {
-	_view = view;
-
-	if (_sizeChangedEvent) {
-		removeHandlerNode(_sizeChangedEvent);
-		_sizeChangedEvent = nullptr;
-	}
-
-	_sizeChangedEvent = onEventWithObject(gl::View::onScreenSize, view, [&] (const Event &) {
-		if (_scene) {
-			auto &size = _view->getScreenExtent();
-			auto d = _view->getDensity();
-
-			_scene->setContentSize(Size2(size) / d);
-
-			updateGeneralTransform();
-		}
-	});
-
-	updateGeneralTransform();
-
-	if (_nextScene) {
-		auto &size = _view->getScreenExtent();
-		auto d = _view->getDensity();
-
-		_scene = move(_nextScene);
-		_scene->setContentSize(Size2(size) / d);
-		_scene->onPresented(this);
-		_nextScene = nullptr;
-	}
 }
 
 void Director::end() {
@@ -152,28 +133,27 @@ void Director::end() {
 	_view = nullptr;
 }
 
-Size2 Director::getScreenSize() const {
-	return _view->getScreenExtent();
-}
-
 void Director::runScene(Rc<Scene> &&scene) {
 	if (!scene) {
 		return;
 	}
 
-	/*auto linkId = retain();
+	auto linkId = retain();
 	auto &queue = scene->getRenderQueue();
-	_view->getLoop()->compileRenderQueue(queue, [this, scene, linkId] (bool success) {
+	_view->getLoop()->compileRenderQueue(queue, [this, scene = move(scene), linkId] (bool success) mutable {
 		if (success) {
-			auto linkId = retain();
-			auto &queue = scene->getRenderQueue();
-			_view->getLoop()->scheduleSwapchainRenderQueue(queue, [this, scene, linkId] {
-				_nextScene = scene;
-				release(linkId);
-			});
+			_nextScene = scene;
+			if (!_scene) {
+				_scene = _nextScene;
+				_nextScene = nullptr;
+				_scene->setContentSize(_screenSize / _density);
+				_scene->onPresented(this);
+				_view->runWithQueue(_scene->getRenderQueue());
+				update();
+			}
 		}
 		release(linkId);
-	});*/
+	});
 }
 
 float Director::getFps() const {
@@ -205,8 +185,7 @@ static inline int32_t sp_gcd (int16_t a, int16_t b) {
 }
 
 void Director::updateGeneralTransform() {
-	auto d = _view->getDensity();
-	auto size = Size2(_view->getScreenExtent()) / d;
+	auto size = _screenSize / _density;
 
 	Mat4 proj;
 	proj.scale(2.0f / size.width, -2.0f / size.height, -1.0);

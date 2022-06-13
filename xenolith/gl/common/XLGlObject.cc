@@ -54,6 +54,16 @@ Object::~Object() {
 	invalidate();
 }
 
+static std::atomic<uint64_t> s_RenderPassImplCurrentIndex = 1;
+
+bool RenderPass::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr) {
+	if (NamedObject::init(dev, cb, type, ptr)) {
+		_index = s_RenderPassImplCurrentIndex.fetch_add(1);
+		return true;
+	}
+	return false;
+}
+
 uint64_t Framebuffer::getViewHash(SpanView<Rc<ImageView>> views) {
 	Vector<uint64_t> ids; ids.reserve(views.size());
 	for (auto &it : views) {
@@ -128,6 +138,18 @@ bool ImageView::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr) 
 	return false;
 }
 
+void ImageView::invalidate() {
+	if (_releaseCallback) {
+		_releaseCallback();
+		_releaseCallback = nullptr;
+	}
+	Object::invalidate();
+}
+
+void ImageView::setReleaseCallback(Function<void()> &&cb) {
+	_releaseCallback = move(cb);
+}
+
 Extent3 ImageView::getExtent() const {
 	return _image->getInfo().extent;
 }
@@ -173,7 +195,8 @@ void Shader::inspectShader(SpanView<uint32_t> data) {
 	std::cout << "[" << getProgramStageDescription(stage) << "]\n";
 
 	for (auto &it : makeSpanView(shader.descriptor_bindings, shader.descriptor_binding_count)) {
-		std::cout << "Binging: [" << it.set << ":" << it.binding << "] " << getDescriptorTypeName(DescriptorType(it.descriptor_type)) << "\n";
+		std::cout << "Binging: [" << it.set << ":" << it.binding << "] "
+				<< renderqueue::getDescriptorTypeName(DescriptorType(it.descriptor_type)) << "\n";
 	}
 
 	for (auto &it : makeSpanView(shader.push_constant_blocks, shader.push_constant_block_count)) {
@@ -194,7 +217,8 @@ void Shader::inspect(SpanView<uint32_t> data) {
 	spvReflectEnumerateDescriptorBindings(&shader, &count, &bindings);
 
 	for (auto &it : makeSpanView(shader.descriptor_bindings, shader.descriptor_binding_count)) {
-		std::cout << "[" << it.set << ":" << it.binding << "] " << getDescriptorTypeName(DescriptorType(it.descriptor_type)) << "\n";
+		std::cout << "[" << it.set << ":" << it.binding << "] "
+				<< renderqueue::getDescriptorTypeName(DescriptorType(it.descriptor_type)) << "\n";
 	}
 
 	spvReflectDestroyShaderModule(&shader);
@@ -208,10 +232,18 @@ void Semaphore::setWaited(bool value) {
 	_waited = value;
 }
 
+void Semaphore::setInUse(bool value, uint64_t timeline) {
+	if (timeline == _timeline) {
+		_inUse = value;
+	}
+}
+
 bool Semaphore::reset() {
 	if (_signaled == _waited) {
 		_signaled = false;
 		_waited = false;
+		_inUse = false;
+		++ _timeline;
 		return true;
 	}
 	return false;

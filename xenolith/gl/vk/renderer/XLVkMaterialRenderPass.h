@@ -24,7 +24,7 @@
 #define XENOLITH_GL_VK_RENDERER_XLVKMATERIALRENDERPASS_H_
 
 #include "XLVkAttachment.h"
-#include "XLVkRenderPass.h"
+#include "XLVkQueuePass.h"
 
 namespace stappler::xenolith::vk {
 
@@ -35,21 +35,21 @@ public:
 
 	virtual bool init(StringView, const gl::BufferInfo &, Vector<Rc<gl::Material>> && = Vector<Rc<gl::Material>>());
 
-	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameQueue &) override;
+	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
 };
 
 class MaterialVertexAttachmentHandle : public BufferAttachmentHandle {
 public:
 	virtual ~MaterialVertexAttachmentHandle();
 
-	virtual bool init(const Rc<gl::Attachment> &, const gl::FrameQueue &);
+	virtual bool init(const Rc<Attachment> &, const FrameQueue &);
 
 	const Rc<gl::MaterialSet> &getMaterials() const { return _materials; }
 
-	virtual bool isDescriptorDirty(const gl::RenderPassHandle &, const gl::PipelineDescriptor &,
+	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
 			uint32_t, bool isExternal) const override;
 
-	virtual bool writeDescriptor(const RenderPassHandle &, const gl::PipelineDescriptor &,
+	virtual bool writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
 			uint32_t, bool, VkDescriptorBufferInfo &) override;
 
 protected:
@@ -66,7 +66,7 @@ public:
 	const MaterialVertexAttachment *getMaterials() const { return _materials; }
 
 protected:
-	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameQueue &) override;
+	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
 
 	const MaterialVertexAttachment *_materials = nullptr;
 };
@@ -75,14 +75,14 @@ class VertexMaterialAttachmentHandle : public BufferAttachmentHandle {
 public:
 	virtual ~VertexMaterialAttachmentHandle();
 
-	virtual bool setup(gl::FrameQueue &, Function<void(bool)> &&) override;
+	virtual bool setup(FrameQueue &, Function<void(bool)> &&) override;
 
-	virtual void submitInput(gl::FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
+	virtual void submitInput(FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
 
-	virtual bool isDescriptorDirty(const gl::RenderPassHandle &, const gl::PipelineDescriptor &,
+	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
 			uint32_t, bool isExternal) const override;
 
-	virtual bool writeDescriptor(const RenderPassHandle &, const gl::PipelineDescriptor &,
+	virtual bool writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
 			uint32_t, bool, VkDescriptorBufferInfo &) override;
 
 	const Vector<gl::VertexSpan> &getVertexData() const { return _spans; }
@@ -92,7 +92,7 @@ public:
 	bool empty() const;
 
 protected:
-	virtual bool loadVertexes(gl::FrameHandle &, const Rc<gl::CommandList> &);
+	virtual bool loadVertexes(FrameHandle &, const Rc<gl::CommandList> &);
 
 	virtual bool isGpuTransform() const { return false; }
 
@@ -103,14 +103,14 @@ protected:
 	const MaterialVertexAttachmentHandle *_materials = nullptr;
 };
 
-class MaterialRenderPass : public RenderPass {
+class MaterialPass : public QueuePass {
 public:
-	virtual bool init(StringView, gl::RenderOrdering, size_t subpassCount = 1);
+	virtual bool init(StringView, RenderOrdering, size_t subpassCount = 1);
 
 	const VertexMaterialAttachment *getVertexes() const { return _vertexes; }
 	const MaterialVertexAttachment *getMaterials() const { return _materials; }
 
-	virtual Rc<gl::RenderPassHandle> makeFrameHandle(const gl::FrameQueue &) override;
+	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
 
 protected:
 	virtual void prepare(gl::Device &) override;
@@ -119,12 +119,12 @@ protected:
 	const MaterialVertexAttachment *_materials = nullptr;
 };
 
-class MaterialRenderPassHandle : public RenderPassHandle {
+class MaterialPassHandle : public QueuePassHandle {
 public:
-	virtual bool prepare(gl::FrameQueue &, Function<void(bool)> &&) override;
+	virtual bool prepare(FrameQueue &, Function<void(bool)> &&) override;
 
 protected:
-	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &) override;
+	virtual Vector<VkCommandBuffer> doPrepareCommands(FrameHandle &) override;
 	virtual void prepareMaterialCommands(gl::MaterialSet * materials, VkCommandBuffer &);
 
 	virtual void doFinalizeTransfer(gl::MaterialSet * materials, VkCommandBuffer,

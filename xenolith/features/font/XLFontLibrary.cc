@@ -23,8 +23,10 @@
 #include "XLFontLibrary.h"
 #include "XLFontFace.h"
 #include "XLApplication.h"
-#include "XLGlRenderQueue.h"
 #include "XLGlLoop.h"
+#include "XLGlView.h"
+#include "XLRenderQueueQueue.h"
+#include "XLRenderQueueImageStorage.h"
 
 #include "ft2build.h"
 #include FT_FREETYPE_H
@@ -603,7 +605,7 @@ FontLibrary::~FontLibrary() {
 	}
 }
 
-bool FontLibrary::init(const Rc<gl::Loop> &loop, Rc<gl::RenderQueue> &&queue) {
+bool FontLibrary::init(const Rc<gl::Loop> &loop, Rc<renderqueue::Queue> &&queue) {
 	_loop = loop;
 	_queue = move(queue);
 	_application = _loop->getApplication();
@@ -951,7 +953,7 @@ void FontLibrary::updateImage(const Rc<gl::DynamicImage> &image, Vector<Pair<Rc<
 		bmp.save(Bitmap::FileFormat::Png, toString(Time::now().toMicros(), ".png"));
 	};*/
 
-	auto req = Rc<gl::FrameRequest>::create(_queue);
+	auto req = Rc<renderqueue::FrameRequest>::create(_queue);
 
 	for (auto &it : _queue->getInputAttachments()) {
 		req->addInput(it, move(input));

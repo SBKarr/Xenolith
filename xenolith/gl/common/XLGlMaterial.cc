@@ -21,8 +21,8 @@
  **/
 
 #include "XLGlMaterial.h"
-#include "XLGlRenderPass.h"
 #include "XLGlDynamicImage.h"
+#include "XLGlLoop.h"
 
 namespace stappler::xenolith::gl {
 
@@ -487,6 +487,7 @@ bool Material::init(const PipelineData *pipeline, const ImageData *image, ColorM
 		image
 	});
 
+	img.info.setup(*image);
 	img.info.setup(mode);
 
 	_images = Vector<MaterialImage>({
@@ -638,11 +639,11 @@ void MaterialAttachment::updateDynamicImage(Loop &loop, const DynamicImage *imag
 	loop.compileMaterials(move(input));
 }
 
-Rc<AttachmentDescriptor> MaterialAttachment::makeDescriptor(RenderPassData *pass) {
+auto MaterialAttachment::makeDescriptor(PassData *pass) -> Rc<AttachmentDescriptor> {
 	return Rc<MaterialAttachmentDescriptor>::create(pass, this);
 }
 
-bool MaterialAttachmentDescriptor::init(RenderPassData *data, Attachment *attachment) {
+bool MaterialAttachmentDescriptor::init(PassData *data, Attachment *attachment) {
 	if (BufferAttachmentDescriptor::init(data, attachment)) {
 		_usesTextureSet = true;
 		return true;

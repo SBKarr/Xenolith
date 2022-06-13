@@ -26,8 +26,8 @@
 #include "XLApplication.h"
 #include "XLGlLoop.h"
 #include "XLGlDevice.h"
-#include "XLGlRenderQueue.h"
 #include "XLDefaultShaders.h"
+#include "XLRenderQueueQueue.h"
 
 #include "XLVkAttachment.h"
 #include "XLVkMaterialRenderPass.h"
@@ -45,9 +45,9 @@ bool FpsDisplay::init(font::FontController *fontController) {
 		_label->setString("0.0\n0.0\n0.0");
 		_label->setFontFamily("monospace");
 		_label->setAnchorPoint(Anchor::BottomLeft);
-		_label->setColor(Color::Red_500, true);
+		_label->setColor(Color::Black, true);
 		_label->setFontSize(16);
-		_label->setOpacity(0.75);
+		//_label->setOpacity(0.75);
 		_label->setOnContentSizeDirtyCallback([this] {
 			setContentSize(_label->getContentSize());
 		});
@@ -68,18 +68,6 @@ void FpsDisplay::update(const UpdateTime &) {
 
 		if (_label) {
 			auto str = toString(std::setprecision(3), fps, "\n", spf, "\n", local);
-			/*auto str = toString(std::setprecision(3), local);
-			if (_frames % 2 == 0) {
-				str.resize(2, '0');
-				std::cout << str << "\n";
-			} else if (_frames % 60 == 1) {
-				str.resize(4, '0');
-			} else if (_frames % 60 == 2) {
-				str.resize(4, '0');
-			} else {
-				str.resize(4, '0');
-			}*/
-
 			_label->setString(str);
 		}
 		if (local > 8.0f) {
@@ -117,9 +105,10 @@ static gl::ImageFormat TessScene_selectDepthFormat(SpanView<gl::ImageFormat> for
 	return ret;
 }
 
-static void TessScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder &builder, Extent2 extent,
-		Function<void(gl::FrameQueue &, const Rc<gl::AttachmentHandle> &, Function<void(bool)> &&)> && cb) {
-	auto &dev = app->getGlLoop()->getDevice();
+static void TessScene_makeRenderQueue(Application *app, renderqueue::Queue::Builder &builder, Extent2 extent,
+		Function<void(renderqueue::FrameQueue &, const Rc<renderqueue::AttachmentHandle> &, Function<void(bool)> &&)> && cb) {
+	using namespace renderqueue;
+
 	auto &cache = app->getResourceCache();
 
 	// load shaders by ref - do not copy content into engine
@@ -127,16 +116,16 @@ static void TessScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder
 	auto materialVert = builder.addProgramByRef("Loader_MaterialFrag", xenolith::shaders::MaterialFrag);
 
 	// render-to-swapchain RenderPass
-	auto pass = Rc<vk::MaterialRenderPass>::create("SwapchainPass", gl::RenderOrderingHighest);
+	auto pass = Rc<vk::MaterialPass>::create("SwapchainPass", RenderOrderingHighest);
 	builder.addRenderPass(pass);
 
-	auto shaderSpecInfo = Vector<gl::SpecializationInfo>({
+	auto shaderSpecInfo = Vector<SpecializationInfo>({
 		// no specialization required for vertex shader
 		materialVert,
 		// specialization for fragment shader - use platform-dependent array sizes
-		gl::SpecializationInfo(materialFrag, Vector<gl::PredefinedConstant>{
-			gl::PredefinedConstant::SamplersArraySize,
-			gl::PredefinedConstant::TexturesArraySize
+		SpecializationInfo(materialFrag, Vector<PredefinedConstant>{
+			PredefinedConstant::SamplersArraySize,
+			PredefinedConstant::TexturesArraySize
 		})
 	});
 
@@ -151,7 +140,7 @@ static void TessScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder
 		DepthInfo(false, true, gl::CompareOp::Less)
 	}));
 
-	builder.addPipeline(pass, 0, "Surface", shaderSpecInfo, PipelineMaterialInfo(
+	auto surfacePipeline = builder.addPipeline(pass, 0, "Surface", shaderSpecInfo, PipelineMaterialInfo(
 		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
 				gl::BlendFactor::One, gl::BlendFactor::Zero, gl::BlendOp::Add),
 		DepthInfo(false, true, gl::CompareOp::LessOrEqual)
@@ -175,14 +164,14 @@ static void TessScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder
 	builder.setInternalResource(Rc<gl::Resource>::create(move(resourceBuilder)));*/
 
 	gl::ImageInfo depthImageInfo(extent, gl::ForceImageUsage(gl::ImageUsage::DepthStencilAttachment),
-			TessScene_selectDepthFormat(dev->getSupportedDepthStencilFormat()));
+			TessScene_selectDepthFormat(app->getGlLoop()->getSupportedDepthStencilFormat()));
 
-	gl::ImageAttachment::AttachmentInfo depthAttachmentInfo;
-	depthAttachmentInfo.initialLayout = gl::AttachmentLayout::Undefined;
-	depthAttachmentInfo.finalLayout = gl::AttachmentLayout::DepthStencilAttachmentOptimal;
+	ImageAttachment::AttachmentInfo depthAttachmentInfo;
+	depthAttachmentInfo.initialLayout = AttachmentLayout::Undefined;
+	depthAttachmentInfo.finalLayout = AttachmentLayout::DepthStencilAttachmentOptimal;
 	depthAttachmentInfo.clearOnLoad = true;
 	depthAttachmentInfo.clearColor = Color4F::WHITE;
-	depthAttachmentInfo.frameSizeCallback = [] (const gl::FrameQueue &frame) {
+	depthAttachmentInfo.frameSizeCallback = [] (const FrameQueue &frame) {
 		return Extent3(frame.getExtent());
 	};
 
@@ -191,12 +180,12 @@ static void TessScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder
 	gl::ImageInfo outImageInfo(extent, gl::ForceImageUsage(gl::ImageUsage::ColorAttachment), platform::graphic::getCommonFormat());
 
 	// output attachment
-	gl::ImageAttachment::AttachmentInfo outAttachmentInfo;
-	outAttachmentInfo.initialLayout = gl::AttachmentLayout::Undefined;
-	outAttachmentInfo.finalLayout = gl::AttachmentLayout::PresentSrc;
+	ImageAttachment::AttachmentInfo outAttachmentInfo;
+	outAttachmentInfo.initialLayout = AttachmentLayout::Undefined;
+	outAttachmentInfo.finalLayout = AttachmentLayout::PresentSrc;
 	outAttachmentInfo.clearOnLoad = true;
 	outAttachmentInfo.clearColor = Color4F(0.0f, 0.0f, 0.0f, 0.0f); // Color4F::BLACK;
-	outAttachmentInfo.frameSizeCallback = [] (const gl::FrameQueue &frame) {
+	outAttachmentInfo.frameSizeCallback = [] (const FrameQueue &frame) {
 		return Extent3(frame.getExtent());
 	};
 
@@ -209,11 +198,13 @@ static void TessScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder
 		// ... with predefined list of materials
 		Vector<Rc<gl::Material>>({
 			// Rc<gl::Material>::create(materialPipeline, initImage),
+			// Rc<gl::Material>::create(transparentPipeline, initImage),
 			Rc<gl::Material>::create(materialPipeline, cache->getEmptyImage(), ColorMode::IntensityChannel),
 			Rc<gl::Material>::create(materialPipeline, cache->getSolidImage(), ColorMode::IntensityChannel),
-			// Rc<gl::Material>::create(transparentPipeline, initImage),
-			Rc<gl::Material>::create(transparentPipeline, cache->getEmptyImage(), ColorMode::IntensityChannel),
-			Rc<gl::Material>::create(transparentPipeline, cache->getSolidImage(), ColorMode::IntensityChannel)
+			Rc<gl::Material>::create(transparentPipeline, cache->getEmptyImage(), ColorMode()),
+			Rc<gl::Material>::create(transparentPipeline, cache->getSolidImage(), ColorMode()),
+			Rc<gl::Material>::create(surfacePipeline, cache->getEmptyImage(), ColorMode()),
+			Rc<gl::Material>::create(surfacePipeline, cache->getSolidImage(), ColorMode())
 		})
 	);
 
@@ -223,26 +214,26 @@ static void TessScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder
 	vertexInput->setInputCallback(move(cb));
 
 	// define pass input-output
-	builder.addPassInput(pass, 0, vertexInput, gl::AttachmentDependencyInfo()); // 0
-	builder.addPassInput(pass, 0, materialInput, gl::AttachmentDependencyInfo()); // 1
-	builder.addPassDepthStencil(pass, 0, depth, gl::AttachmentDependencyInfo{
-		gl::PipelineStage::EarlyFragmentTest,
-			gl::AccessType::DepthStencilAttachmentRead | gl::AccessType::DepthStencilAttachmentWrite,
-		gl::PipelineStage::LateFragmentTest,
-			gl::AccessType::DepthStencilAttachmentRead | gl::AccessType::DepthStencilAttachmentWrite,
+	builder.addPassInput(pass, 0, vertexInput, AttachmentDependencyInfo()); // 0
+	builder.addPassInput(pass, 0, materialInput, AttachmentDependencyInfo()); // 1
+	builder.addPassDepthStencil(pass, 0, depth, AttachmentDependencyInfo{
+		PipelineStage::EarlyFragmentTest,
+			AccessType::DepthStencilAttachmentRead | AccessType::DepthStencilAttachmentWrite,
+		PipelineStage::LateFragmentTest,
+			AccessType::DepthStencilAttachmentRead | AccessType::DepthStencilAttachmentWrite,
 
 		// can be reused after RenderPass is submitted
-		gl::FrameRenderPassState::Submitted,
+		FrameRenderPassState::Submitted,
 	});
-	builder.addPassOutput(pass, 0, out, gl::AttachmentDependencyInfo{
+	builder.addPassOutput(pass, 0, out, AttachmentDependencyInfo{
 		// first used as color attachment to output colors
-		gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::ColorAttachmentWrite,
+		PipelineStage::ColorAttachmentOutput, AccessType::ColorAttachmentWrite,
 
 		// last used the same way (the only usage for this attachment)
-		gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::ColorAttachmentWrite,
+		PipelineStage::ColorAttachmentOutput, AccessType::ColorAttachmentWrite,
 
 		// can be reused after RenderPass is submitted
-		gl::FrameRenderPassState::Submitted,
+		FrameRenderPassState::Submitted,
 	});
 
 	// define global input-output
@@ -258,9 +249,9 @@ static void TessScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder
 
 bool TessScene::init(AppDelegate *app, Extent2 extent) {
 	// build presentation RenderQueue
-	gl::RenderQueue::Builder builder("Loader", gl::RenderQueue::Continuous);
+	renderqueue::Queue::Builder builder("Loader");
 
-	TessScene_makeRenderQueue(app, builder, extent, [this] (gl::FrameQueue &frame, const Rc<gl::AttachmentHandle> &a,
+	TessScene_makeRenderQueue(app, builder, extent, [this] (renderqueue::FrameQueue &frame, const Rc<renderqueue::AttachmentHandle> &a,
 			Function<void(bool)> &&cb) {
 		on2dVertexInput(frame, a, move(cb));
 	});

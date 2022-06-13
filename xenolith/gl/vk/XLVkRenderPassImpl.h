@@ -24,14 +24,15 @@
 #define XENOLITH_GL_VK_XLVKRENDERPASSIMPL_H_
 
 #include "XLVk.h"
+#include "XLVkQueuePass.h"
 
 namespace stappler::xenolith::vk {
 
 class Device;
 
-class RenderPassImpl : public gl::RenderPassImpl {
+class RenderPassImpl : public gl::RenderPass {
 public:
-	struct PassData {
+	struct Data {
 		VkPipelineLayout layout = VK_NULL_HANDLE;
 		VkRenderPass renderPass = VK_NULL_HANDLE;
 		VkRenderPass renderPassAlternative = VK_NULL_HANDLE;
@@ -42,7 +43,7 @@ public:
 		bool cleanup(Device &dev);
 	};
 
-	virtual bool init(Device &dev, gl::RenderPassData &);
+	virtual bool init(Device &dev, PassData &);
 
 	VkRenderPass getRenderPass(bool alt = false) const;
 	VkPipelineLayout getPipelineLayout() const { return _data->layout; }
@@ -52,17 +53,17 @@ public:
 
 	// if async is true - update descriptors with updateAfterBind flag
 	// 			   false - without updateAfterBindFlag
-	virtual bool writeDescriptors(const RenderPassHandle &, bool async) const;
+	virtual bool writeDescriptors(const QueuePassHandle &, bool async) const;
 
-	virtual void perform(const RenderPassHandle &, VkCommandBuffer buf, const Callback<void()> &);
+	virtual void perform(const QueuePassHandle &, VkCommandBuffer buf, const Callback<void()> &);
 
 protected:
-	bool initGraphicsPass(Device &dev, gl::RenderPassData &);
-	bool initComputePass(Device &dev, gl::RenderPassData &);
-	bool initTransferPass(Device &dev, gl::RenderPassData &);
-	bool initGenericPass(Device &dev, gl::RenderPassData &);
+	bool initGraphicsPass(Device &dev, PassData &);
+	bool initComputePass(Device &dev, PassData &);
+	bool initTransferPass(Device &dev, PassData &);
+	bool initGenericPass(Device &dev, PassData &);
 
-	bool initDescriptors(Device &dev, gl::RenderPassData &, PassData &);
+	bool initDescriptors(Device &dev, PassData &, Data &);
 
 	Vector<VkAttachmentDescription> _attachmentDescriptions;
 	Vector<VkAttachmentDescription> _attachmentDescriptionsAlternative;
@@ -70,8 +71,8 @@ protected:
 	Vector<uint32_t> _preservedAttachments;
 	Vector<VkSubpassDependency> _subpassDependencies;
 	Vector<VkSubpassDescription> _subpasses;
-	Set<const gl::Attachment *> _variableAttachments;
-	PassData *_data = nullptr;
+	Set<const Attachment *> _variableAttachments;
+	Data *_data = nullptr;
 
 	Vector<VkClearValue> _clearValues;
 };

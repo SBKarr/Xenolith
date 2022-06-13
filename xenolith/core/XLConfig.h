@@ -23,6 +23,7 @@ THE SOFTWARE.
 #ifndef XENOLITH_CORE_XLCONFIG_H_
 #define XENOLITH_CORE_XLCONFIG_H_
 
+#include "SPCommon.h"
 #include <stdint.h>
 
 namespace stappler::xenolith::config {
@@ -51,9 +52,6 @@ static constexpr uint64_t MaxDirectorDeltaTime = 10'000'000 / 16;
 static constexpr uint64_t MaxDirectorDeltaTime = 100'000'000 / 16;
 #endif
 
-/* Enable hooking output image with swapchain image when possible, can improve performance */
-static constexpr bool EnableSwapchainHook = false;
-
 // max chars count, used by locale::hasLocaleTagsFast
 static constexpr size_t MaxFastLocaleChars = size_t(127);
 
@@ -61,6 +59,22 @@ static constexpr size_t MaxFastLocaleChars = size_t(127);
 static constexpr float VGAntialiasFactor = 0.5f;
 
 static constexpr bool VGProcessIntersectsInDrawer = false;
+
+inline uint16_t getGlThreadCount() {
+#if DEBUG
+	return 2;
+#else
+	return math::clamp(uint16_t(std::thread::hardware_concurrency()), uint16_t(4), uint16_t(16));
+#endif
+}
+
+inline uint16_t getMainThreadCount() {
+#if DEBUG
+	return 2;
+#else
+	return math::clamp(uint16_t(std::thread::hardware_concurrency() / 2), uint16_t(2), uint16_t(16));
+#endif
+}
 
 }
 

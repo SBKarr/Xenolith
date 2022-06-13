@@ -23,37 +23,28 @@
 #ifndef XENOLITH_GL_COMMON_XLGLDEVICE_H_
 #define XENOLITH_GL_COMMON_XLGLDEVICE_H_
 
-#include "XLGlRenderQueue.h"
+#include "XLRenderQueueQueue.h"
 #include "XLGlMaterial.h"
-#include "XLGlFrameEmitter.h"
 #include "XLEventHeader.h"
 #include <deque>
 
 namespace stappler::xenolith::gl {
 
-class Resource;
 class Instance;
 class View;
-class RenderQueue;
 class ObjectInterface;
 class Loop;
-class FrameHandle;
 
 class Device : public Ref {
 public:
+	using DescriptorType = renderqueue::DescriptorType;
+	using ImageStorage = renderqueue::ImageStorage;
+
 	Device();
 	virtual ~Device();
 
 	virtual bool init(const Instance *instance);
-
-	virtual void begin(const Application *, TaskQueue &);
-	virtual void end(gl::Loop &, TaskQueue &);
-	virtual void waitIdle(gl::Loop &);
-
-	virtual uint32_t addSampler(const SamplerInfo &);
-
-	// release any external resources
-	virtual void invalidateFrame(FrameHandle &);
+	virtual void end();
 
 	Rc<Shader> getProgram(StringView);
 	Rc<Shader> addProgram(Rc<Shader>);
@@ -71,29 +62,18 @@ public:
 	virtual void onLoopStarted(gl::Loop &);
 	virtual void onLoopEnded(gl::Loop &);
 
-	virtual bool supportsUpdateAfterBind(gl::DescriptorType) const;
+	virtual bool supportsUpdateAfterBind(DescriptorType) const;
 
 	virtual Rc<gl::ImageObject> getEmptyImageObject() const = 0;
 	virtual Rc<gl::ImageObject> getSolidImageObject() const = 0;
 
-	virtual Rc<gl::FrameHandle> makeFrame(gl::Loop &, Rc<gl::FrameRequest> &&, uint64_t gen);
-
-	virtual Rc<Framebuffer> makeFramebuffer(const gl::RenderPassData *, SpanView<Rc<gl::ImageView>>, Extent2);
-	virtual Rc<ImageAttachmentObject> makeImage(const gl::ImageAttachment *, Extent3);
+	virtual Rc<Framebuffer> makeFramebuffer(const renderqueue::PassData *, SpanView<Rc<gl::ImageView>>, Extent2);
+	virtual Rc<ImageStorage> makeImage(const ImageInfo &);
 	virtual Rc<Semaphore> makeSemaphore();
 	virtual Rc<ImageView> makeImageView(const Rc<ImageObject> &, const ImageViewInfo &);
 
 protected:
 	friend class Loop;
-
-	virtual void compileResource(gl::Loop &loop, const Rc<Resource> &req, Function<void(bool)> && = nullptr);
-	virtual void compileRenderQueue(gl::Loop &loop, const Rc<RenderQueue> &req, Function<void(bool)> &&);
-
-	virtual void compileMaterials(gl::Loop &loop, Rc<MaterialInputData> &&);
-
-	virtual void compileImage(gl::Loop &loop, const Rc<DynamicImage> &, Function<void(bool)> &&) = 0;
-
-	virtual void compileSamplers(thread::TaskQueue &q, bool force = true) = 0;
 
 	void clearShaders();
 	void invalidateObjects();

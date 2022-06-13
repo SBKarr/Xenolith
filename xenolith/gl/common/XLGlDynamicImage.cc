@@ -141,7 +141,7 @@ const ImageData * DynamicImage::Builder::setImage(StringView key, ImageInfo &&in
 	static_cast<ImageInfo &>(_data->_data) = info;
 	_data->_data.key = _data->_keyData;
 	_data->_data.stdCallback = [npath, format = info.format] (const ImageData::DataCallback &dcb) {
-		Resource_loadImageFileData(npath, format, dcb);
+		Resource::loadImageFileData(npath, format, dcb);
 	};;
 	_data->_data.atlas = move(atlas);
 	return &_data->_data;

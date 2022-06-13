@@ -439,7 +439,8 @@ DeviceInfo::DeviceInfo(VkPhysicalDevice dev, QueueFamilyInfo gr, QueueFamilyInfo
 : device(dev), graphicsFamily(gr), presentFamily(pres), transferFamily(tr), computeFamily(comp)
 , optionalExtensions(move(optionals)), promotedExtensions(move(promoted)) { }
 
-bool DeviceInfo::isUsable() const {
+bool DeviceInfo::supportsPresentation() const {
+	// transferFamily and computeFamily can be same as graphicsFamily
 	if ((graphicsFamily.ops & QueueOperations::Graphics) != QueueOperations::None
 			&& (presentFamily.ops & QueueOperations::Present) != QueueOperations::None
 			&& (transferFamily.ops & QueueOperations::Transfer) != QueueOperations::None

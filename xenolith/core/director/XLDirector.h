@@ -23,8 +23,6 @@
 #ifndef XENOLITH_CORE_DIRECTOR_XLDIRECTOR_H_
 #define XENOLITH_CORE_DIRECTOR_XLDIRECTOR_H_
 
-#include "XLGlFrameHandle.h"
-#include "XLGlCommandList.h"
 #include "XLEventHeader.h"
 #include "XLEventHandler.h"
 #include "XLResourceCache.h"
@@ -38,11 +36,21 @@ class InputDispatcher;
 
 class Director : public Ref, EventHandler {
 public:
+	using FrameRequest = renderqueue::FrameRequest;
+
 	virtual ~Director();
 
 	Director();
 
-	virtual bool init(Application *, Rc<Scene> &&);
+	bool init(Application *, gl::View *);
+
+	void runScene(Rc<Scene> &&);
+
+	bool acquireFrame(const Rc<FrameRequest> &);
+
+	void update();
+
+	void end();
 
 	gl::View *getView() const { return _view; }
 	Application *getApplication() const { return _application; }
@@ -53,16 +61,8 @@ public:
 	const Rc<ResourceCache> &getResourceCache() const;
 	const Mat4 &getGeneralProjection() const { return _generalProjection; }
 
-	virtual gl::SwapchainConfig selectConfig(const gl::SurfaceInfo &) const;
-
-	virtual void update();
-
-	virtual void begin(gl::View *view);
-	virtual void end();
-
-	Size2 getScreenSize() const;
-
-	void runScene(Rc<Scene> &&);
+	Extent2 getScreenExtent() const { return _screenExtent; }
+	Size2 getScreenSize() const { return _screenSize; }
 
 	float getFps() const;
 	float getAvgFps() const;
@@ -75,14 +75,19 @@ protected:
 
 	void updateGeneralTransform();
 
+	Extent2 _screenExtent;
+	Size2 _screenSize;
+	float _density = 1.0f;
+
 	uint64_t _startTime = 0;
 	UpdateTime _time;
 	bool _running = false;
-	Rc<gl::View> _view;
 
 	Mutex _mutex;
 
 	Application *_application = nullptr;
+	gl::View *_view = nullptr;
+
 	Rc<Scene> _scene;
 	Rc<Scene> _nextScene;
 

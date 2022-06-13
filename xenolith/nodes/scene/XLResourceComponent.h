@@ -24,7 +24,7 @@ THE SOFTWARE.
 #define COMPONENTS_XENOLITH_NODES_XLRESOURCECOMPONENT_H_
 
 #include "XLComponent.h"
-#include "XLGlResource.h"
+#include "XLRenderQueueResource.h"
 
 namespace stappler::xenolith {
 

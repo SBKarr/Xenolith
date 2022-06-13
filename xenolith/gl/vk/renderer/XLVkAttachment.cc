@@ -21,12 +21,11 @@
  **/
 
 #include "XLVkAttachment.h"
-#include "XLVkFrame.h"
 #include "XLVkDevice.h"
 
 namespace stappler::xenolith::vk {
 
-Rc<gl::AttachmentHandle> ImageAttachment::makeFrameHandle(const gl::FrameQueue &handle) {
+auto ImageAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<AttachmentHandle> {
 	return Rc<ImageAttachmentHandle>::create(this, handle);
 }
 
@@ -34,7 +33,7 @@ VertexBufferAttachment::~VertexBufferAttachment() {
 
 }
 
-Rc<gl::AttachmentHandle> VertexBufferAttachment::makeFrameHandle(const gl::FrameQueue &frame) {
+auto VertexBufferAttachment::makeFrameHandle(const FrameQueue &frame) -> Rc<AttachmentHandle> {
 	return Rc<VertexBufferAttachmentHandle>::create(this, frame);
 }
 
@@ -44,22 +43,21 @@ VertexBufferAttachmentHandle::~VertexBufferAttachmentHandle() {
 		_pool = nullptr;
 	}
 
-	if (_fence) {
-		_device->releaseFenceUnsafe(move(_fence));
-		_fence = nullptr;
-	}
-
 	if (_transferQueue) {
 		_device->releaseQueue(move(_transferQueue));
 		_transferQueue = nullptr;
 	}
 }
 
-void VertexBufferAttachmentHandle::submitInput(gl::FrameQueue &q, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
+void VertexBufferAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
 	if (auto d = data.cast<gl::VertexData>()) {
-		q.getFrame().performInQueue([this, d = move(d)] (gl::FrameHandle &handle) {
+		if (!q.getFrame()) {
+			cb(false);
+			return;
+		}
+		q.getFrame()->performInQueue([this, d = move(d)] (FrameHandle &handle) {
 			return loadVertexes(handle, d);
-		}, [this, cb = move(cb)] (gl::FrameHandle &handle, bool success) {
+		}, [this, cb = move(cb)] (FrameHandle &handle, bool success) {
 			cb(success);
 		}, this, "VertexBufferAttachmentHandle::submitInput");
 	} else {
@@ -67,12 +65,12 @@ void VertexBufferAttachmentHandle::submitInput(gl::FrameQueue &q, Rc<gl::Attachm
 	}
 }
 
-bool VertexBufferAttachmentHandle::isDescriptorDirty(const gl::RenderPassHandle &, const gl::PipelineDescriptor &,
+bool VertexBufferAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
 		uint32_t, bool isExternal) const {
 	return true;
 }
 
-bool VertexBufferAttachmentHandle::writeDescriptor(const RenderPassHandle &, const gl::PipelineDescriptor &,
+bool VertexBufferAttachmentHandle::writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
 		uint32_t, bool, VkDescriptorBufferInfo &info) {
 	info.buffer = _vertexes->getBuffer();
 	info.offset = 0;
@@ -80,15 +78,10 @@ bool VertexBufferAttachmentHandle::writeDescriptor(const RenderPassHandle &, con
 	return true;
 }
 
-bool VertexBufferAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, const Rc<gl::VertexData> &vertexes) {
-	auto handle = dynamic_cast<FrameHandle *>(&fhandle);
-	if (!handle) {
-		return false;
-	}
-
+bool VertexBufferAttachmentHandle::loadVertexes(FrameHandle &handle, const Rc<gl::VertexData> &vertexes) {
 	_data = vertexes;
 
-	auto &memPool = handle->getMemPool();
+	auto &memPool = static_cast<DeviceFrameHandle &>(handle).getMemPool();
 
 	_vertexes = memPool->spawn(AllocationUsage::DeviceLocalHostVisible,
 			gl::BufferInfo(gl::BufferUsage::StorageBuffer, vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U)));

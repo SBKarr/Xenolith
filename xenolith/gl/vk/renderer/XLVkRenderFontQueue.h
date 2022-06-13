@@ -23,17 +23,17 @@
 #ifndef XENOLITH_GL_VK_RENDERER_XLVKRENDERFONTQUEUE_H_
 #define XENOLITH_GL_VK_RENDERER_XLVKRENDERFONTQUEUE_H_
 
-#include "XLVkRenderPass.h"
+#include "XLVkQueuePass.h"
 
 namespace stappler::xenolith::vk {
 
 class RenderFontAttachment;
 
-class RenderFontQueue : public gl::RenderQueue {
+class RenderFontQueue : public renderqueue::Queue {
 public:
 	virtual ~RenderFontQueue();
 
-	bool init(StringView name, Function<void(gl::FrameQueue &, const Rc<gl::AttachmentHandle> &, Function<void(bool)> &&)> && = nullptr);
+	bool init(StringView name, Function<void(FrameQueue &, const Rc<AttachmentHandle> &, Function<void(bool)> &&)> && = nullptr);
 
 	RenderFontAttachment *getAttachment() const { return _attachment; }
 

@@ -27,7 +27,7 @@
 
 namespace stappler::xenolith::vk {
 
-bool RenderPassImpl::PassData::cleanup(Device &dev) {
+bool RenderPassImpl::Data::cleanup(Device &dev) {
 	for (VkDescriptorSetLayout &it : layouts) {
 		dev.getTable()->vkDestroyDescriptorSetLayout(dev.getDevice(), it, nullptr);
 	}
@@ -51,7 +51,7 @@ bool RenderPassImpl::PassData::cleanup(Device &dev) {
 	return false;
 }
 
-bool RenderPassImpl::init(Device &dev, gl::RenderPassData &data) {
+bool RenderPassImpl::init(Device &dev, PassData &data) {
 	switch (data.renderPass->getType()) {
 	case gl::RenderPassType::Graphics:
 		return initGraphicsPass(dev, data);
@@ -85,7 +85,7 @@ VkDescriptorSet RenderPassImpl::getDescriptorSet(uint32_t idx) const {
 	return _data->sets[idx];
 }
 
-bool RenderPassImpl::writeDescriptors(const RenderPassHandle &handle, bool async) const {
+bool RenderPassImpl::writeDescriptors(const QueuePassHandle &handle, bool async) const {
 	auto dev = (Device *)_device;
 	auto table = dev->getTable();
 	auto data = handle.getData();
@@ -96,7 +96,7 @@ bool RenderPassImpl::writeDescriptors(const RenderPassHandle &handle, bool async
 
 	Vector<VkWriteDescriptorSet> writes;
 
-	auto writeDescriptor = [&] (VkDescriptorSet set, const gl::PipelineDescriptor &desc, uint32_t currentDescriptor, bool external) {
+	auto writeDescriptor = [&] (VkDescriptorSet set, const PipelineDescriptor &desc, uint32_t currentDescriptor, bool external) {
 		auto a = handle.getAttachmentHandle(desc.attachment);
 		if (!a) {
 			return false;
@@ -122,11 +122,11 @@ bool RenderPassImpl::writeDescriptors(const RenderPassHandle &handle, bool async
 		for (uint32_t i = 0; i < c; ++ i) {
 			if (a->isDescriptorDirty(handle, desc, i, external)) {
 				switch (desc.type) {
-				case gl::DescriptorType::Sampler:
-				case gl::DescriptorType::CombinedImageSampler:
-				case gl::DescriptorType::SampledImage:
-				case gl::DescriptorType::StorageImage:
-				case gl::DescriptorType::InputAttachment:
+				case DescriptorType::Sampler:
+				case DescriptorType::CombinedImageSampler:
+				case DescriptorType::SampledImage:
+				case DescriptorType::StorageImage:
+				case DescriptorType::InputAttachment:
 					if (!localImages) {
 						localImages = &images.emplace_front(Vector<VkDescriptorImageInfo>());
 					}
@@ -138,8 +138,8 @@ bool RenderPassImpl::writeDescriptors(const RenderPassHandle &handle, bool async
 						}
 					}
 					break;
-				case gl::DescriptorType::StorageTexelBuffer:
-				case gl::DescriptorType::UniformTexelBuffer:
+				case DescriptorType::StorageTexelBuffer:
+				case DescriptorType::UniformTexelBuffer:
 					if (!localViews) {
 						localViews = &views.emplace_front(Vector<VkBufferView>());
 					}
@@ -152,10 +152,10 @@ bool RenderPassImpl::writeDescriptors(const RenderPassHandle &handle, bool async
 						}
 					}
 					break;
-				case gl::DescriptorType::UniformBuffer:
-				case gl::DescriptorType::StorageBuffer:
-				case gl::DescriptorType::UniformBufferDynamic:
-				case gl::DescriptorType::StorageBufferDynamic:
+				case DescriptorType::UniformBuffer:
+				case DescriptorType::StorageBuffer:
+				case DescriptorType::UniformBufferDynamic:
+				case DescriptorType::StorageBufferDynamic:
 					if (!localBuffers) {
 						localBuffers = &buffers.emplace_front(Vector<VkDescriptorBufferInfo>());
 					}
@@ -167,7 +167,7 @@ bool RenderPassImpl::writeDescriptors(const RenderPassHandle &handle, bool async
 						}
 					}
 					break;
-				case gl::DescriptorType::Unknown:
+				case DescriptorType::Unknown:
 					break;
 				}
 				++ writeData.descriptorCount;
@@ -259,11 +259,11 @@ bool RenderPassImpl::writeDescriptors(const RenderPassHandle &handle, bool async
 	return true;
 }
 
-void RenderPassImpl::perform(const RenderPassHandle &handle, VkCommandBuffer buf, const Callback<void()> &cb) {
+void RenderPassImpl::perform(const QueuePassHandle &handle, VkCommandBuffer buf, const Callback<void()> &cb) {
 	bool useAlternative = false;
 	for (auto &it : _variableAttachments) {
 		if (auto aHandle = handle.getAttachmentHandle(it)) {
-			if (aHandle->getQueueData()->image && !aHandle->getQueueData()->image->isSwapchainImage) {
+			if (aHandle->getQueueData()->image && !aHandle->getQueueData()->image->isSwapchainImage()) {
 				useAlternative = true;
 				break;
 			}
@@ -295,13 +295,13 @@ void RenderPassImpl::perform(const RenderPassHandle &handle, VkCommandBuffer buf
 	}
 }
 
-bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
+bool RenderPassImpl::initGraphicsPass(Device &dev, PassData &data) {
 	bool hasAlternative = false;
-	PassData pass;
+	Data pass;
 
 	size_t attachmentReferences = 0;
 	for (auto &it : data.descriptors) {
-		if (!gl::isImageAttachmentType(it->getAttachment()->getType())) {
+		if (it->getAttachment()->getType() != renderqueue::AttachmentType::Image) {
 			continue;
 		}
 
@@ -310,12 +310,12 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
 
 		bool mayAlias = false;
 		for (auto &u : it->getRefs()) {
-			if (u->getUsage() == gl::AttachmentUsage::InputOutput || u->getUsage() == gl::AttachmentUsage::InputDepthStencil) {
+			if (u->getUsage() == renderqueue::AttachmentUsage::InputOutput || u->getUsage() == renderqueue::AttachmentUsage::InputDepthStencil) {
 				mayAlias = true;
 			}
 		}
 
-		auto imageDesc = (gl::ImageAttachmentDescriptor *)it;
+		auto imageDesc = (renderqueue::ImageAttachmentDescriptor *)it;
 		auto &info = imageDesc->getInfo();
 
 		attachmentAlternative.flags = attachment.flags = (mayAlias ? VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT : 0);
@@ -328,9 +328,9 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
 		attachmentAlternative.initialLayout = attachment.initialLayout = VkImageLayout(imageDesc->getInitialLayout());
 		attachmentAlternative.finalLayout = attachment.finalLayout = VkImageLayout(imageDesc->getFinalLayout());
 
-		if (imageDesc->getFinalLayout() == gl::AttachmentLayout::PresentSrc) {
+		if (imageDesc->getFinalLayout() == renderqueue::AttachmentLayout::PresentSrc) {
 			hasAlternative = true;
-			attachmentAlternative.finalLayout = VkImageLayout(gl::AttachmentLayout::TransferSrcOptimal);
+			attachmentAlternative.finalLayout = VkImageLayout(renderqueue::AttachmentLayout::TransferSrcOptimal);
 			_variableAttachments.emplace(it->getAttachment());
 		}
 
@@ -342,8 +342,8 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
 		auto fmt = gl::getImagePixelFormat(imageDesc->getInfo().format);
 		switch (fmt) {
 		case gl::PixelFormat::D:
-			if (imageDesc->getLoadOp() == gl::AttachmentLoadOp::Clear) {
-				auto c = ((gl::ImageAttachment *)imageDesc->getAttachment())->getClearColor();
+			if (imageDesc->getLoadOp() == renderqueue::AttachmentLoadOp::Clear) {
+				auto c = ((renderqueue::ImageAttachment *)imageDesc->getAttachment())->getClearColor();
 				VkClearValue clearValue;
 				clearValue.depthStencil.depth = c.r;
 				_clearValues.emplace_back(clearValue);
@@ -354,8 +354,9 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
 			}
 			break;
 		case gl::PixelFormat::DS:
-			if (imageDesc->getStencilLoadOp() == gl::AttachmentLoadOp::Clear || imageDesc->getLoadOp() == gl::AttachmentLoadOp::Clear) {
-				auto c = ((gl::ImageAttachment *)imageDesc->getAttachment())->getClearColor();
+			if (imageDesc->getStencilLoadOp() == renderqueue::AttachmentLoadOp::Clear
+					|| imageDesc->getLoadOp() == renderqueue::AttachmentLoadOp::Clear) {
+				auto c = ((renderqueue::ImageAttachment *)imageDesc->getAttachment())->getClearColor();
 				VkClearValue clearValue;
 				clearValue.depthStencil.depth = c.r;
 				clearValue.depthStencil.stencil = 0;
@@ -368,7 +369,7 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
 			}
 			break;
 		case gl::PixelFormat::S:
-			if (imageDesc->getStencilLoadOp() == gl::AttachmentLoadOp::Clear) {
+			if (imageDesc->getStencilLoadOp() == renderqueue::AttachmentLoadOp::Clear) {
 				VkClearValue clearValue;
 				clearValue.depthStencil.stencil = 0;
 				_clearValues.emplace_back(clearValue);
@@ -379,8 +380,8 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
 			}
 			break;
 		default:
-			if (imageDesc->getLoadOp() == gl::AttachmentLoadOp::Clear) {
-				auto c = ((gl::ImageAttachment *)imageDesc->getAttachment())->getClearColor();
+			if (imageDesc->getLoadOp() == renderqueue::AttachmentLoadOp::Clear) {
+				auto c = ((renderqueue::ImageAttachment *)imageDesc->getAttachment())->getClearColor();
 				_clearValues.emplace_back(VkClearValue{c.r, c.g, c.b, c.a});
 			} else {
 				_clearValues.emplace_back(VkClearValue{0.0f, 0.0f, 0.0f, 1.0f});
@@ -496,8 +497,8 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
 
 	for (auto &it : data.dependencies) {
 		VkSubpassDependency dependency{};
-		dependency.srcSubpass = (it.srcSubpass == gl::RenderSubpassDependency::External) ? VK_SUBPASS_EXTERNAL : it.srcSubpass;
-		dependency.dstSubpass = (it.dstSubpass == gl::RenderSubpassDependency::External) ? VK_SUBPASS_EXTERNAL : it.dstSubpass;
+		dependency.srcSubpass = (it.srcSubpass == renderqueue::SubpassDependency::External) ? VK_SUBPASS_EXTERNAL : it.srcSubpass;
+		dependency.dstSubpass = (it.dstSubpass == renderqueue::SubpassDependency::External) ? VK_SUBPASS_EXTERNAL : it.dstSubpass;
 		dependency.srcStageMask = VkPipelineStageFlags(it.srcStage);
 		dependency.srcAccessMask = VkAccessFlags(it.srcAccess);
 		dependency.dstStageMask = VkPipelineStageFlags(it.dstStage);
@@ -533,11 +534,11 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
 	}
 
 	if (initDescriptors(dev, data, pass)) {
-		auto l = new PassData(move(pass));
+		auto l = new Data(move(pass));
 		_data = l;
-		return gl::RenderPassImpl::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+		return gl::RenderPass::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
 			auto d = ((Device *)dev);
-			auto l = (PassData *)ptr;
+			auto l = (Data *)ptr;
 			l->cleanup(*d);
 			delete l;
 		}, gl::ObjectType::RenderPass, l);
@@ -546,35 +547,35 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, gl::RenderPassData &data) {
 	return pass.cleanup(dev);
 }
 
-bool RenderPassImpl::initComputePass(Device &dev, gl::RenderPassData &) {
+bool RenderPassImpl::initComputePass(Device &dev, PassData &) {
 	return false; // TODO - deal with Compute passes
 }
 
-bool RenderPassImpl::initTransferPass(Device &dev, gl::RenderPassData &) {
+bool RenderPassImpl::initTransferPass(Device &dev, PassData &) {
 	// init nothing - no descriptors or render pass implementation needed
-	auto l = new PassData();
+	auto l = new Data();
 	_data = l;
-	return gl::RenderPassImpl::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+	return gl::RenderPass::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
 		auto d = ((Device *)dev);
-		auto l = (PassData *)ptr;
+		auto l = (Data *)ptr;
 		l->cleanup(*d);
 		delete l;
 	}, gl::ObjectType::RenderPass, l);
 }
 
-bool RenderPassImpl::initGenericPass(Device &dev, gl::RenderPassData &) {
+bool RenderPassImpl::initGenericPass(Device &dev, PassData &) {
 	// init nothing - no descriptors or render pass implementation needed
-	auto l = new PassData();
+	auto l = new Data();
 	_data = l;
-	return gl::RenderPassImpl::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+	return gl::RenderPass::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
 		auto d = ((Device *)dev);
-		auto l = (PassData *)ptr;
+		auto l = (Data *)ptr;
 		l->cleanup(*d);
 		delete l;
 	}, gl::ObjectType::RenderPass, l);
 }
 
-bool RenderPassImpl::initDescriptors(Device &dev, gl::RenderPassData &data, PassData &pass) {
+bool RenderPassImpl::initDescriptors(Device &dev, PassData &data, Data &pass) {
 	Vector<VkDescriptorPoolSize> sizes;
 
 	auto incrementSize = [&sizes] (VkDescriptorType type, uint32_t count) {
@@ -617,7 +618,7 @@ bool RenderPassImpl::initDescriptors(Device &dev, gl::RenderPassData &data, Pass
 			b.descriptorCount = binding->count;
 			b.descriptorType = VkDescriptorType(binding->type);
 			b.stageFlags = VkShaderStageFlags(binding->stages);
-			if (binding->type == gl::DescriptorType::Sampler) {
+			if (binding->type == DescriptorType::Sampler) {
 				// do nothing
 				log::vtext("vk::RenderPassImpl", "gl::DescriptorType::Sampler is not supported for descriptors");
 			} else {
@@ -680,7 +681,7 @@ bool RenderPassImpl::initDescriptors(Device &dev, gl::RenderPassData &data, Pass
 			b.descriptorCount = binding.count;
 			b.descriptorType = VkDescriptorType(binding.type);
 			b.stageFlags = VkShaderStageFlags(binding.stages);
-			if (binding.type == gl::DescriptorType::Sampler) {
+			if (binding.type == DescriptorType::Sampler) {
 				log::vtext("vk::RenderPassImpl", "gl::DescriptorType::Sampler is not supported for render pass descriptors");
 			} else {
 				incrementSize(VkDescriptorType(binding.type), std::max(binding.count, binding.maxCount));

@@ -23,7 +23,7 @@
 #ifndef XENOLITH_GL_VK_RENDERER_XLVKRENDERQUEUECOMPILER_H_
 #define XENOLITH_GL_VK_RENDERER_XLVKRENDERQUEUECOMPILER_H_
 
-#include "XLVkRenderPass.h"
+#include "XLVkQueuePass.h"
 #include "XLVkDeviceQueue.h"
 #include "XLVkTransferQueue.h"
 #include "XLGlMaterial.h"
@@ -33,16 +33,16 @@ namespace stappler::xenolith::vk {
 class RenderQueueAttachment;
 
 struct RenderQueueInput : public gl::AttachmentInputData {
-	Rc<gl::RenderQueue> queue;
+	Rc<renderqueue::Queue> queue;
 };
 
-class RenderQueueCompiler : public gl::RenderQueue {
+class RenderQueueCompiler : public renderqueue::Queue {
 public:
 	virtual ~RenderQueueCompiler();
 
 	bool init(Device &);
 
-	Rc<gl::FrameRequest> makeRequest(Rc<RenderQueueInput> &&);
+	Rc<FrameRequest> makeRequest(Rc<RenderQueueInput> &&);
 
 protected:
 	RenderQueueAttachment *_attachment;

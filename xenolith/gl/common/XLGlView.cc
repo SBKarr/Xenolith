@@ -21,148 +21,158 @@
  **/
 
 #include "XLGlView.h"
-
 #include "XLInputDispatcher.h"
-#include "XLGlLoop.h"
 #include "XLScene.h"
+#include "XLDirector.h"
+#include "XLGlLoop.h"
+#include "XLGlDevice.h"
+#include "XLRenderQueueFrameHandle.h"
 
 namespace stappler::xenolith::gl {
 
-XL_DECLARE_EVENT_CLASS(View, onClipboard);
-XL_DECLARE_EVENT_CLASS(View, onBackground);
-XL_DECLARE_EVENT_CLASS(View, onFocus);
 XL_DECLARE_EVENT_CLASS(View, onScreenSize);
 
 View::View() { }
 
 View::~View() { }
 
-bool View::init(const Rc<EventLoop> &ev, const Rc<gl::Loop> &loop) {
-	if (!FrameEmitter::init(loop, /*1'000'000 / 60*/ 0)) {
-		return false;
-	}
-
-	_eventLoop = ev;
-	return true;
-}
-
-bool View::begin(const Rc<Director> &dir, Function<void()> &&cb) {
-	_director = dir;
-	_onEnded = move(cb);
-	_eventLoop->addView(this);
-	_director->begin(this);
-	_director->update();
+bool View::init(Loop &loop, ViewInfo &&info) {
+	_loop = &loop;
+	_screenExtent = Extent2(info.rect.width, info.rect.height);
+	_frameEmitter = Rc<FrameEmitter>::create(_loop, info.frameInterval);
+	_selectConfig = move(info.config);
+	_onCreated = move(info.onCreated);
+	_onClosed = move(info.onClosed);
 	return true;
 }
 
 void View::end() {
-	_loop->performOnThread([this] {
-		invalidate();
-	}, this);
-
-	if (_onEnded) {
-		_onEnded();
-		_onEnded = nullptr;
-	}
-	_director->end();
-	_director = nullptr;
-	_eventLoop->removeView(this);
-}
-
-void View::reset(SwapchanCreationMode mode) {
-	if (_swapchain) {
-		_swapchain->recreateSwapchain(*_loop->getDevice(), mode);
-	}
-	if (_loop) {
-		dropFrameTimeout();
+	_running = false;
+	_frameEmitter->invalidate();
+	_loop->removeView(this);
+	if (_onClosed) {
+		_loop->getApplication()->performOnMainThread([this, cb = move(_onClosed)] () {
+			if (_director) {
+				_director->end();
+			}
+			cb();
+		}, this);
 	}
 }
 
 void View::update() {
-	if (_director) {
-		_director->update();
+	Vector<Pair<Function<void()>, Rc<Ref>>> callback;
+
+	_mutex.lock();
+	callback = move(_callbacks);
+	_callbacks.clear();
+	_mutex.unlock();
+
+	for (auto &it : callback) {
+		it.first();
 	}
 }
 
-int View::getDpi() const {
-	return _dpi;
+void View::close() {
+	_shouldQuit.clear();
 }
 
-float View::getDensity() const {
-	return _density;
-}
-
-const Rc<Director> &View::getDirector() const {
-	return _director;
-}
-
-const Extent2 & View::getScreenExtent() const {
-	return _screenExtent;
+void View::performOnThread(Function<void()> &&func, Ref *target, bool immediate) {
+	if (immediate && std::this_thread::get_id() == _threadId) {
+		func();
+	} else {
+		std::unique_lock<Mutex> lock(_mutex);
+		if (_running) {
+			_callbacks.emplace_back(move(func), target);
+			wakeup();
+		}
+	}
 }
 
 void View::setScreenExtent(Extent2 e) {
 	if (e != _screenExtent) {
 		_screenExtent = e;
-		onScreenSize(this);
+		onScreenSize(this, Value({
+			pair("size", Value({ Value(_screenExtent.width), Value(_screenExtent.height) })),
+			pair("density", Value(_density))
+		}));
 	}
 }
 
 void View::handleInputEvent(const InputEventData &event) {
-	if (_director) {
+	_loop->getApplication()->performOnMainThread([this, event] {
+		switch (event.event) {
+		case InputEventName::Background:
+			_inBackground = event.getValue();
+			break;
+		case InputEventName::PointerEnter:
+			_pointerInWindow = event.getValue();
+			break;
+		case InputEventName::FocusGain:
+			_hasFocus = event.getValue();
+			break;
+		default:
+			break;
+		}
 		_director->getInputDispatcher()->handleInputEvent(event);
+	}, this);
+}
+
+void View::runFrame(const Rc<RenderQueue> &queue, Extent2 extent) {
+	auto req = Rc<FrameRequest>::create(queue, _frameEmitter, extent);
+	req->bindSwapchain(this);
+	_frameEmitter->submitNextFrame(move(req));
+}
+
+gl::ImageInfo View::getSwapchainImageInfo() const {
+	return getSwapchainImageInfo(_config);
+}
+
+gl::ImageInfo View::getSwapchainImageInfo(const gl::SwapchainConfig &cfg) const {
+	gl::ImageInfo swapchainImageInfo;
+	swapchainImageInfo.format = cfg.imageFormat;
+	swapchainImageInfo.flags = gl::ImageFlags::None;
+	swapchainImageInfo.imageType = gl::ImageType::Image2D;
+	swapchainImageInfo.extent = Extent3(cfg.extent.width, cfg.extent.height, 1);
+	swapchainImageInfo.arrayLayers = gl::ArrayLayers( 1 );
+	swapchainImageInfo.usage = gl::ImageUsage::ColorAttachment;
+	if (cfg.transfer) {
+		swapchainImageInfo.usage |= gl::ImageUsage::TransferDst;
 	}
+	return swapchainImageInfo;
 }
 
-void View::handleFocusIn() {
+gl::ImageViewInfo View::getSwapchainImageViewInfo(const gl::ImageInfo &image) const {
+	gl::ImageViewInfo info;
+	switch (image.imageType) {
+	case gl::ImageType::Image1D:
+		info.type = gl::ImageViewType::ImageView1D;
+		break;
+	case gl::ImageType::Image2D:
+		info.type = gl::ImageViewType::ImageView2D;
+		break;
+	case gl::ImageType::Image3D:
+		info.type = gl::ImageViewType::ImageView3D;
+		break;
+	}
 
+	return image.getViewInfo(info);
 }
 
-void View::handleFocusOut() {
-
+uint64_t View::getLastFrameInterval() const {
+	std::unique_lock<Mutex> lock(_frameIntervalMutex);
+	return _lastFrameInterval;
+}
+uint64_t View::getAvgFrameInterval() const {
+	std::unique_lock<Mutex> lock(_frameIntervalMutex);
+	return _avgFrameInterval.getAverage();
 }
 
-void View::setClipboardString(StringView) { }
-
-StringView View::getClipboardString() const { return StringView(); }
-
-ScreenOrientation View::getScreenOrientation() const {
-	return _orientation;
+uint64_t View::getLastFrameTime() const {
+	return _frameEmitter->getLastFrameTime();
 }
-
-bool View::isTouchDevice() const {
-	return _isTouchDevice;
-}
-
-bool View::hasFocus() const {
-	return _hasFocus;
-}
-
-bool View::isInBackground() const {
-	return _inBackground;
-}
-
-void View::pushEvent(AppEvent::Value events) const {
-	_events |= events;
-}
-
-AppEvent::Value View::popEvents() const {
-	return _events.exchange(AppEvent::None);
-}
-
-void View::acquireNextFrame() {
-	pushEvent(AppEvent::Update);
-}
-
-void View::runFrame(const Rc<gl::RenderQueue> &queue, Extent2 extent) {
-	auto req = Rc<FrameRequest>::create(queue, this, extent);
-	req->bindSwapchain(_swapchain);
-	submitNextFrame(move(req));
-}
-
-gl::SwapchainConfig View::selectConfig(const gl::SurfaceInfo &info) {
-	auto ret = _director->selectConfig(info);
-	setScreenExtent(ret.extent);
-	return ret;
+uint64_t View::getAvgFrameTime() const {
+	return _frameEmitter->getAvgFrameTime();
 }
 
 }

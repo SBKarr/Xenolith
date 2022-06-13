@@ -24,20 +24,26 @@
 
 namespace stappler::xenolith::vk {
 
-bool Framebuffer::init(Device &dev, VkRenderPass renderPass, SpanView<Rc<gl::ImageView>> imageViews, Extent2 extent) {
+bool Framebuffer::init(Device &dev, RenderPassImpl *renderPass, SpanView<Rc<gl::ImageView>> imageViews, Extent2 extent) {
 	Vector<VkImageView> views; views.reserve(imageViews.size());
 	_viewIds.reserve(imageViews.size());
 	_imageViews.reserve(imageViews.size());
+	_renderPass = renderPass;
 
 	for (auto &it : imageViews) {
 		views.emplace_back(((ImageView *)it.get())->getImageView());
 		_viewIds.emplace_back(it->getIndex());
 		_imageViews.emplace_back(it);
+
+		auto e = it->getExtent();
+		if (e.width != extent.width || e.height != extent.height) {
+			return false;
+		}
 	}
 
 	VkFramebufferCreateInfo framebufferInfo { };
 	framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-	framebufferInfo.renderPass = renderPass;
+	framebufferInfo.renderPass = renderPass->getRenderPass();
 	framebufferInfo.attachmentCount = views.size();
 	framebufferInfo.pAttachments = views.data();
 	framebufferInfo.width = extent.width;

@@ -27,7 +27,7 @@ THE SOFTWARE.
 
 namespace stappler::xenolith {
 
-class EventLoop;
+class EventLoopInterface;
 class Application;
 
 }
@@ -37,6 +37,8 @@ namespace stappler::xenolith::gl {
 class Instance;
 class View;
 class Loop;
+class Device;
+struct ViewInfo;
 
 }
 
@@ -66,8 +68,9 @@ namespace device {
 	String _deviceIdentifier();
 
 	uint64_t _clock(ClockType = Default);
+	void _sleep(uint64_t microseconds);
 
-	Rc<EventLoop> createEventLoop(Application *);
+	Rc<EventLoopInterface> createEventLoop();
 }
 
 namespace interaction {
@@ -94,8 +97,7 @@ namespace statusbar {
 namespace graphic {
 	Rc<gl::Instance> createInstance(Application *);
 
-	Rc<gl::View> createView(const Rc<EventLoop> &event, const Rc<gl::Loop> &, StringView viewName, URect rect);
-	Rc<gl::View> createView(const Rc<EventLoop> &event, const Rc<gl::Loop> &, StringView viewName);
+	Rc<gl::View> createView(gl::Loop &, gl::Device &, gl::ViewInfo &&);
 
 	// should be commonly supported format,
 	// R8G8B8A8_UNORM on Android, B8G8R8A8_UNORM on others

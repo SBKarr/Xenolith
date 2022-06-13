@@ -35,9 +35,9 @@ bool TessLayout::init() {
 	// auto app = (AppDelegate *)Application::getInstance();
 	// auto fontController = app->getFontController();
 
-	/*_background = addChild(Rc<Layer>::create(Color::White), -1);
-	_background->setColorMode(ColorMode(gl::ComponentMapping::R, gl::ComponentMapping::One));
-	_background->setAnchorPoint(Anchor::Middle);*/
+	_background = addChild(Rc<Layer>::create(Color::White), -1);
+	_background->setColorMode(ColorMode::IntensityChannel);
+	_background->setAnchorPoint(Anchor::Middle);
 
 	_canvas = addChild(Rc<TessCanvas>::create());
 	_canvas->setAnchorPoint(Anchor::Middle);

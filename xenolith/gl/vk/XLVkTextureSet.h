@@ -29,10 +29,14 @@
 namespace stappler::xenolith::vk {
 
 class TextureSet;
+class Loop;
+class DeviceBuffer;
 
 // persistent object, part of Device
 class TextureSetLayout : public Ref {
 public:
+	using AttachmentLayout = renderqueue::AttachmentLayout;
+
 	virtual ~TextureSetLayout() { }
 
 	bool init(Device &dev, uint32_t);
@@ -48,18 +52,22 @@ public:
 	Rc<TextureSet> acquireSet(Device &dev);
 	void releaseSet(Rc<TextureSet> &&);
 
-	void initDefault(Device &dev, gl::Loop &);
+	void initDefault(Device &dev, Loop &, Function<void(bool)> &&);
 
 	bool isPartiallyBound() const { return _partiallyBound; }
 
 	Rc<Image> getEmptyImageObject() const;
 	Rc<Image> getSolidImageObject() const;
 
-	void compileImage(Device &dev, gl::Loop &loop, const Rc<gl::DynamicImage> &, Function<void(bool)> &&);
+	void compileImage(Device &dev, Loop &loop, const Rc<gl::DynamicImage> &, Function<void(bool)> &&);
+
+	void readImage(Device &dev, Loop &loop, const Rc<Image> &, AttachmentLayout, Function<void(const gl::ImageInfo &, BytesView)> &&);
 
 protected:
 	void writeDefaults(Device &dev, VkCommandBuffer buf);
 	void writeImageTransfer(Device &dev, VkCommandBuffer buf, uint32_t qidx, const Rc<Buffer> &, const Rc<Image> &);
+	void writeImageRead(Device &dev, VkCommandBuffer buf, uint32_t qidx, const Rc<Image> &,
+			AttachmentLayout, const Rc<DeviceBuffer> &);
 
 	bool _partiallyBound = false;
 	uint32_t _imageCount = 0;

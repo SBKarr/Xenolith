@@ -23,31 +23,42 @@
 #include "XLVkDevice.h"
 #include "XLApplication.h"
 #include "XLGlObject.h"
-#include "XLVkSwapchain.h"
 #include "XLVkPipeline.h"
-#include "XLVkFrame.h"
 #include "XLGlLoop.h"
 #include "XLVkTextureSet.h"
 #include "XLVkRenderPassImpl.h"
-#include "XLVkTransferQueue.h"
-#include "XLVkMaterialCompiler.h"
-#include "XLVkRenderQueueCompiler.h"
+#include "XLVkLoop.h"
+#include "XLVkFramebuffer.h"
+#include "XLVkView.h"
+#include "XLVkAllocator.h"
 
 namespace stappler::xenolith::vk {
+
+DeviceFrameHandle::~DeviceFrameHandle() {
+	if (!_valid) {
+		auto dev = (Device *)_device;
+		dev->getTable()->vkDeviceWaitIdle(dev->getDevice());
+	}
+	_memPool = nullptr;
+}
+
+bool DeviceFrameHandle::init(Loop &loop, Device &device, Rc<FrameRequest> &&req, uint64_t gen) {
+	if (!renderqueue::FrameHandle::init(loop, device, move(req), gen)) {
+		return false;
+	}
+
+	_memPool = Rc<DeviceMemoryPool>::create(device.getAllocator(), _request->isPersistentMapping());
+	return true;
+}
+
+const Rc<DeviceMemoryPool> &DeviceFrameHandle::getMemPool() const {
+	return _memPool;
+}
 
 Device::Device() { }
 
 Device::~Device() {
-	log::text("vk::Device", "~Device - begin");
 	if (_vkInstance && _device) {
-		if (_renderQueueCompiler) {
-			_renderQueueCompiler = nullptr;
-		}
-
-		if (_materialQueue) {
-			_materialQueue = nullptr;
-		}
-
 		if (_allocator) {
 			_allocator->invalidate(*this);
 			_allocator = nullptr;
@@ -67,7 +78,7 @@ Device::~Device() {
 		_device = nullptr;
 		_table = nullptr;
 	}
-	log::text("vk::Device", "~Device - end");
+	XL_VKDEVICE_LOG("~Device");
 }
 
 bool Device::init(const vk::Instance *inst, DeviceInfo && info, const Features &features) {
@@ -85,10 +96,13 @@ bool Device::init(const vk::Instance *inst, DeviceInfo && info, const Features &
 		_families.emplace_back(DeviceQueueFamily({ info.index, count, preferred, info.ops, info.minImageTransferGranularity}));
 	};
 
-	emplaceQueueFamily(info.graphicsFamily, 1 /* std::thread::hardware_concurrency() */, QueueOperations::Graphics);
+	info.graphicsFamily.count = 1;
+	info.presentFamily.count = 1;
+
+	emplaceQueueFamily(info.graphicsFamily, std::thread::hardware_concurrency(), QueueOperations::Graphics);
 	emplaceQueueFamily(info.presentFamily, 1, QueueOperations::Present);
 	emplaceQueueFamily(info.transferFamily, 2, QueueOperations::Transfer);
-	emplaceQueueFamily(info.computeFamily, 1/* std::thread::hardware_concurrency() */, QueueOperations::Compute);
+	emplaceQueueFamily(info.computeFamily, std::thread::hardware_concurrency(), QueueOperations::Compute);
 
 	Vector<const char *> extensions;
 	for (auto &it : s_requiredDeviceExtensions) {
@@ -144,8 +158,6 @@ bool Device::init(const vk::Instance *inst, DeviceInfo && info, const Features &
 	_textureLayoutImagesCount = imageLimit = std::min(imageLimit, config::MaxTextureSetImages);
 	_textureSetLayout = Rc<TextureSetLayout>::create(*this, imageLimit);
 
-	_renderQueueCompiler = Rc<RenderQueueCompiler>::create(*this);
-
 	do {
 		VkFormatProperties properties;
 		_vkInstance->vkGetPhysicalDeviceFormatProperties(_info.device, VK_FORMAT_D16_UNORM, &properties);
@@ -192,21 +204,15 @@ VkPhysicalDevice Device::getPhysicalDevice() const {
 	return _info.device;
 }
 
-void Device::begin(const Application *app, gl::TaskQueue &q) {
-	if (!isSamplersCompiled()) {
-		compileSamplers(*app->getQueue(), true);
-	}
-
-	gl::Device::begin(app, q);
-
+void Device::begin(Loop &loop, gl::TaskQueue &q, Function<void(bool)> &&cb) {
+	compileSamplers(q, true);
 	_textureSetLayout->compile(*this, _immutableSamplers);
-	_materialQueue = Rc<MaterialCompiler>::create();
-	_transferQueue = Rc<TransferQueue>::create();
+	_textureSetLayout->initDefault(*this, loop, move(cb));
+
+	_loopThreadId = std::this_thread::get_id();
 }
 
-void Device::end(gl::Loop &loop, gl::TaskQueue &q) {
-	waitIdle(loop);
-
+void Device::end() {
 	for (auto &it : _families) {
 		for (auto &b : it.pools) {
 			b->invalidate(*this);
@@ -216,43 +222,10 @@ void Device::end(gl::Loop &loop, gl::TaskQueue &q) {
 
 	_finished = true;
 
-	_materialQueue->clearRequests();
-	_materialQueue = nullptr;
-	_transferQueue = nullptr;
-
-	for (auto &it : _fences) {
-		it->invalidate();
-	}
-	_fences.clear();
-
 	for (auto &it : _samplers) {
 		it->invalidate();
 	}
 	_samplers.clear();
-
-	gl::Device::end(loop, q);
-}
-
-void Device::waitIdle(gl::Loop &loop) {
-	for (auto &it : _scheduled) {
-		it->check(loop, false);
-	}
-	_scheduled.clear();
-	getTable()->vkDeviceWaitIdle(_device);
-}
-
-void Device::onLoopStarted(gl::Loop &loop) {
-	gl::Device::onLoopStarted(loop);
-	_textureSetLayout->initDefault(*this, loop);
-
-	loop.getQueue()->waitForAll();
-
-	compileRenderQueue(loop, _materialQueue);
-	compileRenderQueue(loop, _transferQueue);
-}
-
-void Device::onLoopEnded(gl::Loop &loop) {
-	gl::Device::onLoopEnded(loop);
 }
 
 #if VK_HOOK_DEBUG
@@ -262,7 +235,7 @@ static thread_local uint64_t s_vkFnCallStart = 0;
 const DeviceTable * Device::getTable() const {
 #if VK_HOOK_DEBUG
 	setDeviceHookThreadContext([] (void *ctx, const char *name, PFN_vkVoidFunction fn) {
-		auto dev = (Device *)ctx;
+		/*auto dev = (Device *)ctx;
 		if (std::this_thread::get_id() == dev->_loopThreadId) {
 			if (fn != (PFN_vkVoidFunction)dev->_original->vkCreateFence
 					&& fn != (PFN_vkVoidFunction)dev->_original->vkGetFenceStatus) {
@@ -275,14 +248,14 @@ const DeviceTable * Device::getTable() const {
 				|| fn == (PFN_vkVoidFunction)dev->_original->vkCreateSwapchainKHR
 				|| fn == (PFN_vkVoidFunction)dev->_original->vkDestroySwapchainKHR) {
 			//log::text("Vk-Call", name);
-		}
+		}*/
 		s_vkFnCallStart = platform::device::_clock();
 	}, [] (void *ctx, const char *name, PFN_vkVoidFunction fn) {
 		auto dt = platform::device::_clock() - s_vkFnCallStart;
-		auto dev = (Device *)ctx;
+		/*auto dev = (Device *)ctx;
 		if (std::this_thread::get_id() == dev->_loopThreadId) {
 			log::vtext("Vk-Call-Timeout", name, ": ", dt);
-		}
+		}*/
 		if (dt > 200000) {
 			log::vtext("Vk-Call-Timeout", name, ": ", dt);
 		}
@@ -345,6 +318,7 @@ Rc<DeviceQueue> Device::tryAcquireQueueSync(QueueOperations ops) {
 
 	std::unique_lock<Mutex> lock(_resourceMutex);
 	if (!family->queues.empty()) {
+		XL_VKDEVICE_LOG("tryAcquireQueueSync ", family->index, " (", family->count, ") ", getQueueOperationsDesc(family->ops));
 		auto queue = move(family->queues.back());
 		family->queues.pop_back();
 		return queue;
@@ -352,8 +326,8 @@ Rc<DeviceQueue> Device::tryAcquireQueueSync(QueueOperations ops) {
 	return nullptr;
 }
 
-bool Device::acquireQueue(QueueOperations ops, gl::FrameHandle &handle, Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> && acquire,
-		Function<void(gl::FrameHandle &)> && invalidate, Rc<Ref> &&ref) {
+bool Device::acquireQueue(QueueOperations ops, FrameHandle &handle, Function<void(FrameHandle &, const Rc<DeviceQueue> &)> && acquire,
+		Function<void(FrameHandle &)> && invalidate, Rc<Ref> &&ref) {
 
 	auto family = (DeviceQueueFamily *)getQueueFamily(ops);
 	if (!family) {
@@ -366,18 +340,20 @@ bool Device::acquireQueue(QueueOperations ops, gl::FrameHandle &handle, Function
 		queue = move(family->queues.back());
 		family->queues.pop_back();
 	} else {
+		XL_VKDEVICE_LOG("acquireQueue-wait ", family->index, " (", family->count, ") ", getQueueOperationsDesc(family->ops));
 		family->waiters.emplace_back(DeviceQueueFamily::Waiter(move(acquire), move(invalidate), &handle, move(ref)));
 	}
 
 	if (queue) {
 		queue->setOwner(handle);
+		XL_VKDEVICE_LOG("acquireQueue ", family->index, " (", family->count, ") ", getQueueOperationsDesc(family->ops));
 		acquire(handle, queue);
 	}
 	return true;
 }
 
-bool Device::acquireQueue(QueueOperations ops, gl::Loop &loop, Function<void(gl::Loop &, const Rc<DeviceQueue> &)> && acquire,
-		Function<void(gl::Loop &)> && invalidate, Rc<Ref> &&ref) {
+bool Device::acquireQueue(QueueOperations ops, Loop &loop, Function<void(Loop &, const Rc<DeviceQueue> &)> && acquire,
+		Function<void(Loop &)> && invalidate, Rc<Ref> &&ref) {
 
 	auto family = (DeviceQueueFamily *)getQueueFamily(ops);
 	if (!family) {
@@ -390,11 +366,13 @@ bool Device::acquireQueue(QueueOperations ops, gl::Loop &loop, Function<void(gl:
 		queue = move(family->queues.back());
 		family->queues.pop_back();
 	} else {
+		XL_VKDEVICE_LOG("acquireQueue-wait ", family->index, " (", family->count, ") ", getQueueOperationsDesc(family->ops));
 		family->waiters.emplace_back(DeviceQueueFamily::Waiter(move(acquire), move(invalidate), &loop, move(ref)));
 	}
 
 	lock.unlock();
 	if (queue) {
+		XL_VKDEVICE_LOG("acquireQueue ", family->index, " (", family->count, ") ", getQueueOperationsDesc(family->ops));
 		acquire(loop, queue);
 	}
 	return true;
@@ -417,13 +395,14 @@ void Device::releaseQueue(Rc<DeviceQueue> &&queue) {
 
 	std::unique_lock<Mutex> lock(_resourceMutex);
 	if (family->waiters.empty()) {
+		XL_VKDEVICE_LOG("releaseQueue ", family->index, " (", family->count, ") ", getQueueOperationsDesc(family->ops));
 		family->queues.emplace_back(move(queue));
 	} else {
 		if (family->waiters.front().handle) {
-			Rc<gl::FrameHandle> handle;
+			Rc<FrameHandle> handle;
 			Rc<Ref> ref;
-			Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> cb;
-			Function<void(gl::FrameHandle &)> invalidate;
+			Function<void(FrameHandle &, const Rc<DeviceQueue> &)> cb;
+			Function<void(FrameHandle &)> invalidate;
 
 			cb = move(family->waiters.front().acquireForFrame);
 			invalidate = move(family->waiters.front().releaseForFrame);
@@ -434,18 +413,20 @@ void Device::releaseQueue(Rc<DeviceQueue> &&queue) {
 			if (handle && handle->isValid()) {
 				if (cb) {
 					queue->setOwner(*handle);
+					XL_VKDEVICE_LOG("release-acquireQueue ", family->index, " (", family->count, ") ", getQueueOperationsDesc(family->ops));
 					cb(*handle, queue);
 				}
 			} else if (invalidate) {
+				XL_VKDEVICE_LOG("invalidate ", family->index, " (", family->count, ") ", getQueueOperationsDesc(family->ops));
 				invalidate(*handle);
 			}
 
 			handle = nullptr;
 		} else if (family->waiters.front().loop) {
-			Rc<gl::Loop> loop;
+			Rc<Loop> loop;
 			Rc<Ref> ref;
-			Function<void(gl::Loop &, const Rc<DeviceQueue> &)> cb;
-			Function<void(gl::Loop &)> invalidate;
+			Function<void(Loop &, const Rc<DeviceQueue> &)> cb;
+			Function<void(Loop &)> invalidate;
 
 			cb = move(family->waiters.front().acquireForLoop);
 			invalidate = move(family->waiters.front().releaseForLoop);
@@ -455,9 +436,11 @@ void Device::releaseQueue(Rc<DeviceQueue> &&queue) {
 
 			if (loop && loop->isRunning()) {
 				if (cb) {
+					XL_VKDEVICE_LOG("release-acquireQueue ", family->index, " (", family->count, ") ", getQueueOperationsDesc(family->ops));
 					cb(*loop, queue);
 				}
 			} else if (invalidate) {
+				XL_VKDEVICE_LOG("invalidate ", family->index, " (", family->count, ") ", getQueueOperationsDesc(family->ops));
 				invalidate(*loop);
 			}
 
@@ -526,93 +509,26 @@ void Device::releaseCommandPoolUnsafe(Rc<CommandPool> &&pool) {
 	_families[pool->getFamilyIdx()].pools.emplace_back(Rc<CommandPool>(pool));
 }
 
-Rc<Fence> Device::acquireFence(uint32_t v) {
-	std::unique_lock<Mutex> lock(_resourceMutex);
-	if (!_fences.empty()) {
-		auto ret = _fences.back();
-		_fences.pop_back();
-		ret->setFrame(v);
-		return ret;
-	}
-	lock.unlock();
-	auto f = Rc<Fence>::create(*this);
-	f->setFrame(v);
-	return f;
-}
-
-void Device::releaseFence(gl::Loop &loop, Rc<Fence> &&ref) {
-	ref->reset(loop, [this] (Rc<Fence> &&ref) {
-		std::unique_lock<Mutex> lock(_resourceMutex);
-		_fences.emplace_back(move(ref));
-	});
-}
-
-void Device::releaseFenceUnsafe(Rc<Fence> &&ref) {
-	ref->resetUnsafe();
-	std::unique_lock<Mutex> lock(_resourceMutex);
-	_fences.emplace_back(move(ref));
-}
-
-void Device::scheduleFence(gl::Loop &loop, Rc<Fence> &&fence) {
-	if (!fence->isArmed() || fence->check(loop)) {
-		releaseFence(loop, move(fence));
-		return;
-	}
-
-	_scheduled.emplace(fence);
-	loop.schedule([this, fence = move(fence)] (gl::Loop::Context &ctx) {
-		if (_scheduled.find(fence) == _scheduled.end()) {
-			return true;
-		}
-		if (fence->check(*ctx.loop)) {
-			_scheduled.erase(fence);
-			releaseFence(*ctx.loop, Rc<Fence>(fence));
-			return true;
-		}
-		return false;
-	}, "Device::scheduleFence");
-}
-
-void Device::scheduleFence(gl::Loop &loop, Rc<Fence> &&fence, Function<bool(Fence &)> &&cb) {
-	if (cb(*fence)) {
-		releaseFence(loop, move(fence));
-		return;
-	}
-
-	_scheduled.emplace(fence);
-	loop.schedule([this, fence = move(fence), cb = move(cb)] (gl::Loop::Context &ctx) mutable {
-		if (_scheduled.find(fence) == _scheduled.end()) {
-			return true;
-		}
-		if (cb(*fence)) {
-			_scheduled.erase(fence);
-			releaseFence(*ctx.loop, move(fence));
-			return true;
-		}
-		return false;
-	}, "Device::scheduleFence");
-}
-
 static BytesView Device_emplaceConstant(Bytes &data, BytesView constant) {
 	data.resize(data.size() + constant.size());
 	memcpy(data.data() + data.size() - constant.size(), constant.data(), constant.size());
 	return BytesView(data.data() + data.size() - constant.size(), constant.size());
 }
 
-BytesView Device::emplaceConstant(gl::PredefinedConstant c, Bytes &data) const {
+BytesView Device::emplaceConstant(renderqueue::PredefinedConstant c, Bytes &data) const {
 	uint32_t intData = 0;
 	switch (c) {
-	case gl::PredefinedConstant::SamplersArraySize:
+	case renderqueue::PredefinedConstant::SamplersArraySize:
 		return Device_emplaceConstant(data, BytesView((const uint8_t *)&_samplersCount, sizeof(uint32_t)));
 		break;
-	case gl::PredefinedConstant::SamplersDescriptorIdx:
+	case renderqueue::PredefinedConstant::SamplersDescriptorIdx:
 		intData = 0;
 		return Device_emplaceConstant(data, BytesView((const uint8_t *)&intData, sizeof(uint32_t)));
 		break;
-	case gl::PredefinedConstant::TexturesArraySize:
+	case renderqueue::PredefinedConstant::TexturesArraySize:
 		return Device_emplaceConstant(data, BytesView((const uint8_t *)&_textureSetLayout->getImageCount(), sizeof(uint32_t)));
 		break;
-	case gl::PredefinedConstant::TexturesDescriptorIdx:
+	case renderqueue::PredefinedConstant::TexturesDescriptorIdx:
 		intData = 1;
 		return Device_emplaceConstant(data, BytesView((const uint8_t *)&intData, sizeof(uint32_t)));
 		break;
@@ -620,30 +536,30 @@ BytesView Device::emplaceConstant(gl::PredefinedConstant c, Bytes &data) const {
 	return BytesView();
 }
 
-bool Device::supportsUpdateAfterBind(gl::DescriptorType type) const {
+bool Device::supportsUpdateAfterBind(DescriptorType type) const {
 	switch (type) {
-	case gl::DescriptorType::Sampler:
+	case DescriptorType::Sampler:
 		return true; // Samplers are immutable engine-wide
 		break;
-	case gl::DescriptorType::CombinedImageSampler:
+	case DescriptorType::CombinedImageSampler:
 		return _info.features.deviceDescriptorIndexing.descriptorBindingSampledImageUpdateAfterBind;
 		break;
-	case gl::DescriptorType::SampledImage:
+	case DescriptorType::SampledImage:
 		return _info.features.deviceDescriptorIndexing.descriptorBindingSampledImageUpdateAfterBind;
 		break;
-	case gl::DescriptorType::StorageImage:
+	case DescriptorType::StorageImage:
 		return _info.features.deviceDescriptorIndexing.descriptorBindingStorageImageUpdateAfterBind;
 		break;
-	case gl::DescriptorType::UniformTexelBuffer:
+	case DescriptorType::UniformTexelBuffer:
 		return _info.features.deviceDescriptorIndexing.descriptorBindingUniformTexelBufferUpdateAfterBind;
 		break;
-	case gl::DescriptorType::StorageTexelBuffer:
+	case DescriptorType::StorageTexelBuffer:
 		return _info.features.deviceDescriptorIndexing.descriptorBindingStorageTexelBufferUpdateAfterBind;
 		break;
-	case gl::DescriptorType::UniformBuffer:
+	case DescriptorType::UniformBuffer:
 		return _info.features.deviceDescriptorIndexing.descriptorBindingUniformBufferUpdateAfterBind;
 		break;
-	case gl::DescriptorType::StorageBuffer:
+	case DescriptorType::StorageBuffer:
 		return _info.features.deviceDescriptorIndexing.descriptorBindingStorageBufferUpdateAfterBind;
 		break;
 	default:
@@ -661,31 +577,19 @@ Rc<gl::ImageObject> Device::getSolidImageObject() const {
 	return _textureSetLayout->getSolidImageObject();
 }
 
-Rc<gl::FrameHandle> Device::makeFrame(gl::Loop &loop, Rc<gl::FrameRequest> &&req, uint64_t gen) {
-	return Rc<FrameHandle>::create(loop, move(req), gen);
+Rc<gl::Framebuffer> Device::makeFramebuffer(const renderqueue::PassData *pass, SpanView<Rc<gl::ImageView>> views, Extent2 extent) {
+	return Rc<Framebuffer>::create(*this, (RenderPassImpl *)pass->impl.get(), views, extent);
 }
 
-Rc<gl::Framebuffer> Device::makeFramebuffer(const gl::RenderPassData *pass, SpanView<Rc<gl::ImageView>> views, Extent2 extent) {
-	return Rc<Framebuffer>::create(*this, ((RenderPassImpl *)pass->impl.get())->getRenderPass(), views, extent);
-}
+auto Device::makeImage(const gl::ImageInfo &imageInfo) -> Rc<ImageStorage> {
 
-Rc<gl::ImageAttachmentObject> Device::makeImage(const gl::ImageAttachment *attachment, Extent3 extent) {
-	auto ret = Rc<gl::ImageAttachmentObject>::alloc();
-
-	auto imageInfo = attachment->getInfo();
-	if (attachment->isTransient()) {
-		imageInfo.usage |= gl::ImageUsage::TransientAttachment;
-	}
-	ret->extent = imageInfo.extent = extent;
+	bool isTransient = (imageInfo.usage & gl::ImageUsage::TransientAttachment) != gl::ImageUsage::None;
 
 	auto img = _allocator->spawnPersistent(
-			attachment->isTransient() ? AllocationUsage::DeviceLocalLazilyAllocated : AllocationUsage::DeviceLocal,
+			isTransient ? AllocationUsage::DeviceLocalLazilyAllocated : AllocationUsage::DeviceLocal,
 			imageInfo, false);
 
-	ret->image = img.get();
-	ret->makeViews(*this, *attachment);
-
-	return ret;
+	return Rc<ImageStorage>::create(move(img));
 }
 
 Rc<gl::Semaphore> Device::makeSemaphore() {
@@ -702,34 +606,7 @@ bool Device::hasNonSolidFillMode() const {
 	return _info.features.device10.features.fillModeNonSolid;
 }
 
-void Device::compileResource(gl::Loop &loop, const Rc<gl::Resource> &req, Function<void(bool)> &&complete) {
-	auto h = makeFrame(loop, _transferQueue->makeRequest(Rc<TransferResource>::create(getAllocator(), req, move(complete))), 0);
-	h->update(true);
-}
-
-void Device::compileRenderQueue(gl::Loop &loop, const Rc<gl::RenderQueue> &req, Function<void(bool)> &&cb) {
-	if (req->usesSamplers() && !_samplersCompiled.load()) {
-		loop.getQueue()->waitForAll();
-	}
-
-	auto input = Rc<RenderQueueInput>::alloc();
-	input->queue = req;
-
-	auto h = makeFrame(loop, _renderQueueCompiler->makeRequest(move(input)), 0);
-	if (cb) {
-		h->setCompleteCallback([cb] (gl::FrameHandle &handle) {
-			cb(handle.isValid());
-		});
-	}
-
-	h->update(true);
-}
-
-void Device::compileImage(gl::Loop &loop, const Rc<gl::DynamicImage> &image, Function<void(bool)> &&cb) {
-	_textureSetLayout->compileImage(*this, loop, image, move(cb));
-}
-
-void Device::compileSamplers(thread::TaskQueue &q, bool force) {
+void Device::compileSamplers(gl::TaskQueue &q, bool force) {
 	_immutableSamplers.resize(_samplersInfo.size(), nullptr);
 	_samplers.resize(_samplersInfo.size(), nullptr);
 	_samplersCount = _samplersInfo.size();
@@ -753,39 +630,6 @@ void Device::compileSamplers(thread::TaskQueue &q, bool force) {
 	}
 	if (force) {
 		q.waitForAll();
-	}
-}
-
-void Device::runMaterialCompilationFrame(gl::Loop &loop, Rc<gl::MaterialInputData> &&req) {
-	auto targetAttachment = req->attachment;
-
-	auto h = makeFrame(loop, _materialQueue->makeRequest(move(req)), 0);
-	h->setCompleteCallback([this, targetAttachment] (gl::FrameHandle &handle) {
-		if (_materialQueue->hasRequest(targetAttachment)) {
-			if (handle.getLoop()->isRunning()) {
-				auto req = _materialQueue->popRequest(targetAttachment);
-				runMaterialCompilationFrame(*handle.getLoop(), move(req));
-			} else {
-				_materialQueue->clearRequests();
-				_materialQueue->dropInProgress(targetAttachment);
-			}
-		} else {
-			_materialQueue->dropInProgress(targetAttachment);
-		}
-	});
-	h->update(true);
-}
-
-void Device::compileMaterials(gl::Loop &loop, Rc<gl::MaterialInputData> &&req) {
-	if (_finished) {
-		return;
-	}
-	if (_materialQueue->inProgress(req->attachment)) {
-		_materialQueue->appendRequest(req->attachment, move(req));
-	} else {
-		auto attachment = req->attachment;
-		_materialQueue->setInProgress(attachment);
-		runMaterialCompilationFrame(loop, move(req));
 	}
 }
 

@@ -136,7 +136,32 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 		}
 		break;
 	}
-	case InputEventName::MouseMove:
+	case InputEventName::MouseMove: {
+		auto ev = getEventInfo(event);
+		Vector<InputListener *> listeners;
+		_events->foreach([&] (InputListener *l) {
+			if (l->canHandleEvent(ev)) {
+				listeners.emplace_back(l);
+				if (l->shouldSwallowEvent(ev)) {
+					listeners.clear();
+					listeners.emplace_back(l);
+					return false;
+				}
+			}
+			return true;
+		});
+		for (auto &it : listeners) {
+			it->handleEvent(ev);
+		}
+		for (auto &it : _activeEvents) {
+			it.second.first.data.x = event.x;
+			it.second.first.data.y = event.y;
+			it.second.first.data.event = InputEventName::Move;
+			it.second.first.data.modifiers = event.modifiers;
+			handleInputEvent(it.second.first.data);
+		}
+		break;
+	}
 	case InputEventName::Scroll: {
 		auto ev = getEventInfo(event);
 		Vector<InputListener *> listeners;
@@ -156,6 +181,26 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 		}
 		break;
 	}
+	case InputEventName::Background:
+	case InputEventName::PointerEnter:
+	case InputEventName::FocusGain:
+		auto ev = getEventInfo(event);
+		Vector<InputListener *> listeners;
+		_events->foreach([&] (InputListener *l) {
+			if (l->canHandleEvent(ev)) {
+				listeners.emplace_back(l);
+				if (l->shouldSwallowEvent(ev)) {
+					listeners.clear();
+					listeners.emplace_back(l);
+					return false;
+				}
+			}
+			return true;
+		});
+		for (auto &it : listeners) {
+			it->handleEvent(ev);
+		}
+		break;
 	}
 }
 

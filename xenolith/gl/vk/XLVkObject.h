@@ -25,8 +25,12 @@
 
 #include "XLVkDevice.h"
 #include "XLGlObject.h"
+#include "XLRenderQueueImageStorage.h"
 
 namespace stappler::xenolith::vk {
+
+class Surface;
+class SwapchainImage;
 
 class DeviceMemory : public gl::Object {
 public:
@@ -47,7 +51,7 @@ public:
 	virtual ~Image() { }
 
 	// non-owining image wrapping
-	bool init(Device &dev, VkImage, const gl::ImageInfo &, Rc<gl::ImageAtlas> && = Rc<gl::ImageAtlas>());
+	bool init(Device &dev, VkImage, const gl::ImageInfo &, uint32_t);
 
 	// owning image wrapping
 	bool init(Device &dev, VkImage, const gl::ImageInfo &, Rc<DeviceMemory> &&, Rc<gl::ImageAtlas> && = Rc<gl::ImageAtlas>());
@@ -90,7 +94,7 @@ public:
 	virtual ~ImageView() { }
 
 	bool init(Device &dev, VkImage, VkFormat format);
-	bool init(Device &dev, const gl::ImageAttachmentDescriptor &desc, Image *);
+	bool init(Device &dev, const renderqueue::ImageAttachmentDescriptor &desc, Image *);
 	bool init(Device &dev, Image *, const gl::ImageViewInfo &);
 
 	VkImageView getImageView() const { return _imageView; }
@@ -113,41 +117,100 @@ protected:
 
 class SwapchainHandle : public gl::Object {
 public:
-	virtual ~SwapchainHandle() { }
+	using ImageStorage = renderqueue::ImageStorage;
+
+	struct SwapchainImageData {
+		Rc<Image> image;
+		Map<gl::ImageViewInfo, Rc<ImageView>> views;
+	};
+
+	virtual ~SwapchainHandle();
 
 	bool init(Device &dev, const gl::SwapchainConfig &, gl::ImageInfo &&, gl::PresentMode,
-			VkSurfaceKHR, uint32_t families[2], Function<void(gl::SwapchanCreationMode)> &&, SwapchainHandle * = nullptr);
+			Surface *, uint32_t families[2], SwapchainHandle * = nullptr);
 
 	gl::PresentMode getPresentMode() const { return _presentMode; }
+	gl::PresentMode getRebuildMode() const { return _rebuildMode; }
 	const gl::ImageInfo &getImageInfo() const { return _imageInfo; }
 	const gl::SwapchainConfig &getConfig() const { return _config; }
 	VkSwapchainKHR getSwapchain() const { return _swapchain; }
+	uint32_t getAcquiredImagesCount() const { return _acquiredImages; }
 
 	bool isDeprecated();
 	bool isOptimal() const;
 
-	Rc<gl::ImageAttachmentObject> getImage(uint32_t) const;
-
 	// returns true if it was first deprecation
-	bool deprecate(bool invalidate = false);
+	bool deprecate();
 
-	bool retainUsage();
-	void releaseUsage();
+	Rc<ImageStorage> acquire(bool lockfree, const Rc<Fence> &fence);
+	bool acquire(const Rc<SwapchainImage> &, const Rc<Fence> &fence);
 
-	VkResult present(Device &dev, DeviceQueue &queue, VkSemaphore presentSem, uint32_t imageIdx);
+	VkResult present(DeviceQueue &queue, const Rc<ImageStorage> &);
+	void invalidateImage(const Rc<ImageStorage> &);
+
+	Rc<Semaphore> acquireSemaphore();
+	void releaseSemaphore(Rc<Semaphore> &&);
+
+	Rc<gl::ImageView> makeView(const Rc<gl::ImageObject> &, const gl::ImageViewInfo &);
 
 protected:
-	Mutex _mutex;
-	uint32_t _inUse = 0;
+	gl::ImageViewInfo getSwapchainImageViewInfo(const gl::ImageInfo &image) const;
+
+	Device *_device = nullptr;
 	bool _deprecated = false;
 	gl::PresentMode _presentMode = gl::PresentMode::Unsupported;
 	gl::ImageInfo _imageInfo;
 	gl::SwapchainConfig _config;
 	VkSwapchainKHR _swapchain = VK_NULL_HANDLE;
-	Vector<Rc<gl::ImageAttachmentObject>> _images;
-	Function<void(gl::SwapchanCreationMode)> _rebuildCallback;
-	std::atomic<uint32_t> _presentedFrames = 0;
-	gl::SwapchanCreationMode _rebuildMode = gl::SwapchanCreationMode::Fast;
+	Vector<SwapchainImageData> _images;
+	uint32_t _acquiredImages = 0;
+	uint64_t _presentedFrames = 0;
+	gl::PresentMode _rebuildMode = gl::PresentMode::Unsupported;
+
+	Mutex _resourceMutex;
+	Vector<Rc<Semaphore>> _semaphores;
+	Rc<Semaphore> _presentSemaphore;
+	Rc<Surface> _surface;
+};
+
+class SwapchainImage : public renderqueue::ImageStorage {
+public:
+	enum class State {
+		Initial,
+		Submitted,
+		Presented,
+	};
+
+	virtual ~SwapchainImage();
+
+	virtual bool init(Rc<SwapchainHandle> &&, uint64_t);
+	virtual bool init(Rc<SwapchainHandle> &&, const SwapchainHandle::SwapchainImageData &, const Rc<Semaphore> &);
+
+	virtual void cleanup() override;
+	virtual void rearmSemaphores(gl::Loop &) override;
+	virtual void releaseSemaphore(gl::Semaphore *) override;
+
+	virtual bool isSemaphorePersistent() const override { return false; }
+
+	virtual gl::ImageInfoData getInfo() const override;
+
+	virtual Rc<gl::ImageView> makeView(const gl::ImageViewInfo &);
+
+	void setImage(Rc<SwapchainHandle> &&, const SwapchainHandle::SwapchainImageData &, const Rc<Semaphore> &);
+
+	uint64_t getOrder() const { return _order; }
+
+	void setPresented();
+	bool isPresented() const { return _state == State::Presented; }
+
+	const Rc<SwapchainHandle> &getSwapchain() const { return _swapchain; }
+
+	void invalidateImage();
+
+protected:
+	uint64_t _order = 0;
+	State _state = State::Initial;
+	Rc<SwapchainHandle> _swapchain;
 };
 
 }

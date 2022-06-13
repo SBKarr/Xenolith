@@ -27,11 +27,13 @@
 
 namespace stappler::xenolith::vk {
 
+class RenderPassImpl;
+
 class Framebuffer : public gl::Framebuffer {
 public:
 	virtual ~Framebuffer() { }
 
-	bool init(Device &dev, VkRenderPass renderPass, SpanView<Rc<gl::ImageView>> imageViews, Extent2 extent);
+	bool init(Device &dev, RenderPassImpl *renderPass, SpanView<Rc<gl::ImageView>> imageViews, Extent2 extent);
 
 	VkFramebuffer getFramebuffer() const { return _framebuffer; }
 

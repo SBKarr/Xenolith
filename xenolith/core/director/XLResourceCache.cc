@@ -122,15 +122,17 @@ Rc<ResourceCache> ResourceCache::getInstance() {
 
 ResourceCache::~ResourceCache() { }
 
-bool ResourceCache::init(gl::Device &dev) {
-	_emptyImage = gl::ImageData::make(dev.getEmptyImageObject());
-	_solidImage = gl::ImageData::make(dev.getSolidImageObject());
+bool ResourceCache::init() {
 	return true;
 }
 
-void ResourceCache::invalidate(gl::Device &dev) {
-	_emptyImage.image = nullptr;
-	_solidImage.image = nullptr;
+void ResourceCache::invalidate() {
+	_images.clear();
+}
+
+void ResourceCache::addImage(gl::ImageData &&data) {
+	auto name = data.key;
+	_images.emplace(name, move(data));
 }
 
 void ResourceCache::addResource(const Rc<gl::Resource> &req) {
@@ -142,18 +144,34 @@ void ResourceCache::removeResource(StringView requestName) {
 }
 
 Rc<Texture> ResourceCache::acquireTexture(StringView str) const {
-	if (str == EmptyTextureName) {
-		return Rc<Texture>::create(&_emptyImage, nullptr);
-	} else if (str == SolidTextureName) {
-		return Rc<Texture>::create(&_solidImage, nullptr);
-	} else {
-		for (auto &it : _resources) {
-			if (auto v = it.second->getImage(str)) {
-				return Rc<Texture>::create(v, it.second);
-			}
+	auto iit = _images.find(str);
+	if (iit != _images.end()) {
+		return Rc<Texture>::create(&iit->second, nullptr);
+	}
+
+	for (auto &it : _resources) {
+		if (auto v = it.second->getImage(str)) {
+			return Rc<Texture>::create(v, it.second);
 		}
 	}
+
 	log::vtext("ResourceCache", "Texture not found: ", str);
+	return nullptr;
+}
+
+const gl::ImageData *ResourceCache::getEmptyImage() const {
+	auto iit = _images.find(StringView(EmptyTextureName));
+	if (iit != _images.end()) {
+		return &iit->second;
+	}
+	return nullptr;
+}
+
+const gl::ImageData *ResourceCache::getSolidImage() const {
+	auto iit = _images.find(StringView(SolidTextureName));
+	if (iit != _images.end()) {
+		return &iit->second;
+	}
 	return nullptr;
 }
 

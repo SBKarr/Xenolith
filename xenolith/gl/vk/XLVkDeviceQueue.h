@@ -27,7 +27,7 @@
 #include "XLVkInstance.h"
 #include "XLGlDevice.h"
 #include "XLGlLoop.h"
-#include "XLGlFrameHandle.h"
+#include "XLRenderQueueFrameHandle.h"
 
 namespace stappler::xenolith::vk {
 
@@ -36,24 +36,27 @@ class DeviceQueue;
 class CommandPool;
 class Semaphore;
 class Fence;
+class Loop;
 
 struct DeviceQueueFamily {
-	struct Waiter {
-		Function<void(gl::Loop &, const Rc<DeviceQueue> &)> acquireForLoop;
-		Function<void(gl::Loop &)> releaseForLoop;
-		Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> acquireForFrame;
-		Function<void(gl::FrameHandle &)> releaseForFrame;
+	using FrameHandle = renderqueue::FrameHandle;
 
-		Rc<gl::FrameHandle> handle;
-		Rc<gl::Loop> loop;
+	struct Waiter {
+		Function<void(Loop &, const Rc<DeviceQueue> &)> acquireForLoop;
+		Function<void(Loop &)> releaseForLoop;
+		Function<void(FrameHandle &, const Rc<DeviceQueue> &)> acquireForFrame;
+		Function<void(FrameHandle &)> releaseForFrame;
+
+		Rc<FrameHandle> handle;
+		Rc<Loop> loop;
 		Rc<Ref> ref;
 
-		Waiter(Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> &&a, Function<void(gl::FrameHandle &)> &&r,
-				gl::FrameHandle *h, Rc<Ref> &&ref)
+		Waiter(Function<void(FrameHandle &, const Rc<DeviceQueue> &)> &&a, Function<void(FrameHandle &)> &&r,
+				FrameHandle *h, Rc<Ref> &&ref)
 		: acquireForFrame(move(a)), releaseForFrame(move(r)), handle(h), ref(move(ref)) { }
 
-		Waiter(Function<void(gl::Loop &, const Rc<DeviceQueue> &)> &&a, Function<void(gl::Loop &)> &&r,
-				gl::Loop *h, Rc<Ref> &&ref)
+		Waiter(Function<void(Loop &, const Rc<DeviceQueue> &)> &&a, Function<void(Loop &)> &&r,
+				Loop *h, Rc<Ref> &&ref)
 		: acquireForLoop(move(a)), releaseForLoop(move(r)), loop(h), ref(move(ref)) { }
 	};
 
@@ -69,11 +72,14 @@ struct DeviceQueueFamily {
 
 class DeviceQueue final : public Ref {
 public:
+	using FrameSync = renderqueue::FrameSync;
+	using FrameHandle = renderqueue::FrameHandle;
+
 	virtual ~DeviceQueue();
 
 	virtual bool init(Device &, VkQueue, uint32_t, QueueOperations);
 
-	bool submit(const gl::FrameSync &, Fence &, SpanView<VkCommandBuffer>);
+	bool submit(const FrameSync &, Fence &, SpanView<VkCommandBuffer>);
 	bool submit(Fence &, SpanView<VkCommandBuffer>);
 
 	void waitIdle();
@@ -88,7 +94,7 @@ public:
 	QueueOperations getOps() const { return _ops; }
 	VkResult getResult() const { return _result; }
 
-	void setOwner(gl::FrameHandle &);
+	void setOwner(FrameHandle &);
 	void reset();
 
 protected:

@@ -27,7 +27,6 @@
 #include "XLVkRenderPassImpl.h"
 #include "XLVkPipeline.h"
 #include "XLVkBuffer.h"
-#include "XLVkFrame.h"
 #include "XLVkTextureSet.h"
 
 namespace stappler::xenolith::vk {
@@ -52,13 +51,13 @@ bool MaterialVertexAttachment::init(StringView str, const gl::BufferInfo &info, 
 	}, sizeof(uint32_t) * 4, gl::MaterialType::Basic2D, move(initial));
 }
 
-Rc<gl::AttachmentHandle> MaterialVertexAttachment::makeFrameHandle(const gl::FrameQueue &handle) {
+auto MaterialVertexAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<AttachmentHandle> {
 	return Rc<MaterialVertexAttachmentHandle>::create(this, handle);
 }
 
 MaterialVertexAttachmentHandle::~MaterialVertexAttachmentHandle() { }
 
-bool MaterialVertexAttachmentHandle::init(const Rc<gl::Attachment> &a, const gl::FrameQueue &handle) {
+bool MaterialVertexAttachmentHandle::init(const Rc<Attachment> &a, const FrameQueue &handle) {
 	if (BufferAttachmentHandle::init(a, handle)) {
 		_materials = ((MaterialVertexAttachment *)a.get())->getMaterials();
 		return true;
@@ -66,12 +65,12 @@ bool MaterialVertexAttachmentHandle::init(const Rc<gl::Attachment> &a, const gl:
 	return false;
 }
 
-bool MaterialVertexAttachmentHandle::isDescriptorDirty(const gl::RenderPassHandle &, const gl::PipelineDescriptor &desc,
+bool MaterialVertexAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &desc,
 		uint32_t, bool isExternal) const {
 	return _materials && _materials->getGeneration() != ((gl::MaterialAttachmentDescriptor *)desc.descriptor)->getBoundGeneration();
 }
 
-bool MaterialVertexAttachmentHandle::writeDescriptor(const RenderPassHandle &handle, const gl::PipelineDescriptor &descriptors,
+bool MaterialVertexAttachmentHandle::writeDescriptor(const QueuePassHandle &handle, const PipelineDescriptor &descriptors,
 		uint32_t, bool, VkDescriptorBufferInfo &info) {
 	auto b = _materials->getBuffer();
 	if (!b) {
@@ -93,24 +92,28 @@ bool VertexMaterialAttachment::init(StringView name, const gl::BufferInfo &info,
 	return false;
 }
 
-Rc<gl::AttachmentHandle> VertexMaterialAttachment::makeFrameHandle(const gl::FrameQueue &handle) {
+auto VertexMaterialAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<AttachmentHandle> {
 	return Rc<VertexMaterialAttachmentHandle>::create(this, handle);
 }
 
 VertexMaterialAttachmentHandle::~VertexMaterialAttachmentHandle() { }
 
-bool VertexMaterialAttachmentHandle::setup(gl::FrameQueue &handle, Function<void(bool)> &&cb) {
+bool VertexMaterialAttachmentHandle::setup(FrameQueue &handle, Function<void(bool)> &&cb) {
 	if (auto materials = handle.getAttachment(((VertexMaterialAttachment *)_attachment.get())->getMaterials())) {
 		_materials = (const MaterialVertexAttachmentHandle *)materials->handle.get();
 	}
 	return true;
 }
 
-void VertexMaterialAttachmentHandle::submitInput(gl::FrameQueue &handle, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
+void VertexMaterialAttachmentHandle::submitInput(FrameQueue &handle, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
 	if (auto d = data.cast<gl::CommandList>()) {
-		handle.getFrame().performInQueue([this, d = move(d)] (gl::FrameHandle &handle) {
+		if (handle.isFinalized()) {
+			cb(false);
+			return;
+		}
+		handle.getFrame()->performInQueue([this, d = move(d)] (FrameHandle &handle) {
 			return loadVertexes(handle, d);
-		}, [this, cb = move(cb)] (gl::FrameHandle &handle, bool success) {
+		}, [this, cb = move(cb)] (FrameHandle &handle, bool success) {
 			cb(success);
 		}, this, "VertexMaterialAttachmentHandle::submitInput");
 	} else {
@@ -118,12 +121,12 @@ void VertexMaterialAttachmentHandle::submitInput(gl::FrameQueue &handle, Rc<gl::
 	}
 }
 
-bool VertexMaterialAttachmentHandle::isDescriptorDirty(const gl::RenderPassHandle &, const gl::PipelineDescriptor &,
+bool VertexMaterialAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
 		uint32_t, bool isExternal) const {
 	return _vertexes;
 }
 
-bool VertexMaterialAttachmentHandle::writeDescriptor(const RenderPassHandle &, const gl::PipelineDescriptor &,
+bool VertexMaterialAttachmentHandle::writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
 		uint32_t, bool, VkDescriptorBufferInfo &info) {
 	info.buffer = _vertexes->getBuffer();
 	info.offset = 0;
@@ -135,7 +138,7 @@ bool VertexMaterialAttachmentHandle::empty() const {
 	return !_indexes || !_vertexes;
 }
 
-static void checkTriagles(BytesView vertexesData, BytesView indexesData) {
+/*static void checkTriagles(BytesView vertexesData, BytesView indexesData) {
 	SpanView<uint32_t> indexes((uint32_t *)indexesData.data(), indexesData.size() / sizeof(uint32_t));
 	SpanView<gl::Vertex_V4F_V4F_T2F2U> vertexes(
 			(gl::Vertex_V4F_V4F_T2F2U *)vertexesData.data(), vertexesData.size() / sizeof(gl::Vertex_V4F_V4F_T2F2U));
@@ -150,20 +153,20 @@ static void checkTriagles(BytesView vertexesData, BytesView indexesData) {
 		if (v1 >= vertexes.size() || v2 >= vertexes.size() || v3 >= vertexes.size()) {
 			std::cout << "Invalid input: " << v1 << " " << v2 << " " << v3 << "\n";
 		} else {
-			auto &vv1 = vertexes[v1];
-			auto &vv2 = vertexes[v2];
-			auto &vv3 = vertexes[v3];
+			//auto &vv1 = vertexes[v1];
+			//auto &vv2 = vertexes[v2];
+			//auto &vv3 = vertexes[v3];
 
 			//std::cout << v1 << ": " << vv1 << "\n" << v2 << ": " << vv2 << "\n" << v3 << ": " << vv3 << "\n\n";
 
-			/*if (vv1.color != vv2.color || vv1.color != vv3.color || vv2.color != vv3.color) {
-				std::cout << "Invalid vertexes: " << vv1 << " " << vv2 << " " << vv3 << "\n";
-			}*/
+			//if (vv1.color != vv2.color || vv1.color != vv3.color || vv2.color != vv3.color) {
+				//std::cout << "Invalid vertexes: " << vv1 << " " << vv2 << " " << vv3 << "\n";
+			//}
 		}
 	}
-}
+}*/
 
-bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, const Rc<gl::CommandList> &commands) {
+bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<gl::CommandList> &commands) {
 	auto handle = dynamic_cast<FrameHandle *>(&fhandle);
 	if (!handle) {
 		return false;
@@ -262,12 +265,14 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 		depthOffset -= depthScale;
 	}
 
-	// create buffers
-	_indexes = handle->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(gl::BufferUsage::IndexBuffer, 1024 /*globalWritePlan.indexes*/ * sizeof(uint32_t)));
+	auto devFrame = static_cast<DeviceFrameHandle *>(handle);
 
-	_vertexes = handle->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(gl::BufferUsage::StorageBuffer, 1024 /*globalWritePlan.vertexes*/ * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
+	// create buffers
+	_indexes = devFrame->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
+			gl::BufferInfo(gl::BufferUsage::IndexBuffer, globalWritePlan.indexes * sizeof(uint32_t)));
+
+	_vertexes = devFrame->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
+			gl::BufferInfo(gl::BufferUsage::StorageBuffer, globalWritePlan.vertexes * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
 
 	if (!_vertexes || !_indexes) {
 		return false;
@@ -342,42 +347,6 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 		materialIndexes += vertexes->indexes.size();
 	};
 
-	auto pushPadding = [&] {
-		auto target = (gl::Vertex_V4F_V4F_T2F2U *)vertexesMap.ptr + vertexOffset;
-		target->color = Vec4(1, 0, 0, 1);
-		target->tex = Vec2(0, 0); target->material = 0; target->object = 0;
-		target->pos = Vec4(-1, -1, 0, 1);
-
-		++ target;
-		target->color = Vec4(0, 1, 0, 1);
-		target->tex = Vec2(0, 0); target->material = 0; target->object = 0;
-		target->pos = Vec4(-1, 1, 0, 1);
-
-		++ target;
-		target->color = Vec4(0, 0, 1, 1);
-		target->tex = Vec2(0, 0); target->material = 0; target->object = 0;
-		target->pos = Vec4(1, 1, 0, 1);
-
-		++ target;
-		target->color = Vec4(0, 1, 1, 1);
-		target->tex = Vec2(0, 0); target->material = 0; target->object = 0;
-		target->pos = Vec4(1, -1, 0, 1);
-
-		auto indexTarget = (uint32_t *)indexesMap.ptr + indexOffset;
-		*indexTarget = vertexOffset + 0; ++ indexTarget;
-		*indexTarget = vertexOffset + 2; ++ indexTarget;
-		*indexTarget = vertexOffset + 1; ++ indexTarget;
-		*indexTarget = vertexOffset + 0; ++ indexTarget;
-		*indexTarget = vertexOffset + 3; ++ indexTarget;
-		*indexTarget = vertexOffset + 2; ++ indexTarget;
-
-		vertexOffset += 4;
-		indexOffset += 6;
-
-		materialVertexes += 4;
-		materialIndexes += 6;
-	};
-
 	auto drawWritePlan = [&] (std::unordered_map<gl::MaterialId, MaterialWritePlan> &writePlan) {
 		// optimize draw order, minimize switching pipeline, textureSet and descriptors
 		Vector<const Pair<const gl::MaterialId, MaterialWritePlan> *> drawOrder;
@@ -415,31 +384,17 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 			}
 
 			_spans.emplace_back(gl::VertexSpan({ it->first, materialIndexes, 1, indexOffset - materialIndexes}));
-
-			materialVertexes = 0;
-			materialIndexes = 0;
-
-			pushPadding();
 		}
 	};
 
-	((Device *)fhandle.getDevice())->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
-		drawWritePlan(solidWritePlan);
-		drawWritePlan(surfaceWritePlan);
+	drawWritePlan(solidWritePlan);
+	drawWritePlan(surfaceWritePlan);
 
-		for (auto &it : transparentWritePlan) {
-			drawWritePlan(it.second);
-		}
-	});
+	for (auto &it : transparentWritePlan) {
+		drawWritePlan(it.second);
+	}
 
-	/*for (auto &it : paths) {
-		for (auto &iit : it.first) {
-			std::cout << " " << iit;
-		}
-		std::cout << "\n";
-	}*/
-
-	checkTriagles(BytesView(vertexesMap.ptr, vertexesMap.size), BytesView(indexesMap.ptr, indexesMap.size));
+	// checkTriagles(BytesView(vertexesMap.ptr, vertexesMap.size), BytesView(indexesMap.ptr, indexesMap.size));
 
 	if (fhandle.isPersistentMapping()) {
 		_vertexes->unmap(vertexesMap, true);
@@ -452,16 +407,16 @@ bool VertexMaterialAttachmentHandle::loadVertexes(gl::FrameHandle &fhandle, cons
 	return true;
 }
 
-bool MaterialRenderPass::init(StringView name, gl::RenderOrdering ord, size_t subpassCount) {
-	return RenderPass::init(name, gl::RenderPassType::Graphics, ord, subpassCount);
+bool MaterialPass::init(StringView name, RenderOrdering ord, size_t subpassCount) {
+	return QueuePass::init(name, gl::RenderPassType::Graphics, ord, subpassCount);
 }
 
-Rc<gl::RenderPassHandle> MaterialRenderPass::makeFrameHandle(const gl::FrameQueue &handle) {
-	return Rc<MaterialRenderPassHandle>::create(*this, handle);
+auto MaterialPass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle> {
+	return Rc<MaterialPassHandle>::create(*this, handle);
 }
 
-void MaterialRenderPass::prepare(gl::Device &dev) {
-	RenderPass::prepare(dev);
+void MaterialPass::prepare(gl::Device &dev) {
+	QueuePass::prepare(dev);
 	for (auto &it : _data->descriptors) {
 		if (auto a = dynamic_cast<MaterialVertexAttachment *>(it->getAttachment())) {
 			_materials = a;
@@ -471,8 +426,8 @@ void MaterialRenderPass::prepare(gl::Device &dev) {
 	}
 }
 
-bool MaterialRenderPassHandle::prepare(gl::FrameQueue &q, Function<void(bool)> &&cb) {
-	auto pass = (MaterialRenderPass *)_renderPass.get();
+bool MaterialPassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
+	auto pass = (MaterialPass *)_renderPass.get();
 
 	if (auto materialBuffer = q.getAttachment(pass->getMaterials())) {
 		_materialBuffer = (const MaterialVertexAttachmentHandle *)materialBuffer->handle.get();
@@ -482,19 +437,15 @@ bool MaterialRenderPassHandle::prepare(gl::FrameQueue &q, Function<void(bool)> &
 		_vertexBuffer = (const VertexMaterialAttachmentHandle *)vertexBuffer->handle.get();
 	}
 
-	if (!_vertexBuffer->empty()) {
-		return RenderPassHandle::prepare(q, move(cb));
-	}
-
-	cb(false);
-	return true;
+	return QueuePassHandle::prepare(q, move(cb));
 }
 
-Vector<VkCommandBuffer> MaterialRenderPassHandle::doPrepareCommands(gl::FrameHandle &) {
+Vector<VkCommandBuffer> MaterialPassHandle::doPrepareCommands(FrameHandle &) {
 	auto table = _device->getTable();
 	auto buf = _pool->allocBuffer(*_device);
 
-	auto currentExtent = getFramebuffer()->getExtent();
+	auto &fb = getFramebuffer();
+	auto currentExtent = fb->getExtent();
 
 	auto materials = _materialBuffer->getMaterials().get();
 
@@ -536,8 +487,8 @@ Vector<VkCommandBuffer> MaterialRenderPassHandle::doPrepareCommands(gl::FrameHan
 	return Vector<VkCommandBuffer>();
 }
 
-void MaterialRenderPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, VkCommandBuffer &buf) {
-	if (!_vertexBuffer->getIndexes() || !_vertexBuffer->getVertexes()) {
+void MaterialPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, VkCommandBuffer &buf) {
+	if (_vertexBuffer->empty() || !_vertexBuffer->getIndexes() || !_vertexBuffer->getVertexes()) {
 		return;
 	}
 
@@ -606,7 +557,7 @@ void MaterialRenderPassHandle::prepareMaterialCommands(gl::MaterialSet * materia
 	}
 }
 
-void MaterialRenderPassHandle::doFinalizeTransfer(gl::MaterialSet * materials, VkCommandBuffer buf,
+void MaterialPassHandle::doFinalizeTransfer(gl::MaterialSet * materials, VkCommandBuffer buf,
 		Vector<VkImageMemoryBarrier> &outputImageBarriers, Vector<VkBufferMemoryBarrier> &outputBufferBarriers) {
 	if (!materials) {
 		return;

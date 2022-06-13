@@ -23,15 +23,23 @@ THE SOFTWARE.
 #include "XLDefine.h"
 #include "XLVk.h"
 
+#define XL_VK_DEBUG 0
+#define XL_VKDEVICE_DEBUG 0
 #define XL_VKAPI_DEBUG 1
 
-#ifdef XL_VK_DEBUG
+#if XL_VK_DEBUG
 #define XL_VK_LOG(...) log::vtext("Vk::Loop", __VA_ARGS__)
 #else
 #define XL_VK_LOG(...)
 #endif
 
-#ifdef XL_VKAPI_DEBUG
+#if XL_VKDEVICE_DEBUG
+#define XL_VKDEVICE_LOG(...) log::vtext("Vk::Device", __VA_ARGS__)
+#else
+#define XL_VKDEVICE_LOG(...)
+#endif
+
+#if XL_VKAPI_DEBUG
 #define XL_VKAPI_LOG(...) log::vtext("vk::Api", __VA_ARGS__)
 #else
 #define XL_VKAPI_LOG(...)
@@ -39,19 +47,16 @@ THE SOFTWARE.
 
 #include "XLVkDeviceQueue.cc"
 #include "XLVkDevice.cc"
+#include "XLVkSync.cc"
 #include "XLVkAllocator.cc"
 #include "XLVkBuffer.cc"
 #include "XLVkFramebuffer.cc"
-#include "XLVkSwapchain.cc"
-#include "XLVkSwapchainSync.cc"
 #include "XLVkPipeline.cc"
 #include "XLVkRenderPassImpl.cc"
-#include "XLVkSync.cc"
-#include "XLVkFrame.cc"
 #include "XLVkObject.cc"
 #include "XLVkTextureSet.cc"
 #include "renderer/XLVkAttachment.cc"
-#include "renderer/XLVkRenderPass.cc"
+#include "renderer/XLVkQueuePass.cc"
 #include "renderer/XLVkTransferQueue.cc"
 #include "renderer/XLVkMaterialCompiler.cc"
 #include "renderer/XLVkMaterialRenderPass.cc"

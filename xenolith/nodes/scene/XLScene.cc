@@ -25,6 +25,8 @@ THE SOFTWARE.
 #include "XLInputDispatcher.h"
 #include "XLDirector.h"
 #include "XLApplication.h"
+#include "XLGlLoop.h"
+#include "XLRenderQueueFrameHandle.h"
 
 namespace stappler::xenolith {
 
@@ -32,7 +34,7 @@ Scene::~Scene() {
 	_queue = nullptr;
 }
 
-bool Scene::init(Application *app, gl::RenderQueue::Builder &&builder) {
+bool Scene::init(Application *app, RenderQueue::Builder &&builder) {
 	if (!Node::init()) {
 		return false;
 	}
@@ -43,7 +45,7 @@ bool Scene::init(Application *app, gl::RenderQueue::Builder &&builder) {
 	return true;
 }
 
-bool Scene::init(Application *app, gl::RenderQueue::Builder &&builder, Size2 size) {
+bool Scene::init(Application *app, RenderQueue::Builder &&builder, Size2 size) {
 	if (!Node::init()) {
 		return false;
 	}
@@ -111,22 +113,24 @@ void Scene::onFinished(Director *dir) {
 	}
 }
 
-void Scene::onFrameStarted(gl::FrameRequest &req) {
+void Scene::onFrameStarted(FrameRequest &req) {
 	req.setSceneId(retain());
 }
 
-void Scene::onFrameEnded(gl::FrameRequest &req) {
+void Scene::onFrameEnded(FrameRequest &req) {
 	release(req.getSceneId());
 }
 
-void Scene::on2dVertexInput(gl::FrameQueue &frame, const Rc<gl::AttachmentHandle> &attachment, Function<void(bool)> &&cb) {
+void Scene::on2dVertexInput(FrameQueue &frame, const Rc<renderqueue::AttachmentHandle> &attachment, Function<void(bool)> &&cb) {
 	if (!_director) {
 		cb(false);
 		return;
 	}
 
+	auto handle = frame.getFrame();
+
 	_director->getApplication()->performOnMainThread(
-			[this, frame = Rc<gl::FrameQueue>(&frame), attachment = attachment, cb = move(cb)] () mutable {
+			[this, handle, frame = Rc<renderqueue::FrameQueue>(&frame), attachment, cb = move(cb)] () mutable {
 		if (!_director) {
 			return;
 		}
@@ -137,7 +141,9 @@ void Scene::on2dVertexInput(gl::FrameQueue &frame, const Rc<gl::AttachmentHandle
 
 		render(info);
 
-		attachment->submitInput(*frame, move(info.commands), move(cb));
+		handle->performOnGlThread([attachment, commands = move(info.commands), cb = move(cb), frame = Rc<renderqueue::FrameQueue>(frame)] (FrameHandle &) mutable {
+			attachment->submitInput(*frame, move(commands), move(cb));
+		}, handle, false, "Scene::on2dVertexInput");
 
 		// submit material updates
 		if (!_pendingMaterials.empty()) {
@@ -145,7 +151,7 @@ void Scene::on2dVertexInput(gl::FrameQueue &frame, const Rc<gl::AttachmentHandle
 				auto req = Rc<gl::MaterialInputData>::alloc();
 				req->attachment = it.first;
 				req->materialsToAddOrUpdate = move(it.second);
-				frame->getLoop()->compileMaterials(req);
+				frame->getLoop()->compileMaterials(move(req));
 			}
 			_pendingMaterials.clear();
 		}
@@ -195,15 +201,15 @@ uint64_t Scene::acquireMaterial(const MaterialInfo &info, Vector<gl::MaterialIma
 	return 0;
 }
 
-Rc<gl::RenderQueue> Scene::makeQueue(gl::RenderQueue::Builder &&builder) {
-	builder.setBeginCallback([this] (gl::FrameRequest &frame) {
+auto Scene::makeQueue(RenderQueue::Builder &&builder) -> Rc<RenderQueue> {
+	builder.setBeginCallback([this] (FrameRequest &frame) {
 		onFrameStarted(frame);
 	});
-	builder.setEndCallback([this] (gl::FrameRequest &frame) {
+	builder.setEndCallback([this] (FrameRequest &frame) {
 		onFrameEnded(frame);
 	});
 
-	return Rc<gl::RenderQueue>::create(move(builder));
+	return Rc<RenderQueue>::create(move(builder));
 }
 
 void Scene::readInitialMaterials() {
@@ -235,7 +241,7 @@ void Scene::readInitialMaterials() {
 						auto hash = pipeline->material.hash();
 						auto it = sp.pipelines.find(hash);
 						if (it == sp.pipelines.end()) {
-							it = sp.pipelines.emplace(hash, Vector<const gl::PipelineData *>()).first;
+							it = sp.pipelines.emplace(hash, Vector<const PipelineData *>()).first;
 						}
 						it->second.emplace_back(pipeline);
 						log::vtext("Scene", "Pipeline ", pipeline->material.description(), " : ", pipeline->material.data());
@@ -278,7 +284,7 @@ Bytes Scene::getDataForMaterial(const gl::MaterialAttachment *a, const MaterialI
 	return Bytes();
 }
 
-const gl::PipelineData *Scene::getPipelineForMaterial(const AttachmentData &a, const MaterialInfo &info) const {
+auto Scene::getPipelineForMaterial(const AttachmentData &a, const MaterialInfo &info) const -> const PipelineData * {
 	auto hash = info.pipeline.hash();
 	for (auto &it : a.subasses) {
 		auto hashIt = it.pipelines.find(hash);
@@ -295,7 +301,7 @@ const gl::PipelineData *Scene::getPipelineForMaterial(const AttachmentData &a, c
 	return nullptr;
 }
 
-bool Scene::isPipelineMatch(const gl::PipelineInfo *data, const MaterialInfo &info) const {
+bool Scene::isPipelineMatch(const PipelineInfo *data, const MaterialInfo &info) const {
 	return true; // TODO: true match
 }
 
@@ -317,6 +323,16 @@ void Scene::addMaterial(const MaterialInfo &info, gl::MaterialId id) {
 		Vector<Pair<MaterialInfo, gl::MaterialId>> ids({pair(info, id)});
 		_materials.emplace(materialHash, move(ids));
 	}
+}
+
+void Scene::listMterials() const {
+	for (auto &it : _materials) {
+		std::cout << it.first << ":\n";
+		for (auto &iit : it.second) {
+			std::cout << "\t" << iit.first.description() << " -> " << iit.second << "\n";
+		}
+	}
+
 }
 
 }

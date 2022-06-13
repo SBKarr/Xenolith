@@ -23,6 +23,7 @@
 #include "XLVkDeviceQueue.h"
 #include "XLVkDevice.h"
 #include "XLVkSync.h"
+#include "XLRenderQueueImageStorage.h"
 
 namespace stappler::xenolith::vk {
 
@@ -36,24 +37,28 @@ bool DeviceQueue::init(Device &device, VkQueue queue, uint32_t index, QueueOpera
 	return true;
 }
 
-bool DeviceQueue::submit(const gl::FrameSync &sync, Fence &fence, SpanView<VkCommandBuffer> buffers) {
+bool DeviceQueue::submit(const FrameSync &sync, Fence &fence, SpanView<VkCommandBuffer> buffers) {
 	Vector<VkSemaphore> waitSem;
 	Vector<VkPipelineStageFlags> waitStages;
 	Vector<VkSemaphore> signalSem;
 
 	for (auto &it : sync.waitAttachments) {
-		auto sem = ((Semaphore *)it.semaphore.get())->getSemaphore();
+		if (it.semaphore) {
+			auto sem = ((Semaphore *)it.semaphore.get())->getSemaphore();
 
-		if (!it.semaphore->isWaited()) {
-			waitSem.emplace_back(sem);
-			waitStages.emplace_back(VkPipelineStageFlags(it.stages));
+			if (!it.semaphore->isWaited()) {
+				waitSem.emplace_back(sem);
+				waitStages.emplace_back(VkPipelineStageFlags(it.stages));
+			}
 		}
 	}
 
 	for (auto &it : sync.signalAttachments) {
-		auto sem = ((Semaphore *)it.semaphore.get())->getSemaphore();
+		if (it.semaphore) {
+			auto sem = ((Semaphore *)it.semaphore.get())->getSemaphore();
 
-		signalSem.emplace_back(sem);
+			signalSem.emplace_back(sem);
+		}
 	}
 
 	VkSubmitInfo submitInfo{};
@@ -67,7 +72,7 @@ bool DeviceQueue::submit(const gl::FrameSync &sync, Fence &fence, SpanView<VkCom
 	submitInfo.signalSemaphoreCount = signalSem.size();
 	submitInfo.pSignalSemaphores = signalSem.data();
 
-#ifdef XL_VKAPI_DEBUG
+#if XL_VKAPI_DEBUG
 	auto t = platform::device::_clock(platform::device::Monotonic);
 	fence.addRelease([frameIdx = _frameIdx, t] (bool success) {
 		XL_VKAPI_LOG("[", frameIdx,  "] vkQueueSubmit [complete]",
@@ -76,31 +81,46 @@ bool DeviceQueue::submit(const gl::FrameSync &sync, Fence &fence, SpanView<VkCom
 #endif
 
 	_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
-#ifdef XL_VKAPI_DEBUG
+#if XL_VKAPI_DEBUG
 		auto t = platform::device::_clock(platform::device::Monotonic);
 		_result = table.vkQueueSubmit(_queue, 1, &submitInfo, fence.getFence());
 		XL_VKAPI_LOG("[", _frameIdx,  "] vkQueueSubmit: ", _result, " ", (void *)_queue,
 				" [", platform::device::_clock(platform::device::Monotonic) - t, "]");
 #else
-		result = table.vkQueueSubmit(_queue, 1, &submitInfo, fence.getFence());
+		_result = table.vkQueueSubmit(_queue, 1, &submitInfo, fence.getFence());
 #endif
 	});
 
 	if (_result == VK_SUCCESS) {
 		// mark semaphores
 
-		fence.setArmed(*this);
-
 		for (auto &it : sync.waitAttachments) {
-			it.semaphore->setWaited(true);
+			if (it.semaphore) {
+				it.semaphore->setWaited(true);
+				if (it.image && !it.image->isSemaphorePersistent()) {
+					fence.addRelease([img = it.image, sem = it.semaphore.get(), t = it.semaphore->getTimeline()] (bool success) {
+						sem->setInUse(false, t);
+						img->releaseSemaphore(sem);
+					}, it.image, "DeviceQueue::submit::!isSemaphorePersistent");
+				} else {
+					fence.addRelease([sem = it.semaphore.get(), t = it.semaphore->getTimeline()] (bool success) {
+						sem->setInUse(false, t);
+					}, it.semaphore, "DeviceQueue::submit::isSemaphorePersistent");
+				}
+			}
 		}
 
 		for (auto &it : sync.signalAttachments) {
-			it.semaphore->setSignaled(true);
+			if (it.semaphore) {
+				it.semaphore->setSignaled(true);
+				it.semaphore->setInUse(true, it.semaphore->getTimeline());
+			}
 		}
 
+		fence.setArmed(*this);
+
 		for (auto &it : sync.images) {
-			it.image->layout = it.newLayout;
+			it.image->setLayout(it.newLayout);
 		}
 
 		return true;
@@ -129,13 +149,13 @@ bool DeviceQueue::submit(Fence &fence, SpanView<VkCommandBuffer> buffers) {
 #endif
 
 	_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
-#ifdef XL_VKAPI_DEBUG
+#if XL_VKAPI_DEBUG
 		auto t = platform::device::_clock(platform::device::Monotonic);
 		_result = table.vkQueueSubmit(_queue, 1, &submitInfo, fence.getFence());
 		XL_VKAPI_LOG("[", _frameIdx,  "] vkQueueSubmit: ", _result, " ", (void *)_queue,
 				" [", platform::device::_clock(platform::device::Monotonic) - t, "]");
 #else
-		result = table.vkQueueSubmit(_queue, 1, &submitInfo, fence.getFence());
+		_result = table.vkQueueSubmit(_queue, 1, &submitInfo, fence.getFence());
 #endif
 	});
 
@@ -164,7 +184,7 @@ void DeviceQueue::releaseFence(const Fence &fence) {
 	-- _nfences;
 }
 
-void DeviceQueue::setOwner(gl::FrameHandle &frame) {
+void DeviceQueue::setOwner(FrameHandle &frame) {
 	_frameIdx = frame.getOrder();
 }
 

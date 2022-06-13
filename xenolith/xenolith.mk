@@ -34,7 +34,7 @@ XENOLITH_OUTPUT_DIR = $(abspath $(TOOLKIT_OUTPUT)/xenolith)
 XENOLITH_OUTPUT_STATIC = $(abspath $(TOOLKIT_OUTPUT)/libxenolith.a)
 
 # linker flags and extra libs
-OSTYPE_XENOLITH_LIBS += $(OSTYPE_CLI_LIBS) -l:libfreetype.a -lX11 -lXrandr -lXi -lXinerama -lXcursor -lxcb
+OSTYPE_XENOLITH_LIBS += $(OSTYPE_CLI_LIBS) -l:libfreetype.a
 
 # use default stappler LDFLAGS for OS
 XENOLITH_LDFLAGS := $(OSTYPE_LDFLAGS)

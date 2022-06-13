@@ -31,6 +31,7 @@ namespace stappler::xenolith::vk {
 
 class Device;
 class DeviceQueue;
+class Loop;
 
 /* VkSemaphore wrapper
  *
@@ -73,35 +74,47 @@ public:
 	enum State {
 		Disabled,
 		Armed,
-		Delayed,
 		Signaled
 	};
 
 	virtual ~Fence();
 
 	bool init(Device &);
+	void clear();
 
 	VkFence getFence() const { return _fence; }
 
-	void setFrame(uint32_t f) { _frame = f; }
-	uint32_t getFrame() const { return _frame; }
+	void setFrame(Function<bool()> &&schedule, Function<void()> &&release, uint64_t f);
+	uint64_t getFrame() const { return _frame; }
+
+	void setScheduleCallback(Function<bool()> &&schedule);
+	void setReleaseCallback(Function<bool()> &&release);
+
+	uint64_t getArmedTime() const { return _armedTime; }
 
 	bool isArmed() const { return _state == Armed; }
 	void setArmed(DeviceQueue &);
+	void setArmed();
 
 	void setTag(StringView);
+	StringView getTag() const { return _tag; }
 
 	// function will be called and ref will be released on fence's signal
 	void addRelease(Function<void(bool)> &&, Ref *, StringView tag);
 
-	bool check(gl::Loop &loop, bool lockfree = true);
-	bool checkDelayed(bool lockfree = true);
+	bool schedule(Loop &);
 
-	void reset(gl::Loop &, Function<void(Rc<Fence> &&)> &&);
-	void resetUnsafe();
+	bool check(Loop &, bool lockfree = true);
+	void reset(Loop &, Function<void(Rc<Fence> &&)> &&);
 
 protected:
+	void scheduleReset(Loop &);
+	void scheduleReleaseReset(Loop &, bool s);
 	void doRelease(bool success);
+
+	virtual bool isRetainTrackerEnabled() const {
+		return true;
+	}
 
 	struct ReleaseHandle {
 		Function<void(bool)> callback;
@@ -109,7 +122,7 @@ protected:
 		StringView tag;
 	};
 
-	uint32_t _frame = 0;
+	uint64_t _frame = 0;
 	State _state = Disabled;
 	VkFence _fence = VK_NULL_HANDLE;
 	Vector<ReleaseHandle> _release;
@@ -117,6 +130,9 @@ protected:
 	DeviceQueue *_queue = nullptr;
 	uint64_t _armedTime = 0;
 	StringView _tag;
+
+	Function<bool()> _scheduleFn;
+	Function<void()> _releaseFn;
 };
 
 }

@@ -25,82 +25,81 @@
 
 #include "XLVkFramebuffer.h"
 #include "XLVkSync.h"
-#include "XLGlAttachment.h"
+#include "XLRenderQueueAttachment.h"
 
 namespace stappler::xenolith::vk {
 
 class DeviceBuffer;
-class RenderPassHandle;
+class QueuePassHandle;
 
-class BufferAttachment : public gl::BufferAttachment {
+class BufferAttachment : public renderqueue::BufferAttachment {
 public:
 	virtual ~BufferAttachment() { }
 
 protected:
 };
 
-class ImageAttachment : public gl::ImageAttachment {
+class ImageAttachment : public renderqueue::ImageAttachment {
 public:
 	virtual ~ImageAttachment() { }
 
-	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameQueue &) override;
+	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
 };
 
 
-class BufferAttachmentHandle : public gl::AttachmentHandle {
+class BufferAttachmentHandle : public renderqueue::AttachmentHandle {
 public:
 	virtual ~BufferAttachmentHandle() { }
 
-	virtual bool writeDescriptor(const RenderPassHandle &, const gl::PipelineDescriptor &,
+	virtual bool writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
 			uint32_t, bool, VkDescriptorBufferInfo &) { return false; }
 };
 
-class ImageAttachmentHandle : public gl::AttachmentHandle {
+class ImageAttachmentHandle : public renderqueue::AttachmentHandle {
 public:
 	virtual ~ImageAttachmentHandle() { }
 
-	virtual bool writeDescriptor(const RenderPassHandle &, const gl::PipelineDescriptor &,
+	virtual bool writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
 			uint32_t, bool, VkDescriptorImageInfo &) { return false; }
 };
 
-class TexelAttachmentHandle : public gl::AttachmentHandle {
+class TexelAttachmentHandle : public renderqueue::AttachmentHandle {
 public:
 	virtual ~TexelAttachmentHandle();
 
-	virtual VkBufferView getDescriptor(const RenderPassHandle &, const gl::PipelineDescriptor &,
+	virtual VkBufferView getDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
 			uint32_t, bool) { return VK_NULL_HANDLE; }
 };
 
-class VertexBufferAttachment : public gl::BufferAttachment {
+class VertexBufferAttachment : public renderqueue::BufferAttachment {
 public:
 	virtual ~VertexBufferAttachment();
 
 protected:
-	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameQueue &) override;
+	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
 };
 
 class VertexBufferAttachmentHandle : public BufferAttachmentHandle {
 public:
 	virtual ~VertexBufferAttachmentHandle();
 
-	virtual void submitInput(gl::FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
+	virtual void submitInput(FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
 
-	virtual bool isDescriptorDirty(const gl::RenderPassHandle &, const gl::PipelineDescriptor &,
+	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
 			uint32_t, bool isExternal) const override;
 
-	virtual bool writeDescriptor(const RenderPassHandle &, const gl::PipelineDescriptor &,
+	virtual bool writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
 			uint32_t, bool, VkDescriptorBufferInfo &) override;
 
 	const Rc<DeviceBuffer> &getVertexes() const { return _vertexes; }
 	const Rc<DeviceBuffer> &getIndexes() const { return _indexes; }
 
 protected:
-	virtual bool loadVertexes(gl::FrameHandle &, const Rc<gl::VertexData> &);
+	virtual bool loadVertexes(FrameHandle &, const Rc<gl::VertexData> &);
 
 	Device *_device = nullptr;
 	Rc<DeviceQueue> _transferQueue;
 
-	Rc<Fence> _fence;
 	Rc<CommandPool> _pool;
 
 	Rc<DeviceBuffer> _vertexes;

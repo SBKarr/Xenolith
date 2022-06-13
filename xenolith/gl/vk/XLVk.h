@@ -41,9 +41,9 @@ THE SOFTWARE.
 namespace stappler::xenolith::vk {
 
 #if DEBUG
-#define VK_DEBUG_LOG 0
-#define VK_HOOK_DEBUG 0 // enable engine hooks for Vulkan calls
-static constexpr bool s_enableValidationLayers = false;
+#define VK_DEBUG_LOG 1
+#define VK_HOOK_DEBUG 1 // enable engine hooks for Vulkan calls
+static constexpr bool s_enableValidationLayers = true;
 
 #else
 #define VK_DEBUG_LOG 0
@@ -199,6 +199,7 @@ enum class PresentationEvent {
 
 QueueOperations getQueueOperations(VkQueueFlags, bool present);
 QueueOperations getQueueOperations(gl::RenderPassType);
+String getQueueOperationsDesc(QueueOperations);
 VkShaderStageFlagBits getVkStageBits(gl::ProgramStage);
 
 StringView getVkFormatName(VkFormat fmt);
@@ -221,5 +222,7 @@ void sanitizeVkStruct(T &t) {
 }
 
 }
+
+std::ostream &operator<< (std::ostream &stream, VkResult res);
 
 #endif /* COMPONENTS_XENOLITH_GL_XLVK_H_ */

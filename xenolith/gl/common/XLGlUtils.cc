@@ -24,6 +24,17 @@
 
 namespace stappler::xenolith {
 
+String MaterialInfo::description() const {
+	StringStream stream;
+
+	stream << "{" << images[0] << "," << images[1] << "," << images[2] << "," << images[3] << "},"
+			<< "{" << samplers[0] << "," << samplers[1] << "," << samplers[2] << "," << samplers[3] << "},"
+			<< "{" << colorModes[0].toInt() << "," << colorModes[1].toInt() << "," << colorModes[2].toInt() << "," << colorModes[3].toInt() << "},"
+			<< toInt(type) << "," << pipeline.description();
+
+	return stream.str();
+}
+
 String PipelineMaterialInfo::data() const {
 	BytesView view((const uint8_t *)this, sizeof(PipelineMaterialInfo));
 	return toString(
@@ -487,24 +498,6 @@ StringView getComponentMappingName(ComponentMapping mapping) {
 	return StringView("Unknown");
 }
 
-StringView getDescriptorTypeName(DescriptorType type) {
-	switch (type) {
-	case DescriptorType::Sampler: return StringView("Sampler"); break;
-	case DescriptorType::CombinedImageSampler: return StringView("CombinedImageSampler"); break;
-	case DescriptorType::SampledImage: return StringView("SampledImage"); break;
-	case DescriptorType::StorageImage: return StringView("StorageImage"); break;
-	case DescriptorType::UniformTexelBuffer: return StringView("UniformTexelBuffer"); break;
-	case DescriptorType::StorageTexelBuffer: return StringView("StorageTexelBuffer"); break;
-	case DescriptorType::UniformBuffer: return StringView("UniformBuffer"); break;
-	case DescriptorType::StorageBuffer: return StringView("StorageBuffer"); break;
-	case DescriptorType::UniformBufferDynamic: return StringView("UniformBufferDynamic"); break;
-	case DescriptorType::StorageBufferDynamic: return StringView("StorageBufferDynamic"); break;
-	case DescriptorType::InputAttachment: return StringView("InputAttachment"); break;
-	default: break;
-	}
-	return StringView("Unknown");
-}
-
 StringView getPresentModeName(PresentMode mode) {
 	switch (mode) {
 	case gl::PresentMode::Immediate: return "IMMEDIATE"; break;
@@ -571,75 +564,6 @@ String getImageUsageDescription(ImageUsage fmt) {
 	if ((fmt & ImageUsage::TransientAttachment) != ImageUsage::None) { stream << " TransientAttachment"; }
 	if ((fmt & ImageUsage::InputAttachment) != ImageUsage::None) { stream << " InputAttachment"; }
 	return stream.str();
-}
-
-String getProgramStageDescription(ProgramStage fmt) {
-	StringStream stream;
-	if ((fmt & ProgramStage::Vertex) != ProgramStage::None) { stream << " Vertex"; }
-	if ((fmt & ProgramStage::TesselationControl) != ProgramStage::None) { stream << " TesselationControl"; }
-	if ((fmt & ProgramStage::TesselationEvaluation) != ProgramStage::None) { stream << " TesselationEvaluation"; }
-	if ((fmt & ProgramStage::Geometry) != ProgramStage::None) { stream << " Geometry"; }
-	if ((fmt & ProgramStage::Fragment) != ProgramStage::None) { stream << " Fragment"; }
-	if ((fmt & ProgramStage::Compute) != ProgramStage::None) { stream << " Compute"; }
-	if ((fmt & ProgramStage::RayGen) != ProgramStage::None) { stream << " RayGen"; }
-	if ((fmt & ProgramStage::AnyHit) != ProgramStage::None) { stream << " AnyHit"; }
-	if ((fmt & ProgramStage::ClosestHit) != ProgramStage::None) { stream << " ClosestHit"; }
-	if ((fmt & ProgramStage::MissHit) != ProgramStage::None) { stream << " MissHit"; }
-	if ((fmt & ProgramStage::AnyHit) != ProgramStage::None) { stream << " AnyHit"; }
-	if ((fmt & ProgramStage::Intersection) != ProgramStage::None) { stream << " Intersection"; }
-	if ((fmt & ProgramStage::Callable) != ProgramStage::None) { stream << " Callable"; }
-	if ((fmt & ProgramStage::Task) != ProgramStage::None) { stream << " Task"; }
-	if ((fmt & ProgramStage::Mesh) != ProgramStage::None) { stream << " Mesh"; }
-	return stream.str();
-}
-
-void ProgramData::inspect(SpanView<uint32_t> data) {
-	SpvReflectShaderModule shader;
-
-	spvReflectCreateShaderModule(data.size() * sizeof(uint32_t), data.data(), &shader);
-
-	switch (shader.spirv_execution_model) {
-	case SpvExecutionModelVertex: stage = ProgramStage::Vertex; break;
-	case SpvExecutionModelTessellationControl: stage = ProgramStage::TesselationControl; break;
-	case SpvExecutionModelTessellationEvaluation: stage = ProgramStage::TesselationEvaluation; break;
-	case SpvExecutionModelGeometry: stage = ProgramStage::Geometry; break;
-	case SpvExecutionModelFragment: stage = ProgramStage::Fragment; break;
-	case SpvExecutionModelGLCompute: stage = ProgramStage::Compute; break;
-	case SpvExecutionModelKernel: stage = ProgramStage::Compute; break;
-	case SpvExecutionModelTaskNV: stage = ProgramStage::Task; break;
-	case SpvExecutionModelMeshNV: stage = ProgramStage::Mesh; break;
-	case SpvExecutionModelRayGenerationKHR: stage = ProgramStage::RayGen; break;
-	case SpvExecutionModelIntersectionKHR: stage = ProgramStage::Intersection; break;
-	case SpvExecutionModelAnyHitKHR: stage = ProgramStage::AnyHit; break;
-	case SpvExecutionModelClosestHitKHR: stage = ProgramStage::ClosestHit; break;
-	case SpvExecutionModelMissKHR: stage = ProgramStage::MissHit; break;
-	case SpvExecutionModelCallableKHR: stage = ProgramStage::Callable; break;
-	default: break;
-	}
-
-	bindings.reserve(shader.descriptor_binding_count);
-	for (auto &it : makeSpanView(shader.descriptor_bindings, shader.descriptor_binding_count)) {
-		bindings.emplace_back(ProgramDescriptorBinding({it.set, it.binding, DescriptorType(it.descriptor_type)}));
-	}
-
-	constants.reserve(shader.push_constant_block_count);
-	for (auto &it : makeSpanView(shader.push_constant_blocks, shader.push_constant_block_count)) {
-		constants.emplace_back(ProgramPushConstantBlock({it.absolute_offset, it.padded_size}));
-	}
-
-	spvReflectDestroyShaderModule(&shader);
-}
-
-SpecializationInfo::SpecializationInfo(const ProgramData *data) : data(data) { }
-
-SpecializationInfo::SpecializationInfo(const ProgramData *data, SpanView<PredefinedConstant> c)
-: data(data), constants(c.vec<memory::PoolInterface>()) { }
-
-bool PipelineInfo::isSolid() const {
-	if (material.getDepthInfo().writeEnabled || !material.getBlendInfo().enabled) {
-		return true;
-	}
-	return false;
 }
 
 String BufferInfo::description() const {
@@ -709,15 +633,15 @@ String ImageInfo::description() const {
 ImageData ImageData::make(Rc<ImageObject> &&obj) {
 	ImageData ret;
 	static_cast<gl::ImageInfo &>(ret) = obj->getInfo();
+	ret.key = StringView(obj->getInfo().key);
 	ret.image = move(obj);
-	ret.key = StringView(SolidTextureName);
 	return ret;
 }
 
-void ImageViewInfo::setup(const ImageAttachmentDescriptor &desc) {
+void ImageViewInfo::setup(const renderqueue::ImageAttachmentDescriptor &desc) {
 	bool usedAsInput = false;
 	for (auto &it : desc.getRefs()) {
-		if ((it->getUsage() & gl::AttachmentUsage::Input) != gl::AttachmentUsage::None) {
+		if ((it->getUsage() & renderqueue::AttachmentUsage::Input) != renderqueue::AttachmentUsage::None) {
 			usedAsInput = true;
 			break;
 		}

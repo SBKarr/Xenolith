@@ -25,51 +25,21 @@ THE SOFTWARE.
 
 #include "XLDefine.h"
 #include "XLEventHeader.h"
-#include "XLGlView.h"
-#include "XLGlInstance.h"
-#include "XLGlRenderQueue.h"
 #include "SPThreadTaskQueue.h"
+#include "XLGl.h"
 
 namespace stappler::xenolith {
 
 class ResourceCache;
 
-class EventLoop : public Ref {
-public:
-	EventLoop();
-	virtual ~EventLoop();
-
-	virtual bool init(Application *app);
-	virtual bool run();
-
-	virtual uint64_t getMinFrameTime() const;
-	virtual uint64_t getClock();
-	virtual void sleep(uint64_t);
-
-	virtual Pair<uint64_t, uint64_t> getDiskSpace() const;
-
-	virtual void pushEvent(AppEvent::Value);
-	virtual AppEvent::Value popEvents();
-
-	virtual void addView(gl::View *);
-	virtual void removeView(gl::View *);
-
-protected:
-	Application *_application = nullptr;
-	std::atomic<AppEvent::Value> _events = AppEvent::None;
-};
-
 class Application : public Ref {
 public:
-	static constexpr uint32_t ApplicationThreadId = 1;
-
 	static EventHeader onDeviceToken;
 	static EventHeader onNetwork;
 	static EventHeader onUrlOpened;
 	static EventHeader onError;
 
-	static EventHeader onRemoteNotification;
-	static EventHeader onLaunchUrl;
+	static constexpr uint32_t ApplicationThreadId = 1;
 
 	struct Data {
 		String bundleName = "org.stappler.xenolith";
@@ -119,8 +89,14 @@ public:
 	// Run application with parsed command line data
 	virtual int run(Value &&);
 
+	virtual void wait(TimeInterval);
+
+	virtual void end();
+
 	// Open external URL from within application
 	virtual bool openURL(const StringView &url);
+
+	virtual void addView(gl::ViewInfo &&);
 
 public: // Threading, Events
 	using Callback = Function<void()>;
@@ -128,7 +104,7 @@ public: // Threading, Events
 	using CompleteCallback = Function<void(const Task &, bool)>;
 
 	/* Checks if current calling thread is director's main thread */
-	bool isMainThread() const;
+	bool isOnMainThread() const;
 
 	/* If current thread is main thread: executes function/task
 	   If not: adds function/task to main thread queue */
@@ -211,17 +187,12 @@ public: // Threading, Events
 	// set in launch process by AppController/Activity/etc...
 	void setLaunchUrl(const StringView &);
 
-	// called, when we should open recieved url with launched application
-	// produce onLaunchUrl event, url can be read from event or by getLaunchUrl()
-	void processLaunchUrl(const StringView &);
-
 	const Data &getData() const { return _data; }
 
 	const Rc<thread::TaskQueue> &getQueue() const { return _queue; }
 	const gl::Instance *getGlInstance() const { return _instance; }
-	const Rc<ResourceCache> &getResourceCache() const { return _resourceCache; }
+	const Rc<ResourceCache> &getResourceCache() const;
 
-	const Rc<EventLoop> &getEventLoop() const { return _loop; }
 	const Rc<gl::Loop> &getGlLoop() const { return _glLoop; }
 
 #if MODULE_XENOLITH_STORAGE
@@ -257,8 +228,6 @@ protected:
 	uint64_t _updateTimer = 0;
 	bool _isNetworkOnline = false;
 
-	Rc<EventLoop> _loop;
-	Rc<ResourceCache> _resourceCache;
 	Rc<thread::TaskQueue> _queue;
 	std::thread::id _threadId;
 	bool _singleThreaded = false;
@@ -271,6 +240,8 @@ protected:
 
 	memory::pool_t *_rootPool = nullptr;
 	memory::pool_t *_updatePool = nullptr;
+
+	bool _shouldEndLoop = false;
 };
 
 }

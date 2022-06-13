@@ -151,7 +151,7 @@ public:
 	FontLibrary();
 	virtual ~FontLibrary();
 
-	bool init(const Rc<gl::Loop> &, Rc<gl::RenderQueue> &&);
+	bool init(const Rc<gl::Loop> &, Rc<renderqueue::Queue> &&);
 
 	Rc<FontFaceData> openFontData(StringView, const Callback<FontData()> & = nullptr);
 
@@ -186,7 +186,7 @@ protected:
 
 	const Application *_application = nullptr;
 	Rc<gl::Loop> _loop; // for texture streaming
-	Rc<gl::RenderQueue> _queue;
+	Rc<renderqueue::Queue> _queue;
 	Vector<ImageQuery> _pendingImageQueries;
 };
 

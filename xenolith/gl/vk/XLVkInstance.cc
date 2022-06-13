@@ -22,7 +22,8 @@ THE SOFTWARE.
 
 #include "XLVkInstance.h"
 #include "XLPlatform.h"
-#include "XLVkDevice.h"
+#include "XLGlLoop.h"
+#include "XLGlDevice.h"
 
 namespace stappler::xenolith::vk {
 
@@ -39,6 +40,10 @@ VKAPI_ATTR VkBool32 VKAPI_CALL s_debugCallback(VkDebugUtilsMessageSeverityFlagBi
 	}
 	if (strcmp(pCallbackData->pMessageIdName, "Loader Message") == 0) {
 		if (messageSeverity <= VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
+			if (StringView(pCallbackData->pMessage).starts_with("Instance Extension: ")
+					|| StringView(pCallbackData->pMessage).starts_with("Device Extension: ")) {
+				return VK_FALSE;
+			}
 			log::vtext("Vk-Validation-Verbose", "[", pCallbackData->pMessageIdName, "] ", pCallbackData->pMessage);
 		} else if (messageSeverity <= VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
 			log::vtext("Vk-Validation-Info", "[", pCallbackData->pMessageIdName, "] ", pCallbackData->pMessage);
@@ -50,6 +55,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL s_debugCallback(VkDebugUtilsMessageSeverityFlagBi
 		return VK_FALSE;
 	} else {
 		if (messageSeverity <= VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
+			if (StringView(pCallbackData->pMessage).starts_with("Device Extension: ")) {
+				return VK_FALSE;
+			}
 			log::vtext("Vk-Validation-Verbose", "[", pCallbackData->pMessageIdName, "] ", pCallbackData->pMessage);
 		} else if (messageSeverity <= VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
 			log::vtext("Vk-Validation-Info", "[", pCallbackData->pMessageIdName, "] ", pCallbackData->pMessage);
@@ -94,9 +102,13 @@ Instance::Instance(VkInstance inst, const PFN_vkGetInstanceProcAddr getInstanceP
 
 		for (auto &device : devices) {
 			auto &it = _devices.emplace_back(getDeviceInfo(device));
-			if (it.isUsable()) {
-				_hasDevices = true;
-			}
+
+			_availableDevices.emplace_back(gl::DeviceProperties{
+				String((const char *)it.properties.device10.properties.deviceName),
+				it.properties.device10.properties.apiVersion,
+				it.properties.device10.properties.driverVersion,
+				it.supportsPresentation()
+			});
 		}
 	}
 }
@@ -111,10 +123,14 @@ Instance::~Instance() {
 	log::text("vk::Instance", "~Instance");
 }
 
-Rc<gl::Device> Instance::makeDevice(uint32_t deviceIndex) const {
+Rc<gl::Loop> Instance::makeLoop(Application *app, uint32_t deviceIndex) const {
+	return Rc<vk::Loop>::create(app, Rc<Instance>(const_cast<Instance *>(this)), deviceIndex);
+}
+
+Rc<Device> Instance::makeDevice(uint32_t deviceIndex) const {
 	if (deviceIndex == maxOf<uint32_t>()) {
 		for (auto &it : _devices) {
-			if (it.isUsable()) {
+			if (it.supportsPresentation()) {
 				auto requiredFeatures = DeviceInfo::Features::getOptional();
 				requiredFeatures.enableFromFeatures(DeviceInfo::Features::getRequired());
 				requiredFeatures.disableFromFeatures(it.features);
@@ -126,7 +142,7 @@ Rc<gl::Device> Instance::makeDevice(uint32_t deviceIndex) const {
 			}
 		}
 	} else if (deviceIndex < _devices.size()) {
-		if (_devices[deviceIndex].isUsable()) {
+		if (_devices[deviceIndex].supportsPresentation()) {
 
 			auto requiredFeatures = DeviceInfo::Features::getOptional();
 			requiredFeatures.enableFromFeatures(DeviceInfo::Features::getRequired());
@@ -429,7 +445,7 @@ void Instance::printDevicesInfo(std::ostream &out) const {
 				out << "Protected";
 			}
 
-			VkBool32 presentSupport = isDeviceSupportsPresent(device.device, i);
+			VkBool32 presentSupport = _checkPresentSupport(this, device.device, i);
 			if (presentSupport) {
 				if (!empty) { out << ", "; } else { empty = false; }
 				out << "Present";
@@ -518,13 +534,6 @@ void Instance::getDeviceProperties(const VkPhysicalDevice &device, DeviceInfo::P
 	}
 }
 
-bool Instance::isDeviceSupportsPresent(VkPhysicalDevice device, uint32_t familyIdx) const {
-	if (_checkPresentSupport) {
-		return _checkPresentSupport(this, device, familyIdx);
-	}
-	return false;
-}
-
 DeviceInfo Instance::getDeviceInfo(VkPhysicalDevice device) const {
 	DeviceInfo ret;
 	uint32_t graphicsFamily = maxOf<uint32_t>();
@@ -542,13 +551,14 @@ DeviceInfo Instance::getDeviceInfo(VkPhysicalDevice device) const {
 
 	int i = 0;
 	for (const VkQueueFamilyProperties &queueFamily : queueFamilies) {
-		auto presentSupport = isDeviceSupportsPresent(device, i);
+		auto presentSupport = _checkPresentSupport(this, device, i);
 
 		queueInfo[i].index = i;
 		queueInfo[i].ops = getQueueOperations(queueFamily.queueFlags, presentSupport);
 		queueInfo[i].count = queueFamily.queueCount;
 		queueInfo[i].used = 0;
 		queueInfo[i].minImageTransferGranularity = queueFamily.minImageTransferGranularity;
+		queueInfo[i].presentSurfaceMask = presentSupport;
 
 		if ((queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) && graphicsFamily == maxOf<uint32_t>()) {
 			graphicsFamily = i;
@@ -562,7 +572,7 @@ DeviceInfo Instance::getDeviceInfo(VkPhysicalDevice device) const {
 			computeFamily = i;
 		}
 
-		if (presentSupport && presentFamily == maxOf<uint32_t>()) {
+		if (presentSupport != 0 && presentFamily == maxOf<uint32_t>()) {
 			presentFamily = i;
 		}
 

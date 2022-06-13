@@ -23,6 +23,8 @@
 #include "XLDefine.h"
 #include "XLInputListener.h"
 #include "TessCanvas.h"
+#include "XLGlView.h"
+#include "XLDirector.h"
 
 namespace stappler::xenolith::tessapp {
 
@@ -42,6 +44,10 @@ bool TessCanvas::init() {
 		return true;
 	});
 
+	inputListener->setPointerEnterCallback([this] (bool pointerEnter) {
+		return onPointerEnter(pointerEnter);
+	});
+
 	auto image = Rc<VectorImage>::create(Size2(10, 10));
 	auto path = image->addPath();
 	path->setFillColor(Color::White);
@@ -50,7 +56,7 @@ bool TessCanvas::init() {
 	path->setAntialiased(false);
 
 	_cursor = addChild(Rc<VectorSprite>::create(move(image)));
-	_cursor->setColor(Color::White);
+	_cursor->setColor(Color::Black);
 	_cursor->setContentSize(Size2(10, 10));
 	_cursor->setAutofit(Sprite::Autofit::Contain);
 	_cursor->setPosition(Vec2(200.0f, 200.0f));
@@ -61,18 +67,30 @@ bool TessCanvas::init() {
 	return true;
 }
 
+void TessCanvas::onEnter(Scene *scene) {
+	Node::onEnter(scene);
+
+	_pointerInWindow = _director->getView()->isPointerWithinWindow();
+}
+
 void TessCanvas::onTouch(const InputEvent &ev) {
 
 }
 
 void TessCanvas::onMouseMove(const InputEvent &ev) {
-	Vec2 point = convertToNodeSpace(ev.currentLocation);
-	if (isTouchedNodeSpace(point)) {
-		_cursor->setPosition(point);
-		_cursor->setVisible(true);
+	_currentLocation = convertToNodeSpace(ev.currentLocation);
+	if (isTouchedNodeSpace(_currentLocation)) {
+		_cursor->setPosition(_currentLocation);
+		_cursor->setVisible(_pointerInWindow);
 	} else {
 		_cursor->setVisible(false);
 	}
+}
+
+bool TessCanvas::onPointerEnter(bool value) {
+	_pointerInWindow = value;
+	_cursor->setVisible(_pointerInWindow && isTouchedNodeSpace(_currentLocation));
+	return true;
 }
 
 }

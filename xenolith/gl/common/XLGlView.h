@@ -23,83 +23,91 @@
 #ifndef XENOLITH_GL_COMMON_XLGLVIEW_H_
 #define XENOLITH_GL_COMMON_XLGLVIEW_H_
 
-#include "XLGl.h"
-#include "XLGlFrameEmitter.h"
-#include "XLGlSwapchain.h"
-
-namespace stappler::xenolith {
-
-class EventLoop;
-
-}
+#include "XLRenderQueueFrameEmitter.h"
+#include "XLEventHeader.h"
 
 namespace stappler::xenolith::gl {
 
 class Device;
 class Loop;
 class Instance;
-class Swapchain;
 
-class View : public FrameEmitter {
+class View : public thread::ThreadInterface<Interface> {
 public:
-	static EventHeader onClipboard;
-	static EventHeader onBackground;
-	static EventHeader onFocus;
+	using AttachmentLayout = renderqueue::AttachmentLayout;
+	using ImageStorage = renderqueue::ImageStorage;
+	using FrameEmitter = renderqueue::FrameEmitter;
+	using FrameRequest = renderqueue::FrameRequest;
+	using RenderQueue = renderqueue::Queue;
+
 	static EventHeader onScreenSize;
 
 	View();
 	virtual ~View();
 
-	virtual bool init(const Rc<EventLoop> &, const Rc<gl::Loop> &);
+	virtual bool init(Loop &, ViewInfo &&);
 
-	virtual bool begin(const Rc<Director> &, Function<void()> &&completeCallback);
+	virtual void run() = 0;
+	virtual void runWithQueue(const Rc<renderqueue::Queue> &) = 0;
 	virtual void end();
 
-	virtual void setIMEKeyboardState(bool open) = 0;
-
-	virtual void reset(SwapchanCreationMode mode);
 	virtual void update();
-	virtual bool poll() = 0; // poll for input
-	virtual void close() = 0;
+	virtual void close();
 
-	virtual void setCursorVisible(bool isVisible) { }
+	void performOnThread(Function<void()> &&func, Ref *target = nullptr, bool immediate = false);
 
-	virtual int getDpi() const;
-	virtual float getDensity() const;
+	// true - if presentation request accepted, false otherwise,
+	// frame should not mark image as detached if false is returned
+	virtual bool present(Rc<ImageStorage> &&) = 0;
 
-	virtual const Rc<Director> &getDirector() const;
+	// present image in place instead of scheduling presentation
+	// should be called in view's thread
+	virtual bool presentImmediate(Rc<ImageStorage> &&) = 0;
 
-	virtual const Extent2 & getScreenExtent() const;
+	// invalidate swapchain image target, if drawing process was not successful
+	virtual void invalidateTarget(Rc<ImageStorage> &&) = 0;
+
+	const Rc<Director> &getDirector() const { return _director; }
+	const Rc<Loop> &getLoop() const { return _loop; }
+
+	// returns current screen extent, non thread-safe, used in view's thread
+	// for main thread, use Director::getScreenExtent
+	virtual const Extent2 & getScreenExtent() const { return _screenExtent; }
+
+	// update screen extent, non thread-safe
+	// only updates field, view is not resized
 	virtual void setScreenExtent(Extent2);
 
-	virtual void handleInputEvent(const InputEventData &);
+	// handle and propagate input event
+	void handleInputEvent(const InputEventData &);
 
-	virtual void handleFocusIn();
-	virtual void handleFocusOut();
+	virtual void runFrame(const Rc<RenderQueue> &, Extent2);
 
-	virtual void setClipboardString(StringView);
-	virtual StringView getClipboardString() const;
+	virtual ImageInfo getSwapchainImageInfo() const;
+	virtual ImageInfo getSwapchainImageInfo(const SwapchainConfig &cfg) const;
+	virtual ImageViewInfo getSwapchainImageViewInfo(const ImageInfo &image) const;
 
-	virtual ScreenOrientation getScreenOrientation() const;
+	// interval between two frame presented
+	uint64_t getLastFrameInterval() const;
+	uint64_t getAvgFrameInterval() const;
 
-	virtual bool isTouchDevice() const;
-	virtual bool hasFocus() const;
-	virtual bool isInBackground() const;
+	// time between frame stared and last queue submission completed
+	uint64_t getLastFrameTime() const;
+	uint64_t getAvgFrameTime() const;
 
-	// Push view event to process in in View's primary thread
-	virtual void pushEvent(AppEvent::Value) const;
-	virtual AppEvent::Value popEvents() const;
+	float getDensity() const { return _density; }
+	ScreenOrientation getScreenOrientation() const { return _orientation; }
 
-	virtual void runFrame(const Rc<gl::RenderQueue> &, Extent2);
-
-	virtual gl::SwapchainConfig selectConfig(const gl::SurfaceInfo &);
+	bool isTouchDevice() const { return _isTouchDevice; }
+	bool hasFocus() const { return _hasFocus; }
+	bool isInBackground() const { return _inBackground; }
+	bool isPointerWithinWindow() const { return _pointerInWindow; }
 
 protected:
-	virtual void acquireNextFrame() override;
+	virtual void wakeup() = 0;
 
 	Extent2 _screenExtent;
 
-	int _dpi = 96;
 	float _density = 1.0f;
 
 	ScreenOrientation _orientation = ScreenOrientation::Landscape;
@@ -107,13 +115,30 @@ protected:
 	bool _isTouchDevice = false;
 	bool _inBackground = false;
 	bool _hasFocus = true;
+	bool _pointerInWindow = false;
+	std::atomic<bool> _running = false;
 
-	mutable std::atomic<AppEvent::Value> _events = AppEvent::None;
-
-	Function<void()> _onEnded;
 	Rc<Director> _director;
-	Rc<EventLoop> _eventLoop;
-	Rc<Swapchain> _swapchain;
+	Rc<Loop> _loop;
+	Rc<renderqueue::FrameEmitter> _frameEmitter;
+
+	Function<SwapchainConfig(const SurfaceInfo &)> _selectConfig;
+	Function<void(const Rc<Director> &)> _onCreated;
+	Function<void()> _onClosed;
+
+	uint64_t _gen = 1;
+	gl::SwapchainConfig _config;
+
+	std::thread _thread;
+	std::thread::id _threadId;
+	std::atomic_flag _shouldQuit;
+	Mutex _mutex;
+	Vector<Pair<Function<void()>, Rc<Ref>>> _callbacks;
+
+	mutable Mutex _frameIntervalMutex;
+	uint64_t _lastFrameStart = 0;
+	uint64_t _lastFrameInterval = 0;
+	math::MovingAverage<15, uint64_t> _avgFrameInterval;
 };
 
 }

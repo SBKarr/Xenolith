@@ -24,6 +24,7 @@
 #define XENOLITH_GL_COMMON_XLGLOBJECT_H_
 
 #include "XLGl.h"
+#include "XLRenderQueue.h"
 
 namespace stappler::xenolith::gl {
 
@@ -62,6 +63,11 @@ public:
 
 class Pipeline : public NamedObject {
 public:
+	using PipelineInfo = renderqueue::PipelineInfo;
+	using PipelineData = renderqueue::PipelineData;
+	using SubpassData = renderqueue::SubpassData;
+	using RenderQueue = renderqueue::Queue;
+
 	virtual ~Pipeline() { }
 
 	virtual StringView getName() const override { return _name; }
@@ -73,6 +79,9 @@ protected:
 
 class Shader : public NamedObject {
 public:
+	using ProgramData = renderqueue::ProgramData;
+	using DescriptorType = renderqueue::DescriptorType;
+
 	static void inspectShader(SpanView<uint32_t>);
 
 	virtual ~Shader() { }
@@ -88,14 +97,25 @@ protected:
 };
 
 
-class RenderPassImpl : public NamedObject {
+class RenderPass : public NamedObject {
 public:
-	virtual ~RenderPassImpl() { }
+	using PassData = renderqueue::PassData;
+	using Attachment = renderqueue::Attachment;
+	using PipelineDescriptor = renderqueue::PipelineDescriptor;
+	using DescriptorType = renderqueue::DescriptorType;
+
+	virtual ~RenderPass() { }
+
+	virtual bool init(Device &, ClearCallback, ObjectType, void *ptr) override;
 
 	virtual StringView getName() const override { return _name; }
 
+	uint64_t getIndex() const { return _index; }
+
 protected:
 	String _name;
+
+	uint64_t _index = 1; // 0 stays as special value
 };
 
 class Framebuffer : public Object {
@@ -107,13 +127,14 @@ public:
 
 	const Extent2 &getExtent() const { return _extent; }
 	const Vector<uint64_t> &getViewIds() const { return _viewIds; }
+	const Rc<RenderPass> &getRenderPass() const { return _renderPass; }
 
 	uint64_t getHash() const;
 
 protected:
 	Extent2 _extent;
 	Vector<uint64_t> _viewIds;
-	Rc<RenderPassImpl> _renderPass;
+	Rc<RenderPass> _renderPass;
 	Vector<Rc<ImageView>> _imageViews;
 };
 
@@ -158,6 +179,9 @@ public:
 	virtual ~ImageView() { }
 
 	virtual bool init(Device &, ClearCallback, ObjectType, void *ptr) override;
+	virtual void invalidate() override;
+
+	void setReleaseCallback(Function<void()> &&);
 
 	const Rc<ImageObject> &getImage() const { return _image; }
 	const ImageViewInfo &getInfo() const { return _info; }
@@ -182,6 +206,7 @@ protected:
 
 	// all ImageViews are atomically indexed for descriptor caching purpose
 	uint64_t _index = 1; // 0 stays as special value
+	Function<void()> _releaseCallback;
 };
 
 class BufferObject : public Object {
@@ -242,11 +267,18 @@ public:
 	void setWaited(bool value);
 	bool isWaited() const { return _waited; }
 
+	void setInUse(bool value, uint64_t timeline);
+	bool isInUse() const { return _inUse; }
+
+	uint64_t getTimeline() const { return _timeline; }
+
 	virtual bool reset();
 
 protected:
+	uint64_t _timeline = 0;
 	bool _signaled = false;
 	bool _waited = false;
+	bool _inUse = false;
 };
 
 }

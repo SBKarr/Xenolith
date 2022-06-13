@@ -35,18 +35,6 @@ constexpr uint64_t operator"" _usec ( unsigned long long int val ) { return val 
 constexpr uint64_t operator"" _umsec ( unsigned long long int val ) { return val * 1000; }
 constexpr uint64_t operator"" _umksec ( unsigned long long int val ) { return val; }
 
-namespace AppEvent {
-	using Value = uint32_t;
-
-	constexpr uint32_t None = 0;
-	constexpr uint32_t Terminate = 1;
-	constexpr uint32_t SwapchainRecreation = 2;
-	constexpr uint32_t SwapchainRecreationBest = 4;
-	constexpr uint32_t Update = 8;
-	constexpr uint32_t Thread = 16;
-	constexpr uint32_t Input = 32;
-}
-
 class PoolRef : public Ref {
 public:
 	virtual ~PoolRef() {

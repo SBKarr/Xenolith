@@ -23,16 +23,16 @@
 #ifndef XENOLITH_GL_VK_RENDERER_XLVKMATERIALCOMPILATIONATTACHMENT_H_
 #define XENOLITH_GL_VK_RENDERER_XLVKMATERIALCOMPILATIONATTACHMENT_H_
 
-#include "XLVkRenderPass.h"
+#include "XLVkQueuePass.h"
 #include "XLVkAllocator.h"
-#include "XLGlAttachment.h"
+#include "XLRenderQueueAttachment.h"
 #include "XLGlMaterial.h"
 
 namespace stappler::xenolith::vk {
 
 class MaterialCompilationAttachment;
 
-class MaterialCompiler : public gl::RenderQueue {
+class MaterialCompiler : public renderqueue::Queue {
 public:
 	virtual ~MaterialCompiler();
 
@@ -47,7 +47,8 @@ public:
 	Rc<gl::MaterialInputData> popRequest(const gl::MaterialAttachment *);
 	void clearRequests();
 
-	Rc<gl::FrameRequest> makeRequest(Rc<gl::MaterialInputData> &&);
+	Rc<FrameRequest> makeRequest(Rc<gl::MaterialInputData> &&);
+	void runMaterialCompilationFrame(gl::Loop &loop, Rc<gl::MaterialInputData> &&req);
 
 protected:
 	struct MaterialRequest {

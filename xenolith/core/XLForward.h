@@ -118,6 +118,11 @@ class EventHandlerNode;
 class Application;
 class Director;
 
+class Node;
+class Sprite;
+class Label;
+class Layer;
+
 using Task = thread::Task;
 
 template <typename Callback>

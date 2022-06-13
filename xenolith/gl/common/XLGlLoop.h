@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -24,127 +24,81 @@
 #define XENOLITH_GL_COMMON_XLGLLOOP_H_
 
 #include "XLGl.h"
-#include "XLGlDevice.h"
-#include "XLGlView.h"
-#include "XLGlSwapchain.h"
+#include "XLApplication.h"
+#include "XLGlMaterial.h"
+#include "XLResourceCache.h"
+#include "XLRenderQueueFrameCache.h"
 
 namespace stappler::xenolith::gl {
 
-struct PresentationData;
-
 class Loop : public thread::ThreadInterface<Interface> {
 public:
+	using FrameCache = renderqueue::FrameCache;
+	using FrameRequest = renderqueue::FrameRequest;
+	using ImageStorage = renderqueue::ImageStorage;
+	using RenderQueue = renderqueue::Queue;
+	using FrameHandle = renderqueue::FrameHandle;
+	using PassData = renderqueue::PassData;
+	using ImageAttachment = renderqueue::ImageAttachment;
+
 	static constexpr uint32_t LoopThreadId = 2;
 
-	enum class EventName {
-		Update, // force-update
-		FrameUpdate,
-		FrameInvalidated,
-		CompileResource,
-		CompileMaterials,
-		RunRenderQueue,
-		Exit,
-	};
-
-	struct Event final {
-		Event(EventName event, Rc<Ref> &&data, Value &&value, Function<void(bool)> &&cb = nullptr)
-		: event(event), data(move(data)), value(move(value)), callback(cb) { }
-
-		EventName event = EventName::Update;
-		Rc<Ref> data;
-		Value value;
-		Function<void(bool)> callback;
-	};
-
-	struct Context final {
-		memory::vector<Event> *events;
-		Loop *loop;
-	};
-
-	struct Timer final {
-		Timer(uint64_t interval, Function<bool(Context &)> &&cb, StringView t)
-		: interval(interval), callback(move(cb)), tag(t) { }
-
-		uint64_t interval;
-		uint64_t value = 0;
-		Function<bool(Context &)> callback; // return true if timer is complete and should be removed
-		StringView tag;
-	};
-
-	Loop(Application *, const Rc<Device> &);
 	virtual ~Loop();
 
-	virtual void threadInit() override; // called when thread is created
-	virtual bool worker() override;
+	Loop();
 
-	void pushEvent(EventName, Rc<Ref> && = Rc<Ref>(), Value && = Value(), Function<void(bool)> && = nullptr);
-	void pushContextEvent(EventName, Rc<Ref> && = Rc<Ref>(), Value && = Value(), Function<void(bool)> && = nullptr);
+	virtual bool init(Application *app, Instance *gl);
+	virtual void waitRinning() = 0;
+	virtual void cancel() = 0;
 
-	// callback should return true to end spinning
-	void schedule(Function<bool(Context &)> &&, StringView);
-	void schedule(Function<bool(Context &)> &&, uint64_t, StringView);
+	virtual bool isRunning() const = 0;
 
-	void begin();
-	void end(bool success = true);
+	const Rc<ResourceCache> &getResourceCache() const { return _resourceCache; }
+	Application *getApplication() const { return _application; }
+	const Rc<Instance> &getGlInstance() const { return _glInstance; }
+	const Rc<FrameCache> &getFrameCache() const { return _frameCache; }
 
-	std::thread::id getThreadId() const { return _threadId; }
-	const Rc<Device> &getDevice() const { return _device; }
-	const Application *getApplication() const { return _application; }
-	const Instance *getInstance() const;
-	const Rc<TaskQueue> &getQueue() const { return _queue; }
-	uint64_t getClock() const { return _clock; }
-	bool isRunning() const { return _running.load(); }
-
-	void performOnThread(Function<void()> &&func, Ref *target = nullptr, bool immediate = false);
-
-	void compileResource(const Rc<Resource> &req) {
-		pushEvent(EventName::CompileResource, req.get(), Value());
-	}
-
-	void compileMaterials(const Rc<MaterialInputData> &req) {
-		pushEvent(EventName::CompileMaterials, req.get(), Value());
-	}
-
-	// if called before loop is started - should compile RenderQueue in place
-	// if not - compilation is scheduled on TaskQueue
-	void compileRenderQueue(const Rc<RenderQueue> &req, Function<void(bool)> && = nullptr);
-
-	void compileImage(const Rc<DynamicImage> &, Function<void(bool)> && = nullptr);
+	virtual void compileResource(Rc<Resource> &&req) = 0;
+	virtual void compileMaterials(Rc<MaterialInputData> &&req) = 0;
+	virtual void compileRenderQueue(const Rc<RenderQueue> &req, Function<void(bool)> && = nullptr) = 0;
+	virtual void compileImage(const Rc<DynamicImage> &, Function<void(bool)> && = nullptr) = 0;
 
 	// run frame with RenderQueue
-	void runRenderQueue(Rc<FrameRequest> &&req, uint64_t gen = 0, Function<void(bool)> && = nullptr);
+	virtual void runRenderQueue(Rc<FrameRequest> &&req, uint64_t gen = 0, Function<void(bool)> && = nullptr) = 0;
 
-	bool isOnThread() const;
+	// callback should return true to end spinning
+	virtual void schedule(Function<bool(Loop &)> &&, StringView) = 0;
+	virtual void schedule(Function<bool(Loop &)> &&, uint64_t, StringView) = 0;
 
-	void autorelease(Ref *);
+	virtual void performInQueue(Rc<thread::Task> &&) = 0;
+	virtual void performInQueue(Function<void()> &&func, Ref *target = nullptr) = 0;
+
+	virtual void performOnGlThread(Function<void()> &&func, Ref *target = nullptr, bool immediate = false) = 0;
+	virtual void performOnGlThread(Rc<thread::Task> &&) = 0;
+
+	virtual bool isOnGlThread() const = 0;
+
+	virtual Rc<renderqueue::FrameHandle> makeFrame(Rc<FrameRequest> &&, uint64_t gen) = 0;
+
+	virtual Rc<Framebuffer> acquireFramebuffer(const PassData *, SpanView<Rc<ImageView>>, Extent2 e) = 0;
+	virtual void releaseFramebuffer(Rc<Framebuffer> &&) = 0;
+
+	virtual Rc<ImageStorage> acquireImage(const ImageAttachment *, Extent3 e) = 0;
+	virtual void releaseImage(Rc<ImageStorage> &&) = 0;
+
+	virtual Rc<Semaphore> makeSemaphore() = 0;
+
+	virtual void addView(ViewInfo &&) = 0;
+	virtual void removeView(View *) = 0;
+
+	virtual const Vector<gl::ImageFormat> &getSupportedDepthStencilFormat() const = 0;
 
 protected:
-	struct Internal;
-
-	virtual bool pollEvents(PresentationData &data);
-
-	uint32_t runTimers(uint64_t dt, Context &t);
-
-	static StringView getEventName(EventName);
-
-	Context *_currentContext = nullptr;
-
-	const Application *_application = nullptr;
-	Rc<Device> _device;
-
-	std::atomic<uint64_t> _rate;
-	std::thread _thread;
-	std::thread::id _threadId;
-
-	memory::pool_t *_pool = nullptr;
-	Internal *_internal = nullptr;
-
-	std::atomic<bool> _running = false;
-
-	Rc<TaskQueue> _queue;
-	uint64_t _clock = 0;
-	Mutex _pendingEventMutex;
-	Vector<Event> _pendingEvents;
+	std::atomic_flag _shouldExit;
+	Rc<ResourceCache> _resourceCache;
+	Application *_application = nullptr;
+	Rc<Instance> _glInstance;
+	Rc<FrameCache> _frameCache;
 };
 
 }

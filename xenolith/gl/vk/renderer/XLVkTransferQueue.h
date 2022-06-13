@@ -23,9 +23,9 @@
 #ifndef XENOLITH_GL_VK_RENDERER_XLVKTRANSFERQUEUE_H_
 #define XENOLITH_GL_VK_RENDERER_XLVKTRANSFERQUEUE_H_
 
-#include "XLVkRenderPass.h"
+#include "XLVkQueuePass.h"
 #include "XLVkAllocator.h"
-#include "XLGlAttachment.h"
+#include "XLRenderQueueAttachment.h"
 
 namespace stappler::xenolith::vk {
 
@@ -126,13 +126,13 @@ protected:
 	Function<void(bool)> _callback;
 };
 
-class TransferQueue : public gl::RenderQueue {
+class TransferQueue : public renderqueue::Queue {
 public:
 	virtual ~TransferQueue();
 
 	bool init();
 
-	Rc<gl::FrameRequest> makeRequest(Rc<TransferResource> &&);
+	Rc<FrameRequest> makeRequest(Rc<TransferResource> &&);
 
 protected:
 	TransferAttachment *_attachment = nullptr;

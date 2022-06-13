@@ -25,23 +25,34 @@
 
 #include "XLVkInstance.h"
 #include "XLVkDeviceQueue.h"
+#include "XLVkLoop.h"
 
 namespace stappler::xenolith::vk {
 
-class Swapchain;
 class Fence;
 class Allocator;
 class TextureSetLayout;
-class MaterialCompiler;
-class TransferQueue;
 class Sampler;
+class Loop;
+class DeviceMemoryPool;
 
-class RenderQueueCompiler;
+class DeviceFrameHandle : public renderqueue::FrameHandle {
+public:
+	virtual ~DeviceFrameHandle();
+
+	bool init(Loop &loop, Device &, Rc<FrameRequest> &&, uint64_t gen);
+
+	const Rc<DeviceMemoryPool> &getMemPool() const;
+
+protected:
+	Rc<DeviceMemoryPool> _memPool;
+};
 
 class Device : public gl::Device {
 public:
 	using Features = DeviceInfo::Features;
 	using Properties = DeviceInfo::Properties;
+	using FrameHandle = renderqueue::FrameHandle;
 
 	Device();
 	virtual ~Device();
@@ -52,12 +63,8 @@ public:
 	VkDevice getDevice() const { return _device; }
 	VkPhysicalDevice getPhysicalDevice() const;
 
-	virtual void begin(const Application *, gl::TaskQueue &) override;
+	void begin(Loop &loop, gl::TaskQueue &, Function<void(bool)> &&);
 	virtual void end() override;
-	virtual void waitIdle(gl::Loop &) override;
-
-	virtual void onLoopStarted(gl::Loop &) override;
-	virtual void onLoopEnded(gl::Loop &) override;
 
 	const DeviceInfo & getInfo() const { return _info; }
 	const DeviceTable * getTable() const;
@@ -82,10 +89,10 @@ public:
 	//
 	// Acquired DeviceQueue must be released with releaseQueue
 	Rc<DeviceQueue> tryAcquireQueueSync(QueueOperations);
-	bool acquireQueue(QueueOperations, gl::FrameHandle &, Function<void(gl::FrameHandle &, const Rc<DeviceQueue> &)> && acquire,
-			Function<void(gl::FrameHandle &)> && invalidate, Rc<Ref> &&);
-	bool acquireQueue(QueueOperations, gl::Loop &, Function<void(gl::Loop &, const Rc<DeviceQueue> &)> && acquire,
-			Function<void(gl::Loop &)> && invalidate, Rc<Ref> &&);
+	bool acquireQueue(QueueOperations, FrameHandle &, Function<void(FrameHandle &, const Rc<DeviceQueue> &)> && acquire,
+			Function<void(FrameHandle &)> && invalidate, Rc<Ref> && = nullptr);
+	bool acquireQueue(QueueOperations, Loop &, Function<void(Loop &, const Rc<DeviceQueue> &)> && acquire,
+			Function<void(Loop &)> && invalidate, Rc<Ref> && = nullptr);
 	void releaseQueue(Rc<DeviceQueue> &&);
 
 	Rc<CommandPool> acquireCommandPool(QueueOperations, uint32_t = 0);
@@ -93,33 +100,25 @@ public:
 	void releaseCommandPool(gl::Loop &, Rc<CommandPool> &&);
 	void releaseCommandPoolUnsafe(Rc<CommandPool> &&);
 
-	Rc<Fence> acquireFence(uint32_t);
-	void releaseFence(gl::Loop &, Rc<Fence> &&);
-	void releaseFenceUnsafe(Rc<Fence> &&);
-	void scheduleFence(gl::Loop &, Rc<Fence> &&);
-	void scheduleFence(gl::Loop &, Rc<Fence> &&, Function<bool(Fence &)> &&);
-
 	const Rc<TextureSetLayout> &getTextureSetLayout() const { return _textureSetLayout; }
 
-	BytesView emplaceConstant(gl::PredefinedConstant, Bytes &) const;
+	BytesView emplaceConstant(renderqueue::PredefinedConstant, Bytes &) const;
 
-	virtual bool supportsUpdateAfterBind(gl::DescriptorType) const override;
+	virtual bool supportsUpdateAfterBind(DescriptorType) const override;
 
 	virtual Rc<gl::ImageObject> getEmptyImageObject() const override;
 	virtual Rc<gl::ImageObject> getSolidImageObject() const override;
 
-	virtual Rc<gl::FrameHandle> makeFrame(gl::Loop &, Rc<gl::FrameRequest> &&, uint64_t gen) override;
-
-	virtual Rc<gl::Framebuffer> makeFramebuffer(const gl::RenderPassData *, SpanView<Rc<gl::ImageView>>, Extent2) override;
-	virtual Rc<gl::ImageAttachmentObject> makeImage(const gl::ImageAttachment *, Extent3) override;
+	virtual Rc<gl::Framebuffer> makeFramebuffer(const renderqueue::PassData *, SpanView<Rc<gl::ImageView>>, Extent2) override;
+	virtual Rc<ImageStorage> makeImage(const gl::ImageInfo &) override;
 	virtual Rc<gl::Semaphore> makeSemaphore() override;
 	virtual Rc<gl::ImageView> makeImageView(const Rc<gl::ImageObject> &, const gl::ImageViewInfo &) override;
 
 	template <typename Callback>
 	void makeApiCall(const Callback &cb) {
-		//_apiMutex.lock();
+		_apiMutex.lock();
 		cb(*getTable(), getDevice());
-		//_apiMutex.unlock();
+		_apiMutex.unlock();
 	}
 
 	bool hasNonSolidFillMode() const;
@@ -127,13 +126,7 @@ public:
 private:
 	friend class DeviceQueue;
 
-	virtual void compileResource(gl::Loop &loop, const Rc<gl::Resource> &req, Function<void(bool)> &&) override;
-	virtual void compileRenderQueue(gl::Loop &loop, const Rc<gl::RenderQueue> &req, Function<void(bool)> && = Function<void(bool)>()) override;
-	virtual void compileImage(gl::Loop &loop, const Rc<gl::DynamicImage> &, Function<void(bool)> &&) override;
-	virtual void compileSamplers(thread::TaskQueue &q, bool force) override;
-
-	void runMaterialCompilationFrame(gl::Loop &loop, Rc<gl::MaterialInputData> &&req);
-	virtual void compileMaterials(gl::Loop &loop, Rc<gl::MaterialInputData> &&req) override;
+	virtual void compileSamplers(gl::TaskQueue &q, bool force);
 
 	bool setup(const Instance *instance, VkPhysicalDevice p, const Properties &prop,
 			const Vector<DeviceQueueFamily> &queueFamilies, Features &features, const Vector<const char *> &requiredExtension);
@@ -154,12 +147,6 @@ private:
 	Vector<DeviceQueueFamily> _families;
 
 	bool _finished = false;
-
-	Vector<Rc<Fence>> _fences;
-	Set<Rc<Fence>> _scheduled;
-	Rc<RenderQueueCompiler> _renderQueueCompiler;
-	Rc<TransferQueue> _transferQueue;
-	Rc<MaterialCompiler> _materialQueue;
 
 	Vector<VkSampler> _immutableSamplers;
 	Vector<Rc<Sampler>> _samplers;

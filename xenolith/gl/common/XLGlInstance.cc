@@ -38,7 +38,7 @@ Instance::~Instance() {
 	}
 }
 
-Rc<Device> Instance::makeDevice(uint32_t deviceIndex) const {
+Rc<Loop> Instance::makeLoop(Application *, uint32_t deviceIndex) const {
 	return nullptr;
 }
 

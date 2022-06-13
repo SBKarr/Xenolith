@@ -23,8 +23,8 @@
 #ifndef XENOLITH_GL_COMMON_XLGLMATERIAL_H_
 #define XENOLITH_GL_COMMON_XLGLMATERIAL_H_
 
-#include "XLGlResource.h"
-#include "XLGlAttachment.h"
+#include "XLRenderQueueResource.h"
+#include "XLRenderQueueAttachment.h"
 #include "XLGlDynamicImage.h"
 
 namespace stappler::xenolith::gl {
@@ -34,7 +34,9 @@ class Material;
 class MaterialSet;
 class MaterialAttachment;
 
-struct MaterialInputData : gl::AttachmentInputData {
+using AttachmentInputData = renderqueue::AttachmentInputData;
+
+struct MaterialInputData : AttachmentInputData {
 	const MaterialAttachment * attachment;
 	Vector<Rc<Material>> materialsToAddOrUpdate;
 	Vector<MaterialId> materialsToRemove;
@@ -115,6 +117,8 @@ protected:
 
 class Material final : public Ref {
 public:
+	using PipelineData = renderqueue::PipelineData;
+
 	virtual ~Material();
 
 	// view for image must be empty
@@ -150,7 +154,7 @@ protected:
 };
 
 // this attachment should provide material data buffer for rendering
-class MaterialAttachment : public BufferAttachment {
+class MaterialAttachment : public renderqueue::BufferAttachment {
 public:
 	virtual ~MaterialAttachment();
 
@@ -175,7 +179,7 @@ public:
 	virtual void updateDynamicImage(Loop &, const DynamicImage *) const;
 
 protected:
-	virtual Rc<AttachmentDescriptor> makeDescriptor(RenderPassData *) override;
+	virtual Rc<renderqueue::AttachmentDescriptor> makeDescriptor(PassData *) override;
 
 	struct DynamicImageTracker {
 		uint32_t refCount;
@@ -193,11 +197,11 @@ protected:
 	mutable Map<Rc<DynamicImage>, DynamicImageTracker> _dynamicTrackers;
 };
 
-class MaterialAttachmentDescriptor : public BufferAttachmentDescriptor {
+class MaterialAttachmentDescriptor : public renderqueue::BufferAttachmentDescriptor {
 public:
 	virtual ~MaterialAttachmentDescriptor() { }
 
-	virtual bool init(RenderPassData *, Attachment *);
+	virtual bool init(renderqueue::PassData *, renderqueue::Attachment *);
 
 	uint64_t getBoundGeneration() const { return _boundGeneration.load(); }
 	void setBoundGeneration(uint64_t);

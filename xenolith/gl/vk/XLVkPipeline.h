@@ -30,21 +30,21 @@ namespace stappler::xenolith::vk {
 
 class Shader : public gl::Shader {
 public:
-	bool init(Device &dev, const gl::ProgramData &);
+	bool init(Device &dev, const ProgramData &);
 
 	VkShaderModule getModule() const { return _shaderModule; }
 
 protected:
-	bool setup(Device &dev, const gl::ProgramData &, SpanView<uint32_t>);
+	bool setup(Device &dev, const ProgramData &, SpanView<uint32_t>);
 
 	VkShaderModule _shaderModule = VK_NULL_HANDLE;
 };
 
 class Pipeline : public gl::Pipeline {
 public:
-	static bool comparePipelineOrdering(const gl::PipelineInfo &l, const gl::PipelineInfo &r);
+	static bool comparePipelineOrdering(const PipelineInfo &l, const PipelineInfo &r);
 
-	bool init(Device &dev, const gl::PipelineData &params, const gl::RenderSubpassData &, const gl::RenderQueue &);
+	bool init(Device &dev, const PipelineData &params, const SubpassData &, const RenderQueue &);
 
 	VkPipeline getPipeline() const { return _pipeline; }
 

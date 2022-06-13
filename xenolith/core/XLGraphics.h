@@ -64,10 +64,10 @@ struct ColorMode {
 
 	ColorMode() : mode(Solid), r(0), g(0), b(0), a(0) { }
 	ColorMode(gl::ComponentMapping r, gl::ComponentMapping g, gl::ComponentMapping b, gl::ComponentMapping a)
-	: mode(Custom), r(toInt(r)), g(toInt(g)), b(toInt(b)), a(toInt(a)) { }
+	: mode(Custom), r(stappler::toInt(r)), g(stappler::toInt(g)), b(stappler::toInt(b)), a(stappler::toInt(a)) { }
 
 	ColorMode(gl::ComponentMapping color, gl::ComponentMapping a)
-	: mode(Custom), r(toInt(color)), g(toInt(color)), b(toInt(color)), a(toInt(a)) { }
+	: mode(Custom), r(stappler::toInt(color)), g(stappler::toInt(color)), b(stappler::toInt(color)), a(stappler::toInt(a)) { }
 
 	ColorMode(const ColorMode &) = default;
 	ColorMode(ColorMode &&) = default;
@@ -82,6 +82,9 @@ struct ColorMode {
 	gl::ComponentMapping getG() const { return gl::ComponentMapping(g); }
 	gl::ComponentMapping getB() const { return gl::ComponentMapping(b); }
 	gl::ComponentMapping getA() const { return gl::ComponentMapping(a); }
+
+	uint32_t toInt() const { return *(uint32_t *)this; }
+	operator uint32_t () const { return *(uint32_t *)this; }
 };
 
 // uint32_t-sized blend description
@@ -235,75 +238,6 @@ protected:
 	float lineWidth = 0.0f; // 0.0f - draw triangles, < 0.0f - points,  > 0.0f - lines with width
 };
 
-/*struct PipelineMaterialInfo {
-
-	size_t hash() const {
-		auto tmp = normalize();
-		return hash::hashSize((const char *)&tmp, sizeof(PipelineMaterialInfo));
-	}
-
-	bool operator==(const PipelineMaterialInfo &other) const {
-		auto tmp1 = normalize();
-		auto tmp2 = other.normalize();
-		return tmp1.blend == tmp2.blend && tmp1.depth == tmp2.depth && tmp1.bounds == tmp2.bounds
-				&& tmp1.stencil == tmp2.stencil && (!tmp1.stencil || (tmp1.front == tmp2.front && tmp1.back == tmp2.back))
-				&& tmp1.lineWidth == tmp2.lineWidth;
-	}
-
-	bool operator!=(const PipelineMaterialInfo &other) const {
-		auto tmp1 = normalize();
-		auto tmp2 = other.normalize();
-		return tmp1.blend != tmp2.blend || tmp1.depth != tmp2.depth || tmp1.bounds != tmp2.bounds
-				|| tmp1.stencil != tmp2.stencil || (tmp1.stencil && (tmp1.front != tmp2.front || tmp1.back != tmp2.back))
-				|| tmp1.lineWidth != tmp2.lineWidth;
-	}
-
-	String data() const {
-		auto tmp = normalize();
-		return base16::encode<Interface>(BytesView((const uint8_t *)&tmp, sizeof(PipelineMaterialInfo)));
-	}
-
-	String description() const {
-		StringStream stream;
-		stream << "{" << blend.enabled << "," << blend.srcColor << "," << blend.dstColor << "," << blend.opColor << ","
-				<< blend.srcAlpha << "," << blend.dstAlpha << "," << blend.opAlpha << "," << blend.writeMask
-				<< "},{" << depth.writeEnabled << "," << depth.testEnabled << "," << depth.compare
-				<< "},{" << bounds.enabled << "," << bounds.min << "," << bounds.max
-				<< "},{" << stencil << "}";
-		return stream.str();
-	}
-
-	PipelineMaterialInfo normalize() const {
-		PipelineMaterialInfo ret;
-		memset(&ret, 0, sizeof(PipelineMaterialInfo));
-
-		if (blend.isEnabled()) {
-			ret.blend = blend;
-		} else {
-			ret.blend.writeMask = blend.writeMask;
-		}
-		if (depth.testEnabled) {
-			ret.depth.testEnabled = 1;
-			ret.depth.compare = depth.compare;
-		}
-		if (depth.writeEnabled) {
-			ret.depth.writeEnabled = 1;
-		}
-		if (bounds.enabled) {
-			ret.bounds.enabled = true;
-			ret.bounds.min = bounds.min;
-			ret.bounds.max = bounds.max;
-		}
-		if (stencil) {
-			ret.stencil = true;
-			ret.front = front;
-			ret.back = back;
-		}
-		ret.lineWidth = lineWidth;
-		return ret;
-	}
-};*/
-
 enum class ColorMask : uint8_t {
 	None = 0,
 	R = 0x01,
@@ -329,6 +263,8 @@ struct MaterialInfo {
 	uint64_t hash() const {
 		return hash::hash64((const char *)this, sizeof(MaterialInfo));
 	}
+
+	String description() const;
 
 	bool operator==(const MaterialInfo &info) const = default;
 	bool operator!=(const MaterialInfo &info) const = default;
@@ -379,7 +315,11 @@ enum class InputModifier : uint32_t {
 	Button2 = 1 << 9,
 	Button3 = 1 << 10,
 	Button4 = 1 << 11,
-	Button5 = 1 << 12
+	Button5 = 1 << 12,
+
+	// boolean value for switch event (background/focus)
+	ValueFalse = None,
+	ValueTrue = uint32_t(1) << uint32_t(31)
 };
 
 SP_DEFINE_ENUM_AS_MASK(InputModifier)
@@ -392,10 +332,20 @@ enum class InputEventName : uint32_t {
 	Cancel,
 	MouseMove,
 	Scroll,
+
+	Background,
+	PointerEnter,
+	FocusGain,
+
 	Max,
 };
 
 struct InputEventData {
+	static InputEventData BoolEvent(InputEventName event, bool value) {
+		return InputEventData{maxOf<uint32_t>(), event, float(0.0f), float(0.0f),
+			InputMouseButton::None, value ? InputModifier::ValueTrue : InputModifier::None};
+	}
+
 	uint32_t id = maxOf<uint32_t>();
 	InputEventName event = InputEventName::None;
 	float x = 0.0f;
@@ -410,6 +360,22 @@ struct InputEventData {
 
 	friend bool operator==(const InputEventData &, const InputEventData &) = default;
 	friend bool operator!=(const InputEventData &, const InputEventData &) = default;
+
+	bool getValue() const { return modifiers == InputModifier::ValueTrue; }
+
+	bool hasLocation() const {
+		switch (event) {
+		case InputEventName::None:
+		case InputEventName::Background:
+		case InputEventName::PointerEnter:
+		case InputEventName::FocusGain:
+			return false;
+			break;
+		default:
+			break;
+		}
+		return true;
+	}
 
 #if __cpp_impl_three_way_comparison >= 201711
 	friend auto operator<=>(const InputEventData &, const InputEventData &) = default;

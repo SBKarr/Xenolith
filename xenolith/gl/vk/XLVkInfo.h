@@ -76,6 +76,7 @@ struct DeviceInfo {
 		uint32_t count = 0;
 		uint32_t used = 0;
 		VkExtent3D minImageTransferGranularity;
+		uint32_t presentSurfaceMask;
 	};
 
 	VkPhysicalDevice device = VK_NULL_HANDLE;
@@ -101,7 +102,7 @@ struct DeviceInfo {
 	DeviceInfo(DeviceInfo &&) = default;
 	DeviceInfo &operator=(DeviceInfo &&) = default;
 
-	bool isUsable() const;
+	bool supportsPresentation() const;
 
 	String description() const;
 };

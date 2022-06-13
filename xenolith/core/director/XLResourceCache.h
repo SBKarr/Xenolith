@@ -24,7 +24,7 @@
 #define XENOLITH_CORE_DIRECTOR_XLRESOURCECACHE_H_
 
 #include "XLDefine.h"
-#include "XLGlResource.h"
+#include "XLRenderQueueResource.h"
 #include "XLGlMaterial.h"
 
 namespace stappler::xenolith {
@@ -33,7 +33,7 @@ class Texture : public NamedRef {
 public:
 	virtual ~Texture();
 
-	bool init(const gl::ImageData *, const Rc<gl::Resource> &);
+	bool init(const gl::ImageData *, const Rc<renderqueue::Resource> &);
 	bool init(const Rc<gl::DynamicImage> &);
 
 	virtual StringView getName() const;
@@ -47,7 +47,7 @@ public:
 
 protected:
 	const gl::ImageData *_data = nullptr;
-	Rc<gl::Resource> _resource;
+	Rc<renderqueue::Resource> _resource;
 	Rc<gl::DynamicImage> _dynamic;
 };
 
@@ -57,21 +57,22 @@ public:
 
 	virtual ~ResourceCache();
 
-	bool init(gl::Device &);
-	void invalidate(gl::Device &);
+	bool init();
+	void invalidate();
 
-	void addResource(const Rc<gl::Resource> &);
+	void addImage(gl::ImageData &&);
+	void addResource(const Rc<renderqueue::Resource> &);
 	void removeResource(StringView);
 
 	Rc<Texture> acquireTexture(StringView) const;
 
-	const gl::ImageData *getEmptyImage() const { return &_emptyImage; }
-	const gl::ImageData *getSolidImage() const { return &_solidImage; }
+	const gl::ImageData *getEmptyImage() const;
+	const gl::ImageData *getSolidImage() const;
 
 protected:
-	gl::ImageData _emptyImage;
-	gl::ImageData _solidImage;
-	Map<StringView, Rc<gl::Resource>> _resources;
+	Map<StringView, gl::ImageData> _images;
+	Map<StringView, Rc<renderqueue::Resource>> _resources;
+
 };
 
 }

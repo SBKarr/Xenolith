@@ -21,10 +21,12 @@ THE SOFTWARE.
 **/
 
 #include "XLPlatform.h"
-#include "XLApplication.h"
-#include "XLVk.h"
 
-#if (LINUX)
+#if LINUX
+
+#include "XLApplication.h"
+#include "XLPlatformLinux.h"
+#include "XLVkInstance.h"
 
 #include <dlfcn.h>
 
@@ -41,24 +43,17 @@ struct FunctionTable : public vk::LoaderTable {
 	}
 };
 
-enum SurfaceType {
+enum class SurfaceType : uint32_t {
 	None,
-	XLib,
-	XCB,
-	Wayland
+	XCB = 1 << 0,
+	Wayland = 1 << 1,
 };
+
+SP_DEFINE_ENUM_AS_MASK(SurfaceType)
 
 static uint32_t s_InstanceVersion = 0;
 static Vector<VkLayerProperties> s_InstanceAvailableLayers;
 static Vector<VkExtensionProperties> s_InstanceAvailableExtensions;
-
-static bool isXcbAvailable() {
-	return true;
-}
-
-static bool isWaylandAvailable() {
-	return false;
-}
 
 Rc<gl::Instance> createInstance(Application *app) {
 	auto handle = ::dlopen("libvulkan.so.1", RTLD_LAZY | RTLD_LOCAL);
@@ -133,11 +128,14 @@ Rc<gl::Instance> createInstance(Application *app) {
 		}
 	}
 
-	const char *waylandExt = nullptr;
-	const char *xcbExt = nullptr;
-	const char *xlibExt = nullptr;
 	const char *surfaceExt = nullptr;
 	const char *debugExt = nullptr;
+
+	SurfaceType osSurfaceType = SurfaceType::None;
+	auto xcbLib = Rc<platform::XcbLibrary>::create();
+	if (xcbLib) {
+		osSurfaceType |= SurfaceType::XCB;
+	}
 
 	SurfaceType surfaceType = SurfaceType::None;
 	Vector<const char*> requiredExtensions;
@@ -154,12 +152,14 @@ Rc<gl::Instance> createInstance(Application *app) {
 		if (strcmp(VK_KHR_SURFACE_EXTENSION_NAME, extension.extensionName) == 0) {
 			surfaceExt = extension.extensionName;
 			requiredExtensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
-		} else if (strcmp("VK_KHR_xcb_surface", extension.extensionName) == 0 && isXcbAvailable()) {
-			xcbExt = extension.extensionName;
-			surfaceType = std::max(surfaceType, SurfaceType::XCB);
-		} else if (strcmp("VK_KHR_wayland_surface", extension.extensionName) == 0 && isWaylandAvailable()) {
-			waylandExt = extension.extensionName;
-			surfaceType = std::max(surfaceType, SurfaceType::Wayland);
+		} else if (strcmp(VK_KHR_XCB_SURFACE_EXTENSION_NAME, extension.extensionName) == 0
+				&& (osSurfaceType & SurfaceType::XCB) != SurfaceType::None) {
+			surfaceType |= SurfaceType::XCB;
+			requiredExtensions.push_back(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
+		} else if (strcmp(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME, extension.extensionName) == 0
+				&& (osSurfaceType & SurfaceType::Wayland) != SurfaceType::None) {
+			surfaceType |= SurfaceType::Wayland;
+			requiredExtensions.push_back(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
 		} else {
 			for (auto &it : vk::s_optionalExtension) {
 				if (it) {
@@ -190,25 +190,9 @@ Rc<gl::Instance> createInstance(Application *app) {
 		}
 	}
 
-	if (!surfaceExt) {
+	if (!surfaceExt || surfaceType == SurfaceType::None) {
 		log::format("Vk", "Required extension not found: %s", VK_KHR_SURFACE_EXTENSION_NAME);
 		completeExt = false;
-	}
-
-	switch (surfaceType) {
-	case SurfaceType::None:
-		log::text("Vk", "Required extension not found: VK_KHR_xlib_surface or VK_KHR_xcb_surface or VK_KHR_wayland_surface");
-		completeExt = false;
-		break;
-	case SurfaceType::XLib:
-		requiredExtensions.emplace_back(xlibExt);
-		break;
-	case SurfaceType::XCB:
-		requiredExtensions.emplace_back(xcbExt);
-		break;
-	case SurfaceType::Wayland:
-		requiredExtensions.emplace_back(waylandExt);
-		break;
 	}
 
 	if constexpr (vk::s_enableValidationLayers) {
@@ -224,7 +208,7 @@ Rc<gl::Instance> createInstance(Application *app) {
 	}
 
 	if (!completeExt) {
-		log::text("Vk", "Not all required extensions found, Instance is not created");
+		log::text("Vk", "Not all required extensions found, fail to create VkInstance");
 		::dlclose(handle);
 		return nullptr;
 	}
@@ -286,22 +270,22 @@ Rc<gl::Instance> createInstance(Application *app) {
 		return nullptr;
 	}
 
-	auto vkInstance = Rc<vk::Instance>::alloc(instance, table.vkGetInstanceProcAddr, targetVersion, move(enabledOptionals), [handle] {
+	auto vkInstance = Rc<vk::Instance>::alloc(instance, table.vkGetInstanceProcAddr, targetVersion, move(enabledOptionals),
+			[handle] {
 		::dlclose(handle);
-	}, [surfaceType] (const vk::Instance *instance, VkPhysicalDevice device, uint32_t queueIdx) {
-		VkBool32 supports = false;
-		switch (surfaceType) {
-		case SurfaceType::XCB: {
-			auto conn = vk::XcbConnectionCache::getActive();
-			supports = instance->vkGetPhysicalDeviceXcbPresentationSupportKHR(device, queueIdx, conn.connection, conn.screen->root_visual);
-			break;
+	}, [surfaceType, xcbLib] (const vk::Instance *instance, VkPhysicalDevice device, uint32_t queueIdx) {
+		uint32_t ret = 0;
+		if ((surfaceType & SurfaceType::Wayland) != SurfaceType::None) {
+
 		}
-		case SurfaceType::Wayland:
-			break;
-		default:
-			break;
+		if ((surfaceType & SurfaceType::XCB) != SurfaceType::None) {
+			auto conn = xcbLib->getActiveConnection();
+			auto supports = instance->vkGetPhysicalDeviceXcbPresentationSupportKHR(device, queueIdx, conn.connection, conn.screen->root_visual);
+			if (supports) {
+				ret |= toInt(SurfaceType::XCB);
+			}
 		}
-		return supports;
+		return ret;
 	});
 
 	if constexpr (vk::s_printVkInfo) {

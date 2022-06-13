@@ -22,12 +22,9 @@
 
 #include "XLGlDevice.h"
 #include "XLGlLoop.h"
-#include "XLGlRenderQueue.h"
 #include "XLGlObject.h"
 #include "XLApplication.h"
-#include "SPThreadTaskQueue.h"
-#include "XLGlFrameHandle.h"
-#include "XLGlFrameHandle.h"
+#include "XLRenderQueueImageStorage.h"
 
 namespace stappler::xenolith::gl {
 
@@ -44,11 +41,7 @@ bool Device::init(const Instance *instance) {
 	return true;
 }
 
-void Device::begin(const Application *, TaskQueue &) {
-	_started = true;
-}
-
-void Device::end(Loop &, TaskQueue &) {
+void Device::end() {
 	_started = false;
 
 	if (isRetainTrackerEnabled()) {
@@ -63,32 +56,6 @@ void Device::end(Loop &, TaskQueue &) {
 		});
 	}
 }
-
-void Device::waitIdle(Loop &) {
-
-}
-
-uint32_t Device::addSampler(const SamplerInfo &info) {
-	auto lb = std::lower_bound(_samplersInfo.begin(), _samplersInfo.end(), info);
-	if (lb != _samplersInfo.end() && *lb == info) {
-		return uint32_t(lb - _samplersInfo.begin());
-	} else {
-		if (isSamplersCompiled()) {
-			log::text("Gl-Device", "Fail to define sampler list - samplers already compiled");
-			return maxOf<uint32_t>();
-		}
-
-		if (lb != _samplersInfo.end()) {
-			_samplersInfo.emplace(lb, info);
-			return uint32_t(lb - lb) + 1;
-		} else {
-			_samplersInfo.emplace_back(info);
-			return _samplersInfo.size() - 1;
-		}
-	}
-}
-
-void Device::invalidateFrame(FrameHandle &frame) { }
 
 Rc<Shader> Device::getProgram(StringView name) {
 	std::unique_lock<Mutex> lock(_shaderMutex);
@@ -110,15 +77,11 @@ Rc<Shader> Device::addProgram(Rc<Shader> program) {
 	}
 }
 
-Rc<gl::FrameHandle> Device::makeFrame(gl::Loop &loop, Rc<gl::FrameRequest> &&req, uint64_t gen) {
-	return Rc<gl::FrameHandle>::create(loop, move(req), gen);
-}
-
-Rc<Framebuffer> Device::makeFramebuffer(const gl::RenderPassData *, SpanView<Rc<gl::ImageView>>, Extent2) {
+Rc<Framebuffer> Device::makeFramebuffer(const renderqueue::PassData *, SpanView<Rc<gl::ImageView>>, Extent2) {
 	return nullptr;
 }
 
-Rc<ImageAttachmentObject> Device::makeImage(const gl::ImageAttachment *, Extent3) {
+auto Device::makeImage(const ImageInfo &) -> Rc<ImageStorage> {
 	return nullptr;
 }
 
@@ -130,8 +93,8 @@ Rc<ImageView> Device::makeImageView(const Rc<ImageObject> &, const ImageViewInfo
 	return nullptr;
 }
 
-void Device::compileResource(gl::Loop &, const Rc<Resource> &req, Function<void(bool)> &&complete) {
-	/**/
+/*void Device::compileResource(gl::Loop &, const Rc<Resource> &req, Function<void(bool)> &&complete) {
+
 }
 
 void Device::compileRenderQueue(gl::Loop &loop, const Rc<RenderQueue> &queue, Function<void(bool)> &&complete) {
@@ -140,7 +103,7 @@ void Device::compileRenderQueue(gl::Loop &loop, const Rc<RenderQueue> &queue, Fu
 
 void Device::compileMaterials(gl::Loop &loop, Rc<MaterialInputData> &&) {
 
-}
+}*/
 
 void Device::addObject(ObjectInterface *obj) {
 	std::unique_lock<Mutex> lock(_objectMutex);
@@ -153,14 +116,14 @@ void Device::removeObject(ObjectInterface *obj) {
 }
 
 void Device::onLoopStarted(gl::Loop &loop) {
-	_loopThreadId = loop.getThreadId();
+
 }
 
 void Device::onLoopEnded(gl::Loop &) {
 
 }
 
-bool Device::supportsUpdateAfterBind(gl::DescriptorType) const {
+bool Device::supportsUpdateAfterBind(DescriptorType) const {
 	return false;
 }
 
@@ -172,7 +135,13 @@ void Device::invalidateObjects() {
 	auto objs = std::move(_objects);
 	_objects.clear();
 	for (auto &it : objs) {
-		log::vtext("Gl-Device", "Object ", (void *)it, " (", typeid(*it).name(), ") was not destroyed before device destruction");
+		if (auto ref = dynamic_cast<Ref *>(it)) {
+			log::vtext("Gl-Device", "Object ", (void *)it, " (", typeid(*it).name(),
+					") [rc:", ref->getReferenceCount(), "] was not destroyed before device destruction");
+		} else {
+			log::vtext("Gl-Device", "Object ", (void *)it, " (", typeid(*it).name(),
+					") was not destroyed before device destruction");
+		}
 		if (auto ref = dynamic_cast<const Ref *>(it)) {
 			log::vtext("Gl-Device", "Backtrace for ", (void *)it);
 			ref->foreachBacktrace([] (uint64_t id, Time time, const std::vector<std::string> &vec) {

@@ -27,6 +27,13 @@
 
 namespace stappler::xenolith::gl {
 
+struct DeviceProperties {
+	String deviceName;
+	uint32_t apiVersion = 0;
+	uint32_t driverVersion = 0;
+	bool supportsPresentation = false;
+};
+
 class Instance : public Ref {
 public:
 	using TerminateCallback = Function<void()>;
@@ -38,13 +45,13 @@ public:
 	Instance(TerminateCallback &&);
 	virtual ~Instance();
 
-	bool hasDevices() const { return _hasDevices; }
+	const Vector<DeviceProperties> &getAvailableDevices() const { return _availableDevices; }
 
-	virtual Rc<Device> makeDevice(uint32_t deviceIndex = DefaultDevice) const;
+	virtual Rc<Loop> makeLoop(Application *, uint32_t deviceIndex) const;
 
 protected:
 	TerminateCallback _terminate;
-	bool _hasDevices = false;
+	Vector<DeviceProperties> _availableDevices;
 };
 
 }

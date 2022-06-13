@@ -93,6 +93,10 @@ public:
 	GestureRecognizer *addScrollRecognizer(InputCallback<GestureScroll> &&);
 	GestureRecognizer *addMoveRecognizer(InputCallback<InputEvent> &&);
 
+	void setPointerEnterCallback(Function<bool(bool)> &&);
+	void setBackgroudCallback(Function<bool(bool)> &&);
+	void setFocusCallback(Function<bool(bool)> &&);
+
 	void clear();
 
 protected:
@@ -115,6 +119,7 @@ protected:
 
 	EventFilter _eventFilter;
 	Vector<Rc<GestureRecognizer>> _recognizers;
+	Map<InputEventName, Function<bool(bool)>> _callbacks;
 };
 
 }

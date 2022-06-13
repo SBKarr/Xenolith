@@ -21,25 +21,24 @@
  **/
 
 #include "XLVkMaterialCompiler.h"
-#include "XLVkFrame.h"
 #include "XLVkObject.h"
 #include "XLVkBuffer.h"
 
 namespace stappler::xenolith::vk {
 
-class MaterialCompilationAttachment : public gl::GenericAttachment {
+class MaterialCompilationAttachment : public renderqueue::GenericAttachment {
 public:
 	virtual ~MaterialCompilationAttachment();
 
-	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameQueue &) override;
+	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
 };
 
-class MaterialCompilationAttachmentHandle : public gl::AttachmentHandle {
+class MaterialCompilationAttachmentHandle : public renderqueue::AttachmentHandle {
 public:
 	virtual ~MaterialCompilationAttachmentHandle();
 
-	virtual bool setup(gl::FrameQueue &handle, Function<void(bool)> &&) override;
-	virtual void submitInput(gl::FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
+	virtual bool setup(FrameQueue &handle, Function<void(bool)> &&) override;
+	virtual void submitInput(FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
 
 	virtual const Rc<gl::MaterialInputData> &getInputData() const { return _inputData; }
 	virtual const Rc<gl::MaterialSet> &getOriginalSet() const { return _originalSet; }
@@ -49,13 +48,13 @@ protected:
 	Rc<gl::MaterialSet> _originalSet;
 };
 
-class MaterialCompilationRenderPass : public RenderPass {
+class MaterialCompilationRenderPass : public QueuePass {
 public:
 	virtual ~MaterialCompilationRenderPass();
 
 	virtual bool init(StringView);
 
-	virtual Rc<gl::RenderPassHandle> makeFrameHandle(const gl::FrameQueue &) override;
+	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
 
 	const MaterialCompilationAttachment *getMaterialAttachment() const {
 		return _materialAttachment;
@@ -67,15 +66,15 @@ protected:
 	const MaterialCompilationAttachment *_materialAttachment = nullptr;
 };
 
-class MaterialCompilationRenderPassHandle : public RenderPassHandle {
+class MaterialCompilationRenderPassHandle : public QueuePassHandle {
 public:
 	virtual ~MaterialCompilationRenderPassHandle();
 
-	virtual bool prepare(gl::FrameQueue &, Function<void(bool)> &&) override;
-	virtual void finalize(gl::FrameQueue &, bool successful) override;
+	virtual bool prepare(FrameQueue &, Function<void(bool)> &&) override;
+	virtual void finalize(FrameQueue &, bool successful) override;
 
 protected:
-	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &) override;
+	virtual Vector<VkCommandBuffer> doPrepareCommands(FrameHandle &) override;
 
 	Rc<gl::MaterialSet> _outputData;
 	MaterialCompilationAttachmentHandle *_materialAttachment;
@@ -84,18 +83,18 @@ protected:
 MaterialCompiler::~MaterialCompiler() { }
 
 bool MaterialCompiler::init() {
-	gl::RenderQueue::Builder builder("Material", gl::RenderQueue::RenderOnDemand);
+	Queue::Builder builder("Material");
 
 	auto attachment = Rc<MaterialCompilationAttachment>::create("MaterialAttachment");
 	auto pass = Rc<MaterialCompilationRenderPass>::create("MaterialRenderPass");
 
 	builder.addRenderPass(pass);
-	builder.addPassInput(pass, 0, attachment, gl::AttachmentDependencyInfo());
-	builder.addPassOutput(pass, 0, attachment, gl::AttachmentDependencyInfo());
+	builder.addPassInput(pass, 0, attachment, renderqueue::AttachmentDependencyInfo());
+	builder.addPassOutput(pass, 0, attachment, renderqueue::AttachmentDependencyInfo());
 	builder.addInput(attachment);
 	builder.addOutput(attachment);
 
-	if (gl::RenderQueue::init(move(builder))) {
+	if (renderqueue::Queue::init(move(builder))) {
 		_attachment = attachment;
 		return true;
 	}
@@ -193,27 +192,47 @@ void MaterialCompiler::clearRequests() {
 	_requests.clear();
 }
 
-Rc<gl::FrameRequest> MaterialCompiler::makeRequest(Rc<gl::MaterialInputData> &&input) {
-	auto req = Rc<gl::FrameRequest>::create(this);
+auto MaterialCompiler::makeRequest(Rc<gl::MaterialInputData> &&input) -> Rc<FrameRequest> {
+	auto req = Rc<FrameRequest>::create(this);
 	req->addInput(_attachment, move(input));
 	return req;
 }
 
+void MaterialCompiler::runMaterialCompilationFrame(gl::Loop &loop, Rc<gl::MaterialInputData> &&req) {
+	auto targetAttachment = req->attachment;
+
+	auto h = loop.makeFrame(makeRequest(move(req)), 0);
+	h->setCompleteCallback([this, targetAttachment] (FrameHandle &handle) {
+		if (hasRequest(targetAttachment)) {
+			if (handle.getLoop()->isRunning()) {
+				auto req = popRequest(targetAttachment);
+				runMaterialCompilationFrame(*handle.getLoop(), move(req));
+			} else {
+				clearRequests();
+				dropInProgress(targetAttachment);
+			}
+		} else {
+			dropInProgress(targetAttachment);
+		}
+	});
+	h->update(true);
+}
+
 MaterialCompilationAttachment::~MaterialCompilationAttachment() { }
 
-Rc<gl::AttachmentHandle> MaterialCompilationAttachment::makeFrameHandle(const gl::FrameQueue &handle) {
+auto MaterialCompilationAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<AttachmentHandle> {
 	return Rc<MaterialCompilationAttachmentHandle>::create(this, handle);
 }
 
 MaterialCompilationAttachmentHandle::~MaterialCompilationAttachmentHandle() { }
 
-bool MaterialCompilationAttachmentHandle::setup(gl::FrameQueue &handle, Function<void(bool)> &&cb) {
+bool MaterialCompilationAttachmentHandle::setup(FrameQueue &handle, Function<void(bool)> &&cb) {
 	return true;
 }
 
-void MaterialCompilationAttachmentHandle::submitInput(gl::FrameQueue &handle, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
+void MaterialCompilationAttachmentHandle::submitInput(FrameQueue &handle, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
 	if (auto d = data.cast<gl::MaterialInputData>()) {
-		handle.getFrame().performOnGlThread([this, d = move(d), cb = move(cb)] (gl::FrameHandle &handle) {
+		handle.getFrame()->performOnGlThread([this, d = move(d), cb = move(cb)] (FrameHandle &handle) {
 			_inputData = d;
 			_originalSet = _inputData->attachment->getMaterials();
 			cb(true);
@@ -226,14 +245,14 @@ void MaterialCompilationAttachmentHandle::submitInput(gl::FrameQueue &handle, Rc
 MaterialCompilationRenderPass::~MaterialCompilationRenderPass() { }
 
 bool MaterialCompilationRenderPass::init(StringView name) {
-	if (RenderPass::init(name, gl::RenderPassType::Generic, gl::RenderOrderingHighest, 1)) {
+	if (QueuePass::init(name, gl::RenderPassType::Generic, renderqueue::RenderOrderingHighest, 1)) {
 		_queueOps = QueueOperations::Transfer;
 		return true;
 	}
 	return false;
 }
 
-Rc<gl::RenderPassHandle> MaterialCompilationRenderPass::makeFrameHandle(const gl::FrameQueue &handle) {
+auto MaterialCompilationRenderPass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle> {
 	return Rc<MaterialCompilationRenderPassHandle>::create(*this, handle);
 }
 
@@ -247,7 +266,7 @@ void MaterialCompilationRenderPass::prepare(gl::Device &) {
 
 MaterialCompilationRenderPassHandle::~MaterialCompilationRenderPassHandle() { }
 
-bool MaterialCompilationRenderPassHandle::prepare(gl::FrameQueue &frame, Function<void(bool)> &&cb) {
+bool MaterialCompilationRenderPassHandle::prepare(FrameQueue &frame, Function<void(bool)> &&cb) {
 	if (auto a = frame.getAttachment(((MaterialCompilationRenderPass *)_renderPass.get())->getMaterialAttachment())) {
 		_materialAttachment = (MaterialCompilationAttachmentHandle *)a->handle.get();
 	}
@@ -256,15 +275,15 @@ bool MaterialCompilationRenderPassHandle::prepare(gl::FrameQueue &frame, Functio
 	auto &inputData = _materialAttachment->getInputData();
 	_outputData = inputData->attachment->cloneSet(originalData);
 
-	return RenderPassHandle::prepare(frame, move(cb));
+	return QueuePassHandle::prepare(frame, move(cb));
 }
 
-void MaterialCompilationRenderPassHandle::finalize(gl::FrameQueue &handle, bool successful) {
-	RenderPassHandle::finalize(handle, successful);
+void MaterialCompilationRenderPassHandle::finalize(FrameQueue &handle, bool successful) {
+	QueuePassHandle::finalize(handle, successful);
 	_materialAttachment->getInputData()->attachment->setMaterials(_outputData);
 }
 
-Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(gl::FrameHandle &handle) {
+Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(FrameHandle &handle) {
 	auto table = _device->getTable();
 	auto buf = _pool->allocBuffer(*_device);
 	auto layout = _device->getTextureSetLayout();
@@ -278,7 +297,7 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(g
 
 	QueueOperations ops = QueueOperations::None;
 	for (auto &it : inputData->attachment->getRenderPasses()) {
-		ops |= ((RenderPass *)it->renderPass.get())->getQueueOps();
+		ops |= ((QueuePass *)it->renderPass.get())->getQueueOps();
 	}
 
 	auto q = _device->getQueueFamily(ops);
@@ -303,6 +322,11 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(g
 
 	table->vkCmdCopyBuffer(buf, buffers.stagingBuffer->getBuffer(), buffers.targetBuffer->getBuffer(), 1, &indexesCopy);
 
+	VkPipelineStageFlags targetStages = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+	if (_pool->getClass() == QueueOperations::Transfer) {
+		targetStages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+	}
+
 	if (q->index == _pool->getFamilyIdx()) {
 		VkBufferMemoryBarrier bufferBarrier({
 			VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
@@ -312,7 +336,7 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(g
 		});
 
 		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-				VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+				targetStages, 0,
 				0, nullptr,
 				1, &bufferBarrier,
 				0, nullptr);
@@ -325,7 +349,7 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(g
 		});
 
 		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-				VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+				targetStages, 0,
 				0, nullptr,
 				1, &bufferBarrier,
 				0, nullptr);
@@ -336,7 +360,7 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(g
 	if (table->vkEndCommandBuffer(buf) == VK_SUCCESS) {
 		auto tmpBuffer = new Rc<Buffer>(move(buffers.targetBuffer));
 		auto tmpOrder = new std::unordered_map<gl::MaterialId, uint32_t>(move(buffers.ordering));
-		handle.performOnGlThread([data = _outputData, tmpBuffer, tmpOrder] (gl::FrameHandle &) {
+		handle.performOnGlThread([data = _outputData, tmpBuffer, tmpOrder] (FrameHandle &) {
 			data->setBuffer(move(*tmpBuffer), move(*tmpOrder));
 			delete tmpBuffer;
 			delete tmpOrder;

@@ -128,19 +128,27 @@ bool InputListener::shouldSwallowEvent(const InputEvent &event) const {
 
 bool InputListener::canHandleEvent(const InputEvent &event) const {
 	if (_eventMask.test(toInt(event.data.event)) && shouldProcessEvent(event)) {
-		bool ret = false;
+		auto it = _callbacks.find(event.data.event);
+		if (it != _callbacks.end()) {
+			return true;
+		}
 		for (auto &it : _recognizers) {
 			if (it->canHandleEvent(event)) {
-				ret = true;
+				return true;
 			}
 		}
-		return ret;
 	}
 	return false;
 }
 
 bool InputListener::handleEvent(const InputEvent &event) {
 	bool ret = false;
+	auto it = _callbacks.find(event.data.event);
+	if (it != _callbacks.end()) {
+		if (it->second(event.data.getValue())) {
+			ret = true;
+		}
+	}
 	for (auto &it : _recognizers) {
 		if (it->handleInputEvent(event)) {
 			ret = true;
@@ -167,6 +175,36 @@ GestureRecognizer *InputListener::addMoveRecognizer(InputCallback<InputEvent> &&
 	return _recognizers.emplace_back(move(rec)).get();
 }
 
+void InputListener::setPointerEnterCallback(Function<bool(bool)> &&cb) {
+	if (cb) {
+		_callbacks.insert_or_assign(InputEventName::PointerEnter, move(cb));
+		_eventMask.set(toInt(InputEventName::PointerEnter));
+	} else {
+		_callbacks.erase(InputEventName::PointerEnter);
+		_eventMask.reset(toInt(InputEventName::PointerEnter));
+	}
+}
+
+void InputListener::setBackgroudCallback(Function<bool(bool)> &&cb) {
+	if (cb) {
+		_callbacks.insert_or_assign(InputEventName::Background, move(cb));
+		_eventMask.set(toInt(InputEventName::Background));
+	} else {
+		_callbacks.erase(InputEventName::Background);
+		_eventMask.reset(toInt(InputEventName::Background));
+	}
+}
+
+void InputListener::setFocusCallback(Function<bool(bool)> &&cb) {
+	if (cb) {
+		_callbacks.insert_or_assign(InputEventName::FocusGain, move(cb));
+		_eventMask.set(toInt(InputEventName::FocusGain));
+	} else {
+		_callbacks.erase(InputEventName::FocusGain);
+		_eventMask.reset(toInt(InputEventName::FocusGain));
+	}
+}
+
 void InputListener::clear() {
 	_eventMask.reset();
 	_recognizers.clear();
@@ -189,7 +227,8 @@ bool InputListener::_shouldProcessEvent(const InputEvent &event) const {
 			visible = p->isVisible();
 			p = p->getParent();
 		}
-		if (visible && node->isTouched(event.currentLocation, _touchPadding) && node->getOpacity() >= _opacityFilter) {
+		if (visible && (!event.data.hasLocation() || node->isTouched(event.currentLocation, _touchPadding))
+				&& node->getOpacity() >= _opacityFilter) {
 			return true;
 		}
 	}

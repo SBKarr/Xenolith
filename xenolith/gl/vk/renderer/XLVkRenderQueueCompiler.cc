@@ -20,35 +20,33 @@
  THE SOFTWARE.
  **/
 
-#include "XLGlRenderQueue.h"
+#include "XLRenderQueueAttachment.h"
 #include "XLVkPipeline.h"
 #include "XLVkRenderPassImpl.h"
-#include "XLGlRenderQueue.h"
 #include "XLVkRenderQueueCompiler.h"
-#include "XLGlFrameHandle.h"
 
 namespace stappler::xenolith::vk {
 
-class RenderQueueAttachment : public gl::GenericAttachment {
+class RenderQueueAttachment : public renderqueue::GenericAttachment {
 public:
 	virtual ~RenderQueueAttachment();
 
-	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameQueue &) override;
+	virtual Rc<renderqueue::AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
 };
 
-class RenderQueueAttachmentHandle : public gl::AttachmentHandle {
+class RenderQueueAttachmentHandle : public renderqueue::AttachmentHandle {
 public:
 	virtual ~RenderQueueAttachmentHandle();
 
-	virtual bool setup(gl::FrameQueue &handle, Function<void(bool)> &&) override;
-	virtual void submitInput(gl::FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
+	virtual bool setup(FrameQueue &handle, Function<void(bool)> &&) override;
+	virtual void submitInput(FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
 
-	const Rc<gl::RenderQueue> &getRenderQueue() const { return _input->queue; }
+	const Rc<renderqueue::Queue> &getRenderQueue() const { return _input->queue; }
 	const Rc<TransferResource> &getTransferResource() const { return _resource; }
 
 protected:
-	void runShaders(gl::FrameHandle &frame);
-	void runPipelines(gl::FrameHandle &frame);
+	void runShaders(FrameHandle &frame);
+	void runPipelines(FrameHandle &frame);
 
 	Device *_device = nullptr;
 	std::atomic<size_t> _programsInQueue = 0;
@@ -57,13 +55,13 @@ protected:
 	Rc<RenderQueueInput> _input;
 };
 
-class RenderQueueRenderPass : public RenderPass {
+class RenderQueuePass : public QueuePass {
 public:
-	virtual ~RenderQueueRenderPass();
+	virtual ~RenderQueuePass();
 
 	virtual bool init(StringView);
 
-	virtual Rc<gl::RenderPassHandle> makeFrameHandle(const gl::FrameQueue &) override;
+	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
 
 	const RenderQueueAttachment *getAttachment() const {
 		return _attachment;
@@ -75,41 +73,41 @@ protected:
 	RenderQueueAttachment *_attachment = nullptr;
 };
 
-class RenderQueueRenderPassHandle : public RenderPassHandle {
+class RenderQueuePassHandle : public QueuePassHandle {
 public:
-	virtual ~RenderQueueRenderPassHandle();
+	virtual ~RenderQueuePassHandle();
 
-	virtual bool init(gl::RenderPass &, const gl::FrameQueue &) override;
+	virtual bool init(Pass &, const FrameQueue &) override;
 
-	virtual bool prepare(gl::FrameQueue &, Function<void(bool)> &&) override;
-	virtual void submit(gl::FrameQueue &, Rc<gl::FrameSync> &&, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) override;
+	virtual bool prepare(FrameQueue &, Function<void(bool)> &&) override;
+	virtual void submit(FrameQueue &, Rc<FrameSync> &&, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) override;
 
-	virtual void finalize(gl::FrameQueue &, bool successful) override;
+	virtual void finalize(FrameQueue &, bool successful) override;
 
 protected:
-	virtual bool prepareMaterials(gl::FrameHandle &frame, VkCommandBuffer buf,
+	virtual bool prepareMaterials(FrameHandle &frame, VkCommandBuffer buf,
 			const Rc<gl::MaterialAttachment> &attachment, Vector<VkBufferMemoryBarrier> &outputBufferBarriers);
 
 	Rc<TransferResource> _resource;
-	Rc<gl::RenderQueue> _queue;
+	Rc<renderqueue::Queue> _queue;
 	RenderQueueAttachmentHandle *_attachment;
 };
 
 RenderQueueCompiler::~RenderQueueCompiler() { }
 
 bool RenderQueueCompiler::init(Device &dev) {
-	gl::RenderQueue::Builder builder("RenderQueue", gl::RenderQueue::RenderOnDemand);
+	renderqueue::Queue::Builder builder("RenderQueue");
 
 	auto attachment = Rc<RenderQueueAttachment>::create("RenderQueueAttachment");
-	auto pass = Rc<RenderQueueRenderPass>::create("RenderQueueRenderPass");
+	auto pass = Rc<RenderQueuePass>::create("RenderQueueRenderPass");
 
 	builder.addRenderPass(pass);
-	builder.addPassInput(pass, 0, attachment, gl::AttachmentDependencyInfo());
-	builder.addPassOutput(pass, 0, attachment, gl::AttachmentDependencyInfo());
+	builder.addPassInput(pass, 0, attachment, renderqueue::AttachmentDependencyInfo());
+	builder.addPassOutput(pass, 0, attachment, renderqueue::AttachmentDependencyInfo());
 	builder.addInput(attachment);
 	builder.addOutput(attachment);
 
-	if (gl::RenderQueue::init(move(builder))) {
+	if (Queue::init(move(builder))) {
 		_attachment = attachment.get();
 
 		prepare(dev);
@@ -124,50 +122,50 @@ bool RenderQueueCompiler::init(Device &dev) {
 	return false;
 }
 
-Rc<gl::FrameRequest> RenderQueueCompiler::makeRequest(Rc<RenderQueueInput> &&input) {
-	auto ret = Rc<gl::FrameRequest>::create(this);
+auto RenderQueueCompiler::makeRequest(Rc<RenderQueueInput> &&input) -> Rc<FrameRequest> {
+	auto ret = Rc<FrameRequest>::create(this);
 	ret->addInput(_attachment, move(input));
 	return ret;
 }
 
 RenderQueueAttachment::~RenderQueueAttachment() { }
 
-Rc<gl::AttachmentHandle> RenderQueueAttachment::makeFrameHandle(const gl::FrameQueue &handle) {
+auto RenderQueueAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<AttachmentHandle> {
 	return Rc<RenderQueueAttachmentHandle>::create(this, handle);
 }
 
 RenderQueueAttachmentHandle::~RenderQueueAttachmentHandle() { }
 
-bool RenderQueueAttachmentHandle::setup(gl::FrameQueue &handle, Function<void(bool)> &&) {
-	_device = (Device *)handle.getFrame().getDevice();
+bool RenderQueueAttachmentHandle::setup(FrameQueue &handle, Function<void(bool)> &&) {
+	_device = (Device *)handle.getFrame()->getDevice();
 	return true;
 }
 
-void RenderQueueAttachmentHandle::submitInput(gl::FrameQueue &frame, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
+void RenderQueueAttachmentHandle::submitInput(FrameQueue &frame, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
 	_input = (RenderQueueInput *)data.get();
 
 	if (_input->queue->getInternalResource()) {
-		frame.getFrame().performInQueue([this] (gl::FrameHandle &frame) -> bool {
+		frame.getFrame()->performInQueue([this] (FrameHandle &frame) -> bool {
 			runShaders(frame);
 			_resource = Rc<TransferResource>::create(_device->getAllocator(), _input->queue->getInternalResource());
 			if (_resource->initialize()) {
 				return true;
 			}
 			return false;
-		}, [this, cb = move(cb)] (gl::FrameHandle &frame, bool success) {
+		}, [this, cb = move(cb)] (FrameHandle &frame, bool success) {
 			cb(success);
 		}, nullptr, "RenderQueueAttachmentHandle::submitInput _input->queue->getInternalResource");
 	} else {
-		frame.getFrame().performOnGlThread([this, cb = move(cb)] (gl::FrameHandle &frame) {
+		frame.getFrame()->performOnGlThread([this, cb = move(cb)] (FrameHandle &frame) {
 			cb(true);
 			runShaders(frame);
 		}, this, true, "RenderQueueAttachmentHandle::submitInput");
 	}
 }
 
-void RenderQueueAttachmentHandle::runShaders(gl::FrameHandle &frame) {
+void RenderQueueAttachmentHandle::runShaders(FrameHandle &frame) {
 	size_t tasksCount = 0;
-	Vector<gl::ProgramData *> programs;
+	Vector<renderqueue::ProgramData *> programs;
 
 	// count phase-1 tasks
 	_programsInQueue += _input->queue->getPasses().size();
@@ -184,7 +182,7 @@ void RenderQueueAttachmentHandle::runShaders(gl::FrameHandle &frame) {
 	}
 
 	for (auto &it : programs) {
-		frame.performRequiredTask([this, req = it] (gl::FrameHandle &frame) {
+		frame.performRequiredTask([this, req = it] (FrameHandle &frame) {
 			auto ret = Rc<Shader>::create(*_device, *req);
 			if (!ret) {
 				log::vtext("Gl-Device", "Fail to compile shader program ", req->key);
@@ -200,7 +198,7 @@ void RenderQueueAttachmentHandle::runShaders(gl::FrameHandle &frame) {
 	_input->queue->prepare(*_device);
 
 	for (auto &it : _input->queue->getPasses()) {
-		frame.performRequiredTask([this, req = it] (gl::FrameHandle &frame) -> bool {
+		frame.performRequiredTask([this, req = it] (FrameHandle &frame) -> bool {
 			auto ret = Rc<RenderPassImpl>::create(*_device, *req);
 			if (!ret) {
 				log::vtext("Gl-Device", "Fail to compile render pass ", req->key);
@@ -219,7 +217,7 @@ void RenderQueueAttachmentHandle::runShaders(gl::FrameHandle &frame) {
 	}
 }
 
-void RenderQueueAttachmentHandle::runPipelines(gl::FrameHandle &frame) {
+void RenderQueueAttachmentHandle::runPipelines(FrameHandle &frame) {
 	size_t tasksCount = _pipelinesInQueue.load();
 	for (auto &pit : _input->queue->getPasses()) {
 		for (auto &sit : pit->subpasses) {
@@ -231,7 +229,7 @@ void RenderQueueAttachmentHandle::runPipelines(gl::FrameHandle &frame) {
 	for (auto &pit : _input->queue->getPasses()) {
 		for (auto &sit : pit->subpasses) {
 			for (auto &it : sit.pipelines) {
-				frame.performRequiredTask([this, pass = &sit, pipeline = it] (gl::FrameHandle &frame) -> bool {
+				frame.performRequiredTask([this, pass = &sit, pipeline = it] (FrameHandle &frame) -> bool {
 					auto ret = Rc<Pipeline>::create(*_device, *pipeline, *pass, *_input->queue);
 					if (!ret) {
 						log::vtext("Gl-Device", "Fail to compile pipeline ", pipeline->key);
@@ -246,21 +244,21 @@ void RenderQueueAttachmentHandle::runPipelines(gl::FrameHandle &frame) {
 	}
 }
 
-RenderQueueRenderPass::~RenderQueueRenderPass() { }
+RenderQueuePass::~RenderQueuePass() { }
 
-bool RenderQueueRenderPass::init(StringView name) {
-	if (RenderPass::init(name, gl::RenderPassType::Transfer, gl::RenderOrderingHighest, 1)) {
+bool RenderQueuePass::init(StringView name) {
+	if (QueuePass::init(name, PassType::Transfer, renderqueue::RenderOrderingHighest, 1)) {
 		_queueOps = QueueOperations::Transfer;
 		return true;
 	}
 	return false;
 }
 
-Rc<gl::RenderPassHandle> RenderQueueRenderPass::makeFrameHandle(const gl::FrameQueue &handle) {
-	return Rc<RenderQueueRenderPassHandle>::create(*this, handle);
+auto RenderQueuePass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle> {
+	return Rc<RenderQueuePassHandle>::create(*this, handle);
 }
 
-void RenderQueueRenderPass::prepare(gl::Device &) {
+void RenderQueuePass::prepare(gl::Device &) {
 	for (auto &it : _data->descriptors) {
 		if (auto a = dynamic_cast<RenderQueueAttachment *>(it->getAttachment())) {
 			_attachment = a;
@@ -268,14 +266,14 @@ void RenderQueueRenderPass::prepare(gl::Device &) {
 	}
 }
 
-RenderQueueRenderPassHandle::~RenderQueueRenderPassHandle() {
+RenderQueuePassHandle::~RenderQueuePassHandle() {
 	if (_resource) {
 		_resource->invalidate(*_device);
 	}
 }
 
-bool RenderQueueRenderPassHandle::init(gl::RenderPass &pass, const gl::FrameQueue &queue) {
-	if (!RenderPassHandle::init(pass, queue)) {
+bool RenderQueuePassHandle::init(Pass &pass, const FrameQueue &queue) {
+	if (!QueuePassHandle::init(pass, queue)) {
 		return false;
 	}
 
@@ -283,12 +281,13 @@ bool RenderQueueRenderPassHandle::init(gl::RenderPass &pass, const gl::FrameQueu
 	return true;
 }
 
-bool RenderQueueRenderPassHandle::prepare(gl::FrameQueue &frame, Function<void(bool)> &&cb) {
-	if (auto a = frame.getAttachment(((RenderQueueRenderPass *)_renderPass.get())->getAttachment())) {
+bool RenderQueuePassHandle::prepare(FrameQueue &frame, Function<void(bool)> &&cb) {
+	if (auto a = frame.getAttachment(((RenderQueuePass *)_renderPass.get())->getAttachment())) {
 		_attachment = (RenderQueueAttachmentHandle *)a->handle.get();
 	}
 
-	_device = (Device *)frame.getFrame().getDevice();
+	_loop = (Loop *)frame.getLoop();
+	_device = (Device *)frame.getFrame()->getDevice();
 	_queue = _attachment->getRenderQueue();
 
 	auto hasMaterials = false;
@@ -310,7 +309,7 @@ bool RenderQueueRenderPassHandle::prepare(gl::FrameQueue &frame, Function<void(b
 			return false;
 		}
 
-		frame.getFrame().performInQueue([this, hasMaterials] (gl::FrameHandle &frame) {
+		frame.getFrame()->performInQueue([this, hasMaterials] (FrameHandle &frame) {
 			auto buf = _pool->allocBuffer(*_device);
 			auto table = _device->getTable();
 
@@ -342,7 +341,7 @@ bool RenderQueueRenderPassHandle::prepare(gl::FrameQueue &frame, Function<void(b
 			}
 
 			table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-				VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+				VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
 				0, nullptr,
 				outputBufferBarriers.size(), outputBufferBarriers.data(),
 				outputImageBarriers.size(), outputImageBarriers.data());
@@ -353,7 +352,7 @@ bool RenderQueueRenderPassHandle::prepare(gl::FrameQueue &frame, Function<void(b
 
 			_buffers.emplace_back(buf);
 			return true;
-		}, [this, cb = move(cb)] (gl::FrameHandle &frame, bool success) {
+		}, [this, cb = move(cb)] (FrameHandle &frame, bool success) {
 			if (success) {
 				_commandsReady = true;
 				_descriptorsReady = true;
@@ -363,7 +362,7 @@ bool RenderQueueRenderPassHandle::prepare(gl::FrameQueue &frame, Function<void(b
 			cb(success);
 		}, this, "RenderPass::doPrepareCommands _attachment->getTransferResource");
 	} else {
-		frame.getFrame().performOnGlThread([this, cb = move(cb)] (gl::FrameHandle &frame) {
+		frame.getFrame()->performOnGlThread([this, cb = move(cb)] (FrameHandle &frame) {
 			cb(true);
 		}, this, false, "RenderPass::doPrepareCommands");
 	}
@@ -371,21 +370,36 @@ bool RenderQueueRenderPassHandle::prepare(gl::FrameQueue &frame, Function<void(b
 	return false;
 }
 
-void RenderQueueRenderPassHandle::submit(gl::FrameQueue &queue, Rc<gl::FrameSync> &&sync, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) {
+void RenderQueuePassHandle::submit(FrameQueue &queue, Rc<FrameSync> &&sync, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) {
 	if (_buffers.empty()) {
 		onSubmited(true);
 		onComplete(true);
 	} else {
-		RenderPassHandle::submit(queue, move(sync), move(onSubmited), move(onComplete));
+		QueuePassHandle::submit(queue, move(sync), move(onSubmited), move(onComplete));
 	}
 }
 
-void RenderQueueRenderPassHandle::finalize(gl::FrameQueue &frame, bool successful) {
-	RenderPassHandle::finalize(frame, successful);
-	_attachment->getRenderQueue()->setCompiled(true);
+void RenderQueuePassHandle::finalize(FrameQueue &frame, bool successful) {
+	QueuePassHandle::finalize(frame, successful);
+	Vector<uint64_t> ids;
+	auto &cache = frame.getLoop()->getFrameCache();
+	for (auto &it : _attachment->getRenderQueue()->getPasses()) {
+		if (it->impl && it->renderPass->getType() != gl::RenderPassType::Generic) {
+			ids.emplace_back(it->impl->getIndex());
+			cache->addRenderPass(it->impl->getIndex());
+		}
+	}
+	_attachment->getRenderQueue()->setCompiled(true, [loop = Rc<gl::Loop>(frame.getLoop()), ids = move(ids)] {
+		loop->performOnGlThread([loop, ids] {
+			auto &cache = loop->getFrameCache();
+			for (auto &id : ids) {
+				cache->removeRenderPass(id);
+			}
+		});
+	});
 }
 
-bool RenderQueueRenderPassHandle::prepareMaterials(gl::FrameHandle &iframe, VkCommandBuffer buf,
+bool RenderQueuePassHandle::prepareMaterials(FrameHandle &iframe, VkCommandBuffer buf,
 		const Rc<gl::MaterialAttachment> &attachment, Vector<VkBufferMemoryBarrier> &outputBufferBarriers) {
 	auto table = _device->getTable();
 	auto &initial = attachment->getInitialMaterials();
@@ -410,7 +424,7 @@ bool RenderQueueRenderPassHandle::prepareMaterials(gl::FrameHandle &iframe, VkCo
 
 	QueueOperations ops = QueueOperations::None;
 	for (auto &it : attachment->getRenderPasses()) {
-		ops |= ((RenderPass *)it->renderPass.get())->getQueueOps();
+		ops |= ((QueuePass *)it->renderPass.get())->getQueueOps();
 	}
 
 	if (auto q = _device->getQueueFamily(ops)) {
@@ -433,7 +447,7 @@ bool RenderQueueRenderPassHandle::prepareMaterials(gl::FrameHandle &iframe, VkCo
 
 		auto tmpBuffer = new Rc<Buffer>(move(buffers.targetBuffer));
 		auto tmpOrder = new std::unordered_map<gl::MaterialId, uint32_t>(move(buffers.ordering));
-		iframe.performOnGlThread([attachment, data, tmpBuffer, tmpOrder] (gl::FrameHandle &) {
+		iframe.performOnGlThread([attachment, data, tmpBuffer, tmpOrder] (FrameHandle &) {
 			data->setBuffer(move(*tmpBuffer), move(*tmpOrder));
 			attachment->setMaterials(data);
 			delete tmpBuffer;

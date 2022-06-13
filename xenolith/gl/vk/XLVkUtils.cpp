@@ -23,15 +23,26 @@ THE SOFTWARE.
 #include "XLDefine.h"
 #include "XLVk.h"
 
-#ifdef XL_VK_DEBUG
+#define XL_VK_DEBUG 0
+#define XL_VKAPI_DEBUG 1
+
+#if XL_VK_DEBUG
 #define XL_VK_LOG(...) log::vtext("Vk::Loop", __VA_ARGS__)
 #else
 #define XL_VK_LOG(...)
 #endif
 
+#if XL_VKAPI_DEBUG
+#define XL_VKAPI_LOG(...) log::vtext("vk::Api", __VA_ARGS__)
+#else
+#define XL_VKAPI_LOG(...)
+#endif
+
+#include "XLVkLoop.cc"
 #include "XLVkInstance.cc"
 #include "XLVkTable.cc"
 #include "XLVkInfo.cc"
+#include "XLVkView.cc"
 
 namespace stappler::xenolith::vk {
 
@@ -52,6 +63,16 @@ QueueOperations getQueueOperations(gl::RenderPassType type) {
 	case gl::RenderPassType::Generic: return QueueOperations::None; break;
 	}
 	return QueueOperations::None;
+}
+
+String getQueueOperationsDesc(QueueOperations ops) {
+	StringStream stream;
+	if ((ops & QueueOperations::Graphics) != QueueOperations::None) { stream << " Graphics"; }
+	if ((ops & QueueOperations::Compute) != QueueOperations::None) { stream << " Compute"; }
+	if ((ops & QueueOperations::Transfer) != QueueOperations::None) { stream << " Transfer"; }
+	if ((ops & QueueOperations::SparceBinding) != QueueOperations::None) { stream << " SparceBinding"; }
+	if ((ops & QueueOperations::Present) != QueueOperations::None) { stream << " Present"; }
+	return stream.str();
 }
 
 VkShaderStageFlagBits getVkStageBits(gl::ProgramStage stage) {
@@ -708,4 +729,49 @@ VkPresentModeKHR getVkPresentMode(gl::PresentMode presentMode) {
 	return VkPresentModeKHR(0);
 }
 
+}
+
+std::ostream &operator<< (std::ostream &stream, VkResult res) {
+	switch (res) {
+	case VK_SUCCESS: stream << "VK_SUCCESS"; break;
+	case VK_NOT_READY: stream << "VK_NOT_READY"; break;
+	case VK_TIMEOUT: stream << "VK_TIMEOUT"; break;
+	case VK_EVENT_SET: stream << "VK_EVENT_SET"; break;
+	case VK_EVENT_RESET: stream << "VK_EVENT_RESET"; break;
+	case VK_INCOMPLETE: stream << "VK_INCOMPLETE"; break;
+	case VK_ERROR_OUT_OF_HOST_MEMORY: stream << "VK_ERROR_OUT_OF_HOST_MEMORY"; break;
+	case VK_ERROR_OUT_OF_DEVICE_MEMORY: stream << "VK_ERROR_OUT_OF_DEVICE_MEMORY"; break;
+	case VK_ERROR_INITIALIZATION_FAILED: stream << "VK_ERROR_INITIALIZATION_FAILED"; break;
+	case VK_ERROR_DEVICE_LOST: stream << "VK_ERROR_DEVICE_LOST"; break;
+	case VK_ERROR_MEMORY_MAP_FAILED: stream << "VK_ERROR_MEMORY_MAP_FAILED"; break;
+	case VK_ERROR_LAYER_NOT_PRESENT: stream << "VK_ERROR_LAYER_NOT_PRESENT"; break;
+	case VK_ERROR_EXTENSION_NOT_PRESENT: stream << "VK_ERROR_EXTENSION_NOT_PRESENT"; break;
+	case VK_ERROR_FEATURE_NOT_PRESENT: stream << "VK_ERROR_FEATURE_NOT_PRESENT"; break;
+	case VK_ERROR_INCOMPATIBLE_DRIVER: stream << "VK_ERROR_INCOMPATIBLE_DRIVER"; break;
+	case VK_ERROR_TOO_MANY_OBJECTS: stream << "VK_ERROR_TOO_MANY_OBJECTS"; break;
+	case VK_ERROR_FORMAT_NOT_SUPPORTED: stream << "VK_ERROR_FORMAT_NOT_SUPPORTED"; break;
+	case VK_ERROR_FRAGMENTED_POOL: stream << "VK_ERROR_FRAGMENTED_POOL"; break;
+	case VK_ERROR_UNKNOWN: stream << "VK_ERROR_UNKNOWN"; break;
+	case VK_ERROR_OUT_OF_POOL_MEMORY: stream << "VK_ERROR_OUT_OF_POOL_MEMORY"; break;
+	case VK_ERROR_INVALID_EXTERNAL_HANDLE: stream << "VK_ERROR_INVALID_EXTERNAL_HANDLE"; break;
+	case VK_ERROR_FRAGMENTATION: stream << "VK_ERROR_FRAGMENTATION"; break;
+	case VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS: stream << "VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS"; break;
+	case VK_PIPELINE_COMPILE_REQUIRED: stream << "VK_PIPELINE_COMPILE_REQUIRED"; break;
+	case VK_ERROR_SURFACE_LOST_KHR: stream << "VK_ERROR_SURFACE_LOST_KHR"; break;
+	case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR: stream << "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR"; break;
+	case VK_SUBOPTIMAL_KHR: stream << "VK_SUBOPTIMAL_KHR"; break;
+	case VK_ERROR_OUT_OF_DATE_KHR: stream << "VK_ERROR_OUT_OF_DATE_KHR"; break;
+	case VK_ERROR_INCOMPATIBLE_DISPLAY_KHR: stream << "VK_ERROR_INCOMPATIBLE_DISPLAY_KHR"; break;
+	case VK_ERROR_VALIDATION_FAILED_EXT: stream << "VK_ERROR_VALIDATION_FAILED_EXT"; break;
+	case VK_ERROR_INVALID_SHADER_NV: stream << "VK_ERROR_INVALID_SHADER_NV"; break;
+	case VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT: stream << "VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT"; break;
+	case VK_ERROR_NOT_PERMITTED_KHR: stream << "VK_ERROR_NOT_PERMITTED_KHR"; break;
+	case VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT: stream << "VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT"; break;
+	case VK_THREAD_IDLE_KHR: stream << "VK_THREAD_IDLE_KHR"; break;
+	case VK_THREAD_DONE_KHR: stream << "VK_THREAD_DONE_KHR"; break;
+	case VK_OPERATION_DEFERRED_KHR: stream << "VK_OPERATION_DEFERRED_KHR"; break;
+	case VK_OPERATION_NOT_DEFERRED_KHR: stream << "VK_OPERATION_NOT_DEFERRED_KHR"; break;
+	case VK_RESULT_MAX_ENUM: stream << "VK_RESULT_MAX_ENUM"; break;
+	}
+	return stream;
 }

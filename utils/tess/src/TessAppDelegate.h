@@ -44,6 +44,9 @@ public:
 protected:
 	void runMainView(Rc<TessScene> &&scene);
 
+	gl::SwapchainConfig selectConfig(const gl::SurfaceInfo &info);
+	void onViewCreated(const Rc<Director> &);
+
 	Rc<font::FontLibrary> _fontLibrary;
 	Rc<font::FontController> _fontMainController;
 };

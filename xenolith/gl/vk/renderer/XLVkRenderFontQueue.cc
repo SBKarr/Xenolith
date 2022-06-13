@@ -21,24 +21,23 @@
  **/
 
 #include "XLVkRenderFontQueue.h"
-#include "XLVkFrame.h"
 #include "XLFontFace.h"
 
 namespace stappler::xenolith::vk {
 
-class RenderFontAttachment : public gl::GenericAttachment {
+class RenderFontAttachment : public renderqueue::GenericAttachment {
 public:
 	virtual ~RenderFontAttachment();
 
-	virtual Rc<gl::AttachmentHandle> makeFrameHandle(const gl::FrameQueue &) override;
+	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
 };
 
-class RenderFontAttachmentHandle : public gl::AttachmentHandle {
+class RenderFontAttachmentHandle : public renderqueue::AttachmentHandle {
 public:
 	virtual ~RenderFontAttachmentHandle();
 
-	virtual bool setup(gl::FrameQueue &, Function<void(bool)> &&) override;
-	virtual void submitInput(gl::FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
+	virtual bool setup(FrameQueue &, Function<void(bool)> &&) override;
+	virtual void submitInput(FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
 
 	Extent2 getImageExtent() const { return _imageExtent; }
 	const Rc<gl::RenderFontInput> &getInput() const { return _input; }
@@ -48,7 +47,7 @@ public:
 
 protected:
 	void writeBufferData(gl::RenderFontInput::FontRequest &, VkBufferImageCopy *target);
-	void writeAtlasData(gl::FrameHandle &);
+	void writeAtlasData(FrameHandle &);
 
 	uint32_t nextBufferOffset(size_t blockSize);
 
@@ -66,13 +65,13 @@ protected:
 	Function<void(bool)> _onInput;
 };
 
-class RenderFontRenderPass : public RenderPass {
+class RenderFontRenderPass : public QueuePass {
 public:
 	virtual ~RenderFontRenderPass();
 
 	virtual bool init(StringView);
 
-	virtual Rc<gl::RenderPassHandle> makeFrameHandle(const gl::FrameQueue &) override;
+	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
 
 	const RenderFontAttachment *getRenderFontAttachment() const {
 		return _fontAttachment;
@@ -84,19 +83,19 @@ protected:
 	const RenderFontAttachment *_fontAttachment;
 };
 
-class RenderFontRenderPassHandle : public RenderPassHandle {
+class RenderFontRenderPassHandle : public QueuePassHandle {
 public:
 	virtual ~RenderFontRenderPassHandle();
 
-	virtual bool init(gl::RenderPass &, const gl::FrameQueue &) override;
+	virtual bool init(Pass &, const FrameQueue &) override;
 
 	virtual QueueOperations getQueueOps() const override;
 
-	virtual bool prepare(gl::FrameQueue &, Function<void(bool)> &&) override;
-	virtual void finalize(gl::FrameQueue &, bool successful)  override;
+	virtual bool prepare(FrameQueue &, Function<void(bool)> &&) override;
+	virtual void finalize(FrameQueue &, bool successful)  override;
 
 protected:
-	virtual Vector<VkCommandBuffer> doPrepareCommands(gl::FrameHandle &) override;
+	virtual Vector<VkCommandBuffer> doPrepareCommands(FrameHandle &) override;
 
 	RenderFontAttachmentHandle *_fontAttachment = nullptr;
 	QueueOperations _queueOps = QueueOperations::None;
@@ -106,8 +105,8 @@ protected:
 
 RenderFontQueue::~RenderFontQueue() { }
 
-bool RenderFontQueue::init(StringView name, Function<void(gl::FrameQueue &, const Rc<gl::AttachmentHandle> &, Function<void(bool)> &&)> &&input) {
-	gl::RenderQueue::Builder builder(name, gl::RenderQueue::RenderOnDemand);
+bool RenderFontQueue::init(StringView name, Function<void(FrameQueue &, const Rc<AttachmentHandle> &, Function<void(bool)> &&)> &&input) {
+	Queue::Builder builder(name);
 
 	auto attachment = Rc<RenderFontAttachment>::create("FontAttachment");
 	auto pass = Rc<RenderFontRenderPass>::create("FontRenderPass");
@@ -117,12 +116,12 @@ bool RenderFontQueue::init(StringView name, Function<void(gl::FrameQueue &, cons
 	}
 
 	builder.addRenderPass(pass);
-	builder.addPassInput(pass, 0, attachment, gl::AttachmentDependencyInfo());
-	builder.addPassOutput(pass, 0, attachment, gl::AttachmentDependencyInfo());
+	builder.addPassInput(pass, 0, attachment, renderqueue::AttachmentDependencyInfo());
+	builder.addPassOutput(pass, 0, attachment, renderqueue::AttachmentDependencyInfo());
 	builder.addInput(attachment);
 	builder.addOutput(attachment);
 
-	if (gl::RenderQueue::init(move(builder))) {
+	if (Queue::init(move(builder))) {
 		_attachment = attachment.get();
 		return true;
 	}
@@ -131,14 +130,14 @@ bool RenderFontQueue::init(StringView name, Function<void(gl::FrameQueue &, cons
 
 RenderFontAttachment::~RenderFontAttachment() { }
 
-Rc<gl::AttachmentHandle> RenderFontAttachment::makeFrameHandle(const gl::FrameQueue &handle) {
+auto RenderFontAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<AttachmentHandle> {
 	return Rc<RenderFontAttachmentHandle>::create(this, handle);
 }
 
 RenderFontAttachmentHandle::~RenderFontAttachmentHandle() { }
 
-bool RenderFontAttachmentHandle::setup(gl::FrameQueue &handle, Function<void(bool)> &&) {
-	auto dev = (Device *)handle.getFrame().getDevice();
+bool RenderFontAttachmentHandle::setup(FrameQueue &handle, Function<void(bool)> &&) {
+	auto dev = (Device *)handle.getFrame()->getDevice();
 	_optimalTextureAlignment = std::max(dev->getInfo().properties.device10.properties.limits.optimalBufferCopyOffsetAlignment, VkDeviceSize(4));
 	_optimalRowAlignment = std::max(dev->getInfo().properties.device10.properties.limits.optimalBufferCopyRowPitchAlignment, VkDeviceSize(4));
 	return true;
@@ -179,13 +178,13 @@ static Extent2 RenderFontAttachmentHandle_buildTextureData(SpanView<VkBufferImag
 	return font::emplaceChars(iface, span, totalSquare);
 }
 
-void RenderFontAttachmentHandle::submitInput(gl::FrameQueue &handle, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
+void RenderFontAttachmentHandle::submitInput(FrameQueue &handle, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
 	if (auto d = data.cast<gl::RenderFontInput>()) {
 		_counter = d->requests.size();
 		_input = d;
 
-		auto &frame = static_cast<FrameHandle &>(handle.getFrame());
-		auto &memPool =  frame.getMemPool();
+		auto frame = static_cast<DeviceFrameHandle *>(handle.getFrame().get());
+		auto &memPool =  frame->getMemPool();
 
 		_frontBuffer = memPool->spawn(AllocationUsage::HostTransitionSource, gl::BufferInfo(
 			gl::ForceBufferUsage(gl::BufferUsage::TransferSrc),
@@ -202,10 +201,10 @@ void RenderFontAttachmentHandle::submitInput(gl::FrameQueue &handle, Rc<gl::Atta
 		size_t offset = 0;
 		_onInput = move(cb);
 		for (auto &it : _input->requests) {
-			handle.getFrame().performInQueue([this, req = &it, target = _bufferData.data() + offset] (gl::FrameHandle &) -> bool {
+			handle.getFrame()->performInQueue([this, req = &it, target = _bufferData.data() + offset] (FrameHandle &) -> bool {
 				writeBufferData(*req, target);
 				return true;
-			}, [this] (gl::FrameHandle &handle, bool success) {
+			}, [this] (FrameHandle &handle, bool success) {
 				if (success) {
 					-- _counter;
 					if (_counter == 0) {
@@ -257,8 +256,8 @@ void RenderFontAttachmentHandle::writeBufferData(gl::RenderFontInput::FontReques
 	}
 }
 
-void RenderFontAttachmentHandle::writeAtlasData(gl::FrameHandle &handle) {
-	handle.performInQueue([this] (gl::FrameHandle &) -> bool {
+void RenderFontAttachmentHandle::writeAtlasData(FrameHandle &handle) {
+	handle.performInQueue([this] (FrameHandle &) -> bool {
 		// write single white pixel for underlines
 		uint32_t offset = nextBufferOffset(1);
 		if (offset + 1 <= Allocator::PageSize * 2) {
@@ -310,7 +309,7 @@ void RenderFontAttachmentHandle::writeAtlasData(gl::FrameHandle &handle) {
 		memory::pool::destroy(pool);
 
 		return true;
-	}, [this] (gl::FrameHandle &handle, bool success) {
+	}, [this] (FrameHandle &handle, bool success) {
 		_onInput(success);
 		_onInput = nullptr;
 	}, nullptr, "RenderFontAttachmentHandle::writeAtlasData");
@@ -324,14 +323,14 @@ uint32_t RenderFontAttachmentHandle::nextBufferOffset(size_t blockSize) {
 RenderFontRenderPass::~RenderFontRenderPass() { }
 
 bool RenderFontRenderPass::init(StringView name) {
-	if (RenderPass::init(name, gl::RenderPassType::Generic, gl::RenderOrderingHighest, 1)) {
+	if (QueuePass::init(name, PassType::Generic, renderqueue::RenderOrderingHighest, 1)) {
 		_queueOps = QueueOperations::Transfer;
 		return true;
 	}
 	return false;
 }
 
-Rc<gl::RenderPassHandle> RenderFontRenderPass::makeFrameHandle(const gl::FrameQueue &handle) {
+auto RenderFontRenderPass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle> {
 	return Rc<RenderFontRenderPassHandle>::create(*this, handle);
 }
 
@@ -345,14 +344,14 @@ void RenderFontRenderPass::prepare(gl::Device &) {
 
 RenderFontRenderPassHandle::~RenderFontRenderPassHandle() { }
 
-bool RenderFontRenderPassHandle::init(gl::RenderPass &pass, const gl::FrameQueue &handle) {
-	if (!RenderPassHandle::init(pass, handle)) {
+bool RenderFontRenderPassHandle::init(Pass &pass, const FrameQueue &handle) {
+	if (!QueuePassHandle::init(pass, handle)) {
 		return false;
 	}
 
-	_queueOps = ((RenderPass *)_renderPass.get())->getQueueOps();
+	_queueOps = ((QueuePass *)_renderPass.get())->getQueueOps();
 
-	auto dev = (Device *)handle.getFrame().getDevice();
+	auto dev = (Device *)handle.getFrame()->getDevice();
 	auto q = dev->getQueueFamily(_queueOps);
 	if (q->transferGranularity.width > 1 || q->transferGranularity.height > 1) {
 		_queueOps = QueueOperations::Graphics;
@@ -381,15 +380,15 @@ QueueOperations RenderFontRenderPassHandle::getQueueOps() const {
 }
 
 
-bool RenderFontRenderPassHandle::prepare(gl::FrameQueue &handle, Function<void(bool)> &&cb) {
+bool RenderFontRenderPassHandle::prepare(FrameQueue &handle, Function<void(bool)> &&cb) {
 	if (auto a = handle.getAttachment(((RenderFontRenderPass *)_renderPass.get())->getRenderFontAttachment())) {
 		_fontAttachment = (RenderFontAttachmentHandle *)a->handle.get();
 	}
-	return RenderPassHandle::prepare(handle, move(cb));
+	return QueuePassHandle::prepare(handle, move(cb));
 }
 
-void RenderFontRenderPassHandle::finalize(gl::FrameQueue &handle, bool successful) {
-	RenderPassHandle::finalize(handle, successful);
+void RenderFontRenderPassHandle::finalize(FrameQueue &handle, bool successful) {
+	QueuePassHandle::finalize(handle, successful);
 
 	if (!successful) {
 		return;
@@ -405,7 +404,7 @@ void RenderFontRenderPassHandle::finalize(gl::FrameQueue &handle, bool successfu
 	}
 }
 
-Vector<VkCommandBuffer> RenderFontRenderPassHandle::doPrepareCommands(gl::FrameHandle &handle) {
+Vector<VkCommandBuffer> RenderFontRenderPassHandle::doPrepareCommands(FrameHandle &handle) {
 	Vector<VkCommandBuffer> ret;
 
 	auto buf = _pool->allocBuffer(*_device);
@@ -464,7 +463,7 @@ Vector<VkCommandBuffer> RenderFontRenderPassHandle::doPrepareCommands(gl::FrameH
 
 		if (input->output) {
 			auto extent = _targetImage->getInfo().extent;
-			auto &frame = static_cast<FrameHandle &>(handle);
+			auto &frame = static_cast<DeviceFrameHandle &>(handle);
 			auto &memPool =  frame.getMemPool();
 
 			_outBuffer = memPool->spawn(AllocationUsage::HostTransitionDestination, gl::BufferInfo(
@@ -531,8 +530,23 @@ Vector<VkCommandBuffer> RenderFontRenderPassHandle::doPrepareCommands(gl::FrameH
 			_targetImage->setPendingBarrier(outputBarrier);
 		}
 
+		VkPipelineStageFlags targetOps = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+				| VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+
+		auto ops = getQueueOps();
+		switch (ops) {
+		case QueueOperations::Transfer:
+			targetOps = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+			break;
+		case QueueOperations::Compute:
+			targetOps = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+			break;
+		default:
+			break;
+		}
+
 		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-				VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+			targetOps, 0,
 			0, nullptr,
 			0, nullptr,
 			1, &outputBarrier);

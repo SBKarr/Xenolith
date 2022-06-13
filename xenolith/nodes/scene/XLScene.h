@@ -24,32 +24,39 @@ THE SOFTWARE.
 #define COMPONENTS_XENOLITH_CORE_SCENE_XLSCENE_H_
 
 #include "XLNode.h"
-#include "XLGlResource.h"
-#include "XLGlRenderQueue.h"
+#include "XLRenderQueueResource.h"
+#include "XLRenderQueueQueue.h"
 #include "XLGlMaterial.h"
 
 namespace stappler::xenolith {
 
 class Scene : public Node {
 public:
+	using RenderQueue = renderqueue::Queue;
+	using FrameRequest = renderqueue::FrameRequest;
+	using FrameQueue = renderqueue::FrameQueue;
+	using FrameHandle = renderqueue::FrameHandle;
+	using PipelineData = renderqueue::PipelineData;
+	using PipelineInfo = renderqueue::PipelineInfo;
+
 	virtual ~Scene();
 
-	virtual bool init(Application *, gl::RenderQueue::Builder &&);
-	virtual bool init(Application *, gl::RenderQueue::Builder &&, Size2);
+	virtual bool init(Application *, RenderQueue::Builder &&);
+	virtual bool init(Application *, RenderQueue::Builder &&, Size2);
 
 	virtual void render(RenderFrameInfo &info);
 
 	virtual void onContentSizeDirty() override;
 
-	const Rc<gl::RenderQueue> &getRenderQueue() const { return _queue; }
+	const Rc<RenderQueue> &getRenderQueue() const { return _queue; }
 	Director *getDirector() const { return _director; }
 
 	virtual void onPresented(Director *);
 	virtual void onFinished(Director *);
 
-	virtual void onFrameStarted(gl::FrameRequest &);
-	virtual void onFrameEnded(gl::FrameRequest &);
-	virtual void on2dVertexInput(gl::FrameQueue &, const Rc<gl::AttachmentHandle> &, Function<void(bool)> &&cb); // called on GL thread;
+	virtual void onFrameStarted(FrameRequest &);
+	virtual void onFrameEnded(FrameRequest &);
+	virtual void on2dVertexInput(FrameQueue &, const Rc<renderqueue::AttachmentHandle> &, Function<void(bool)> &&cb); // called on GL thread;
 
 	virtual uint64_t getMaterial(const MaterialInfo &) const;
 
@@ -61,8 +68,8 @@ public:
 
 protected:
 	struct SubpassData {
-		gl::RenderSubpassData *subpass;
-		std::unordered_map<size_t, Vector<const gl::PipelineData *>> pipelines;
+		renderqueue::SubpassData *subpass;
+		std::unordered_map<size_t, Vector<const PipelineData *>> pipelines;
 	};
 
 	struct AttachmentData {
@@ -70,7 +77,7 @@ protected:
 		Vector<SubpassData> subasses;
 	};
 
-	virtual Rc<gl::RenderQueue> makeQueue(gl::RenderQueue::Builder &&);
+	virtual Rc<RenderQueue> makeQueue(RenderQueue::Builder &&);
 	virtual void readInitialMaterials();
 	virtual MaterialInfo getMaterialInfo(gl::MaterialType, const Rc<gl::Material> &) const;
 
@@ -80,15 +87,17 @@ protected:
 	// Search for pipeline, compatible with material
 	// Backward-search through RenderPass/Subppass, that uses material attachment provided
 	// Can be slow on complex RenderQueue
-	virtual const gl::PipelineData *getPipelineForMaterial(const AttachmentData &, const MaterialInfo &) const;
-	virtual bool isPipelineMatch(const gl::PipelineInfo *, const MaterialInfo &) const;
+	virtual const PipelineData *getPipelineForMaterial(const AttachmentData &, const MaterialInfo &) const;
+	virtual bool isPipelineMatch(const PipelineInfo *, const MaterialInfo &) const;
 
 	void addPendingMaterial(const gl::MaterialAttachment *, Rc<gl::Material> &&);
 	void addMaterial(const MaterialInfo &, gl::MaterialId);
 
+	void listMterials() const;
+
 	Application *_application = nullptr;
 	Director *_director = nullptr;
-	Rc<gl::RenderQueue> _queue;
+	Rc<RenderQueue> _queue;
 
 	Map<gl::MaterialType, AttachmentData> _attachmentsByType;
 	std::unordered_map<uint64_t, Vector<Pair<MaterialInfo, gl::MaterialId>>> _materials;

@@ -21,11 +21,11 @@
  **/
 
 #include "XLVkPipeline.h"
-#include "XLGlRenderQueue.h"
+#include "XLRenderQueueQueue.h"
 
 namespace stappler::xenolith::vk {
 
-bool Shader::init(Device &dev, const gl::ProgramData &data) {
+bool Shader::init(Device &dev, const ProgramData &data) {
 	_stage = data.stage;
 	_name = data.key.str<Interface>();
 
@@ -42,7 +42,7 @@ bool Shader::init(Device &dev, const gl::ProgramData &data) {
 	return false;
 }
 
-bool Shader::setup(Device &dev, const gl::ProgramData &programData, SpanView<uint32_t> data) {
+bool Shader::setup(Device &dev, const ProgramData &programData, SpanView<uint32_t> data) {
 	VkShaderModuleCreateInfo createInfo{}; sanitizeVkStruct(createInfo);
 	createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 	createInfo.codeSize = data.size() * sizeof(uint32_t);
@@ -58,7 +58,7 @@ bool Shader::setup(Device &dev, const gl::ProgramData &programData, SpanView<uin
 	return false;
 }
 
-bool Pipeline::comparePipelineOrdering(const gl::PipelineInfo &l, const gl::PipelineInfo &r) {
+bool Pipeline::comparePipelineOrdering(const PipelineInfo &l, const PipelineInfo &r) {
 	if (l.material.getDepthInfo().writeEnabled != r.material.getDepthInfo().writeEnabled) {
 		if (l.material.getDepthInfo().writeEnabled) {
 			return true; // pipelines with depth write comes first
@@ -74,7 +74,7 @@ bool Pipeline::comparePipelineOrdering(const gl::PipelineInfo &l, const gl::Pipe
 	}
 }
 
-bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::RenderSubpassData &pass, const gl::RenderQueue &queue) {
+bool Pipeline::init(Device &dev, const PipelineData &params, const SubpassData &pass, const RenderQueue &queue) {
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo{}; sanitizeVkStruct(vertexInputInfo);
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	vertexInputInfo.pNext = nullptr;
@@ -179,11 +179,11 @@ bool Pipeline::init(Device &dev, const gl::PipelineData &params, const gl::Rende
 
 	Vector<VkDynamicState> dynamicStates;
 
-	if ((params.dynamicState & gl::DynamicState::Viewport) != gl::DynamicState::None) {
+	if ((params.dynamicState & renderqueue::DynamicState::Viewport) != renderqueue::DynamicState::None) {
 		dynamicStates.emplace_back(VK_DYNAMIC_STATE_VIEWPORT);
 	}
 
-	if ((params.dynamicState & gl::DynamicState::Scissor) != gl::DynamicState::None) {
+	if ((params.dynamicState & renderqueue::DynamicState::Scissor) != renderqueue::DynamicState::None) {
 		dynamicStates.emplace_back(VK_DYNAMIC_STATE_SCISSOR);
 	}
 

@@ -35,10 +35,16 @@ public:
 
 	virtual bool init() override;
 
+	virtual void onEnter(Scene *) override;
+
 protected:
 	void onTouch(const InputEvent &);
 	void onMouseMove(const InputEvent &);
 
+	bool onPointerEnter(bool);
+
+	bool _pointerInWindow = false;
+	Vec2 _currentLocation;
 	VectorSprite *_cursor = nullptr;
 };
 
