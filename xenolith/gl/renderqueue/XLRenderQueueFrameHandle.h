@@ -33,6 +33,7 @@ public:
 	using FrameRequest = renderqueue::FrameRequest;
 
 	static uint32_t GetActiveFramesCount();
+	static void DescribeActiveFrames();
 
 	virtual ~FrameHandle();
 

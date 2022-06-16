@@ -30,6 +30,7 @@ namespace stappler::xenolith::renderqueue {
 
 FrameQueue::~FrameQueue() {
 	_frame = nullptr;
+	XL_FRAME_QUEUE_LOG("Ended");
 }
 
 bool FrameQueue::init(const Rc<PoolRef> &p, const Rc<Queue> &q, FrameHandle &f, Extent2 ext) {
@@ -38,6 +39,8 @@ bool FrameQueue::init(const Rc<PoolRef> &p, const Rc<Queue> &q, FrameHandle &f, 
 	_frame = &f;
 	_loop = _frame->getLoop();
 	_extent = ext;
+	_order = f.getOrder();
+	XL_FRAME_QUEUE_LOG("Started");
 	return true;
 }
 
@@ -204,10 +207,15 @@ void FrameQueue::update() {
 
 void FrameQueue::invalidate() {
 	if (!_finalized) {
+		XL_FRAME_QUEUE_LOG("invalidate");
 		_success = false;
 		auto f = _frame;
 		onFinalized();
 		f->onQueueInvalidated(*this);
+
+		if (_frame) {
+			tryReleaseFrame();
+		}
 	}
 }
 
@@ -485,7 +493,7 @@ void FrameQueue::updateRenderPassState(FramePassData &data, FrameRenderPassState
 		}
 	}
 
-	if (state == FrameRenderPassState::Finalized) {
+	if (state >= FrameRenderPassState::Finalized) {
 		++ _finalizedObjects;
 		tryReleaseFrame();
 	}
@@ -603,8 +611,30 @@ void FrameQueue::onRenderPassResourcesAcquired(FramePassData &data) {
 		return;
 	}
 
+	for (auto &it : data.attachments) {
+		if (it.second->image) {
+			if (auto img = it.second->image->getImage()) {
+				data.handle->autorelease(img);
+			}
+		}
+	}
+
+	if (data.framebuffer) {
+		data.handle->autorelease(data.framebuffer);
+	}
+
+	data.handle->autorelease(_frame->getDevice());
+
+	for (auto &it : data.handle->getData()->subpasses) {
+		for (auto &p : it.pipelines) {
+			if (p->pipeline) {
+				data.handle->autorelease(p->pipeline);
+			}
+		}
+	}
+
 	if (data.handle->prepare(*this,
-			[this, guard = Rc<FrameQueue>(this), data = &data] (bool success) {
+			[this, guard = Rc<FrameQueue>(this), data = &data] (bool success) mutable {
 		_loop->performOnGlThread([this, data, success] {
 			data->waitForResult = false;
 			if (success && !_finalized) {
@@ -740,6 +770,7 @@ PipelineStage FrameQueue::getWaitStageForAttachment(FramePassData &data, const A
 
 void FrameQueue::onComplete() {
 	if (!_finalized) {
+		XL_FRAME_QUEUE_LOG("onComplete");
 		_success = true;
 		_frame->onQueueComplete(*this);
 		onFinalized();
@@ -750,6 +781,8 @@ void FrameQueue::onFinalized() {
 	if (_finalized) {
 		return;
 	}
+
+	XL_FRAME_QUEUE_LOG("onFinalized");
 
 	_finalized = true;
 	for (auto &pass : _renderPasses) {
@@ -787,8 +820,10 @@ void FrameQueue::invalidate(FramePassData &data) {
 		return;
 	}
 
-	if (data.state == FrameRenderPassState::Ready || (!data.waitForResult && toInt(data.state) > toInt(FrameRenderPassState::Ready))) {
+	if (data.state == FrameRenderPassState::Ready || data.state == FrameRenderPassState::Owned
+			|| (!data.waitForResult && toInt(data.state) > toInt(FrameRenderPassState::Ready))) {
 		data.handle->getRenderPass()->releaseForFrame(*this);
+		data.waitForResult = false;
 	}
 
 	if (!data.waitForResult && data.framebuffer) {

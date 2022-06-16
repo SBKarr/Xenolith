@@ -32,6 +32,10 @@ namespace stappler::xenolith::platform {
 
 static XcbLibrary *s_XcbLibrary = nullptr;
 
+SP_EXTERN_C void * xcb_wait_for_reply(xcb_connection_t *c, unsigned int request, xcb_generic_error_t **e) {
+	return s_XcbLibrary->xcb_wait_for_reply(c, request, e);
+}
+
 XcbLibrary *XcbLibrary::getInstance() {
 	return s_XcbLibrary;
 }
@@ -43,6 +47,7 @@ XcbLibrary::~XcbLibrary() {
 bool XcbLibrary::init() {
 	if (auto d = dlopen("libxcb.so", RTLD_LAZY)) {
 		if (open(d)) {
+
 			s_XcbLibrary = this;
 			openConnection(_pending);
 			return true;
@@ -68,6 +73,65 @@ bool XcbLibrary::open(void *handle) {
 	this->xcb_change_property = reinterpret_cast<decltype(this->xcb_change_property)>(dlsym(handle, "xcb_change_property"));
 	this->xcb_intern_atom = reinterpret_cast<decltype(this->xcb_intern_atom)>(dlsym(handle, "xcb_intern_atom"));
 	this->xcb_intern_atom_reply = reinterpret_cast<decltype(this->xcb_intern_atom_reply)>(dlsym(handle, "xcb_intern_atom_reply"));
+	this->xcb_wait_for_reply = reinterpret_cast<decltype(this->xcb_wait_for_reply)>(dlsym(handle, "xcb_wait_for_reply"));
+
+	if (auto randr = dlopen("libxcb-randr.so", RTLD_LAZY)) {
+		this->xcb_randr_query_version =
+				reinterpret_cast<decltype(this->xcb_randr_query_version)>(dlsym(randr, "xcb_randr_query_version"));
+		this->xcb_randr_query_version_reply =
+				reinterpret_cast<decltype(this->xcb_randr_query_version_reply)>(dlsym(randr, "xcb_randr_query_version_reply"));
+		this->xcb_randr_get_screen_info_unchecked =
+				reinterpret_cast<decltype(this->xcb_randr_get_screen_info_unchecked)>(dlsym(randr, "xcb_randr_get_screen_info_unchecked"));
+		this->xcb_randr_get_screen_info_reply =
+				reinterpret_cast<decltype(this->xcb_randr_get_screen_info_reply)>(dlsym(randr, "xcb_randr_get_screen_info_reply"));
+
+		this->xcb_randr_get_screen_info_sizes =
+				reinterpret_cast<decltype(this->xcb_randr_get_screen_info_sizes)>(dlsym(randr, "xcb_randr_get_screen_info_sizes"));;
+		this->xcb_randr_get_screen_info_sizes_length =
+				reinterpret_cast<decltype(this->xcb_randr_get_screen_info_sizes_length)>(dlsym(randr, "xcb_randr_get_screen_info_sizes_length"));
+		this->xcb_randr_get_screen_info_sizes_iterator =
+				reinterpret_cast<decltype(this->xcb_randr_get_screen_info_sizes_iterator)>(dlsym(randr, "xcb_randr_get_screen_info_sizes_iterator"));
+		this->xcb_randr_get_screen_info_rates_length =
+				reinterpret_cast<decltype(this->xcb_randr_get_screen_info_rates_length)>(dlsym(randr, "xcb_randr_get_screen_info_rates_length"));
+		this->xcb_randr_get_screen_info_rates_iterator =
+				reinterpret_cast<decltype(this->xcb_randr_get_screen_info_rates_iterator)>(dlsym(randr, "xcb_randr_get_screen_info_rates_iterator"));
+		this->xcb_randr_refresh_rates_next =
+				reinterpret_cast<decltype(this->xcb_randr_refresh_rates_next)>(dlsym(randr, "xcb_randr_refresh_rates_next"));
+		this->xcb_randr_refresh_rates_rates =
+				reinterpret_cast<decltype(this->xcb_randr_refresh_rates_rates)>(dlsym(randr, "xcb_randr_refresh_rates_rates"));
+		this->xcb_randr_refresh_rates_rates_length =
+				reinterpret_cast<decltype(this->xcb_randr_refresh_rates_rates_length)>(dlsym(randr, "xcb_randr_refresh_rates_rates_length"));
+
+		if (this->xcb_randr_query_version
+				&& this->xcb_randr_query_version_reply
+				&& this->xcb_randr_get_screen_info_unchecked
+				&& this->xcb_randr_get_screen_info_reply
+				&& this->xcb_randr_get_screen_info_sizes
+				&& this->xcb_randr_get_screen_info_sizes_length
+				&& this->xcb_randr_get_screen_info_sizes_iterator
+				&& this->xcb_randr_get_screen_info_rates_length
+				&& this->xcb_randr_get_screen_info_rates_iterator
+				&& this->xcb_randr_refresh_rates_next
+				&& this->xcb_randr_refresh_rates_rates
+				&& this->xcb_randr_refresh_rates_rates_length) {
+			_randr = randr;
+		} else {
+			this->xcb_randr_query_version = nullptr;
+			this->xcb_randr_query_version_reply = nullptr;
+			this->xcb_randr_get_screen_info_unchecked = nullptr;
+			this->xcb_randr_get_screen_info_reply = nullptr;
+			this->xcb_randr_get_screen_info_sizes = nullptr;
+			this->xcb_randr_get_screen_info_sizes_length = nullptr;
+			this->xcb_randr_get_screen_info_sizes_iterator = nullptr;
+			this->xcb_randr_get_screen_info_rates_length = nullptr;
+			this->xcb_randr_get_screen_info_rates_iterator = nullptr;
+			this->xcb_randr_refresh_rates_next = nullptr;
+			this->xcb_randr_refresh_rates_rates = nullptr;
+			this->xcb_randr_refresh_rates_rates_length = nullptr;
+
+			dlclose(randr);
+		}
+	}
 
 	if (this->xcb_connect
 			&& this->xcb_get_setup
@@ -83,7 +147,8 @@ bool XcbLibrary::open(void *handle) {
 			&& this->xcb_create_window
 			&& this->xcb_change_property
 			&& this->xcb_intern_atom
-			&& this->xcb_intern_atom_reply) {
+			&& this->xcb_intern_atom_reply
+			&& this->xcb_wait_for_reply) {
 		return true;
 	}
 	return false;
@@ -97,6 +162,12 @@ void XcbLibrary::close() {
 	if (s_XcbLibrary == this) {
 		s_XcbLibrary = nullptr;
 	}
+
+	if (_randr) {
+		dlclose(_randr);
+		_randr = nullptr;
+	}
+
 	if (_handle) {
 		dlclose(_handle);
 		_handle = nullptr;

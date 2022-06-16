@@ -30,11 +30,15 @@
 #include "XLVkView.h"
 
 #include <xcb/xcb.h>
+#include <xcb/randr.h>
 
 namespace stappler::xenolith::platform {
 
 class XcbLibrary : public Ref {
 public:
+	static constexpr int RANDR_MAJOR_VERSION = XCB_RANDR_MAJOR_VERSION;
+	static constexpr int RANDR_MINOR_VERSION = XCB_RANDR_MINOR_VERSION;
+
 	struct ConnectionData {
 		int screen_nbr = -1;
 		xcb_connection_t *connection = nullptr;
@@ -52,6 +56,8 @@ public:
 
 	bool open(void *handle);
 	void close();
+
+	bool hasRandr() const { return _randr; }
 
 	xcb_connection_t * (* xcb_connect) (const char *displayname, int *screenp) = nullptr;
 	const struct xcb_setup_t * (* xcb_get_setup) (xcb_connection_t *c) = nullptr;
@@ -80,11 +86,33 @@ public:
 	xcb_intern_atom_reply_t * (* xcb_intern_atom_reply) (xcb_connection_t *c, xcb_intern_atom_cookie_t cookie,
 			xcb_generic_error_t **e) = nullptr;
 
+	void * (* xcb_wait_for_reply) (xcb_connection_t *c, unsigned int request, xcb_generic_error_t **e) = nullptr;
+
+	xcb_randr_query_version_cookie_t (* xcb_randr_query_version) (xcb_connection_t *c,
+			uint32_t major_version, uint32_t minor_version) = nullptr;
+	xcb_randr_query_version_reply_t * (* xcb_randr_query_version_reply) (xcb_connection_t *c,
+			xcb_randr_query_version_cookie_t cookie, xcb_generic_error_t **e) = nullptr;
+	xcb_randr_get_screen_info_cookie_t (* xcb_randr_get_screen_info_unchecked) (xcb_connection_t *c,
+			xcb_window_t window) = nullptr;
+	xcb_randr_get_screen_info_reply_t * (* xcb_randr_get_screen_info_reply) (xcb_connection_t *c,
+			xcb_randr_get_screen_info_cookie_t cookie, xcb_generic_error_t **e) = nullptr;
+
+	xcb_randr_screen_size_t * (* xcb_randr_get_screen_info_sizes) (const xcb_randr_get_screen_info_reply_t *) = nullptr;
+	int (* xcb_randr_get_screen_info_sizes_length) (const xcb_randr_get_screen_info_reply_t *) = nullptr;
+	xcb_randr_screen_size_iterator_t (* xcb_randr_get_screen_info_sizes_iterator) (const xcb_randr_get_screen_info_reply_t *) = nullptr;
+
+	int (* xcb_randr_get_screen_info_rates_length) (const xcb_randr_get_screen_info_reply_t *) = nullptr;
+	xcb_randr_refresh_rates_iterator_t (* xcb_randr_get_screen_info_rates_iterator) (const xcb_randr_get_screen_info_reply_t *) = nullptr;
+	void (* xcb_randr_refresh_rates_next) (xcb_randr_refresh_rates_iterator_t *) = nullptr;
+	uint16_t * (* xcb_randr_refresh_rates_rates) (const xcb_randr_refresh_rates_t *);
+	int (* xcb_randr_refresh_rates_rates_length) (const xcb_randr_refresh_rates_t *);
+
 	ConnectionData acquireConnection();
 	ConnectionData getActiveConnection();
 
 protected:
 	void *_handle = nullptr;
+	void *_randr = nullptr;
 
 	void openConnection(ConnectionData &data);
 
@@ -100,6 +128,7 @@ public:
 	virtual int getSocketFd() const = 0;
 
 	virtual bool poll() = 0;
+	virtual uint64_t getScreenFrameInterval() const = 0;
 };
 
 class ViewImpl : public vk::View {
@@ -119,6 +148,9 @@ public:
 
 	vk::Device *getDevice() const { return _device; }
 
+	// minimal poll interval
+	virtual uint64_t getUpdateInterval() const override { return 1000; }
+
 protected:
 	virtual bool pollInput() override;
 
@@ -136,10 +168,20 @@ struct XcbAtomRequest {
 static XcbAtomRequest s_atomRequests[] = {
 	{ "WM_PROTOCOLS", true },
 	{ "WM_DELETE_WINDOW", false },
+	{ "WM_NAME", false },
+	{ "WM_ICON_NAME", false },
 };
 
 class XcbView : public LinuxViewInterface {
 public:
+	struct ScreenInfo {
+	    uint16_t width;
+	    uint16_t height;
+	    uint16_t mwidth;
+	    uint16_t mheight;
+	    Vector<uint16_t> rates;
+	};
+
 	static void ReportError(int error);
 
 	XcbView(XcbLibrary *, ViewImpl *, StringView, URect);
@@ -156,7 +198,11 @@ public:
 
 	virtual int getSocketFd() const override { return _socket; }
 
+	virtual uint64_t getScreenFrameInterval() const override;
+
 protected:
+	Vector<ScreenInfo> getScreenInfo() const;
+
 	Rc<XcbLibrary> _xcb;
 	ViewImpl *_view = nullptr;
 	xcb_connection_t *_connection = nullptr;
@@ -167,6 +213,7 @@ protected:
 
 	uint16_t _width = 0;
 	uint16_t _height = 0;
+	uint16_t _rate = 60;
 
 	int _socket = -1;
 };

@@ -149,4 +149,8 @@ AttachmentHandle *PassHandle::getAttachmentHandle(const Attachment *a) const {
 	return nullptr;
 }
 
+void PassHandle::autorelease(Ref *ref) {
+	_autorelease.emplace_back(ref);
+}
+
 }

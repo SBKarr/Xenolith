@@ -80,6 +80,19 @@ XcbView::XcbView(XcbLibrary *lib, ViewImpl *impl, StringView name, URect rect) {
 
 	_defaultScreen = connection.screen;
 
+	if (_xcb->hasRandr()) {
+		auto versionCookie = _xcb->xcb_randr_query_version( _connection, XcbLibrary::RANDR_MAJOR_VERSION, XcbLibrary::RANDR_MINOR_VERSION);
+		auto versionReply = _xcb->xcb_randr_query_version_reply( _connection, versionCookie, nullptr);
+
+		if (versionReply->major_version == XcbLibrary::RANDR_MAJOR_VERSION) {
+			xcb_randr_get_screen_info_cookie_t screenInfoCookie =
+					_xcb->xcb_randr_get_screen_info_unchecked(_connection, _defaultScreen->root);
+			auto reply = _xcb->xcb_randr_get_screen_info_reply(_connection, screenInfoCookie, nullptr);
+
+			_rate = reply->rate;
+		}
+	}
+
 	_socket = _xcb->xcb_get_file_descriptor(_connection); // assume it's non-blocking
 
 	uint32_t mask = /*XCB_CW_BACK_PIXEL | */ XCB_CW_EVENT_MASK;
@@ -133,7 +146,10 @@ XcbView::XcbView(XcbLibrary *lib, ViewImpl *impl, StringView name, URect rect) {
 		++ i;
 	}
 
+	_xcb->xcb_change_property( _connection, XCB_PROP_MODE_REPLACE, _window, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8, name.size(), name.data());
+	_xcb->xcb_change_property( _connection, XCB_PROP_MODE_REPLACE, _window, XCB_ATOM_WM_ICON_NAME, XCB_ATOM_STRING, 8, name.size(), name.data());
 	_xcb->xcb_change_property( _connection, XCB_PROP_MODE_REPLACE, _window, _atoms[0], 4, 32, 1, &_atoms[1] );
+
 	_xcb->xcb_flush(_connection);
 
 	impl->setScreenExtent(Extent2(_width, _height));
@@ -382,6 +398,66 @@ bool XcbView::poll() {
 
 	if (deprecateSwapchain) {
 		_view->deprecateSwapchain();
+	}
+
+	return ret;
+}
+
+uint64_t XcbView::getScreenFrameInterval() const {
+	return 1'000'000 / _rate;
+}
+
+Vector<XcbView::ScreenInfo> XcbView::getScreenInfo() const {
+	if (!_xcb->hasRandr()) {
+		return Vector<XcbView::ScreenInfo>();
+	}
+
+	auto versionCookie = _xcb->xcb_randr_query_version( _connection, XcbLibrary::RANDR_MAJOR_VERSION, XcbLibrary::RANDR_MINOR_VERSION);
+	auto versionReply = _xcb->xcb_randr_query_version_reply( _connection, versionCookie, nullptr);
+
+	if (versionReply->major_version != XcbLibrary::RANDR_MAJOR_VERSION) {
+		return Vector<XcbView::ScreenInfo>();
+	}
+
+	xcb_randr_get_screen_info_cookie_t screenInfoCookie =
+			_xcb->xcb_randr_get_screen_info_unchecked(_connection, _defaultScreen->root);
+	auto reply = _xcb->xcb_randr_get_screen_info_reply(_connection, screenInfoCookie, nullptr);
+	auto sizes = size_t(_xcb->xcb_randr_get_screen_info_sizes_length(reply));
+
+	Vector<Vector<uint16_t>> ratesVec;
+
+	auto ratesIt = _xcb->xcb_randr_get_screen_info_rates_iterator(reply);
+	for ( ; ratesIt.rem; _xcb->xcb_randr_refresh_rates_next(&ratesIt)) {
+		auto rates = _xcb->xcb_randr_refresh_rates_rates(ratesIt.data);
+		auto len = _xcb->xcb_randr_refresh_rates_rates_length(ratesIt.data);
+
+		Vector<uint16_t> tmp;
+
+		while (len) {
+			tmp.emplace_back(*rates);
+			++ rates;
+			-- len;
+		}
+
+		ratesVec.emplace_back(move(tmp));
+	}
+
+	Vector<ScreenInfo> ret;
+	if (ratesVec.size() == sizes) {
+		auto sizesData = _xcb->xcb_randr_get_screen_info_sizes(reply);
+		for (size_t i = 0; i < sizes; ++ i) {
+			ScreenInfo info { sizesData[i].width, sizesData[i].height, sizesData[i].mwidth, sizesData[i].mheight };
+
+			if (ratesVec.size() == sizes) {
+				info.rates = ratesVec[i];
+			} else if (ratesVec.size() == 1) {
+				info.rates = ratesVec[0];
+			} else {
+				info.rates = Vector<uint16_t>{ _rate };
+			}
+
+			ret.emplace_back(move(info));
+		}
 	}
 
 	return ret;

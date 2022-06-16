@@ -135,6 +135,7 @@ protected:
 	Mutex _mutex;
 	Vector<Pair<Function<void()>, Rc<Ref>>> _callbacks;
 
+	uint64_t _frameInterval = 1'000'000 / 60; // in microseconds
 	mutable Mutex _frameIntervalMutex;
 	uint64_t _lastFrameStart = 0;
 	uint64_t _lastFrameInterval = 0;

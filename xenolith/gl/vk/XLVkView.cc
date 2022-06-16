@@ -112,21 +112,6 @@ void View_writeImageTransfer(Device &dev, VkCommandBuffer buf, const Rc<Image> &
 	table->vkEndCommandBuffer(buf);
 }
 
-Surface::~Surface() {
-	if (_surface) {
-		_instance->vkDestroySurfaceKHR(_instance->getInstance(), _surface, nullptr);
-		_surface = VK_NULL_HANDLE;
-	}
-	_window = nullptr;
-}
-
-bool Surface::init(Instance *instance, VkSurfaceKHR surface, Ref *win) {
-	_instance = instance;
-	_surface = surface;
-	_window = win;
-	return true;
-}
-
 View::~View() {
 	_thread.join();
 }
@@ -172,7 +157,7 @@ void View::threadInit() {
 		_initImage = nullptr;
 	}
 
-	scheduleSwapchainImage();
+	scheduleSwapchainImage(_frameInterval);
 }
 
 void View::threadDispose() {
@@ -185,6 +170,21 @@ void View::threadDispose() {
 	}
 	_fences.clear();
 	_mutex.unlock();
+
+	for (auto &it :_fenceImages) {
+		it->invalidateSwapchain();
+	}
+	_fenceImages.clear();
+
+	for (auto &it :_scheduledImages) {
+		it->invalidateSwapchain();
+	}
+	_scheduledImages.clear();
+
+	for (auto &it :_scheduledPresent) {
+		it->invalidateSwapchain();
+	}
+	_scheduledPresent.clear();
 
 	_swapchain = nullptr;
 	_surface = nullptr;
@@ -199,6 +199,7 @@ void View::threadDispose() {
 void View::update() {
 	gl::View::update();
 
+	auto clock = platform::device::_clock(platform::device::ClockType::Monotonic);
 	uint64_t fenceOrder = 0;
 	do {
 		auto loop = (Loop *)_loop.get();
@@ -240,6 +241,19 @@ void View::update() {
 			}
 		}
 	} while (0);
+
+	do {
+		auto it = _scheduledPresent.begin();
+		while (it != _scheduledPresent.end()) {
+			if ((*it)->getPresentWindow() < clock) {
+				runScheduledPresent(move(*it));
+				it = _scheduledPresent.erase(it);
+			} else {
+				++ it;
+			}
+		}
+	} while (0);
+
 }
 
 void View::run() {
@@ -277,7 +291,7 @@ void View::deprecateSwapchain() {
 		_swapchain->deprecate();
 
 		if (!_blockDeprecation && _swapchain->getAcquiredImagesCount() == 0) {
-			stappler::log::text("View", "recreateSwapchain - View::deprecateSwapchain");
+			// log::vtext("View", "recreateSwapchain - View::deprecateSwapchain (", renderqueue::FrameHandle::GetActiveFramesCount(), ")");
 			recreateSwapchain(_swapchain->getRebuildMode());
 		}
 	}, this, true);
@@ -285,26 +299,34 @@ void View::deprecateSwapchain() {
 
 bool View::present(Rc<ImageStorage> &&object) {
 	if (object->isSwapchainImage()) {
-		auto queue = _device->tryAcquireQueueSync(QueueOperations::Present);
-		if (queue) {
-			performOnThread([this, queue = move(queue), object = move(object)] () mutable {
-				presentWithQueue(*queue, move(object));
-				_loop->performOnGlThread([this,  queue = move(queue)] () mutable {
-					_device->releaseQueue(move(queue));
-				}, this);
-			}, this);
-		} else {
-			_device->acquireQueue(QueueOperations::Present, *(Loop *)_loop.get(),
-					[this, object = move(object)] (Loop &, const Rc<DeviceQueue> &queue) mutable {
-				performOnThread([this, queue, object = move(object)] () mutable {
+		auto img = (SwapchainImage *)object.get();
+		if (img->getPresentWindow() < platform::device::_clock(platform::device::ClockType::Monotonic)) {
+			auto queue = _device->tryAcquireQueueSync(QueueOperations::Present);
+			if (queue) {
+				performOnThread([this, queue = move(queue), object = move(object)] () mutable {
 					presentWithQueue(*queue, move(object));
 					_loop->performOnGlThread([this,  queue = move(queue)] () mutable {
 						_device->releaseQueue(move(queue));
 					}, this);
 				}, this);
-			}, [this] (Loop &) {
-				invalidate();
-			}, this);
+			} else {
+				_device->acquireQueue(QueueOperations::Present, *(Loop *)_loop.get(),
+						[this, object = move(object)] (Loop &, const Rc<DeviceQueue> &queue) mutable {
+					performOnThread([this, queue, object = move(object)] () mutable {
+						presentWithQueue(*queue, move(object));
+						_loop->performOnGlThread([this,  queue = move(queue)] () mutable {
+							_device->releaseQueue(move(queue));
+						}, this);
+					}, this);
+				}, [this] (Loop &) {
+					invalidate();
+				}, this);
+			}
+		} else {
+			performOnThread([this, object = move(object)] () mutable {
+				auto img = (SwapchainImage *)object.get();
+				_scheduledPresent.emplace_back(img);
+			}, this, true);
 		}
 	} else {
 
@@ -463,9 +485,10 @@ void View::invalidate() {
 
 }
 
-void View::scheduleSwapchainImage() {
-	performOnThread([this] {
-		auto image = Rc<SwapchainImage>::create(Rc<SwapchainHandle>(_swapchain), _frameOrder);
+void View::scheduleSwapchainImage(uint64_t windowOffset) {
+	performOnThread([this, windowOffset] {
+		auto presentWindow = platform::device::_clock(platform::device::ClockType::Monotonic) + _frameInterval - getUpdateInterval() - windowOffset;
+		auto image = Rc<SwapchainImage>::create(Rc<SwapchainHandle>(_swapchain), _frameOrder, presentWindow);
 
 		// make new frame request immediately
 		runWithSwapchainImage(Rc<SwapchainImage>(image));
@@ -515,14 +538,24 @@ bool View::acquireScheduledImage(const Rc<SwapchainImage> &image) {
 
 bool View::recreateSwapchain(gl::PresentMode mode) {
 	for (auto &it : _fenceImages) {
-		it->invalidateImage();
+		_loop->performOnGlThread([it] {
+			it->invalidate();
+		}, it);
 	}
 	_fenceImages.clear();
 
 	for (auto &it : _scheduledImages) {
-		it->invalidateImage();
+		_loop->performOnGlThread([it] {
+			it->invalidate();
+		}, it);
 	}
 	_scheduledImages.clear();
+
+	_frameEmitter->dropFrames();
+
+	if (renderqueue::FrameHandle::GetActiveFramesCount() > 1) {
+		renderqueue::FrameHandle::DescribeActiveFrames();
+	}
 
 	auto info = _instance->getSurfaceOptions(_surface->getSurface(), _device->getPhysicalDevice());
 	auto cfg = _selectConfig(info);
@@ -537,13 +570,13 @@ bool View::recreateSwapchain(gl::PresentMode mode) {
 	}
 
 	bool ret = false;
-	if (mode != gl::PresentMode::Unsupported) {
+	if (mode == gl::PresentMode::Unsupported) {
 		ret = createSwapchain(move(cfg), cfg.presentMode);
 	} else {
 		ret = createSwapchain(move(cfg), mode);
 	}
 	if (ret) {
-		scheduleSwapchainImage();
+		scheduleSwapchainImage(_frameInterval);
 	}
 	return ret;
 }
@@ -649,6 +682,22 @@ void View::runWithSwapchainImage(Rc<ImageStorage> &&image) {
 	}, this);
 }
 
+void View::runScheduledPresent(Rc<SwapchainImage> &&object) {
+	_loop->performOnGlThread([this, object = move(object)] () mutable {
+		_device->acquireQueue(QueueOperations::Present, *(Loop *)_loop.get(),
+				[this, object = move(object)] (Loop &, const Rc<DeviceQueue> &queue) mutable {
+			performOnThread([this, queue, object = move(object)] () mutable {
+				presentWithQueue(*queue, move(object));
+				_loop->performOnGlThread([this,  queue = move(queue)] () mutable {
+					_device->releaseQueue(move(queue));
+				}, this);
+			}, this);
+		}, [this] (Loop &) {
+			invalidate();
+		}, this);
+	}, this);
+}
+
 void View::presentWithQueue(DeviceQueue &queue, Rc<ImageStorage> &&image) {
 	auto res = _swapchain->present(queue, move(image));
 	updateFrameInterval();
@@ -668,10 +717,10 @@ void View::presentWithQueue(DeviceQueue &queue, Rc<ImageStorage> &&image) {
 		waitForFences(_frameOrder);
 		queue.waitIdle();
 
-		stappler::log::text("View", "recreateSwapchain - View::presentWithQueue");
+		// log::vtext("View", "recreateSwapchain - View::presentWithQueue (", renderqueue::FrameHandle::GetActiveFramesCount(), ")");
 		recreateSwapchain(_swapchain->getRebuildMode());
 	} else {
-		scheduleSwapchainImage();
+		scheduleSwapchainImage(0);
 	}
 }
 
@@ -679,10 +728,10 @@ void View::invalidateSwapchainImage(Rc<ImageStorage> &&image) {
 	_swapchain->invalidateImage(move(image));
 
 	if (_swapchain->isDeprecated() && _swapchain->getAcquiredImagesCount() == 0) {
-		stappler::log::text("View", "recreateSwapchain - View::invalidateSwapchainImage");
+		// log::vtext("View", "recreateSwapchain - View::invalidateSwapchainImage (", renderqueue::FrameHandle::GetActiveFramesCount(), ")");
 		recreateSwapchain(_swapchain->getRebuildMode());
 	} else {
-		scheduleSwapchainImage();
+		scheduleSwapchainImage(_frameInterval);
 	}
 }
 
@@ -700,7 +749,7 @@ void View::waitForFences(uint64_t min) {
 	auto it = _fences.begin();
 	while (it != _fences.end()) {
 		if ((*it)->getFrame() <= min) {
-			log::vtext("View", "waitForFences: ", (*it)->getTag());
+			// log::vtext("View", "waitForFences: ", (*it)->getTag());
 			if ((*it)->check(*loop, false)) {
 				it = _fences.erase(it);
 			} else {

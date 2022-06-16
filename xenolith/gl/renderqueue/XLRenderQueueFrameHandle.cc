@@ -36,21 +36,59 @@ static constexpr platform::device::ClockType FrameClockType = platform::device::
 
 static std::atomic<uint32_t> s_frameCount = 0;
 
+static Mutex s_frameMutex;
+static std::set<FrameHandle *> s_activeFrames;
+
 uint32_t FrameHandle::GetActiveFramesCount() {
 	return s_frameCount.load();
+}
+
+void FrameHandle::DescribeActiveFrames() {
+	s_frameMutex.lock();
+	auto hasFailed = false;
+	for (auto &it : s_activeFrames) {
+		if (!it->isValidFlag()) {
+			hasFailed = true;
+			break;
+		}
+	}
+
+	if (hasFailed) {
+		StringStream stream;
+		stream << "\n";
+		for (auto &it : s_activeFrames) {
+			stream << "\tFrame: " << it->getOrder() << " refcount: " << it->getReferenceCount() << "; success: " << it->isValidFlag() << "; backtrace:\n";
+			it->foreachBacktrace([&] (uint64_t id, Time time, const std::vector<std::string> &vec) {
+				stream << "[" << id << ":" << time.toHttp<Interface>() << "]:\n";
+				for (auto &it : vec) {
+					stream << "\t" << it << "\n";
+				}
+			});
+		}
+		stappler::log::text("FrameHandle", stream.str());
+	}
+
+	s_frameMutex.unlock();
 }
 
 FrameHandle::~FrameHandle() {
 	XL_FRAME_LOG(XL_FRAME_LOG_INFO, "Destroy");
 
+	s_frameMutex.lock();
 	-- s_frameCount;
+	s_activeFrames.erase(this);
+	s_frameMutex.unlock();
 
 	_request->finalize(_valid);
 	_pool = nullptr;
 }
 
 bool FrameHandle::init(gl::Loop &loop, gl::Device &dev, Rc<FrameRequest> &&req, uint64_t gen) {
+	s_frameMutex.lock();
+	s_activeFrames.emplace(this);
 	++ s_frameCount;
+	s_frameMutex.unlock();
+
 	_loop = &loop;
 	_device = &dev;
 	_request = move(req);
@@ -284,6 +322,7 @@ void FrameHandle::onOutputAttachmentInvalidated(FrameAttachmentData &data) {
 
 void FrameHandle::onQueueInvalidated(FrameQueue &) {
 	++ _queuesCompleted;
+	invalidate();
 }
 
 void FrameHandle::tryComplete() {

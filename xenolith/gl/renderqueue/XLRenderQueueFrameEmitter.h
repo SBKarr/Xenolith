@@ -111,6 +111,8 @@ public:
 
 	virtual void dropFrameTimeout();
 
+	void dropFrames();
+
 	bool isValid() const { return _valid; }
 
 	void setFrameTime(uint64_t v) { _frame = v; }

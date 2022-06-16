@@ -27,7 +27,7 @@
 #define XL_FRAME_EMITTER_DEBUG 0
 
 // Log FrameQueue attachments and render passes state changes
-#define XL_FRAME_QUEUE_DEBUG 1
+#define XL_FRAME_QUEUE_DEBUG 0
 
 // Log FrameHandle events
 #define XL_FRAME_DEBUG 0
@@ -39,7 +39,7 @@
 #endif
 
 #if XL_FRAME_QUEUE_DEBUG
-#define XL_FRAME_QUEUE_LOG(...) log::vtext("FrameQueue", __VA_ARGS__)
+#define XL_FRAME_QUEUE_LOG(...) log::vtext("FrameQueue", "[", _order, "] ", __VA_ARGS__)
 #else
 #define XL_FRAME_QUEUE_LOG(...)
 #endif

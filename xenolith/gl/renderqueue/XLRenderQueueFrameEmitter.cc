@@ -110,6 +110,10 @@ void FrameRequest::onOutputInvalidated(gl::Loop &loop, FrameAttachmentData &data
 			return;
 		}
 	}
+
+	if (data.handle->getAttachment() == _swapchainAttachment && data.image) {
+		_swapchain->invalidateTarget(move(data.image));
+	}
 }
 
 void FrameRequest::finalize(bool success) {
@@ -190,7 +194,9 @@ void FrameEmitter::setFrameSubmitted(FrameHandle &frame) {
 	auto it = _frames.begin();
 	while (it != _frames.end()) {
 		if ((*it) == &frame) {
-			_framesPending.emplace_back(&frame);
+			if (frame.isValid()) {
+				_framesPending.emplace_back(&frame);
+			}
 			it = _frames.erase(it);
 		} else {
 			++ it;
@@ -227,6 +233,14 @@ void FrameEmitter::dropFrameTimeout() {
 			onFrameTimeout(_order);
 		}
 	}, this, true);
+}
+
+void FrameEmitter::dropFrames() {
+	for (auto &it : _frames) {
+		it->invalidate();
+	}
+	_frames.clear();
+	_framesPending.clear();
 }
 
 uint64_t FrameEmitter::getLastFrameTime() const {

@@ -55,6 +55,7 @@ THE SOFTWARE.
 #include "XLVkRenderPassImpl.cc"
 #include "XLVkObject.cc"
 #include "XLVkTextureSet.cc"
+#include "XLVkSwapchain.cc"
 #include "renderer/XLVkAttachment.cc"
 #include "renderer/XLVkQueuePass.cc"
 #include "renderer/XLVkTransferQueue.cc"

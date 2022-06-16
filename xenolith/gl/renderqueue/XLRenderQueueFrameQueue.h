@@ -155,6 +155,7 @@ protected:
 	Rc<FrameHandle> _frame;
 	gl::Loop *_loop = nullptr;
 	Extent2 _extent;
+	uint64_t _order = 0;
 	bool _finalized = false;
 	bool _success = false;
 

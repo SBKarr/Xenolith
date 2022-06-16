@@ -69,8 +69,6 @@ namespace device {
 
 	uint64_t _clock(ClockType = Default);
 	void _sleep(uint64_t microseconds);
-
-	Rc<EventLoopInterface> createEventLoop();
 }
 
 namespace interaction {

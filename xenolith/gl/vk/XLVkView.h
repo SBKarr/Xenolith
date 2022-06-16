@@ -25,27 +25,9 @@
 
 #include "XLVk.h"
 #include "XLGlView.h"
-#include "XLVkDevice.h"
-#include "XLVkObject.h"
-#include "XLRenderQueueImageStorage.h"
+#include "XLVkSwapchain.h"
 
 namespace stappler::xenolith::vk {
-
-class SwapchainHandle;
-
-class Surface : public Ref {
-public:
-	virtual ~Surface();
-
-	bool init(Instance *instance, VkSurfaceKHR surface, Ref *);
-
-	VkSurfaceKHR getSurface() const { return _surface; }
-
-protected:
-	Rc<Ref> _window;
-	Rc<Instance> _instance;
-	VkSurfaceKHR _surface = VK_NULL_HANDLE;
-};
 
 class View : public gl::View {
 public:
@@ -74,11 +56,13 @@ public:
 
 	void scheduleFence(Rc<Fence> &&);
 
+	virtual uint64_t getUpdateInterval() const { return 0; }
+
 protected:
 	virtual bool pollInput();
 
 	void invalidate();
-	void scheduleSwapchainImage();
+	void scheduleSwapchainImage(uint64_t windowOffset);
 	bool acquireScheduledImage(const Rc<SwapchainImage> &);
 
 	bool recreateSwapchain(gl::PresentMode);
@@ -87,6 +71,7 @@ protected:
 	bool isImagePresentable(const gl::ImageObject &image, VkFilter &filter) const;
 
 	void runWithSwapchainImage(Rc<ImageStorage> &&);
+	void runScheduledPresent(Rc<SwapchainImage> &&);
 	void presentWithQueue(DeviceQueue &, Rc<ImageStorage> &&);
 	void invalidateSwapchainImage(Rc<ImageStorage> &&);
 
@@ -108,6 +93,7 @@ protected:
 
 	Vector<Rc<SwapchainImage>> _fenceImages;
 	Vector<Rc<SwapchainImage>> _scheduledImages;
+	Vector<Rc<SwapchainImage>> _scheduledPresent;
 };
 
 }

@@ -177,7 +177,7 @@ bool Fence::check(Loop &loop, bool lockfree) {
 	switch (status) {
 	case VK_SUCCESS:
 		_state = Signaled;
-		log::vtext("Fence", "[", _frame, "] ", _tag, ": signaled: ", platform::device::_clock(platform::device::ClockType::Monotonic) - _armedTime);
+		XL_VKAPI_LOG("Fence [", _frame, "] ", _tag, ": signaled: ", platform::device::_clock(platform::device::ClockType::Monotonic) - _armedTime);
 		lock.unlock();
 		if (loop.isOnGlThread()) {
 			doRelease(true);
@@ -193,9 +193,9 @@ bool Fence::check(Loop &loop, bool lockfree) {
 		if (platform::device::_clock(platform::device::ClockType::Monotonic) - _armedTime > 1'000'000) {
 			_mutex.unlock();
 			if (_queue) {
-				log::vtext("Fence", "[", _queue->getFrameIndex(), "] Fence is possibly broken: ", _tag);
+				XL_VKAPI_LOG("Fence [", _queue->getFrameIndex(), "] Fence is possibly broken: ", _tag);
 			} else {
-				log::vtext("Fence", "[", _frame, "] Fence is possibly broken: ", _tag);
+				XL_VKAPI_LOG("Fence [", _frame, "] Fence is possibly broken: ", _tag);
 			}
 			return check(loop, false);
 		}

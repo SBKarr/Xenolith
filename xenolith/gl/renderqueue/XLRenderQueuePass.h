@@ -123,11 +123,14 @@ public:
 
 	virtual AttachmentHandle *getAttachmentHandle(const Attachment *) const;
 
+	void autorelease(Ref *);
+
 protected:
 	bool _isAsync = false; // async passes can be submitted before previous frame submits all passes
 	Rc<Pass> _renderPass;
 	const PassData *_data = nullptr;
 	FramePassData *_queueData = nullptr;
+	Vector<Rc<Ref>> _autorelease;
 };
 
 }

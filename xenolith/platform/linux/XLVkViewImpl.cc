@@ -89,6 +89,7 @@ void ViewImpl::threadInit() {
 		}
 
 		_surface = Rc<vk::Surface>::create(_instance, _view->createWindowSurface(_instance), _view);
+		_frameInterval = _view->getScreenFrameInterval();
 	}
 
 	View::threadInit();
