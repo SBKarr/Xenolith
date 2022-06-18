@@ -52,8 +52,8 @@ public:
 
 	struct Params {
 		Mat4 transform;
-		Color4B fillColor = Color4B(0, 0, 0, 255);
-		Color4B strokeColor = Color4B(0, 0, 0, 255);
+		Color4B fillColor = Color4B(255, 255, 255, 255);
+		Color4B strokeColor = Color4B(255, 255, 255, 255);
 		DrawStyle style = DrawStyle::Fill;
 		float strokeWidth = 1.0f;
 

@@ -182,8 +182,7 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 		break;
 	}
 	case InputEventName::Background:
-	case InputEventName::PointerEnter:
-	case InputEventName::FocusGain:
+	case InputEventName::FocusGain: {
 		auto ev = getEventInfo(event);
 		Vector<InputListener *> listeners;
 		_events->foreach([&] (InputListener *l) {
@@ -201,6 +200,38 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 			it->handleEvent(ev);
 		}
 		break;
+	}
+	case InputEventName::PointerEnter: {
+		auto ev = getEventInfo(event);
+		Vector<InputListener *> listeners;
+		_events->foreach([&] (InputListener *l) {
+			if (l->canHandleEvent(ev)) {
+				listeners.emplace_back(l);
+				if (l->shouldSwallowEvent(ev)) {
+					listeners.clear();
+					listeners.emplace_back(l);
+					return false;
+				}
+			}
+			return true;
+		});
+		for (auto &it : listeners) {
+			it->handleEvent(ev);
+		}
+		if (!ev.data.getValue()) {
+			// Mouse left window
+			auto tmpEvents = _activeEvents;
+			for (auto &it : tmpEvents) {
+				it.second.first.data.x = event.x;
+				it.second.first.data.y = event.y;
+				it.second.first.data.event = InputEventName::Cancel;
+				it.second.first.data.modifiers = event.modifiers;
+				handleInputEvent(it.second.first.data);
+			}
+			_activeEvents.clear();
+		}
+		break;
+	}
 	}
 }
 

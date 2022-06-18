@@ -346,6 +346,11 @@ struct InputEventData {
 			InputMouseButton::None, value ? InputModifier::ValueTrue : InputModifier::None};
 	}
 
+	static InputEventData BoolEvent(InputEventName event, bool value, const Vec2 &pt) {
+		return InputEventData{maxOf<uint32_t>(), event, pt.x, pt.y,
+			InputMouseButton::None, value ? InputModifier::ValueTrue : InputModifier::None};
+	}
+
 	uint32_t id = maxOf<uint32_t>();
 	InputEventName event = InputEventName::None;
 	float x = 0.0f;
@@ -354,6 +359,7 @@ struct InputEventData {
 	InputModifier modifiers = InputModifier::None;
 	float valueX = 0.0f;
 	float valueY = 0.0f;
+	float density = 1.0f;
 
 	bool operator==(const uint32_t &i) const { return id == i; }
 	bool operator!=(const uint32_t &i) const { return id != i; }

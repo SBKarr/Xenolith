@@ -100,7 +100,9 @@ void View::setScreenExtent(Extent2 e) {
 }
 
 void View::handleInputEvent(const InputEventData &event) {
-	_loop->getApplication()->performOnMainThread([this, event] {
+	_loop->getApplication()->performOnMainThread([this, event = event] () mutable {
+		event.density = getDensity();
+
 		switch (event.event) {
 		case InputEventName::Background:
 			_inBackground = event.getValue();

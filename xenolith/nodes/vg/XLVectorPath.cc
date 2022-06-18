@@ -614,7 +614,7 @@ VectorPath & VectorPath::moveTo(float x, float y) {
 }
 
 VectorPath & VectorPath::lineTo(float x, float y) {
-	_commands.emplace_back(Command::LineTo);
+	_commands.emplace_back(_commands.empty() ? Command::MoveTo : Command::LineTo);
 	_points.emplace_back(x, y);
 	return *this;
 }

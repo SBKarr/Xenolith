@@ -470,6 +470,10 @@ bool VectorImageData::init(VectorImageData &data) {
 	return true;
 }
 
+void VectorImageData::setImageSize(const Size2 &size) {
+	_imageSize = size;
+}
+
 const Map<String, Rc<VectorPath>> &VectorImageData::getPaths() const {
 	return _paths;
 }
@@ -617,6 +621,18 @@ bool VectorImage::init(BytesView data) {
 
 bool VectorImage::init(FilePath path) {
 	return init(filesystem::readTextFile<Interface>(path.get()));
+}
+
+void VectorImage::setImageSize(const Size2 &size) {
+	if (size == _data->getImageSize()) {
+		return;
+	}
+
+	if (_copyOnWrite) {
+		copy();
+	}
+
+	_data->setImageSize(size);
 }
 
 Size2 VectorImage::getImageSize() const {

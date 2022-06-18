@@ -20,52 +20,32 @@
  THE SOFTWARE.
  **/
 
-#ifndef UTILS_TESS_CANVAS_TESSCANVAS_H_
-#define UTILS_TESS_CANVAS_TESSCANVAS_H_
+#ifndef UTILS_TESS_CANVAS_TESSCURSOR_H_
+#define UTILS_TESS_CANVAS_TESSCURSOR_H_
 
-#include "XLLayer.h"
-#include "XLLabel.h"
-#include "TessPoint.h"
+#include "XLVectorSprite.h"
 
 namespace stappler::xenolith::tessapp {
 
-class TessCursor;
-
-class TessCanvas : public Node {
+class TessCursor : public VectorSprite {
 public:
-	virtual ~TessCanvas();
+	enum State {
+		Point,
+		Capture,
+		Target
+	};
 
-	virtual bool init() override;
+	virtual bool init();
 
-	virtual void onEnter(Scene *) override;
-	virtual void onContentSizeDirty() override;
+	void setState(State);
+	State getState() const { return _state; }
 
 protected:
-	void onTouch(const InputEvent &);
-	void onMouseMove(const InputEvent &);
+	void updateState(VectorImage &image, State);
 
-	bool onPointerEnter(bool);
-
-	void onActionTouch(const InputEvent &);
-
-	TessPoint * getTouchedPoint(const Vec2 &) const;
-
-	void updatePoints();
-
-	bool _pointerInWindow = false;
-	Vec2 _currentLocation;
-	TessCursor *_cursor = nullptr;
-
-	VectorSprite *_test1 = nullptr;
-	VectorSprite *_test2 = nullptr;
-
-	Vector<Rc<TessPoint>> _points;
-
-	TessPoint *_capturedPoint = nullptr;
-	VectorSprite *_pathFill = nullptr;
-	VectorSprite *_pathLines = nullptr;
+	State _state = State::Point;
 };
 
 }
 
-#endif /* UTILS_TESS_CANVAS_TESSCANVAS_H_ */
+#endif /* UTILS_TESS_CANVAS_TESSCURSOR_H_ */

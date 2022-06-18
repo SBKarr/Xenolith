@@ -24,7 +24,7 @@ THE SOFTWARE.
 #include "XLVk.h"
 
 #define XL_VK_DEBUG 0
-#define XL_VKAPI_DEBUG 1
+#define XL_VKAPI_DEBUG 0
 
 #if XL_VK_DEBUG
 #define XL_VK_LOG(...) log::vtext("Vk::Loop", __VA_ARGS__)

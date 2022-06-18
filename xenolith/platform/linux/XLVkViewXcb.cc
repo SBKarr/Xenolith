@@ -308,13 +308,17 @@ bool XcbView::poll() {
 				break;
 			case XCB_ENTER_NOTIFY: {
 				xcb_enter_notify_event_t *ev = (xcb_enter_notify_event_t*) e;
-				_view->handleInputEvent(InputEventData::BoolEvent(InputEventName::PointerEnter, true));
+				auto ext = _view->getScreenExtent();
+				_view->handleInputEvent(InputEventData::BoolEvent(InputEventName::PointerEnter, true,
+						Vec2(float(ev->event_x), float(ext.height - ev->event_y))));
 				printf("Mouse entered window %d, at coordinates (%d,%d)\n", ev->event, ev->event_x, ev->event_y);
 				break;
 			}
 			case XCB_LEAVE_NOTIFY: {
 				xcb_leave_notify_event_t *ev = (xcb_leave_notify_event_t*) e;
-				_view->handleInputEvent(InputEventData::BoolEvent(InputEventName::PointerEnter, false));
+				auto ext = _view->getScreenExtent();
+				_view->handleInputEvent(InputEventData::BoolEvent(InputEventName::PointerEnter, false,
+						Vec2(float(ev->event_x), float(ext.height - ev->event_y))));
 				printf("Mouse left window %d, at coordinates (%d,%d)\n", ev->event, ev->event_x, ev->event_y);
 				break;
 			}

@@ -28,12 +28,30 @@
 
 namespace stappler::xenolith {
 
+static constexpr float TapDistanceAllowed = 16.0f;
+static constexpr float TapDistanceAllowedMulti = 32.0f;
+static constexpr TimeInterval TapIntervalAllowed = TimeInterval::microseconds(350000ULL);
+
 struct GestureScroll {
 	Vec2 pos;
 	Vec2 amount;
 
 	const Vec2 &location() const;
 	void cleanup();
+};
+
+struct GestureTap {
+	Vec2 pos;
+	uint32_t id = maxOf<uint32_t>();
+	uint32_t count = 0;
+	Time time;
+	float density = 1.0f;
+
+	void cleanup() {
+		id = maxOf<uint32_t>();
+		time.clear();
+		count = 0;
+	}
 };
 
 enum class GestureType {
@@ -73,6 +91,7 @@ enum class GestureEvent {
 class GestureRecognizer : public Ref {
 public:
 	using EventMask = std::bitset<toInt(InputEventName::Max)>;
+	using ButtonMask = std::bitset<toInt(InputMouseButton::Max)>;
 
 	virtual ~GestureRecognizer() { }
 
@@ -102,12 +121,12 @@ protected:
 	size_t _maxEvents = 0;
 	GestureEvent _event = GestureEvent::Cancelled;
 	EventMask _eventMask;
+	ButtonMask _buttonMask;
 };
 
 class GestureTouchRecognizer : public GestureRecognizer {
 public:
 	using InputCallback = Function<bool(GestureEvent, const InputEvent &)>;
-	using ButtonMask = std::bitset<toInt(InputMouseButton::Max)>;
 
 	virtual ~GestureTouchRecognizer() { }
 
@@ -123,7 +142,30 @@ protected:
 	virtual bool renewEvent(const InputEvent &) override;
 
 	InputCallback _callback;
-	ButtonMask _buttonMask;
+};
+
+class GestureTapRecognizer : public GestureRecognizer {
+public:
+	using InputCallback = Function<void(GestureEvent, const GestureTap &)>;
+	using ButtonMask = std::bitset<toInt(InputMouseButton::Max)>;
+
+public:
+	virtual ~GestureTapRecognizer() { }
+
+	virtual bool init(InputCallback &&, ButtonMask &&);
+
+	virtual void update(uint64_t dt) override;
+	virtual void cancel() override;
+
+protected:
+	virtual bool addEvent(const InputEvent &) override;
+	virtual bool removeEvent(const InputEvent &, bool successful) override;
+	virtual bool renewEvent(const InputEvent &) override;
+
+	virtual void registerTap();
+
+	GestureTap _gesture;
+	InputCallback _callback;
 };
 
 class GestureScrollRecognizer : public GestureRecognizer {

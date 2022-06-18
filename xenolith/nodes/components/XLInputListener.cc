@@ -163,6 +163,12 @@ GestureRecognizer *InputListener::addTouchRecognizer(InputCallback<InputEvent> &
 	return _recognizers.emplace_back(move(rec)).get();
 }
 
+GestureRecognizer *InputListener::addTapRecognizer(InputCallback<GestureTap> &&cb, ButtonMask &&buttonMask) {
+	auto rec = Rc<GestureTapRecognizer>::create(move(cb), move(buttonMask));
+	addEventMask(rec->getEventMask());
+	return _recognizers.emplace_back(move(rec)).get();
+}
+
 GestureRecognizer *InputListener::addScrollRecognizer(InputCallback<GestureScroll> &&cb) {
 	auto rec = Rc<GestureScrollRecognizer>::create(move(cb));
 	addEventMask(rec->getEventMask());

@@ -141,7 +141,9 @@ public:
 	bool init(VectorImage *, Size2 size, Rect viewBox);
 	bool init(VectorImageData &);
 
+	void setImageSize(const Size2 &);
 	Size2 getImageSize() const { return _imageSize; }
+
 	Rect getViewBox() const { return _viewBox; }
 	const Map<String, Rc<VectorPath>> &getPaths() const;
 
@@ -193,7 +195,9 @@ public:
 	bool init(BytesView);
 	bool init(FilePath);
 
+	void setImageSize(const Size2 &);
 	Size2 getImageSize() const;
+
 	Rect getViewBox() const;
 
 	Rc<VectorPathRef> addPath(const VectorPath &, StringView = StringView(), Mat4 = Mat4::IDENTITY);

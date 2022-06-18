@@ -90,6 +90,7 @@ public:
 	bool handleEvent(const InputEvent &event);
 
 	GestureRecognizer *addTouchRecognizer(InputCallback<InputEvent> &&, ButtonMask && = makeButtonMask({InputMouseButton::MouseLeft}));
+	GestureRecognizer *addTapRecognizer(InputCallback<GestureTap> &&, ButtonMask && = makeButtonMask({InputMouseButton::MouseLeft}));
 	GestureRecognizer *addScrollRecognizer(InputCallback<GestureScroll> &&);
 	GestureRecognizer *addMoveRecognizer(InputCallback<InputEvent> &&);
 

@@ -20,52 +20,31 @@
  THE SOFTWARE.
  **/
 
-#ifndef UTILS_TESS_CANVAS_TESSCANVAS_H_
-#define UTILS_TESS_CANVAS_TESSCANVAS_H_
-
-#include "XLLayer.h"
-#include "XLLabel.h"
 #include "TessPoint.h"
 
 namespace stappler::xenolith::tessapp {
 
-class TessCursor;
+bool TessPoint::init(const Vec2 &p) {
+	auto image = Rc<VectorImage>::create(Size2(10, 10));
+	image->addPath()
+		->setFillColor(Color::White)
+		.addOval(Rect(0, 0, 10, 10))
+		.setAntialiased(false);
 
-class TessCanvas : public Node {
-public:
-	virtual ~TessCanvas();
+	if (!VectorSprite::init(move(image))) {
+		return false;
+	}
 
-	virtual bool init() override;
-
-	virtual void onEnter(Scene *) override;
-	virtual void onContentSizeDirty() override;
-
-protected:
-	void onTouch(const InputEvent &);
-	void onMouseMove(const InputEvent &);
-
-	bool onPointerEnter(bool);
-
-	void onActionTouch(const InputEvent &);
-
-	TessPoint * getTouchedPoint(const Vec2 &) const;
-
-	void updatePoints();
-
-	bool _pointerInWindow = false;
-	Vec2 _currentLocation;
-	TessCursor *_cursor = nullptr;
-
-	VectorSprite *_test1 = nullptr;
-	VectorSprite *_test2 = nullptr;
-
-	Vector<Rc<TessPoint>> _points;
-
-	TessPoint *_capturedPoint = nullptr;
-	VectorSprite *_pathFill = nullptr;
-	VectorSprite *_pathLines = nullptr;
-};
-
+	setAnchorPoint(Anchor::Middle);
+	setPosition(p);
+	setColor(Color::Red_500);
+	_point = p;
+	return true;
 }
 
-#endif /* UTILS_TESS_CANVAS_TESSCANVAS_H_ */
+void TessPoint::setPoint(const Vec2 &pt) {
+	_point = pt;
+	setPosition(pt);
+}
+
+}

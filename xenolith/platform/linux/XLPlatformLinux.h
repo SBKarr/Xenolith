@@ -191,9 +191,6 @@ public:
 
 	bool valid() const;
 
-	/*virtual bool isAvailableOnDevice(const Device &) const override;
-	virtual VkSurfaceKHR createWindowSurface() override;*/
-
 	virtual bool poll() override;
 
 	virtual int getSocketFd() const override { return _socket; }
