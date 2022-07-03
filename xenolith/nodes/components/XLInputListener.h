@@ -37,6 +37,7 @@ class InputListener : public Ref {
 public:
 	using EventMask = std::bitset<toInt(InputEventName::Max)>;
 	using ButtonMask = std::bitset<toInt(InputMouseButton::Max)>;
+	using KeyMask = std::bitset<toInt(InputKeyCode::Max)>;
 
 	template<typename T>
 	using InputCallback = Function<bool(GestureEvent, const T &)>;
@@ -75,7 +76,7 @@ public:
 	float getTouchPadding() const { return _touchPadding; }
 
 	void setExclusive();
-	void setExclusive(uint32_t eventId);
+	void setExclusiveForTouch(uint32_t eventId);
 
 	void setSwallowEvents(EventMask &&);
 	void setSwallowAllEvents();
@@ -93,6 +94,8 @@ public:
 	GestureRecognizer *addTapRecognizer(InputCallback<GestureTap> &&, ButtonMask && = makeButtonMask({InputMouseButton::MouseLeft}));
 	GestureRecognizer *addScrollRecognizer(InputCallback<GestureScroll> &&);
 	GestureRecognizer *addMoveRecognizer(InputCallback<InputEvent> &&);
+
+	GestureRecognizer *addKeyRecognizer(InputCallback<InputEvent> &&, KeyMask && = KeyMask());
 
 	void setPointerEnterCallback(Function<bool(bool)> &&);
 	void setBackgroudCallback(Function<bool(bool)> &&);

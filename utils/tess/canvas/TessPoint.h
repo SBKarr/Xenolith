@@ -29,13 +29,18 @@ namespace stappler::xenolith::tessapp {
 
 class TessPoint : public VectorSprite {
 public:
-	bool init(const Vec2 &p);
+	bool init(const Vec2 &p, uint32_t index);
 
 	void setPoint(const Vec2 &);
 	const Vec2 &getPoint() const { return _point; }
 
+	void setIndex(uint32_t index);
+	uint32_t getIndex() const { return _index; }
+
 protected:
+	uint32_t _index = 0;
 	Vec2 _point;
+	Label *_label = nullptr;
 };
 
 }

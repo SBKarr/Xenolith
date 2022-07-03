@@ -26,6 +26,7 @@
 #include "XLScene.h"
 #include "XLVertexArray.h"
 #include "XLScheduler.h"
+#include "XLActionManager.h"
 
 namespace stappler::xenolith {
 
@@ -39,7 +40,8 @@ bool Director::init(Application *app, gl::View *view) {
 	_pool = Rc<PoolRef>::alloc();
 	_pool->perform([&] {
 		_scheduler = Rc<Scheduler>::create();
-		_inputDispatcher = Rc<InputDispatcher>::create();
+		_actionManager = Rc<ActionManager>::create();
+		_inputDispatcher = Rc<InputDispatcher>::create(_view);
 	});
 	_startTime = _application->getClock();
 	_time.global = 0;
@@ -65,6 +67,10 @@ bool Director::init(Application *app, gl::View *view) {
 	updateGeneralTransform();
 
 	return true;
+}
+
+TextInputManager *Director::getTextInputManager() const {
+	return _inputDispatcher->getTextInputManager();
 }
 
 const Rc<ResourceCache> &Director::getResourceCache() const {

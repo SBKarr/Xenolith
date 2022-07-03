@@ -25,7 +25,8 @@ THE SOFTWARE.
 #if LINUX
 
 #include "XLApplication.h"
-#include "XLPlatformLinux.h"
+#include "XLPlatformLinuxWayland.h"
+#include "XLPlatformLinuxXcb.h"
 #include "XLVkInstance.h"
 
 #include <dlfcn.h>
@@ -42,14 +43,6 @@ struct FunctionTable : public vk::LoaderTable {
 			&& vkEnumerateInstanceLayerProperties != nullptr;
 	}
 };
-
-enum class SurfaceType : uint32_t {
-	None,
-	XCB = 1 << 0,
-	Wayland = 1 << 1,
-};
-
-SP_DEFINE_ENUM_AS_MASK(SurfaceType)
 
 static uint32_t s_InstanceVersion = 0;
 static Vector<VkLayerProperties> s_InstanceAvailableLayers;
@@ -135,6 +128,11 @@ Rc<gl::Instance> createInstance(Application *app) {
 	auto xcbLib = Rc<platform::XcbLibrary>::create();
 	if (xcbLib) {
 		osSurfaceType |= SurfaceType::XCB;
+	}
+
+	auto waylandLib = Rc<platform::WaylandLibrary>::create();
+	if (waylandLib) {
+		osSurfaceType |= SurfaceType::Wayland;
 	}
 
 	SurfaceType surfaceType = SurfaceType::None;
@@ -273,10 +271,14 @@ Rc<gl::Instance> createInstance(Application *app) {
 	auto vkInstance = Rc<vk::Instance>::alloc(instance, table.vkGetInstanceProcAddr, targetVersion, move(enabledOptionals),
 			[handle] {
 		::dlclose(handle);
-	}, [surfaceType, xcbLib] (const vk::Instance *instance, VkPhysicalDevice device, uint32_t queueIdx) {
+	}, [surfaceType, xcbLib, waylandLib] (const vk::Instance *instance, VkPhysicalDevice device, uint32_t queueIdx) {
 		uint32_t ret = 0;
 		if ((surfaceType & SurfaceType::Wayland) != SurfaceType::None) {
-
+			auto display = waylandLib->getActiveConnection().display;
+			auto supports = instance->vkGetPhysicalDeviceWaylandPresentationSupportKHR(device, queueIdx, display);
+			if (supports) {
+				ret |= toInt(SurfaceType::Wayland);
+			}
 		}
 		if ((surfaceType & SurfaceType::XCB) != SurfaceType::None) {
 			auto conn = xcbLib->getActiveConnection();

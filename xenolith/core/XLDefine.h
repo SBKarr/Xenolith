@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "XLForward.h"
 #include "XLProfiling.h"
 #include "XLGraphics.h"
+#include "XLInput.h"
 
 namespace stappler::xenolith {
 

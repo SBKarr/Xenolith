@@ -24,6 +24,7 @@
 #define XENOLITH_CORE_DIRECTOR_XLINPUTDISPATCHER_H_
 
 #include "XLInputListener.h"
+#include "XLTextInputManager.h"
 
 namespace stappler::xenolith {
 
@@ -44,7 +45,7 @@ class InputDispatcher : public Ref {
 public:
 	virtual ~InputDispatcher() { }
 
-	bool init();
+	bool init(gl::View *);
 
 	void update(const UpdateTime &time);
 
@@ -56,7 +57,10 @@ public:
 	Vector<InputEventData> getActiveEvents() const;
 
 	void setListenerExclusive(const InputListener *l);
-	void setListenerExclusive(const InputListener *l, uint32_t);
+	void setListenerExclusiveForTouch(const InputListener *l, uint32_t);
+	void setListenerExclusiveForKey(const InputListener *l, InputKeyCode);
+
+	const Rc<TextInputManager> &getTextInputManager() const { return _textInput; }
 
 protected:
 	InputEvent getEventInfo(const InputEventData &) const;
@@ -66,7 +70,10 @@ protected:
 
 	uint64_t _currentTime = 0;
 	HashMap<uint32_t, Pair<InputEvent, Vector<Rc<InputListener>>>> _activeEvents;
+	HashMap<InputKeyCode, Pair<InputEvent, Vector<Rc<InputListener>>>> _activeKeys;
 	Rc<InputListenerStorage> _events;
+	Rc<InputListenerStorage> _tmpEvents;
+	Rc<TextInputManager> _textInput;
 };
 
 template <typename Callback>

@@ -20,32 +20,32 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_PLATFORM_COMMON_XLEVENTLOOP_H_
-#define XENOLITH_PLATFORM_COMMON_XLEVENTLOOP_H_
+#ifndef XENOLITH_NODES_XLSTRICTNODE_H_
+#define XENOLITH_NODES_XLSTRICTNODE_H_
 
-#include "XLDefine.h"
-
-
-namespace stappler::xenolith::gl {
-
-class View;
-
-}
+#include "XLNode.h"
 
 namespace stappler::xenolith {
 
-class EventLoopInterface : public Ref {
+class StrictNode : public Node {
 public:
-	// false on timeout (or signal/error), true on wakeup
-	virtual bool poll(uint64_t microsecondsTimeout) = 0;
-	virtual void wakeup() = 0;
+	virtual bool init() override;
 
-	virtual void addView(gl::View *) = 0;
-	virtual void removeView(gl::View *) = 0;
+	virtual bool isClippingEnabled() const { return _isClippingEnabled; }
+	virtual void setClippingEnabled(bool value);
 
-	virtual void end() = 0;
+	virtual bool isClipOnlyNodesBelow() const { return _clipOnlyNodesBelow; }
+	virtual void setClipOnlyNodesBelow(bool value);
+
+	virtual void setOutline(const Padding &);
+	virtual Padding getOutline() const { return _outline; }
+
+protected:
+	bool _isClippingEnabled = true;
+	bool _clipOnlyNodesBelow = false;
+	Padding _outline;
 };
 
 }
 
-#endif /* XENOLITH_PLATFORM_COMMON_XLEVENTLOOP_H_ */
+#endif /* XENOLITH_NODES_XLSTRICTNODE_H_ */

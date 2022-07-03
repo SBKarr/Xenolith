@@ -26,6 +26,7 @@
 #include "TessCursor.h"
 #include "XLGlView.h"
 #include "XLDirector.h"
+#include "SPFilesystem.h"
 
 namespace stappler::xenolith::tessapp {
 
@@ -52,6 +53,18 @@ bool TessCanvas::init() {
 		return true;
 	});
 
+	InputListener::KeyMask keys;
+	keys.set(toInt(InputKeyCode::W));
+	keys.set(toInt(InputKeyCode::A));
+	keys.set(toInt(InputKeyCode::S));
+	keys.set(toInt(InputKeyCode::D));
+
+	inputListener->addKeyRecognizer([this] (GestureEvent event, const InputEvent &ev) {
+		std::cout << event << " " << ev.data.key.keycode << " (" << ev.data.key.keysym << ")\n";
+
+		return true;
+	}, move(keys));
+
 	inputListener->setPointerEnterCallback([this] (bool pointerEnter) {
 		return onPointerEnter(pointerEnter);
 	});
@@ -66,12 +79,31 @@ bool TessCanvas::init() {
 	_pathFill->setColor(Color::Blue_100);
 	_pathFill->setPosition(Vec2(0.0f, 0.0f));
 	_pathFill->setVisible(false);
+	_pathFill->setOpacity(0.5f);
+	_pathFill->setRenderingLevel(RenderingLevel::Transparent);
 
 	_pathLines = addChild(Rc<VectorSprite>::create(Size2(0, 0)), 2);
 	_pathLines->setColor(Color::Green_500);
 	_pathLines->setPosition(Vec2(0.0f, 0.0f));
 	_pathLines->setLineWidth(1.0f);
 	_pathLines->setVisible(false);
+	//_pathLines->setRenderingLevel(RenderingLevel::Surface);
+
+	auto path = filesystem::writablePath<Interface>("path.cbor");
+	filesystem::mkdir(filepath::root(path));
+	if (filesystem::exists(path)) {
+		auto val = data::readFile<Interface>(path);
+		for (auto &it : val.asArray()) {
+			Vec2 point(it.getDouble(0), it.getDouble(1));
+			auto pt = Rc<TessPoint>::create(point, _points.size());
+
+			_points.emplace_back(addChild(move(pt), 10));
+		}
+	}
+
+	if (!_points.empty()) {
+		updatePoints();
+	}
 
 	return true;
 }
@@ -184,6 +216,11 @@ void TessCanvas::onActionTouch(const InputEvent &ev) {
 				(*it)->removeFromParent();
 				it = _points.erase(it);
 				updatePoints();
+
+				while (it != _points.end()) {
+					(*it)->setIndex((*it)->getIndex() - 1);
+					++ it;
+				}
 				return;
 			} else {
 				++ it;
@@ -191,7 +228,7 @@ void TessCanvas::onActionTouch(const InputEvent &ev) {
 		}
 	} else {
 		auto loc = convertToNodeSpace(ev.currentLocation);
-		auto pt = Rc<TessPoint>::create(loc);
+		auto pt = Rc<TessPoint>::create(loc, _points.size());
 
 		_points.emplace_back(addChild(move(pt), 10));
 		updatePoints();
@@ -226,6 +263,16 @@ void TessCanvas::updatePoints() {
 		_pathFill->setVisible(false);
 		_pathLines->setVisible(false);
 	}
+
+	auto path = filesystem::writablePath<Interface>("path.cbor");
+	filesystem::remove(path);
+
+	Value val;
+	for (auto &it : _points) {
+		val.addValue(Value({ Value(it->getPoint().x), Value(it->getPoint().y)}));
+	}
+
+	data::save(val, path,data::EncodeFormat::Cbor);
 }
 
 }

@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "XLScene.h"
 #include "XLDirector.h"
 #include "XLScheduler.h"
+#include "XLActionManager.h"
 
 namespace stappler::xenolith {
 
@@ -409,6 +410,62 @@ void Node::sortAllChildren() {
 	}
 }
 
+void Node::runActionObject(Action *action) {
+	XLASSERT( action != nullptr, "Argument must be non-nil");
+	if (_actionManager) {
+		_actionManager->addAction(action, this, !_running);
+	}
+}
+
+void Node::runActionObject(Action *action, uint32_t tag) {
+	if (action) {
+		action->setTag(tag);
+	}
+	runActionObject(action);
+}
+
+void Node::stopAllActions() {
+	if (_actionManager) {
+		_actionManager->removeAllActionsFromTarget(this);
+	}
+}
+
+void Node::stopAction(Action *action) {
+	if (_actionManager) {
+		_actionManager->removeAction(action);
+	}
+}
+
+void Node::stopActionByTag(uint32_t tag) {
+	XLASSERT(tag != Action::INVALID_TAG, "Invalid tag");
+	if (_actionManager) {
+		_actionManager->removeActionByTag(tag, this);
+	}
+}
+
+void Node::stopAllActionsByTag(uint32_t tag) {
+	XLASSERT(tag != Action::INVALID_TAG, "Invalid tag");
+	if (_actionManager) {
+		_actionManager->removeAllActionsByTag(tag, this);
+	}
+}
+
+Action* Node::getActionByTag(uint32_t tag) {
+	XLASSERT(tag != Action::INVALID_TAG, "Invalid tag");
+	if (_actionManager) {
+		return _actionManager->getActionByTag(tag, this);
+	}
+	return nullptr;
+}
+
+size_t Node::getNumberOfRunningActions() const {
+	if (_actionManager) {
+		return _actionManager->getNumberOfRunningActionsInTarget(this);
+	}
+	return 0;
+}
+
+
 void Node::setTag(uint64_t tag) {
 	_tag = tag;
 }
@@ -547,7 +604,20 @@ bool Node::removeInputListener(InputListener *input) {
 void Node::onEnter(Scene *scene) {
 	_scene = scene;
 	_director = scene->getDirector();
-	_scheduler = _director->getScheduler();
+
+	if (_scheduler != _director->getScheduler()) {
+		if (_scheduler) {
+			_scheduler->unschedule(this);
+		}
+		_scheduler = _director->getScheduler();
+	}
+
+	if (_actionManager != _director->getActionManager()) {
+		if (_actionManager) {
+			_actionManager->removeAllActionsFromTarget(this);
+		}
+		_actionManager = _director->getActionManager();
+	}
 
 	if (_onEnterCallback) {
 		_onEnterCallback(scene);
@@ -601,7 +671,6 @@ void Node::onExit() {
 
 	_scene = nullptr;
 	_director = nullptr;
-	_scheduler = nullptr;
 }
 
 void Node::onContentSizeDirty() {
@@ -635,7 +704,8 @@ void Node::onReorderChildDirty() {
 }
 
 void Node::cleanup() {
-	// this->stopAllActions();
+	this->stopAllActions();
+	this->unscheduleUpdate();
 
 	for (auto &child : _children) {
 		child->cleanup();
@@ -652,15 +722,15 @@ void Node::resume() {
 		_paused = false;
 		if (_running && _scheduled) {
 			_scheduler->resume(this);
+			_actionManager->resumeTarget(this);
 		}
 	}
-	// _actionManager->resumeTarget(this);
 }
 
 void Node::pause() {
-	// _actionManager->pauseTarget(this);
 	if (!_paused) {
 		if (_running && _scheduled) {
+			_actionManager->pauseTarget(this);
 			_scheduler->pause(this);
 		}
 		_paused = true;
@@ -813,6 +883,10 @@ void Node::setCascadeColorEnabled(bool cascadeColorEnabled) {
 void Node::setOpacity(float opacity) {
 	_displayedColor.a = _realColor.a = opacity;
 	updateCascadeOpacity();
+}
+
+void Node::setOpacity(OpacityValue value) {
+	setOpacity(255.0f / value.get());
 }
 
 void Node::updateDisplayedOpacity(float parentOpacity) {

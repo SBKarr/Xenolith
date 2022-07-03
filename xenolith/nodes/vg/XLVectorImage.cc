@@ -27,8 +27,7 @@
 namespace stappler::xenolith {
 
 void VectorCanvasResult::updateColor(const Color4F &color) {
-	auto origin = Vec4(targetColor.r, targetColor.g, targetColor.b, targetColor.a);
-	auto target = Vec4(color.r, color.g, color.b, color.a);
+	auto target = Vec4(color.r, color.g, color.b, color.a) / Vec4(targetColor.r, targetColor.g, targetColor.b, targetColor.a);
 	for (auto &it : data) {
 		auto data = Rc<gl::VertexData>::alloc();
 		data->data = it.second->data;
@@ -37,9 +36,10 @@ void VectorCanvasResult::updateColor(const Color4F &color) {
 		it.second = move(data);
 
 		for (auto &iit : it.second->data) {
-			iit.color = (iit.color / origin) * target;
+			iit.color = iit.color * target;
 		}
 	}
+	targetColor = Color4F(color.r, color.g, color.b, color.a);
 }
 
 bool VectorPathRef::init(VectorImage *image, const String &id, const Rc<VectorPath> &path) {
@@ -493,12 +493,12 @@ uint16_t VectorImageData::getNextId() {
 	return ret;
 }
 
-Rc<VectorPath> VectorImageData::addPath(StringView id, VectorPath &&path, Mat4 mat) {
+Rc<VectorPath> VectorImageData::addPath(StringView id, StringView cache, VectorPath &&path, Mat4 mat) {
 	Rc<VectorPath> ret;
 	auto it = _paths.find(id);
 	if (it == _paths.end()) {
 		ret = _paths.emplace(id.str<Interface>(), Rc<VectorPath>::alloc(move(path))).first->second;
-		_order.emplace_back(vg::PathXRef{id.str<Interface>(), mat});
+		_order.emplace_back(vg::PathXRef{id.str<Interface>(), cache.str<Interface>(), mat});
 	} else {
 		ret = it->second = Rc<VectorPath>::alloc(move(path));
 		bool found = false;
@@ -509,7 +509,7 @@ Rc<VectorPath> VectorImageData::addPath(StringView id, VectorPath &&path, Mat4 m
 			}
 		}
 		if (!found) {
-			_order.emplace_back(vg::PathXRef{id.str<Interface>(), mat});
+			_order.emplace_back(vg::PathXRef{id.str<Interface>(), cache.str<Interface>(), mat});
 		}
 	}
 
@@ -643,11 +643,11 @@ Rect VectorImage::getViewBox() const {
 	return _data->getViewBox();
 }
 
-Rc<VectorPathRef> VectorImage::addPath(const VectorPath &path, StringView tag, Mat4 vec) {
-	return addPath(VectorPath(path), tag, vec);
+Rc<VectorPathRef> VectorImage::addPath(const VectorPath &path, StringView tag, StringView cache, Mat4 vec) {
+	return addPath(VectorPath(path), tag, cache, vec);
 }
 
-Rc<VectorPathRef> VectorImage::addPath(VectorPath &&path, StringView tag, Mat4 vec) {
+Rc<VectorPathRef> VectorImage::addPath(VectorPath &&path, StringView tag, StringView cache, Mat4 vec) {
 	if (_copyOnWrite) {
 		copy();
 	}
@@ -658,7 +658,7 @@ Rc<VectorPathRef> VectorImage::addPath(VectorPath &&path, StringView tag, Mat4 v
 		tag = idStr;
 	}
 
-	auto pathObj = _data->addPath(tag, move(path), vec);
+	auto pathObj = _data->addPath(tag, cache, move(path), vec);
 
 	setDirty();
 
@@ -672,8 +672,8 @@ Rc<VectorPathRef> VectorImage::addPath(VectorPath &&path, StringView tag, Mat4 v
 	}
 }
 
-Rc<VectorPathRef> VectorImage::addPath(StringView tag, Mat4 vec) {
-	return addPath(VectorPath(), tag, vec);
+Rc<VectorPathRef> VectorImage::addPath(StringView tag, StringView cache, Mat4 vec) {
+	return addPath(VectorPath(), tag, cache, vec);
 }
 
 Rc<VectorPathRef> VectorImage::getPath(StringView tag) const {

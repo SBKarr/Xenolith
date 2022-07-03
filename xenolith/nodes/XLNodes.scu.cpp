@@ -36,3 +36,6 @@ THE SOFTWARE.
 #include "XLVectorPath.cc"
 #include "XLVectorImage.cc"
 #include "XLVectorSprite.cc"
+
+#include "XLStrictNode.cc"
+//#include "XLInputLabel.cc"

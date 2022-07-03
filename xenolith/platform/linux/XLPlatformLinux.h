@@ -29,95 +29,69 @@
 
 #include "XLVkView.h"
 
-#include <xcb/xcb.h>
-#include <xcb/randr.h>
+#include <xkbcommon/xkbcommon.h>
+#include <xkbcommon/xkbcommon-x11.h>
 
 namespace stappler::xenolith::platform {
 
-class XcbLibrary : public Ref {
+enum class SurfaceType : uint32_t {
+	None,
+	XCB = 1 << 0,
+	Wayland = 1 << 1,
+};
+
+SP_DEFINE_ENUM_AS_MASK(SurfaceType)
+
+static constexpr uint32_t INVALID_CODEPOINT = 0xffffffffu;
+
+/* We use GLFW mapping table for keysyms */
+SP_EXTERN_C uint32_t _glfwKeySym2Unicode(unsigned int keysym);
+
+class XkbLibrary : public Ref {
 public:
-	static constexpr int RANDR_MAJOR_VERSION = XCB_RANDR_MAJOR_VERSION;
-	static constexpr int RANDR_MINOR_VERSION = XCB_RANDR_MINOR_VERSION;
+	static XkbLibrary *getInstance();
 
-	struct ConnectionData {
-		int screen_nbr = -1;
-		xcb_connection_t *connection = nullptr;
-		const xcb_setup_t *setup = nullptr;
-		xcb_screen_t *screen = nullptr;
-	};
+	XkbLibrary() { }
 
-	static XcbLibrary *getInstance();
-
-	XcbLibrary() { }
-
-	virtual ~XcbLibrary();
+	virtual ~XkbLibrary();
 
 	bool init();
-
-	bool open(void *handle);
 	void close();
 
-	bool hasRandr() const { return _randr; }
+	bool hasX11() const { return _x11; }
 
-	xcb_connection_t * (* xcb_connect) (const char *displayname, int *screenp) = nullptr;
-	const struct xcb_setup_t * (* xcb_get_setup) (xcb_connection_t *c) = nullptr;
-	xcb_screen_iterator_t (* xcb_setup_roots_iterator) (const xcb_setup_t *R) = nullptr;
-	void (* xcb_screen_next) (xcb_screen_iterator_t *i) = nullptr;
+	struct xkb_context *getContext() const { return _context; }
 
-	int (* xcb_connection_has_error) (xcb_connection_t *c) = nullptr;
-	int (* xcb_get_file_descriptor) (xcb_connection_t *c) = nullptr;
-	uint32_t (* xcb_generate_id) (xcb_connection_t *c) = nullptr;
-	int (*xcb_flush) (xcb_connection_t *c) = nullptr;
-	void (* xcb_disconnect) (xcb_connection_t *c) = nullptr;
-	xcb_generic_event_t * (* xcb_poll_for_event) (xcb_connection_t *c) = nullptr;
+	struct xkb_context * (* xkb_context_new) (enum xkb_context_flags flags) = nullptr;
+	struct xkb_context * (* xkb_context_ref) (struct xkb_context *context) = nullptr;
+	void (* xkb_context_unref)  (struct xkb_context *context) = nullptr;
+	void (* xkb_keymap_unref) (struct xkb_keymap *keymap) = nullptr;
+	void (* xkb_state_unref) (struct xkb_state *state) = nullptr;
+	enum xkb_state_component (* xkb_state_update_mask) (struct xkb_state *, xkb_mod_mask_t depressed_mods,
+			xkb_mod_mask_t latched_mods, xkb_mod_mask_t locked_mods, xkb_layout_index_t depressed_layout,
+			xkb_layout_index_t latched_layout, xkb_layout_index_t locked_layout) = nullptr;
+	int (* xkb_state_key_get_utf8) (struct xkb_state *state, xkb_keycode_t key, char *buffer, size_t size) = nullptr;
+	uint32_t (* xkb_state_key_get_utf32) (struct xkb_state *state, xkb_keycode_t key) = nullptr;
+	xkb_keysym_t (* xkb_state_key_get_one_sym) (struct xkb_state *state, xkb_keycode_t key) = nullptr;
+	void (* xkb_keymap_key_for_each) (struct xkb_keymap *keymap, xkb_keymap_key_iter_t iter, void *data) = nullptr;
+	const char * (* xkb_keymap_key_get_name) (struct xkb_keymap *keymap, xkb_keycode_t key) = nullptr;
 
-	xcb_void_cookie_t (* xcb_map_window) (xcb_connection_t *c, xcb_window_t window) = nullptr;
-
-	xcb_void_cookie_t (* xcb_create_window) (xcb_connection_t *c, uint8_t depth, xcb_window_t wid,
-		xcb_window_t parent, int16_t x, int16_t y, uint16_t width, uint16_t height, uint16_t border_width,
-		uint16_t _class, xcb_visualid_t visual, uint32_t value_mask, const void *value_list) = nullptr;
-
-	xcb_void_cookie_t (* xcb_change_property) (xcb_connection_t *c, uint8_t mode, xcb_window_t window,
-			xcb_atom_t property, xcb_atom_t type, uint8_t format, uint32_t data_len, const void *data) = nullptr;
-
-	xcb_intern_atom_cookie_t (* xcb_intern_atom) (xcb_connection_t *c, uint8_t only_if_exists,
-			uint16_t name_len,const char *name) = nullptr;
-
-	xcb_intern_atom_reply_t * (* xcb_intern_atom_reply) (xcb_connection_t *c, xcb_intern_atom_cookie_t cookie,
-			xcb_generic_error_t **e) = nullptr;
-
-	void * (* xcb_wait_for_reply) (xcb_connection_t *c, unsigned int request, xcb_generic_error_t **e) = nullptr;
-
-	xcb_randr_query_version_cookie_t (* xcb_randr_query_version) (xcb_connection_t *c,
-			uint32_t major_version, uint32_t minor_version) = nullptr;
-	xcb_randr_query_version_reply_t * (* xcb_randr_query_version_reply) (xcb_connection_t *c,
-			xcb_randr_query_version_cookie_t cookie, xcb_generic_error_t **e) = nullptr;
-	xcb_randr_get_screen_info_cookie_t (* xcb_randr_get_screen_info_unchecked) (xcb_connection_t *c,
-			xcb_window_t window) = nullptr;
-	xcb_randr_get_screen_info_reply_t * (* xcb_randr_get_screen_info_reply) (xcb_connection_t *c,
-			xcb_randr_get_screen_info_cookie_t cookie, xcb_generic_error_t **e) = nullptr;
-
-	xcb_randr_screen_size_t * (* xcb_randr_get_screen_info_sizes) (const xcb_randr_get_screen_info_reply_t *) = nullptr;
-	int (* xcb_randr_get_screen_info_sizes_length) (const xcb_randr_get_screen_info_reply_t *) = nullptr;
-	xcb_randr_screen_size_iterator_t (* xcb_randr_get_screen_info_sizes_iterator) (const xcb_randr_get_screen_info_reply_t *) = nullptr;
-
-	int (* xcb_randr_get_screen_info_rates_length) (const xcb_randr_get_screen_info_reply_t *) = nullptr;
-	xcb_randr_refresh_rates_iterator_t (* xcb_randr_get_screen_info_rates_iterator) (const xcb_randr_get_screen_info_reply_t *) = nullptr;
-	void (* xcb_randr_refresh_rates_next) (xcb_randr_refresh_rates_iterator_t *) = nullptr;
-	uint16_t * (* xcb_randr_refresh_rates_rates) (const xcb_randr_refresh_rates_t *);
-	int (* xcb_randr_refresh_rates_rates_length) (const xcb_randr_refresh_rates_t *);
-
-	ConnectionData acquireConnection();
-	ConnectionData getActiveConnection();
+	int (* xkb_x11_setup_xkb_extension) (xcb_connection_t *connection, uint16_t major_xkb_version, uint16_t minor_xkb_version,
+			enum xkb_x11_setup_xkb_extension_flags flags, uint16_t *major_xkb_version_out, uint16_t *minor_xkb_version_out,
+			uint8_t *base_event_out, uint8_t *base_error_out) = nullptr;
+	int32_t (* xkb_x11_get_core_keyboard_device_id) (xcb_connection_t *connection) = nullptr;
+	struct xkb_keymap * (* xkb_x11_keymap_new_from_device) (struct xkb_context *context,
+			xcb_connection_t *connection, int32_t device_id, enum xkb_keymap_compile_flags flags) = nullptr;
+	struct xkb_state * (* xkb_x11_state_new_from_device) (struct xkb_keymap *keymap,
+			xcb_connection_t *connection, int32_t device_id) = nullptr;
 
 protected:
+	bool open(void *);
+	void openAux();
+
 	void *_handle = nullptr;
-	void *_randr = nullptr;
-
-	void openConnection(ConnectionData &data);
-
-	ConnectionData _pending;
-	ConnectionData _current;
+	void *_x11 = nullptr;
+	struct xkb_context *_context = nullptr;
 };
 
 class LinuxViewInterface : public Ref {
@@ -129,6 +103,10 @@ public:
 
 	virtual bool poll() = 0;
 	virtual uint64_t getScreenFrameInterval() const = 0;
+
+	virtual void mapWindow() = 0;
+
+	virtual void onSurfaceInfo(gl::SurfaceInfo &) const { }
 };
 
 class ViewImpl : public vk::View {
@@ -144,6 +122,12 @@ public:
 
 	virtual void wakeup() override;
 
+	virtual void updateTextCursor(uint32_t pos, uint32_t len) override;
+	virtual void updateTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) override;
+	virtual void runTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) override;
+	virtual void cancelTextInput() override;
+
+	bool isInputEnabled() const { return _inputEnabled; }
 	LinuxViewInterface *getView() const { return _view; }
 
 	vk::Device *getDevice() const { return _device; }
@@ -151,68 +135,18 @@ public:
 	// minimal poll interval
 	virtual uint64_t getUpdateInterval() const override { return 1000; }
 
+	virtual void mapWindow() override;
+
 protected:
 	virtual bool pollInput() override;
+
+	virtual gl::SurfaceInfo getSurfaceOptions() const override;
 
 	Rc<LinuxViewInterface> _view;
 	URect _rect;
 	String _name;
 	int _eventFd = -1;
-};
-
-struct XcbAtomRequest {
-	StringView name;
-	bool onlyIfExists;
-};
-
-static XcbAtomRequest s_atomRequests[] = {
-	{ "WM_PROTOCOLS", true },
-	{ "WM_DELETE_WINDOW", false },
-	{ "WM_NAME", false },
-	{ "WM_ICON_NAME", false },
-};
-
-class XcbView : public LinuxViewInterface {
-public:
-	struct ScreenInfo {
-	    uint16_t width;
-	    uint16_t height;
-	    uint16_t mwidth;
-	    uint16_t mheight;
-	    Vector<uint16_t> rates;
-	};
-
-	static void ReportError(int error);
-
-	XcbView(XcbLibrary *, ViewImpl *, StringView, URect);
-	virtual ~XcbView();
-
-	virtual VkSurfaceKHR createWindowSurface(vk::Instance *instance) const override;
-
-	bool valid() const;
-
-	virtual bool poll() override;
-
-	virtual int getSocketFd() const override { return _socket; }
-
-	virtual uint64_t getScreenFrameInterval() const override;
-
-protected:
-	Vector<ScreenInfo> getScreenInfo() const;
-
-	Rc<XcbLibrary> _xcb;
-	ViewImpl *_view = nullptr;
-	xcb_connection_t *_connection = nullptr;
-	xcb_screen_t *_defaultScreen = nullptr;
-	uint32_t _window = 0;
-
-	xcb_atom_t _atoms[sizeof(s_atomRequests) / sizeof(XcbAtomRequest)];
-
-	uint16_t _width = 0;
-	uint16_t _height = 0;
-	uint16_t _rate = 60;
-
-	int _socket = -1;
+	bool _inputEnabled = false;
 };
 
 }

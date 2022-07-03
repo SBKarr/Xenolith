@@ -31,6 +31,8 @@ class Component;
 class Scene;
 class Scheduler;
 class InputListener;
+class Action;
+class ActionManager;
 
 class Node : public Ref {
 public:
@@ -143,6 +145,43 @@ public:
 	 */
 	virtual void sortAllChildren();
 
+	template <typename A>
+	auto runAction(A *action) -> A * {
+		runActionObject(action);
+		return action;
+	}
+
+	template <typename A>
+	auto runAction(A *action, uint32_t tag) -> A * {
+		runActionObject(action, tag);
+		return action;
+	}
+
+	template <typename A>
+	auto runAction(const Rc<A> &action) -> A * {
+		runActionObject(action.get());
+		return action.get();
+	}
+
+	template <typename A>
+	auto runAction(const Rc<A> &action, uint32_t tag) -> A * {
+		runActionObject(action.get(), tag);
+		return action.get();
+	}
+
+	void runActionObject(Action *);
+	void runActionObject(Action *, uint32_t tag);
+
+	void stopAllActions();
+
+	void stopAction(Action *action);
+	void stopActionByTag(uint32_t tag);
+	void stopAllActionsByTag(uint32_t tag);
+
+	Action* getActionByTag(uint32_t tag);
+	size_t getNumberOfRunningActions() const;
+
+
 	template <typename C>
 	auto addComponent(C *component) -> C * {
 		if (addComponentItem(component)) {
@@ -228,6 +267,7 @@ public:
 	virtual float getOpacity() const { return _realColor.a; }
 	virtual float getDisplayedOpacity() const { return _displayedColor.a; }
 	virtual void setOpacity(float opacity);
+	virtual void setOpacity(OpacityValue);
 	virtual void updateDisplayedOpacity(float parentOpacity);
 
 	virtual Color4F getColor() const { return _realColor; }
@@ -252,6 +292,9 @@ public:
 	virtual void setOnContentSizeDirtyCallback(Function<void()> &&);
 	virtual void setOnTransformDirtyCallback(Function<void(const Mat4 &)> &&);
 	virtual void setOnReorderChildDirtyCallback(Function<void()> &&);
+
+	Scheduler *getScheduler() const { return _scheduler; }
+	ActionManager *getActionManager() const { return _actionManager; }
 
 protected:
 	virtual void updateCascadeOpacity();
@@ -314,6 +357,7 @@ protected:
 	Scene *_scene = nullptr;
 	Director *_director = nullptr;
 	Scheduler *_scheduler = nullptr;
+	ActionManager *_actionManager = nullptr;
 };
 
 }

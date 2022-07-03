@@ -541,7 +541,7 @@ void SvgReader::onInlineTag(Parser &p, Tag &tag) {
 				if (tag.mat.isIdentity()) {
 					_drawOrder.emplace_back(PathXRef{ref.str<Interface>()});
 				} else {
-					_drawOrder.emplace_back(PathXRef{ref.str<Interface>(), tag.mat});
+					_drawOrder.emplace_back(PathXRef{ref.str<Interface>(), String(), tag.mat});
 				}
 			}
 		}

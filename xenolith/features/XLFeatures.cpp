@@ -28,4 +28,7 @@ THE SOFTWARE.
 #include "XLFontFace.cc"
 #include "XLLabelParameters.cc"
 
+#include "XLActionManager.cc"
+#include "XLAction.cc"
+
 #include "XLLocale.cc"

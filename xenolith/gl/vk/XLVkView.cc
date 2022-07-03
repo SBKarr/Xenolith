@@ -144,7 +144,7 @@ void View::threadInit() {
 	_threadId = std::this_thread::get_id();
 	_shouldQuit.test_and_set();
 
-	auto info = _instance->getSurfaceOptions(_surface->getSurface(), _device->getPhysicalDevice());
+	auto info = getSurfaceOptions();
 
 	std::cout << info.description() << "\n";
 
@@ -156,6 +156,8 @@ void View::threadInit() {
 		presentImmediate(move(_initImage));
 		_initImage = nullptr;
 	}
+
+	mapWindow();
 
 	scheduleSwapchainImage(_frameInterval);
 }
@@ -477,8 +479,16 @@ void View::scheduleFence(Rc<Fence> &&fence) {
 	}
 }
 
+void View::mapWindow() {
+
+}
+
 bool View::pollInput() {
 	return false;
+}
+
+gl::SurfaceInfo View::getSurfaceOptions() const {
+	return _instance->getSurfaceOptions(_surface->getSurface(), _device->getPhysicalDevice());
 }
 
 void View::invalidate() {
@@ -557,7 +567,7 @@ bool View::recreateSwapchain(gl::PresentMode mode) {
 		renderqueue::FrameHandle::DescribeActiveFrames();
 	}
 
-	auto info = _instance->getSurfaceOptions(_surface->getSurface(), _device->getPhysicalDevice());
+	auto info = getSurfaceOptions();
 	auto cfg = _selectConfig(info);
 
 	if (!info.isSupported(cfg)) {

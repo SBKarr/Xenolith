@@ -151,7 +151,7 @@ public:
 
 	uint16_t getNextId();
 
-	Rc<VectorPath> addPath(StringView, VectorPath &&, Mat4 mat = Mat4::IDENTITY);
+	Rc<VectorPath> addPath(StringView id, StringView cacheId, VectorPath &&, Mat4 mat = Mat4::IDENTITY);
 	void removePath(StringView);
 
 	void clear();
@@ -200,9 +200,9 @@ public:
 
 	Rect getViewBox() const;
 
-	Rc<VectorPathRef> addPath(const VectorPath &, StringView = StringView(), Mat4 = Mat4::IDENTITY);
-	Rc<VectorPathRef> addPath(VectorPath &&, StringView = StringView(), Mat4 = Mat4::IDENTITY);
-	Rc<VectorPathRef> addPath(StringView = StringView(), Mat4 = Mat4::IDENTITY);
+	Rc<VectorPathRef> addPath(const VectorPath &, StringView id = StringView(), StringView cache = StringView(), Mat4 = Mat4::IDENTITY);
+	Rc<VectorPathRef> addPath(VectorPath &&, StringView id = StringView(), StringView cache = StringView(), Mat4 = Mat4::IDENTITY);
+	Rc<VectorPathRef> addPath(StringView id = StringView(), StringView cache = StringView(), Mat4 = Mat4::IDENTITY);
 
 	Rc<VectorPathRef> getPath(StringView) const;
 	const Map<String, Rc<VectorPathRef>> &getPaths() const { return _paths; }
@@ -249,7 +249,7 @@ void VectorImageData::draw(const Callback &cb) const {
 	for (auto &it : _order) {
 		auto pathIt = _paths.find(it.id);
 		if (pathIt != _paths.end()) {
-			cb(*pathIt->second, it.mat);
+			cb(*pathIt->second, it.cacheId, it.mat);
 		}
 	}
 }

@@ -101,7 +101,9 @@ void View::setScreenExtent(Extent2 e) {
 
 void View::handleInputEvent(const InputEventData &event) {
 	_loop->getApplication()->performOnMainThread([this, event = event] () mutable {
-		event.density = getDensity();
+		if (event.isPointEvent()) {
+			event.point.density = getDensity();
+		}
 
 		switch (event.event) {
 		case InputEventName::Background:

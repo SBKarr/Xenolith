@@ -21,12 +21,15 @@
  **/
 
 #include "TessPoint.h"
+#include "TessAppDelegate.h"
+
+#include "XLLabel.h"
 
 namespace stappler::xenolith::tessapp {
 
-bool TessPoint::init(const Vec2 &p) {
+bool TessPoint::init(const Vec2 &p, uint32_t index) {
 	auto image = Rc<VectorImage>::create(Size2(10, 10));
-	image->addPath()
+	image->addPath("", "org.stappler.xenolith.tess.TessPoint")
 		->setFillColor(Color::White)
 		.addOval(Rect(0, 0, 10, 10))
 		.setAntialiased(false);
@@ -35,16 +38,36 @@ bool TessPoint::init(const Vec2 &p) {
 		return false;
 	}
 
+	auto app = (AppDelegate *)Application::getInstance();
+	auto fontController = app->getFontController();
+
+	_label = addChild(Rc<Label>::create(fontController));
+	_label->setFontSize(12);
+	_label->setFontFamily("monospace");
+	_label->setFontWeight(Label::FontWeight::Bold);
+	_label->setColor(Color::Black, true);
+	_label->setString(toString(index, "; ", p.x, " ", p.y));
+	_label->setPosition(Vec2(12, 12));
+
 	setAnchorPoint(Anchor::Middle);
 	setPosition(p);
 	setColor(Color::Red_500);
 	_point = p;
+	_index = index;
 	return true;
 }
 
 void TessPoint::setPoint(const Vec2 &pt) {
 	_point = pt;
 	setPosition(pt);
+	_label->setString(toString(_index, "; ", _point.x, " ", _point.y));
+}
+
+void TessPoint::setIndex(uint32_t index) {
+	if (_index != index) {
+		_label->setString(toString(index, "; ", _point.x, " ", _point.y));
+		_index = index;
+	}
 }
 
 }

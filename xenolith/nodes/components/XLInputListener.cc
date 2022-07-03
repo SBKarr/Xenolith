@@ -92,9 +92,9 @@ void InputListener::setExclusive() {
 	}
 }
 
-void InputListener::setExclusive(uint32_t eventId) {
+void InputListener::setExclusiveForTouch(uint32_t eventId) {
 	if (_scene) {
-		_scene->getDirector()->getInputDispatcher()->setListenerExclusive(this, eventId);
+		_scene->getDirector()->getInputDispatcher()->setListenerExclusiveForTouch(this, eventId);
 	}
 }
 
@@ -177,6 +177,12 @@ GestureRecognizer *InputListener::addScrollRecognizer(InputCallback<GestureScrol
 
 GestureRecognizer *InputListener::addMoveRecognizer(InputCallback<InputEvent> &&cb) {
 	auto rec = Rc<GestureMoveRecognizer>::create(move(cb));
+	addEventMask(rec->getEventMask());
+	return _recognizers.emplace_back(move(rec)).get();
+}
+
+GestureRecognizer *InputListener::addKeyRecognizer(InputCallback<InputEvent> &&cb, KeyMask &&keys) {
+	auto rec = Rc<GestureKeyRecognizer>::create(move(cb), move(keys));
 	addEventMask(rec->getEventMask());
 	return _recognizers.emplace_back(move(rec)).get();
 }

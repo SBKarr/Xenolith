@@ -49,14 +49,14 @@ void TessCursor::updateState(VectorImage &image, State state) {
 	switch (state) {
 	case Point:
 		image.clear();
-		image.addPath()
+		image.addPath("", "org.stappler.xenolith.tess.TessCursor.Point")
 			->setFillColor(Color::White)
 			.addOval(Rect(16, 16, 32, 32))
 			.setAntialiased(false);
 		break;
 	case Capture:
 		image.clear();
-		image.addPath()
+		image.addPath("", "org.stappler.xenolith.tess.TessCursor.Capture")
 			->setFillColor(Color::White)
 			.moveTo(0, 24) .lineTo(4, 24) .lineTo(4, 4) .lineTo(24, 4) .lineTo(24, 0) .lineTo(0, 0)
 			.moveTo(0, 40) .lineTo(0, 64) .lineTo(24, 64) .lineTo(24, 60) .lineTo(4, 60) .lineTo(4, 40)
@@ -66,7 +66,7 @@ void TessCursor::updateState(VectorImage &image, State state) {
 		break;
 	case Target:
 		image.clear();
-		image.addPath()
+		image.addPath("", "org.stappler.xenolith.tess.TessCursor.Target")
 			->setFillColor(Color::White)
 			.moveTo(0.0f, 30.0f)
 			.lineTo(0.0f, 34.0f)

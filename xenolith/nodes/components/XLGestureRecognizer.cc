@@ -48,22 +48,28 @@ bool GestureRecognizer::canHandleEvent(const InputEvent &event) const {
 
 bool GestureRecognizer::handleInputEvent(const InputEvent &event) {
 	if (!_eventMask.test(toInt(event.data.event))) {
-		if (!_buttonMask.any() || _buttonMask.test(toInt(event.data.button))) {
-			return true;
-		}
+		return false;
+	}
+
+	if (_buttonMask.any() && !_buttonMask.test(toInt(event.data.button))) {
+		return false;
 	}
 
 	switch (event.data.event) {
 	case InputEventName::Begin:
+	case InputEventName::KeyPressed:
 		return addEvent(event);
 		break;
 	case InputEventName::Move:
+	case InputEventName::KeyRepeated:
 		renewEvent(event);
 		break;
 	case InputEventName::End:
+	case InputEventName::KeyReleased:
 		removeEvent(event, true);
 		break;
 	case InputEventName::Cancel:
+	case InputEventName::KeyCanceled:
 		removeEvent(event, false);
 		break;
 	default: break;
@@ -319,7 +325,6 @@ bool GestureTapRecognizer::renewEvent(const InputEvent &ev) {
 void GestureTapRecognizer::registerTap() {
 	auto currentTime = Time::now();
 
-	std::cout << "registerTap\n";
 	if (currentTime < _gesture.time + TapIntervalAllowed) {
 		_gesture.count ++;
 	} else {
@@ -354,7 +359,7 @@ bool GestureScrollRecognizer::handleInputEvent(const InputEvent &event) {
 	}
 
 	_gesture.pos = event.currentLocation;
-	_gesture.amount = Vec2(event.data.valueX, event.data.valueY);
+	_gesture.amount = Vec2(event.data.point.valueX, event.data.point.valueY);
 	_event = GestureEvent::Activated;
 	if (_callback) {
 		_callback(_event, _gesture);
@@ -384,6 +389,57 @@ bool GestureMoveRecognizer::handleInputEvent(const InputEvent &event) {
 	}
 	_event = GestureEvent::Cancelled;
 	return true;
+}
+
+bool GestureKeyRecognizer::init(InputCallback &&cb, KeyMask &&mask) {
+	if (!GestureRecognizer::init()) {
+		return false;
+	}
+
+	if (cb && mask.any()) {
+		_callback = move(cb);
+		_keyMask = mask;
+		_eventMask.set(toInt(InputEventName::KeyPressed));
+		_eventMask.set(toInt(InputEventName::KeyRepeated));
+		_eventMask.set(toInt(InputEventName::KeyReleased));
+		_eventMask.set(toInt(InputEventName::KeyCanceled));
+		return true;
+	}
+
+	log::text("GestureKeyRecognizer", "Callback or key mask is not defined");
+	return false;
+}
+
+bool GestureKeyRecognizer::canHandleEvent(const InputEvent &ev) const {
+	if (GestureRecognizer::canHandleEvent(ev)) {
+		if (_keyMask.test(toInt(ev.data.key.keycode))) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool GestureKeyRecognizer::addEvent(const InputEvent &event) {
+	_pressedKeys.set(toInt(event.data.key.keycode));
+	_callback(GestureEvent::Began, event);
+	return true;
+}
+
+bool GestureKeyRecognizer::removeEvent(const InputEvent &event, bool success) {
+	if (_pressedKeys.test(toInt(event.data.key.keycode))) {
+		_callback(success ? GestureEvent::Ended : GestureEvent::Cancelled, event);
+		_pressedKeys.reset(toInt(event.data.key.keycode));
+		return true;
+	}
+	return false;
+}
+
+bool GestureKeyRecognizer::renewEvent(const InputEvent &event) {
+	if (_pressedKeys.test(toInt(event.data.key.keycode))) {
+		_callback(GestureEvent::Activated, event);
+		return true;
+	}
+	return false;
 }
 
 std::ostream &operator<<(std::ostream &stream, GestureEvent ev) {

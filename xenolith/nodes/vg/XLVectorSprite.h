@@ -48,9 +48,9 @@ public:
 	virtual bool init(BytesView);
 	virtual bool init(FilePath);
 
-    virtual Rc<VectorPathRef> addPath(StringView = StringView(), Mat4 = Mat4::IDENTITY);
-    virtual Rc<VectorPathRef> addPath(const VectorPath & path, StringView = StringView(), Mat4 = Mat4::IDENTITY);
-    virtual Rc<VectorPathRef> addPath(VectorPath && path, StringView = StringView(), Mat4 = Mat4::IDENTITY);
+    virtual Rc<VectorPathRef> addPath(StringView id = StringView(), StringView cache = StringView(), Mat4 = Mat4::IDENTITY);
+    virtual Rc<VectorPathRef> addPath(const VectorPath & path, StringView id = StringView(), StringView cache = StringView(), Mat4 = Mat4::IDENTITY);
+    virtual Rc<VectorPathRef> addPath(VectorPath && path, StringView id = StringView(), StringView cache = StringView(), Mat4 = Mat4::IDENTITY);
 
     virtual Rc<VectorPathRef> getPath(StringView);
 

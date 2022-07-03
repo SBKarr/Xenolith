@@ -28,6 +28,8 @@
 
 namespace stappler::xenolith {
 
+using OpacityValue = ValueWrapper<uint8_t, class OpacityTag>;
+
 enum class NodeFlags {
 	None,
 	TransformDirty = 1 << 0,
@@ -270,136 +272,6 @@ struct MaterialInfo {
 	bool operator!=(const MaterialInfo &info) const = default;
 };
 
-enum class InputFlags {
-	None,
-	TouchMouseInput = 1 << 0,
-	KeyboardInput = 1 << 1,
-	FocusInput = 1 << 2,
-};
-
-SP_DEFINE_ENUM_AS_MASK(InputFlags)
-
-enum class InputMouseButton : uint32_t {
-	None,
-	MouseLeft,
-	MouseMiddle,
-	MouseRight,
-	MouseScrollUp,
-	MouseScrollDown,
-	MouseScrollLeft,
-	MouseScrollRight,
-	Mouse8,
-	Mouse9,
-	Mouse10,
-	Mouse11,
-	Mouse12,
-	Mouse13,
-	Mouse14,
-	Mouse15,
-	Max,
-
-	Touch = MouseLeft
-};
-
-enum class InputModifier : uint32_t {
-	None = 0,
-	Shift = 1 << 0,
-	CapsLock = 1 << 1,
-	Ctrl = 1 << 2,
-	Alt = 1 << 3,
-	Mod2 = 1 << 4,
-	Mod3 = 1 << 5,
-	Mod4 = 1 << 6,
-	Mod5 = 1 << 7,
-	Button1 = 1 << 8,
-	Button2 = 1 << 9,
-	Button3 = 1 << 10,
-	Button4 = 1 << 11,
-	Button5 = 1 << 12,
-
-	// boolean value for switch event (background/focus)
-	ValueFalse = None,
-	ValueTrue = uint32_t(1) << uint32_t(31)
-};
-
-SP_DEFINE_ENUM_AS_MASK(InputModifier)
-
-enum class InputEventName : uint32_t {
-	None,
-	Begin,
-	Move,
-	End,
-	Cancel,
-	MouseMove,
-	Scroll,
-
-	Background,
-	PointerEnter,
-	FocusGain,
-
-	Max,
-};
-
-struct InputEventData {
-	static InputEventData BoolEvent(InputEventName event, bool value) {
-		return InputEventData{maxOf<uint32_t>(), event, float(0.0f), float(0.0f),
-			InputMouseButton::None, value ? InputModifier::ValueTrue : InputModifier::None};
-	}
-
-	static InputEventData BoolEvent(InputEventName event, bool value, const Vec2 &pt) {
-		return InputEventData{maxOf<uint32_t>(), event, pt.x, pt.y,
-			InputMouseButton::None, value ? InputModifier::ValueTrue : InputModifier::None};
-	}
-
-	uint32_t id = maxOf<uint32_t>();
-	InputEventName event = InputEventName::None;
-	float x = 0.0f;
-	float y = 0.0f;
-	InputMouseButton button = InputMouseButton::None;
-	InputModifier modifiers = InputModifier::None;
-	float valueX = 0.0f;
-	float valueY = 0.0f;
-	float density = 1.0f;
-
-	bool operator==(const uint32_t &i) const { return id == i; }
-	bool operator!=(const uint32_t &i) const { return id != i; }
-
-	friend bool operator==(const InputEventData &, const InputEventData &) = default;
-	friend bool operator!=(const InputEventData &, const InputEventData &) = default;
-
-	bool getValue() const { return modifiers == InputModifier::ValueTrue; }
-
-	bool hasLocation() const {
-		switch (event) {
-		case InputEventName::None:
-		case InputEventName::Background:
-		case InputEventName::PointerEnter:
-		case InputEventName::FocusGain:
-			return false;
-			break;
-		default:
-			break;
-		}
-		return true;
-	}
-
-#if __cpp_impl_three_way_comparison >= 201711
-	friend auto operator<=>(const InputEventData &, const InputEventData &) = default;
-#endif
-};
-
-struct InputEvent {
-	InputEventData data;
-	Vec2 originalLocation;
-	Vec2 currentLocation;
-	Vec2 previousLocation;
-	uint64_t originalTime = 0;
-	uint64_t currentTime = 0;
-	uint64_t previousTime = 0;
-	InputModifier originalModifiers = InputModifier::None;
-	InputModifier previousModifiers = InputModifier::None;
-};
-
 struct ZIndexLess {
 	bool operator()(const SpanView<int16_t> &l, const SpanView<int16_t> &r) const noexcept {
 		auto len = std::max(l.size(), r.size());
@@ -412,17 +284,6 @@ struct ZIndexLess {
 			}
 		}
 		return false;
-	}
-};
-
-}
-
-namespace std {
-
-template <>
-struct hash<stappler::xenolith::InputEventData> {
-	size_t operator() (const stappler::xenolith::InputEventData &ev) const {
-		return std::hash<uint32_t>{}(ev.id);
 	}
 };
 

@@ -72,6 +72,8 @@ public:
 	virtual Rc<Semaphore> makeSemaphore();
 	virtual Rc<ImageView> makeImageView(const Rc<ImageObject> &, const ImageViewInfo &);
 
+	uint32_t getPresentatonMask() const { return _presentMask; }
+
 protected:
 	friend class Loop;
 
@@ -95,6 +97,7 @@ protected:
 	uint32_t _textureLayoutImagesCount = 0;
 
 	std::thread::id _loopThreadId;
+	uint32_t _presentMask = 0;
 };
 
 }

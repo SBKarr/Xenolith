@@ -22,7 +22,6 @@
 
 #include "XLVkLoop.h"
 #include "XLVkInstance.h"
-#include "XLEventLoop.h"
 #include "XLVkView.h"
 #include "XLVkDevice.h"
 #include "XLVkTextureSet.h"

@@ -24,7 +24,6 @@ THE SOFTWARE.
 
 #if LINUX
 
-#include "XLEventLoop.h"
 #include "SPFilesystem.h"
 
 #include <unistd.h>
@@ -109,4 +108,3 @@ void _sleep(uint64_t microseconds) {
 }
 
 #endif
-

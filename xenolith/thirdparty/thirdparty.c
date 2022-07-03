@@ -21,3 +21,7 @@
  **/
 
 #include "SPIRV-Reflect/spirv_reflect.cc"
+
+#if LINUX
+#include "glfw/xkb_unicode.cc"
+#endif

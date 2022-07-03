@@ -195,6 +195,25 @@ protected:
 	InputCallback _callback;
 };
 
+class GestureKeyRecognizer : public GestureRecognizer {
+public:
+	using InputCallback = Function<bool(GestureEvent, const InputEvent &)>;
+	using KeyMask = std::bitset<toInt(InputKeyCode::Max)>;
+
+	virtual bool init(InputCallback &&, KeyMask &&);
+
+	virtual bool canHandleEvent(const InputEvent &) const override;
+
+protected:
+	virtual bool addEvent(const InputEvent &) override;
+	virtual bool removeEvent(const InputEvent &, bool success) override;
+	virtual bool renewEvent(const InputEvent &) override;
+
+	KeyMask _keyMask;
+	KeyMask _pressedKeys;
+	InputCallback _callback;
+};
+
 std::ostream &operator<<(std::ostream &, GestureEvent);
 
 }

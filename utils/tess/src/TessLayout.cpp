@@ -32,9 +32,6 @@ bool TessLayout::init() {
 		return false;
 	}
 
-	// auto app = (AppDelegate *)Application::getInstance();
-	// auto fontController = app->getFontController();
-
 	_background = addChild(Rc<Layer>::create(Color::White), -1);
 	_background->setColorMode(ColorMode::IntensityChannel);
 	_background->setAnchorPoint(Anchor::Middle);

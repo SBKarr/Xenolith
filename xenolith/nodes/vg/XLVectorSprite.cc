@@ -99,16 +99,16 @@ bool VectorSprite::init(FilePath path) {
 	return _image != nullptr;
 }
 
-Rc<VectorPathRef> VectorSprite::addPath(StringView id, Mat4 pos) {
-	return _image->addPath(id, pos);
+Rc<VectorPathRef> VectorSprite::addPath(StringView id, StringView cache, Mat4 pos) {
+	return _image->addPath(id, cache, pos);
 }
 
-Rc<VectorPathRef> VectorSprite::addPath(const VectorPath & path, StringView id, Mat4 pos) {
-	return _image->addPath(path, id, pos);
+Rc<VectorPathRef> VectorSprite::addPath(const VectorPath & path, StringView id, StringView cache, Mat4 pos) {
+	return _image->addPath(path, id, cache, pos);
 }
 
-Rc<VectorPathRef> VectorSprite::addPath(VectorPath && path, StringView id, Mat4 pos) {
-	return _image->addPath(move(path), id, pos);
+Rc<VectorPathRef> VectorSprite::addPath(VectorPath && path, StringView id, StringView cache, Mat4 pos) {
+	return _image->addPath(move(path), id, cache, pos);
 }
 
 Rc<VectorPathRef> VectorSprite::getPath(StringView id) {

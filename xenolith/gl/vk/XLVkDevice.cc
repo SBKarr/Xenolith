@@ -96,6 +96,8 @@ bool Device::init(const vk::Instance *inst, DeviceInfo && info, const Features &
 		_families.emplace_back(DeviceQueueFamily({ info.index, count, preferred, info.ops, info.minImageTransferGranularity}));
 	};
 
+	_presentMask = info.presentFamily.presentSurfaceMask;
+
 	info.graphicsFamily.count = 1;
 	info.presentFamily.count = 1;
 

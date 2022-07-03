@@ -323,7 +323,7 @@ void AppDelegate::update(uint64_t dt) {
 gl::SwapchainConfig AppDelegate::selectConfig(const gl::SurfaceInfo &info) {
 	gl::SwapchainConfig ret;
 	ret.extent = info.currentExtent;
-	ret.imageCount = std::max(uint32_t(2), info.minImageCount);
+	ret.imageCount = std::max(uint32_t(3), info.minImageCount);
 	ret.presentMode = info.presentModes.front();
 
 	if (std::find(info.presentModes.begin(), info.presentModes.end(), gl::PresentMode::Immediate) != info.presentModes.end()) {

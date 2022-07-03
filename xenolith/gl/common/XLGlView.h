@@ -103,6 +103,11 @@ public:
 	bool isInBackground() const { return _inBackground; }
 	bool isPointerWithinWindow() const { return _pointerInWindow; }
 
+	virtual void updateTextCursor(uint32_t pos, uint32_t len) = 0;
+	virtual void updateTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) = 0;
+	virtual void runTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) = 0;
+	virtual void cancelTextInput() = 0;
+
 protected:
 	virtual void wakeup() = 0;
 

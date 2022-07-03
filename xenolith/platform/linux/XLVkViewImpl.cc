@@ -24,21 +24,13 @@ THE SOFTWARE.
 
 #if LINUX
 
-#include "XLPlatformLinux.h"
+#include "XLPlatformLinuxWayland.h"
+#include "XLPlatformLinuxXcb.h"
 
 #include <sys/eventfd.h>
 #include <poll.h>
 
 namespace stappler::xenolith::platform {
-
-static Rc<LinuxViewInterface> ViewImpl_makeXcbView(XcbLibrary *lib, ViewImpl *view, StringView name, URect rect) {
-	return Rc<XcbView>::alloc(lib, view, name, rect);
-}
-
-/*static Rc<LinuxViewInterface> ViewImpl_makeWaylandView(const Instance *instance, Device *device, ViewImpl *view,
-		StringView name, URect rect) {
-	return nullptr;
-}*/
 
 ViewImpl::ViewImpl() { }
 
@@ -58,38 +50,46 @@ bool ViewImpl::init(gl::Loop &loop, gl::Device &dev, gl::ViewInfo &&info) {
 }
 
 void ViewImpl::threadInit() {
+	auto presentMask = _device->getPresentatonMask();
 
-	// try wayland
-	/*auto d = getenv("WAYLAND_DISPLAY");
-	if (d) {
-		_view = ViewImpl_makeWaylandView(_vkInstance, _vkDevice, this, viewName, rect);
-		if (_view) {
-			return gl::View::init(ev, loop);
+	if (auto wayland = WaylandLibrary::getInstance()) {
+		if ((platform::SurfaceType(presentMask) & platform::SurfaceType::Wayland) != platform::SurfaceType::None) {
+			auto waylandDisplay = getenv("WAYLAND_DISPLAY");
+			auto sessionType = getenv("XDG_SESSION_TYPE");
+
+			if (waylandDisplay || strcasecmp("wayland", sessionType) == 0) {
+				auto view = Rc<WaylandView>::alloc(wayland, this, _name, _rect);
+				if (!view) {
+					log::text("VkView", "Fail to initialize xcb window");
+					return;
+				}
+
+				_view = view.get();
+				_surface = Rc<vk::Surface>::create(_instance, _view->createWindowSurface(_instance), _view);
+				_frameInterval = _view->getScreenFrameInterval();
+			}
 		}
-		log::text("VkView", "Fail to initialize Wayland window");
-		return false;
 	}
 
-	d = getenv("XDG_SESSION_TYPE");
-	if (strcasecmp("wayland", d)) {
-		_view = ViewImpl_makeWaylandView(_vkInstance, _vkDevice, this, viewName, rect);
-		if (_view) {
-			return gl::View::init(ev, loop);
-		}
-		log::text("VkView", "Fail to initialize Wayland window");
-		return false;
-	}*/
+	if (!_view) {
+		// try X11
+		if (auto xcb = XcbLibrary::getInstance()) {
+			if ((platform::SurfaceType(presentMask) & platform::SurfaceType::XCB) != platform::SurfaceType::None) {
+				auto view = Rc<XcbView>::alloc(xcb, this, _name, _rect);
+				if (!view) {
+					log::text("VkView", "Fail to initialize xcb window");
+					return;
+				}
 
-	// try X11
-	if (auto xcb = XcbLibrary::getInstance()) {
-		_view = ViewImpl_makeXcbView(xcb, this, _name, _rect);
-		if (!_view) {
-			log::text("VkView", "Fail to initialize xcb window");
-			return;
+				_view = view.get();
+				_surface = Rc<vk::Surface>::create(_instance, _view->createWindowSurface(_instance), _view);
+				_frameInterval = _view->getScreenFrameInterval();
+			}
 		}
+	}
 
-		_surface = Rc<vk::Surface>::create(_instance, _view->createWindowSurface(_instance), _view);
-		_frameInterval = _view->getScreenFrameInterval();
+	if (!_view) {
+		log::text("View", "No available surface type");
 	}
 
 	View::threadInit();
@@ -159,12 +159,44 @@ void ViewImpl::wakeup() {
 	}
 }
 
+void ViewImpl::updateTextCursor(uint32_t pos, uint32_t len) {
+
+}
+
+void ViewImpl::updateTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) {
+
+}
+
+void ViewImpl::runTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) {
+	performOnThread([this] {
+		_inputEnabled = true;
+	}, this);
+}
+
+void ViewImpl::cancelTextInput() {
+	performOnThread([this] {
+		_inputEnabled = false;
+	}, this);
+}
+
 bool ViewImpl::pollInput() {
 	if (!_view->poll()) {
 		close();
 		return false;
 	}
 	return true;
+}
+
+gl::SurfaceInfo ViewImpl::getSurfaceOptions() const {
+	gl::SurfaceInfo ret = vk::View::getSurfaceOptions();
+	_view->onSurfaceInfo(ret);
+	return ret;
+}
+
+void ViewImpl::mapWindow() {
+	if (_view) {
+		_view->mapWindow();
+	}
 }
 
 }

@@ -33,6 +33,8 @@ namespace stappler::xenolith {
 class Scene;
 class Scheduler;
 class InputDispatcher;
+class TextInputManager;
+class ActionManager;
 
 class Director : public Ref, EventHandler {
 public:
@@ -55,7 +57,9 @@ public:
 	gl::View *getView() const { return _view; }
 	Application *getApplication() const { return _application; }
 	Scheduler *getScheduler() const { return _scheduler; }
+	ActionManager *getActionManager() const { return _actionManager; }
 	InputDispatcher *getInputDispatcher() const { return _inputDispatcher; }
+	TextInputManager *getTextInputManager() const;
 
 	const Rc<Scene> &getScene() const { return _scene; }
 	const Rc<ResourceCache> &getResourceCache() const;
@@ -96,6 +100,7 @@ protected:
 
 	Rc<PoolRef> _pool;
 	Rc<Scheduler> _scheduler;
+	Rc<ActionManager> _actionManager;
 	Rc<InputDispatcher> _inputDispatcher;
 };
 

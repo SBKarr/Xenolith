@@ -116,9 +116,9 @@ public:
 
 	template <typename Callback>
 	void makeApiCall(const Callback &cb) {
-		_apiMutex.lock();
+		//_apiMutex.lock();
 		cb(*getTable(), getDevice());
-		_apiMutex.unlock();
+		//_apiMutex.unlock();
 	}
 
 	bool hasNonSolidFillMode() const;

@@ -32,17 +32,12 @@ class EventListener;
 
 class Label : public Sprite, public LabelParameters {
 public:
-public:
-	//using FontTextureMap = layout::FontTextureMap;
-
 	using ColorMapVec = Vector<Vector<bool>>;
-
-	//static void makeLabelQuads(Source *, const FormatSpec *, const Function<void(const TextureVec &newTex, QuadVec &&newQuads, ColorMapVec &&cMap)> &);
-	//static void makeLabelRects(Source *, const FormatSpec *, float scale, const Function<void(const Vector<Rect> &)> &);
 
 	virtual ~Label();
 
-	virtual bool init(font::FontController *, const DescriptionStyle & = DescriptionStyle(), const String & = "", float w = 0.0f, Alignment = Alignment::Left, float d = 0.0f);
+	virtual bool init(font::FontController *, const DescriptionStyle & = DescriptionStyle(),
+			StringView = StringView(), float w = 0.0f, Alignment = Alignment::Left);
 	virtual void tryUpdateLabel(bool force = false);
 
 	virtual void setStyle(const DescriptionStyle &);
@@ -99,7 +94,7 @@ protected:
 
 	bool _standalone = false;
 
-	float _density = 0.0f;
+	float _density = 1.0f;
 
 	uint8_t _adjustValue = 0;
 	size_t _updateCount = 0;

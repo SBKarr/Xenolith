@@ -29,18 +29,14 @@ Label::~Label() {
 	_format = nullptr;
 }
 
-bool Label::init(font::FontController *source, const DescriptionStyle &style, const String &str, float width, Alignment alignment, float density) {
+bool Label::init(font::FontController *source, const DescriptionStyle &style,
+		StringView str, float width, Alignment alignment) {
 	if (!Sprite::init()) {
 		return false;
 	}
 
-	if (density == 0.0f) {
-		density = Application::getInstance()->getData().density;
-	}
-
 	_source = source;
 	_style = style;
-	_density = density;
 	setNormalized(true);
 
 	setColorMode(ColorMode::AlphaChannel);

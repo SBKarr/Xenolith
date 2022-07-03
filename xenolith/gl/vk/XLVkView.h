@@ -58,8 +58,12 @@ public:
 
 	virtual uint64_t getUpdateInterval() const { return 0; }
 
+	virtual void mapWindow();
+
 protected:
 	virtual bool pollInput();
+
+	virtual gl::SurfaceInfo getSurfaceOptions() const;
 
 	void invalidate();
 	void scheduleSwapchainImage(uint64_t windowOffset);

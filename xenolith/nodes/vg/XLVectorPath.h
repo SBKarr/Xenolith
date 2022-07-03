@@ -36,6 +36,7 @@ using Winding = geom::Winding;
 
 struct PathXRef {
 	String id;
+	String cacheId;
 	Mat4 mat;
 };
 

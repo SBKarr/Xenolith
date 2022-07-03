@@ -43,7 +43,7 @@ public:
 	using FontWeight = font::FontWeight;
 	using FontStretch = font::FontStretch;
 
-	using Opacity = ValueWrapper<uint8_t, class OpacityTag>;
+	using Opacity = OpacityValue;
 	using FontSize = font::FontSize;
 	using FontFamily = ValueWrapper<uint32_t, class FontFamilyTag>;
 
