@@ -73,7 +73,7 @@ public:
 	bool deprecate();
 
 	Rc<ImageStorage> acquire(bool lockfree, const Rc<Fence> &fence);
-	bool acquire(const Rc<SwapchainImage> &, const Rc<Fence> &fence);
+	bool acquire(const Rc<SwapchainImage> &, const Rc<Fence> &fence, bool immediate);
 
 	VkResult present(DeviceQueue &queue, const Rc<ImageStorage> &);
 	void invalidateImage(const Rc<ImageStorage> &);
@@ -95,6 +95,7 @@ protected:
 	Vector<SwapchainImageData> _images;
 	uint32_t _acquiredImages = 0;
 	uint64_t _presentedFrames = 0;
+	uint64_t _presentTime = 0;
 	gl::PresentMode _rebuildMode = gl::PresentMode::Unsupported;
 
 	Mutex _resourceMutex;

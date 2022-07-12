@@ -1476,8 +1476,8 @@ bool SurfaceInfo::isSupported(const SwapchainConfig &cfg) const {
 		return false;
 	}
 
-	if (cfg.extent.width < minImageExtent.width || cfg.extent.width > minImageExtent.width
-			|| cfg.extent.height < minImageExtent.height || cfg.extent.height > minImageExtent.height) {
+	if (cfg.extent.width < minImageExtent.width || cfg.extent.width > maxImageExtent.width
+			|| cfg.extent.height < minImageExtent.height || cfg.extent.height > maxImageExtent.height) {
 		return false;
 	}
 

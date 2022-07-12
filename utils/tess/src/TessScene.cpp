@@ -136,19 +136,19 @@ static void TessScene_makeRenderQueue(Application *app, renderqueue::Queue::Buil
 	}));
 	auto transparentPipeline = builder.addPipeline(pass, 0, "Transparent", shaderSpecInfo, PipelineMaterialInfo({
 		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
-				gl::BlendFactor::One, gl::BlendFactor::Zero, gl::BlendOp::Add),
+				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
 		DepthInfo(false, true, gl::CompareOp::Less)
 	}));
 
 	auto surfacePipeline = builder.addPipeline(pass, 0, "Surface", shaderSpecInfo, PipelineMaterialInfo(
 		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
-				gl::BlendFactor::One, gl::BlendFactor::Zero, gl::BlendOp::Add),
+				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
 		DepthInfo(false, true, gl::CompareOp::LessOrEqual)
 	));
 
 	PipelineMaterialInfo debugLinesMaterialInfo(
 		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
-				gl::BlendFactor::One, gl::BlendFactor::Zero, gl::BlendOp::Add),
+				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
 		DepthInfo(false, true, gl::CompareOp::Less),
 		LineWidth(1.0f)
 	);
@@ -184,7 +184,7 @@ static void TessScene_makeRenderQueue(Application *app, renderqueue::Queue::Buil
 	outAttachmentInfo.initialLayout = AttachmentLayout::Undefined;
 	outAttachmentInfo.finalLayout = AttachmentLayout::PresentSrc;
 	outAttachmentInfo.clearOnLoad = true;
-	outAttachmentInfo.clearColor = Color4F(0.0f, 0.0f, 0.0f, 0.0f); // Color4F::BLACK;
+	outAttachmentInfo.clearColor = Color4F(1.0f, 1.0f, 1.0f, 1.0f); // Color4F::BLACK;
 	outAttachmentInfo.frameSizeCallback = [] (const FrameQueue &frame) {
 		return Extent3(frame.getExtent());
 	};

@@ -204,7 +204,7 @@ auto SwapchainHandle::acquire(bool lockfree, const Rc<Fence> &fence) -> Rc<Image
 	return nullptr;
 }
 
-bool SwapchainHandle::acquire(const Rc<SwapchainImage> &image, const Rc<Fence> &fence) {
+bool SwapchainHandle::acquire(const Rc<SwapchainImage> &image, const Rc<Fence> &fence, bool immediate) {
 	if (image->getSwapchain() != this) {
 		return false;
 	}
@@ -215,12 +215,12 @@ bool SwapchainHandle::acquire(const Rc<SwapchainImage> &image, const Rc<Fence> &
 	_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
 #if XL_VKAPI_DEBUG
 		auto t = platform::device::_clock(platform::device::Monotonic);
-		ret = table.vkAcquireNextImageKHR(device, _swapchain, 0,
+		ret = table.vkAcquireNextImageKHR(device, _swapchain, immediate ? maxOf<uint64_t>() : 0,
 				sem ? sem->getSemaphore() : VK_NULL_HANDLE, fence->getFence(), &imageIndex);
 		XL_VKAPI_LOG("vkAcquireNextImageKHR: ", imageIndex, " ", ret,
 				" [", platform::device::_clock(platform::device::Monotonic) - t, "]");
 #else
-		ret = table.vkAcquireNextImageKHR(device, _swapchain, 0,
+		ret = table.vkAcquireNextImageKHR(device, _swapchain, immediate ? maxOf<uint64_t>() : 0,
 				sem ? sem->getSemaphore() : VK_NULL_HANDLE, fence->getFence(), &imageIndex);
 #endif
 	});
@@ -276,7 +276,8 @@ VkResult SwapchainHandle::present(DeviceQueue &queue, const Rc<ImageStorage> &im
 		auto t = platform::device::_clock(platform::device::Monotonic);
 		result = table.vkQueuePresentKHR(queue.getQueue(), &presentInfo);
 		XL_VKAPI_LOG("[", queue.getFrameIndex(), "] vkQueuePresentKHR: ", imageIndex, " ", result,
-				" [", platform::device::_clock(platform::device::Monotonic) - t, "]");
+				" [", platform::device::_clock(platform::device::Monotonic) - t, "] [", t - _presentTime, "]");
+		_presentTime = t;
 #else
 		result = table.vkQueuePresentKHR(queue.getQueue(), &presentInfo);
 #endif

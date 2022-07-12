@@ -31,6 +31,18 @@ namespace stappler::xenolith::vk {
 
 class View : public gl::View {
 public:
+	struct EngineOptions {
+		// on some systems, we can not acquire next image until queue operations on previous image is finished
+		// on this system, we wait on last swapchain pass fence before acquire swapchain image
+		// swapchain-independent passes is not affected by this option
+		bool waitOnSwapchainPassFence = true;
+
+		// by default, we use vkAcquireNextImageKHR in lockfree manner, but in some cases blocking variant
+		// is more preferable. If this option is set, vkAcquireNextImageKHR called with UIN64_MAX timeout
+		// be careful not to block whole view's thread operation on this
+		bool acquireImageImmediately = false;
+	};
+
 	virtual ~View();
 
 	virtual bool init(Loop &, Device &, gl::ViewInfo &&);
@@ -61,13 +73,13 @@ public:
 	virtual void mapWindow();
 
 protected:
-	virtual bool pollInput();
+	virtual bool pollInput(bool frameReady);
 
 	virtual gl::SurfaceInfo getSurfaceOptions() const;
 
 	void invalidate();
-	void scheduleSwapchainImage(uint64_t windowOffset);
-	bool acquireScheduledImage(const Rc<SwapchainImage> &);
+	void scheduleSwapchainImage(uint64_t windowOffset, bool immediate = false);
+	bool acquireScheduledImage(const Rc<SwapchainImage> &, bool immediate = false);
 
 	bool recreateSwapchain(gl::PresentMode);
 	bool createSwapchain(gl::SwapchainConfig &&cfg, gl::PresentMode presentMode);
@@ -76,12 +88,14 @@ protected:
 
 	void runWithSwapchainImage(Rc<ImageStorage> &&);
 	void runScheduledPresent(Rc<SwapchainImage> &&);
-	void presentWithQueue(DeviceQueue &, Rc<ImageStorage> &&);
+	virtual void presentWithQueue(DeviceQueue &, Rc<ImageStorage> &&);
 	void invalidateSwapchainImage(Rc<ImageStorage> &&);
 
 	void updateFrameInterval();
 
 	void waitForFences(uint64_t min);
+
+	EngineOptions _options;
 
 	bool _blockDeprecation = false;
 	uint64_t _fenceOrder = 0;

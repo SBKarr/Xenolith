@@ -31,6 +31,7 @@ THE SOFTWARE.
 #include "linux/XLVulkan.cc"
 #include "linux/XLDevice.cc"
 #include "linux/XLInteraction.cc"
+#include "linux/XLLinuxDBus.cc"
 #include "linux/XLLinuxWayland.cc"
 #include "linux/XLLinuxXcb.cc"
 #include "linux/XLLinuxXkb.cc"

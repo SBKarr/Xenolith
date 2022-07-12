@@ -146,8 +146,6 @@ void View::threadInit() {
 
 	auto info = getSurfaceOptions();
 
-	std::cout << info.description() << "\n";
-
 	auto cfg = _selectConfig(info);
 
 	createSwapchain(move(cfg), cfg.presentMode);
@@ -291,6 +289,12 @@ void View::onRemoved() {
 void View::deprecateSwapchain() {
 	performOnThread([this] {
 		_swapchain->deprecate();
+
+		auto it = _scheduledPresent.begin();
+		while (it != _scheduledPresent.end()) {
+			runScheduledPresent(move(*it));
+			it = _scheduledPresent.erase(it);
+		}
 
 		if (!_blockDeprecation && _swapchain->getAcquiredImagesCount() == 0) {
 			// log::vtext("View", "recreateSwapchain - View::deprecateSwapchain (", renderqueue::FrameHandle::GetActiveFramesCount(), ")");
@@ -483,7 +487,7 @@ void View::mapWindow() {
 
 }
 
-bool View::pollInput() {
+bool View::pollInput(bool frameReady) {
 	return false;
 }
 
@@ -495,8 +499,8 @@ void View::invalidate() {
 
 }
 
-void View::scheduleSwapchainImage(uint64_t windowOffset) {
-	performOnThread([this, windowOffset] {
+void View::scheduleSwapchainImage(uint64_t windowOffset, bool immediate) {
+	performOnThread([this, windowOffset, immediate] {
 		auto presentWindow = platform::device::_clock(platform::device::ClockType::Monotonic) + _frameInterval - getUpdateInterval() - windowOffset;
 		auto image = Rc<SwapchainImage>::create(Rc<SwapchainHandle>(_swapchain), _frameOrder, presentWindow);
 
@@ -505,20 +509,17 @@ void View::scheduleSwapchainImage(uint64_t windowOffset) {
 
 		// we should wait until all current fences become signaled
 		// then acquire image and wait for fence
-		if (_fenceOrder == 0) {
-			// no fences to wait on
-			if (!acquireScheduledImage(image)) {
+		if (!immediate && _options.waitOnSwapchainPassFence && _fenceOrder != 0) {
+			_fenceImages.emplace_back(move(image));
+		} else {
+			if (!acquireScheduledImage(image, immediate)) {
 				_scheduledImages.emplace_back(move(image));
 			}
-		} else {
-			_fenceImages.emplace_back(move(image));
 		}
-
-		// then, signal image as ready
 	}, this, true);
 }
 
-bool View::acquireScheduledImage(const Rc<SwapchainImage> &image) {
+bool View::acquireScheduledImage(const Rc<SwapchainImage> &image, bool immediate) {
 	if (image->getSwapchain() != _swapchain) {
 		image->invalidate();
 		return true;
@@ -526,7 +527,7 @@ bool View::acquireScheduledImage(const Rc<SwapchainImage> &image) {
 
 	auto loop = (Loop *)_loop.get();
 	auto fence = loop->acquireFence(0);
-	if (_swapchain->acquire(image, fence)) {
+	if (_swapchain->acquire(image, fence, _options.acquireImageImmediately || immediate)) {
 		fence->addRelease([tmp = image.get(), f = fence.get(), loop = _loop](bool success) {
 			if (success) {
 				loop->performOnGlThread([tmp] {
@@ -547,21 +548,29 @@ bool View::acquireScheduledImage(const Rc<SwapchainImage> &image) {
 }
 
 bool View::recreateSwapchain(gl::PresentMode mode) {
-	for (auto &it : _fenceImages) {
-		_loop->performOnGlThread([it] {
+	struct ResetData : public Ref {
+		Vector<Rc<SwapchainImage>> fenceImages;
+		Vector<Rc<SwapchainImage>> scheduledImages;
+		Rc<renderqueue::FrameEmitter> frameEmitter;
+	};
+
+	auto data = Rc<ResetData>::alloc();
+	data->fenceImages = move(_fenceImages);
+	data->scheduledImages = move(_scheduledImages);
+	data->frameEmitter = _frameEmitter;
+
+	_loop->performOnGlThread([data] {
+		for (auto &it : data->fenceImages) {
 			it->invalidate();
-		}, it);
-	}
+		}
+		for (auto &it : data->scheduledImages) {
+			it->invalidate();
+		}
+		data->frameEmitter->dropFrames();
+	}, this);
+
 	_fenceImages.clear();
-
-	for (auto &it : _scheduledImages) {
-		_loop->performOnGlThread([it] {
-			it->invalidate();
-		}, it);
-	}
 	_scheduledImages.clear();
-
-	_frameEmitter->dropFrames();
 
 	if (renderqueue::FrameHandle::GetActiveFramesCount() > 1) {
 		renderqueue::FrameHandle::DescribeActiveFrames();
@@ -586,7 +595,8 @@ bool View::recreateSwapchain(gl::PresentMode mode) {
 		ret = createSwapchain(move(cfg), mode);
 	}
 	if (ret) {
-		scheduleSwapchainImage(_frameInterval);
+		// run frame as fast as possible, no present window, no wait on fences
+		scheduleSwapchainImage(0, true);
 	}
 	return ret;
 }
@@ -717,7 +727,7 @@ void View::presentWithQueue(DeviceQueue &queue, Rc<ImageStorage> &&image) {
 
 	_blockDeprecation = true;
 
-	if (!pollInput()) {
+	if (!pollInput(true)) {
 		return;
 	}
 

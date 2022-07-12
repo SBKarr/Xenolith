@@ -80,6 +80,7 @@ public:
 
 	// handle and propagate input event
 	void handleInputEvent(const InputEventData &);
+	void handleInputEvents(Vector<InputEventData> &&);
 
 	virtual void runFrame(const Rc<RenderQueue> &, Extent2);
 

@@ -122,6 +122,31 @@ void View::handleInputEvent(const InputEventData &event) {
 	}, this);
 }
 
+void View::handleInputEvents(Vector<InputEventData> &&events) {
+	_loop->getApplication()->performOnMainThread([this, events = move(events)] () mutable {
+		for (auto &event : events) {
+			if (event.isPointEvent()) {
+				event.point.density = getDensity();
+			}
+
+			switch (event.event) {
+			case InputEventName::Background:
+				_inBackground = event.getValue();
+				break;
+			case InputEventName::PointerEnter:
+				_pointerInWindow = event.getValue();
+				break;
+			case InputEventName::FocusGain:
+				_hasFocus = event.getValue();
+				break;
+			default:
+				break;
+			}
+			_director->getInputDispatcher()->handleInputEvent(event);
+		}
+	}, this);
+}
+
 void View::runFrame(const Rc<RenderQueue> &queue, Extent2 extent) {
 	auto req = Rc<FrameRequest>::create(queue, _frameEmitter, extent);
 	req->bindSwapchain(this);

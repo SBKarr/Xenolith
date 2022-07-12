@@ -189,6 +189,10 @@ void FrameEmitter::invalidate() {
 }
 
 void FrameEmitter::setFrameSubmitted(FrameHandle &frame) {
+	if (!_loop->isOnGlThread()) {
+		return;
+	}
+
 	XL_FRAME_EMITTER_LOG("FrameTime:        ", _frame.load(), "   ", platform::device::_clock() - _frame.load(), " mks");
 
 	auto it = _frames.begin();
@@ -236,6 +240,10 @@ void FrameEmitter::dropFrameTimeout() {
 }
 
 void FrameEmitter::dropFrames() {
+	if (!_loop->isOnGlThread()) {
+		return;
+	}
+
 	for (auto &it : _frames) {
 		it->invalidate();
 	}
@@ -261,6 +269,10 @@ void FrameEmitter::onFrameEmitted(FrameHandle &) { }
 void FrameEmitter::onFrameSubmitted(FrameHandle &) { }
 
 void FrameEmitter::onFrameComplete(FrameHandle &frame) {
+	if (!_loop->isOnGlThread()) {
+		return;
+	}
+
 	_frameTimeMutex.lock();
 	_lastFrameTime = frame.getTimeEnd() - frame.getTimeStart();
 	_avgFrameTime.addValue(frame.getTimeEnd() - frame.getTimeStart());

@@ -213,7 +213,7 @@ static InputMouseButton getButton(xcb_button_t btn) {
 	return InputMouseButton(btn);
 }
 
-bool XcbView::poll() {
+bool XcbView::poll(bool frameReady) {
 	bool ret = true;
 	bool deprecateSwapchain = false;
 
@@ -261,19 +261,19 @@ bool XcbView::poll() {
 				switch (btn) {
 				case InputMouseButton::MouseScrollUp:
 					event.event = InputEventName::Scroll;
-					event.point.valueX = 0.0f; event.point.valueY = 1.0f;
+					event.point.valueX = 0.0f; event.point.valueY = 10.0f;
 					break;
 				case InputMouseButton::MouseScrollDown:
 					event.event = InputEventName::Scroll;
-					event.point.valueX = 0.0f; event.point.valueY = -1.0f;
+					event.point.valueX = 0.0f; event.point.valueY = -10.0f;
 					break;
 				case InputMouseButton::MouseScrollLeft:
 					event.event = InputEventName::Scroll;
-					event.point.valueX = 1.0f; event.point.valueY = 0.0f;
+					event.point.valueX = 10.0f; event.point.valueY = 0.0f;
 					break;
 				case InputMouseButton::MouseScrollRight:
 					event.event = InputEventName::Scroll;
-					event.point.valueX = -1.0f; event.point.valueY = 0.0f;
+					event.point.valueX = -10.0f; event.point.valueY = 0.0f;
 					break;
 				default:
 					break;

@@ -189,7 +189,7 @@ public:
 
 	bool valid() const;
 
-	virtual bool poll() override;
+	virtual bool poll(bool frameReady) override;
 
 	virtual int getSocketFd() const override { return _socket; }
 

@@ -97,6 +97,7 @@ void ViewImpl::threadInit() {
 
 void ViewImpl::threadDispose() {
 	View::threadDispose();
+	platform::device::_sleep(20000);
 	_view = nullptr;
 }
 
@@ -132,7 +133,7 @@ bool ViewImpl::worker() {
 			}
 			if (fds[1].revents != 0) {
 				fds[1].revents = 0;
-				if (!_view->poll()) {
+				if (!_view->poll(false)) {
 					break;
 				}
 			}
@@ -179,8 +180,14 @@ void ViewImpl::cancelTextInput() {
 	}, this);
 }
 
-bool ViewImpl::pollInput() {
-	if (!_view->poll()) {
+void ViewImpl::presentWithQueue(vk::DeviceQueue &queue, Rc<ImageStorage> &&image) {
+	auto &e = _swapchain->getImageInfo().extent;
+	_view->commit(e.width, e.height);
+	vk::View::presentWithQueue(queue, move(image));
+}
+
+bool ViewImpl::pollInput(bool frameReady) {
+	if (!_view->poll(frameReady)) {
 		close();
 		return false;
 	}

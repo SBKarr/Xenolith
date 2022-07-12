@@ -29,7 +29,7 @@ namespace stappler::xenolith {
 
 Sprite::Sprite() {
 	_blendInfo = BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
-			gl::BlendFactor::One, gl::BlendFactor::Zero, gl::BlendOp::Add);
+			gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add);
 	_materialInfo.setBlendInfo(_blendInfo);
 	_materialInfo.setDepthInfo(DepthInfo(false, true, gl::CompareOp::Less));
 }
