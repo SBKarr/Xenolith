@@ -139,6 +139,10 @@ bool WaylandView::poll(bool frameReady) {
 		return false;
 	}
 
+	if (_display->seatDirty) {
+		_display->seat->update();
+	}
+
 	if (frameReady && ((_continuousRendering && _state.test(XDG_TOPLEVEL_STATE_ACTIVATED))  || _scheduleNext)) {
 		auto frame = _display->wayland->wl_surface_frame(_surface);
 		_display->wayland->wl_callback_add_listener(frame, &s_WaylandSurfaceFrameListener, this);
@@ -179,7 +183,7 @@ void WaylandView::handleSurfaceEnter(wl_surface *surface, wl_output *output) {
 	auto out = (WaylandOutput *)_display->wayland->wl_output_get_user_data(output);
 	if (out) {
 		_activeOutputs.emplace(out);
-		std::cout << "handleSurfaceEnter: output: " << out->description() << "\n";
+		XL_WAYLAND_LOG("handleSurfaceEnter: output: ", out->description());
 	}
 }
 
@@ -191,17 +195,18 @@ void WaylandView::handleSurfaceLeave(wl_surface *surface, wl_output *output) {
 	auto out = (WaylandOutput *)_display->wayland->wl_output_get_user_data(output);
 	if (out) {
 		_activeOutputs.erase(out);
-		std::cout << "handleSurfaceLeave: output: " << out->description() << "\n";
+		XL_WAYLAND_LOG("handleSurfaceLeave: output: ", out->description());
 	}
 }
 
 void WaylandView::handleSurfaceConfigure(xdg_surface *surface, uint32_t serial) {
-	printf("handleSurfaceConfigure: serial: %d\n", serial);
+	XL_WAYLAND_LOG("handleSurfaceConfigure: serial: ", serial);
 	_configureSerial = serial;
 }
 
 void WaylandView::handleToplevelConfigure(xdg_toplevel *xdg_toplevel, int32_t width, int32_t height, wl_array *states) {
-	std::cout << "handleToplevelConfigure: width: " << width << ", height: " << height << ";";
+	StringStream stream;
+	stream << "handleToplevelConfigure: width: " << width << ", height: " << height << ";";
 
 	auto oldState = _state;
 	_state.reset();
@@ -209,14 +214,14 @@ void WaylandView::handleToplevelConfigure(xdg_toplevel *xdg_toplevel, int32_t wi
 	for (uint32_t *it = (uint32_t *)states->data; (const char *)it < ((const char *) states->data + states->size); ++ it) {
 		_state.set(*it);
 		switch (*it) {
-		case XDG_TOPLEVEL_STATE_MAXIMIZED: std::cout << " MAXIMIZED;"; break;
-		case XDG_TOPLEVEL_STATE_FULLSCREEN: std::cout << " FULLSCREEN;"; break;
-		case XDG_TOPLEVEL_STATE_RESIZING: std::cout << " RESIZING;"; break;
-		case XDG_TOPLEVEL_STATE_ACTIVATED: std::cout << " ACTIVATED;"; break;
-		case XDG_TOPLEVEL_STATE_TILED_LEFT: std::cout << " TILED_LEFT;"; break;
-		case XDG_TOPLEVEL_STATE_TILED_RIGHT: std::cout << " TILED_RIGHT;"; break;
-		case XDG_TOPLEVEL_STATE_TILED_TOP: std::cout << " TILED_TOP;"; break;
-		case XDG_TOPLEVEL_STATE_TILED_BOTTOM: std::cout << " TILED_BOTTOM;"; break;
+		case XDG_TOPLEVEL_STATE_MAXIMIZED: stream << " MAXIMIZED;"; break;
+		case XDG_TOPLEVEL_STATE_FULLSCREEN: stream << " FULLSCREEN;"; break;
+		case XDG_TOPLEVEL_STATE_RESIZING: stream << " RESIZING;"; break;
+		case XDG_TOPLEVEL_STATE_ACTIVATED: stream << " ACTIVATED;"; break;
+		case XDG_TOPLEVEL_STATE_TILED_LEFT: stream << " TILED_LEFT;"; break;
+		case XDG_TOPLEVEL_STATE_TILED_RIGHT: stream << " TILED_RIGHT;"; break;
+		case XDG_TOPLEVEL_STATE_TILED_TOP: stream << " TILED_TOP;"; break;
+		case XDG_TOPLEVEL_STATE_TILED_BOTTOM: stream << " TILED_BOTTOM;"; break;
 		}
 	}
 
@@ -229,12 +234,10 @@ void WaylandView::handleToplevelConfigure(xdg_toplevel *xdg_toplevel, int32_t wi
 			_currentExtent.width = width;
 			_currentExtent.height = height - DecorOffset - DecorInset;
 			_view->deprecateSwapchain();
+
+			stream << "surface: " << _currentExtent.width << " " << _currentExtent.height;
 		}
-
-		std::cout << " surface: " << width << " " << height;
 	}
-
-	std::cout << "\n";
 
 	auto checkVisible = [&] (WaylandDecorationName name) {
 		switch (name) {
@@ -280,36 +283,62 @@ void WaylandView::handleToplevelConfigure(xdg_toplevel *xdg_toplevel, int32_t wi
 		it->setActive(_state.test(XDG_TOPLEVEL_STATE_ACTIVATED));
 		it->setVisible(checkVisible(it->name));
 	}
+
+	XL_WAYLAND_LOG(stream.str());
 }
 
 void WaylandView::handleToplevelClose(xdg_toplevel *xdg_toplevel) {
-	printf("handleToplevelClose\n");
+	XL_WAYLAND_LOG("handleToplevelClose");
 	_shouldClose = true;
 }
 
 void WaylandView::handleToplevelBounds(xdg_toplevel *xdg_toplevel, int32_t width, int32_t height) {
-	printf("handleToplevelBounds: width: %d, height: %d\n", width, height);
+	XL_WAYLAND_LOG("handleToplevelBounds: width: ", width, ", height: ", height);
 }
 
 void WaylandView::handleSurfaceFrameDone(wl_callback *frame, uint32_t data) {
-	// printf("handleSurfaceFrameDone: data: %d\n", data);
 	_display->wayland->wl_callback_destroy(frame);
 }
 
 void WaylandView::handlePointerEnter(wl_fixed_t surface_x, wl_fixed_t surface_y) {
-	_view->handleInputEvent(InputEventData::BoolEvent(InputEventName::PointerEnter, true,
-			Vec2(float(wl_fixed_to_double(surface_x)), float(_currentExtent.height - wl_fixed_to_double(surface_y)))));
+	if (!_pointerInit || _display->seat->hasPointerFrames) {
+		auto &ev = _pointerEvents.emplace_back(PointerEvent{ PointerEvent::Enter });
+		ev.enter.x = surface_x;
+		ev.enter.y = surface_y;
+	} else {
+		_view->handleInputEvent(InputEventData::BoolEvent(InputEventName::PointerEnter, true,
+				Vec2(float(wl_fixed_to_double(surface_x)), float(_currentExtent.height - wl_fixed_to_double(surface_y)))));
 
-	_surfaceX = wl_fixed_to_double(surface_x);
-	_surfaceY = wl_fixed_to_double(surface_y);
+		_surfaceX = wl_fixed_to_double(surface_x);
+		_surfaceY = wl_fixed_to_double(surface_y);
+	}
+
+	XL_WAYLAND_LOG("handlePointerEnter: x: ", wl_fixed_to_int(surface_x), ", y: ", wl_fixed_to_int(surface_y));
 }
 
 void WaylandView::handlePointerLeave() {
+	if (!_pointerInit) {
+		_pointerInit = true;
+		if (!_display->seat->hasPointerFrames) {
+			handlePointerFrame();
+		}
+	}
+
+	handlePointerFrame(); // drop pending events
 	_view->handleInputEvent(InputEventData::BoolEvent(InputEventName::PointerEnter, false,
 			Vec2(float(_surfaceX), float(_currentExtent.height - _surfaceY))));
 }
 
 void WaylandView::handlePointerMotion(uint32_t time, wl_fixed_t surface_x, wl_fixed_t surface_y) {
+	// XL_WAYLAND_LOG("handlePointerMotion: x: ", wl_fixed_to_int(surface_x), ", y: ", wl_fixed_to_int(surface_y));
+
+	if (!_pointerInit) {
+		_pointerInit = true;
+		if (!_display->seat->hasPointerFrames) {
+			handlePointerFrame();
+		}
+	}
+
 	if (_display->seat->hasPointerFrames) {
 		auto &ev = _pointerEvents.emplace_back(PointerEvent{ PointerEvent::Motion });
 		ev.motion.time = time;
@@ -345,6 +374,11 @@ static InputMouseButton getButton(uint32_t button) {
 }
 
 void WaylandView::handlePointerButton(uint32_t serial, uint32_t time, uint32_t button, uint32_t state) {
+	if (!_pointerInit) {
+		return;
+	}
+
+	XL_WAYLAND_LOG("handlePointerButton");
 	if (_display->seat->hasPointerFrames) {
 		auto &ev = _pointerEvents.emplace_back(PointerEvent{ PointerEvent::Button });
 		ev.button.serial = serial;
@@ -364,6 +398,10 @@ void WaylandView::handlePointerButton(uint32_t serial, uint32_t time, uint32_t b
 }
 
 void WaylandView::handlePointerAxis(uint32_t time, uint32_t axis, wl_fixed_t value) {
+	if (!_pointerInit) {
+		return;
+	}
+
 	if (_display->seat->hasPointerFrames) {
 		auto &ev = _pointerEvents.emplace_back(PointerEvent{ PointerEvent::Axis });
 		ev.axis.time = time;
@@ -414,24 +452,36 @@ void WaylandView::handlePointerAxis(uint32_t time, uint32_t axis, wl_fixed_t val
 }
 
 void WaylandView::handlePointerAxisSource(uint32_t axis_source) {
+	if (!_pointerInit) {
+		return;
+	}
+
 	auto &ev = _pointerEvents.emplace_back(PointerEvent{ PointerEvent::AxisSource });
 	ev.axisSource.axis_source = axis_source;
 }
 
 void WaylandView::handlePointerAxisStop(uint32_t time, uint32_t axis) {
+	if (!_pointerInit) {
+		return;
+	}
+
 	auto &ev = _pointerEvents.emplace_back(PointerEvent{ PointerEvent::AxisStop });
 	ev.axisStop.time = time;
 	ev.axisStop.axis = axis;
 }
 
 void WaylandView::handlePointerAxisDiscrete(uint32_t axis, int32_t discrete) {
+	if (!_pointerInit) {
+		return;
+	}
+
 	auto &ev = _pointerEvents.emplace_back(PointerEvent{ PointerEvent::AxisDiscrete });
 	ev.axisDiscrete.axis = axis;
 	ev.axisDiscrete.discrete = discrete;
 }
 
 void WaylandView::handlePointerFrame() {
-	if (_pointerEvents.empty()) {
+	if (!_pointerInit || _pointerEvents.empty()) {
 		return;
 	}
 
@@ -451,15 +501,13 @@ void WaylandView::handlePointerFrame() {
 		switch (it.event) {
 		case PointerEvent::None: break;
 		case PointerEvent::Enter:
-			// log::vtext("WaylandView", "PointerEnter: ", wl_fixed_to_double(it.enter.x), " ", wl_fixed_to_double(it.enter.y));
 			inputEvents.emplace_back(InputEventData::BoolEvent(InputEventName::PointerEnter, true,
 					Vec2(float(wl_fixed_to_double(it.enter.x)), float(_currentExtent.height - wl_fixed_to_double(it.enter.y)))));
 			positionChanged = true;
 			x = wl_fixed_to_double(it.enter.x);
-			y = wl_fixed_to_double(it.enter.x);
+			y = wl_fixed_to_double(it.enter.y);
 			break;
 		case PointerEvent::Leave:
-			// log::vtext("WaylandView", "PointerLeave");
 			break;
 		case PointerEvent::Motion:
 			positionChanged = true;
@@ -467,11 +515,8 @@ void WaylandView::handlePointerFrame() {
 			y = wl_fixed_to_double(it.motion.y);
 			break;
 		case PointerEvent::Button:
-			// log::vtext("WaylandView", "PointerButton: ", it.button.serial, " ", it.button.time,
-			//		" ", it.button.button, " ", it.button.state);
 			break;
 		case PointerEvent::Axis:
-			// log::vtext("WaylandView", "PointerAxis: ", it.axis.time, " ", it.axis.axis, " ", wl_fixed_to_double(it.axis.value));
 			switch (it.axis.axis) {
 			case WL_POINTER_AXIS_VERTICAL_SCROLL:
 				hasAxis = true;
@@ -495,14 +540,11 @@ void WaylandView::handlePointerFrame() {
 			}
 			break;
 		case PointerEvent::AxisSource:
-			// log::vtext("WaylandView", "PointerAxisSource: ", it.axisSource.axis_source);
 			axisSource = it.axisSource.axis_source;
 			break;
 		case PointerEvent::AxisStop:
-			// log::vtext("WaylandView", "PointerAxisStop: ", it.axisStop.time, " ", it.axisStop.axis);
 			break;
 		case PointerEvent::AxisDiscrete:
-			// log::vtext("WaylandView", "PointerAxisDiscrete: ", it.axisDiscrete.axis, " ", it.axisDiscrete.discrete);
 			break;
 		}
 	}
@@ -561,7 +603,9 @@ void WaylandView::handlePointerFrame() {
 		}
 	}
 
-	_view->handleInputEvents(move(inputEvents));
+	if (!inputEvents.empty()) {
+		_view->handleInputEvents(move(inputEvents));
+	}
 	_pointerEvents.clear();
 }
 
@@ -655,6 +699,10 @@ void WaylandView::handleKey(uint32_t time, uint32_t scancode, uint32_t state) {
 }
 
 void WaylandView::handleKeyModifiers(uint32_t depressed, uint32_t latched, uint32_t locked) {
+	if (!_display->seat->state) {
+		return;
+	}
+
 	_activeModifiers = InputModifier::None;
 	if (_display->xkb->xkb_state_mod_index_is_active(_display->seat->state,
 			_display->seat->keyState.controlIndex, XKB_STATE_MODS_EFFECTIVE) == 1) {
@@ -734,7 +782,7 @@ void WaylandView::handleKeyRepeat() {
 	}
 }
 
-void WaylandView::handleDecorationPress(WaylandDecoration *decor, uint32_t serial) {
+void WaylandView::handleDecorationPress(WaylandDecoration *decor, uint32_t serial, bool released) {
 	auto switchMaximized = [&] {
 		if (!_state.test(XDG_TOPLEVEL_STATE_MAXIMIZED)) {
 			_display->wayland->xdg_toplevel_set_maximized(_toplevel);
@@ -770,8 +818,10 @@ void WaylandView::handleDecorationPress(WaylandDecoration *decor, uint32_t seria
 	case WaylandCursorImage::BottomLeftCorner: edges = XDG_TOPLEVEL_RESIZE_EDGE_BOTTOM_LEFT; break;
 	case WaylandCursorImage::LeftSide: edges = XDG_TOPLEVEL_RESIZE_EDGE_LEFT; break;
 	case WaylandCursorImage::LeftPtr:
-		switchMaximized();
-		return;
+		if (released) {
+			switchMaximized();
+			return;
+		}
 		break;
 	case WaylandCursorImage::Max:
 		break;
@@ -837,14 +887,15 @@ void WaylandView::commit(uint32_t width, uint32_t height) {
 		return;
 	}
 
-	std::cout << "commit: " << width << " " << height << ";";
+	StringStream stream;
+	stream << "commit: " << width << " " << height << ";";
 	if (_configureSerial != maxOf<uint32_t>()) {
 		_display->wayland->xdg_toplevel_set_min_size(_toplevel, DecorWidth * 2 + IconSize * 3, DecorWidth * 2  + DecorOffset);
 		_display->wayland->xdg_surface_set_window_geometry(_xdgSurface, 0, -DecorInset - DecorOffset,
 				width, height + DecorInset + DecorOffset);
 
 		_display->wayland->xdg_surface_ack_configure(_xdgSurface, _configureSerial);
-		std::cout << " configure: " << _configureSerial << ";";
+		stream << " configure: " << _configureSerial << ";";
 		_configureSerial = maxOf<uint32_t>();
 	}
 
@@ -914,9 +965,10 @@ void WaylandView::commit(uint32_t width, uint32_t height) {
 		}
 	}
 	if (surfacesDirty) {
-		std::cout << " Surfaces Dirty;";
+		stream << " Surfaces Dirty;";
 	}
-	std::cout << "\n";
+
+	XL_WAYLAND_LOG(stream.str());
 }
 
 }

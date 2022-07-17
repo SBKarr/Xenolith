@@ -35,48 +35,6 @@
 
 namespace stappler::xenolith::tessapp {
 
-bool FpsDisplay::init(font::FontController *fontController) {
-	if (!Node::init()) {
-		return false;
-	}
-
-	if (fontController) {
-		_label = addChild(Rc<Label>::create(fontController), 1);
-		_label->setString("0.0\n0.0\n0.0");
-		_label->setFontFamily("monospace");
-		_label->setAnchorPoint(Anchor::BottomLeft);
-		_label->setColor(Color::Black, true);
-		_label->setFontSize(16);
-		//_label->setOpacity(0.75);
-		_label->setOnContentSizeDirtyCallback([this] {
-			setContentSize(_label->getContentSize());
-		});
-		//_label->setRenderingLevel(RenderingLevel::Transparent);
-		//_label->setVisible(false);
-	}
-
-	scheduleUpdate();
-
-	 return true;
-}
-
-void FpsDisplay::update(const UpdateTime &) {
-	if (_director) {
-		auto fps = _director->getAvgFps();
-		auto spf = _director->getSpf();
-		auto local = _director->getLocalFrameTime();
-
-		if (_label) {
-			auto str = toString(std::setprecision(3), fps, "\n", spf, "\n", local);
-			_label->setString(str);
-		}
-		if (local > 8.0f) {
-			// std::cout << local << "\n";
-		}
-		++ _frames;
-	}
-}
-
 static gl::ImageFormat TessScene_selectDepthFormat(SpanView<gl::ImageFormat> formats) {
 	gl::ImageFormat ret = gl::ImageFormat::Undefined;
 
@@ -146,14 +104,12 @@ static void TessScene_makeRenderQueue(Application *app, renderqueue::Queue::Buil
 		DepthInfo(false, true, gl::CompareOp::LessOrEqual)
 	));
 
-	PipelineMaterialInfo debugLinesMaterialInfo(
+	builder.addPipeline(pass, 0, "DebugTriangles", shaderSpecInfo, PipelineMaterialInfo(
 		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
 				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
 		DepthInfo(false, true, gl::CompareOp::Less),
 		LineWidth(1.0f)
-	);
-
-	builder.addPipeline(pass, 0, "DebugTriangles", shaderSpecInfo, debugLinesMaterialInfo);
+	));
 
 	// define internal resources (images and buffers)
 	/*gl::Resource::Builder resourceBuilder("LoaderResources");
@@ -184,7 +140,7 @@ static void TessScene_makeRenderQueue(Application *app, renderqueue::Queue::Buil
 	outAttachmentInfo.initialLayout = AttachmentLayout::Undefined;
 	outAttachmentInfo.finalLayout = AttachmentLayout::PresentSrc;
 	outAttachmentInfo.clearOnLoad = true;
-	outAttachmentInfo.clearColor = Color4F(1.0f, 1.0f, 1.0f, 1.0f); // Color4F::BLACK;
+	outAttachmentInfo.clearColor = Color4F(1.0f, 1.0f, 1.0f, 1.0f);
 	outAttachmentInfo.frameSizeCallback = [] (const FrameQueue &frame) {
 		return Extent3(frame.getExtent());
 	};
@@ -240,65 +196,56 @@ static void TessScene_makeRenderQueue(Application *app, renderqueue::Queue::Buil
 	// samplers and materialInput are persistent between frames, only vertexes should be provided before rendering started
 	builder.addInput(vertexInput);
 	builder.addOutput(out);
-
-	// optional world-to-pass subpass dependency
-	/*builder.addSubpassDependency(pass,
-			gl::RenderSubpassDependency::External, gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::None,
-			0, gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::ColorAttachmentWrite, false);*/
 }
 
 bool TessScene::init(AppDelegate *app, Extent2 extent) {
-	// build presentation RenderQueue
-	renderqueue::Queue::Builder builder("Loader");
+	using namespace renderqueue;
 
-	TessScene_makeRenderQueue(app, builder, extent, [this] (renderqueue::FrameQueue &frame, const Rc<renderqueue::AttachmentHandle> &a,
+	Queue::Builder builder("Initial");
+
+	TessScene_makeRenderQueue(app, builder, extent, [this] (FrameQueue &frame, const Rc<AttachmentHandle> &a,
 			Function<void(bool)> &&cb) {
 		on2dVertexInput(frame, a, move(cb));
 	});
 
-	if (!Scene::init(app, move(builder))) {
+	if (!UtilScene::init(app, move(builder))) {
 		return false;
 	}
 
-	_fps = addChild(Rc<FpsDisplay>::create(app->getFontController()), 2);
 	_layout = addChild(Rc<TessLayout>::create());
 
 	return true;
 }
 
 void TessScene::onPresented(Director *dir) {
-	Scene::onPresented(dir);
+	UtilScene::onPresented(dir);
 }
 
 void TessScene::onFinished(Director *dir) {
-	Scene::onFinished(dir);
+	UtilScene::onFinished(dir);
 }
 
 void TessScene::update(const UpdateTime &time) {
-	Scene::update(time);
+	UtilScene::update(time);
 }
 
 void TessScene::onEnter(Scene *scene) {
-	Scene::onEnter(scene);
+	UtilScene::onEnter(scene);
 	std::cout << "AppScene::onEnter\n";
 }
 
 void TessScene::onExit() {
 	std::cout << "AppScene::onExit\n";
-	Scene::onExit();
+	UtilScene::onExit();
 }
 
 void TessScene::onContentSizeDirty() {
-	Scene::onContentSizeDirty();
+	UtilScene::onContentSizeDirty();
 
 	if (_layout) {
 		_layout->setAnchorPoint(Anchor::Middle);
 		_layout->setPosition(_contentSize / 2.0f);
 		_layout->setContentSize(_contentSize);
-	}
-
-	if (_fps) {
-		_fps->setPosition(Vec2(6.0f, 6.0f));
 	}
 }
 

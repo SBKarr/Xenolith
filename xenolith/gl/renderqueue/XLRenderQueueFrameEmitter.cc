@@ -145,6 +145,7 @@ bool FrameRequest::bindSwapchain(const Rc<gl::View> &swapchain) {
 		if (it->getType() == AttachmentType::Image && it->isCompatible(swapchain->getSwapchainImageInfo())) {
 			_swapchainAttachment = it;
 			_swapchain = swapchain;
+			_swapchainHandle = _swapchain->getSwapchainHandle();
 			return true;
 		}
 	}
@@ -155,6 +156,7 @@ bool FrameRequest::bindSwapchain(const Attachment *a, const Rc<gl::View> &swapch
 	if (a->isCompatible(swapchain->getSwapchainImageInfo())) {
 		_swapchainAttachment = a;
 		_swapchain = swapchain;
+		_swapchainHandle = _swapchain->getSwapchainHandle();
 		return true;
 	}
 	return false;

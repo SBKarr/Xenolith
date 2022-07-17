@@ -36,9 +36,13 @@ public:
 
 	virtual ~Label();
 
-	virtual bool init(font::FontController *, const DescriptionStyle & = DescriptionStyle(),
+	virtual bool init(font::FontController * = nullptr, const DescriptionStyle & = DescriptionStyle(),
 			StringView = StringView(), float w = 0.0f, Alignment = Alignment::Left);
-	virtual void tryUpdateLabel(bool force = false);
+	virtual bool init(const DescriptionStyle &, StringView = StringView(),
+			float w = 0.0f, Alignment = Alignment::Left);
+	virtual bool init(StringView, float w = 0.0f, Alignment = Alignment::Left);
+
+	virtual void tryUpdateLabel();
 
 	virtual void setStyle(const DescriptionStyle &);
 	virtual const DescriptionStyle &getStyle() const;

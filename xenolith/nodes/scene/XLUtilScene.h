@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,23 +20,33 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_XENOLITH_SRC_XLAPPSCENERESOURCE_H_
-#define TEST_XENOLITH_SRC_XLAPPSCENERESOURCE_H_
+#ifndef XENOLITH_NODES_SCENE_XLUTILSCENE_H_
+#define XENOLITH_NODES_SCENE_XLUTILSCENE_H_
 
-#include "XLResourceComponent.h"
+#include "XLScene.h"
 
-namespace stappler::xenolith::app {
+namespace stappler::xenolith {
 
-class AppSceneResource : public ResourceComponent {
+class UtilScene : public Scene {
 public:
-	static constexpr auto RequestName = "AppSceneRequisite";
-	static constexpr auto VertexPipelineName = "AppSceneRequisite_VertexList";
+	virtual ~UtilScene() { }
 
-	virtual ~AppSceneResource() { }
+	virtual bool init(Application *, RenderQueue::Builder &&);
+	virtual bool init(Application *, RenderQueue::Builder &&, Size2);
 
-	bool init();
+	virtual void update(const UpdateTime &time) override;
+
+	virtual void onContentSizeDirty() override;
+
+	virtual void setFpsVisible(bool);
+	virtual bool isFpsVisible() const;
+
+protected:
+	void initialize(Application *app);
+
+	Node *_fps = nullptr;
 };
 
 }
 
-#endif /* TEST_XENOLITH_SRC_XLAPPSCENERESOURCE_H_ */
+#endif /* XENOLITH_NODES_SCENE_XLUTILSCENE_H_ */

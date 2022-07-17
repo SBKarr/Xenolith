@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include "XLNode.cc"
 #include "XLResourceComponent.cc"
 #include "XLScene.cc"
+#include "XLUtilScene.cc"
 #include "XLSprite.cc"
 #include "XLLayer.cc"
 #include "XLLabel.cc"

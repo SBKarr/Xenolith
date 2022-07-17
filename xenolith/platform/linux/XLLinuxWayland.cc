@@ -579,7 +579,7 @@ static const wl_registry_listener s_WaylandRegistryListener{
 		auto display = (WaylandDisplay *)data;
 		auto wayland = display->wayland.get();
 
-		printf("handleGlobal: '%s', version: %d, name: %d\n", interface, version, name);
+		XL_WAYLAND_LOG("handleGlobal: '", interface, "', version: ", version, ", name: ", name);
 		if (strcmp(interface, wayland->wl_compositor_interface->name) == 0) {
 			display->compositor = static_cast<wl_compositor *>(wayland->wl_registry_bind(registry, name,
 					wayland->wl_compositor_interface, std::min(version, 4U)));
@@ -1215,6 +1215,7 @@ static struct wl_pointer_listener s_WaylandPointerListener{
 
 		if (seat->root->isDecoration(surface)) {
 			if (auto decor = (WaylandDecoration *)seat->wayland->wl_surface_get_user_data(surface)) {
+				decor->waitForMove = false;
 				seat->pointerDecorations.erase(decor);
 				decor->onLeave();
 			}
@@ -1238,6 +1239,9 @@ static struct wl_pointer_listener s_WaylandPointerListener{
 		auto seat = (WaylandSeat *)data;
 		for (auto &it : seat->pointerViews) {
 			it->handlePointerMotion(time, surface_x, surface_y);
+		}
+		for (auto &it : seat->pointerDecorations) {
+			it->handleMotion();
 		}
 	},
 
@@ -1379,12 +1383,14 @@ static struct wl_keyboard_listener s_WaylandKeyboardListener{
 	[] (void *data, wl_keyboard *wl_keyboard, uint32_t serial, uint32_t mods_depressed,
 			uint32_t mods_latched, uint32_t mods_locked, uint32_t group) {
 		auto seat = (WaylandSeat *)data;
-		seat->root->xkb->xkb_state_update_mask(seat->state, mods_depressed, mods_latched, mods_locked, 0, 0, group);
-		seat->keyState.modsDepressed = mods_depressed;
-		seat->keyState.modsLatched = mods_latched;
-		seat->keyState.modsLocked = mods_locked;
-		for (auto &it : seat->keyboardViews) {
-			it->handleKeyModifiers(mods_depressed, mods_latched, mods_locked);
+		if (seat->state) {
+			seat->root->xkb->xkb_state_update_mask(seat->state, mods_depressed, mods_latched, mods_locked, 0, 0, group);
+			seat->keyState.modsDepressed = mods_depressed;
+			seat->keyState.modsLatched = mods_latched;
+			seat->keyState.modsLocked = mods_locked;
+			for (auto &it : seat->keyboardViews) {
+				it->handleKeyModifiers(mods_depressed, mods_latched, mods_locked);
+			}
 		}
 	},
 
@@ -1437,33 +1443,14 @@ static struct wl_touch_listener s_WaylandTouchListener{
 static struct wl_seat_listener s_WaylandSeatListener{
 	[] (void *data, struct wl_seat *wl_seat, uint32_t capabilities) {
 		auto seat = (WaylandSeat *)data;
-		if ((capabilities & WL_SEAT_CAPABILITY_POINTER) != 0 && !seat->pointer) {
-			seat->pointer = seat->wayland->wl_seat_get_pointer(wl_seat);
-			seat->wayland->wl_pointer_add_listener(seat->pointer, &s_WaylandPointerListener, seat);
-			seat->pointerScale = 1;
+		seat->capabilities = capabilities;
+		seat->root->seatDirty = true;
+
+		if ((capabilities & WL_SEAT_CAPABILITY_POINTER) != 0) {
 			seat->initCursors();
-		} else if ((capabilities & WL_SEAT_CAPABILITY_POINTER) == 0 && seat->pointer) {
-			seat->wayland->wl_pointer_release(seat->pointer);
-			seat->pointer = NULL;
 		}
 
-		if ((capabilities & WL_SEAT_CAPABILITY_KEYBOARD) != 0 && !seat->keyboard) {
-			seat->keyboard = seat->wayland->wl_seat_get_keyboard(wl_seat);
-			//seat->xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-			seat->wayland->wl_keyboard_add_listener(seat->keyboard, &s_WaylandKeyboardListener, seat);
-		} else if ((capabilities & WL_SEAT_CAPABILITY_KEYBOARD) == 0 && seat->keyboard) {
-			//xkb_context_unref(seat->xkb_context);
-			seat->wayland->wl_keyboard_release(seat->keyboard);
-			seat->keyboard = NULL;
-		}
-
-		if ((capabilities & WL_SEAT_CAPABILITY_TOUCH) != 0 && !seat->touch) {
-			seat->touch = seat->wayland->wl_seat_get_touch(wl_seat);
-			seat->wayland->wl_touch_add_listener(seat->touch, &s_WaylandTouchListener, seat);
-		} else if ((capabilities & WL_SEAT_CAPABILITY_TOUCH) == 0 && seat->touch) {
-			seat->wayland->wl_touch_release(seat->touch);
-			seat->touch = NULL;
-		}
+		seat->update();
 	},
 	[] (void *data, struct wl_seat *wl_seat, const char *name) {
 		auto seat = (WaylandSeat*) data;
@@ -1681,6 +1668,42 @@ void WaylandSeat::tryUpdateCursor() {
 	}
 }
 
+void WaylandSeat::update() {
+	if (!root->seatDirty) {
+		return;
+	}
+
+	root->seatDirty = false;
+
+	if ((capabilities & WL_SEAT_CAPABILITY_POINTER) != 0 && !pointer) {
+		pointer = wayland->wl_seat_get_pointer(seat);
+		wayland->wl_pointer_add_listener(pointer, &s_WaylandPointerListener, this);
+		pointerScale = 1;
+		initCursors();
+	} else if ((capabilities & WL_SEAT_CAPABILITY_POINTER) == 0 && pointer) {
+		wayland->wl_pointer_release(pointer);
+		pointer = NULL;
+	}
+
+	if ((capabilities & WL_SEAT_CAPABILITY_KEYBOARD) != 0 && !keyboard) {
+		keyboard = wayland->wl_seat_get_keyboard(seat);
+		wayland->wl_keyboard_add_listener(keyboard, &s_WaylandKeyboardListener, this);
+	} else if ((capabilities & WL_SEAT_CAPABILITY_KEYBOARD) == 0 && keyboard) {
+		wayland->wl_keyboard_release(keyboard);
+		keyboard = NULL;
+	}
+
+	if ((capabilities & WL_SEAT_CAPABILITY_TOUCH) != 0 && !touch) {
+		touch = wayland->wl_seat_get_touch(seat);
+		wayland->wl_touch_add_listener(touch, &s_WaylandTouchListener, this);
+	} else if ((capabilities & WL_SEAT_CAPABILITY_TOUCH) == 0 && touch) {
+		wayland->wl_touch_release(touch);
+		touch = NULL;
+	}
+
+	// wayland->wl_display_roundtrip(root->display);
+}
+
 InputKeyCode WaylandSeat::translateKey(uint32_t scancode) const {
 	if (scancode < sizeof(keyState.keycodes) / sizeof(keyState.keycodes[0])) {
 		return keyState.keycodes[scancode];
@@ -1770,7 +1793,9 @@ void WaylandDecoration::setAltBuffers(Rc<WaylandBuffer> &&b, Rc<WaylandBuffer> &
 	altActive = move(a);
 }
 
-void WaylandDecoration::handlePress(uint32_t serial, uint32_t button, uint32_t state) {
+void WaylandDecoration::handlePress(uint32_t s, uint32_t button, uint32_t state) {
+	serial = s;
+	waitForMove = false;
 	if (isTouchable()) {
 		if (state == WL_POINTER_BUTTON_STATE_RELEASED && button == BTN_LEFT) {
 			root->handleDecorationPress(this, serial);
@@ -1779,14 +1804,23 @@ void WaylandDecoration::handlePress(uint32_t serial, uint32_t button, uint32_t s
 		if (state == WL_POINTER_BUTTON_STATE_RELEASED && button == BTN_LEFT) {
 			auto n = Time::now().toMicros();
 			if (n - lastTouch < 500'000) {
-				root->handleDecorationPress(this, serial);
+				root->handleDecorationPress(this, serial, true);
 			}
 			lastTouch = n;
+		} else if (state == WL_POINTER_BUTTON_STATE_PRESSED && button == BTN_LEFT) {
+			waitForMove = true;
+			//root->handleDecorationPress(this, serial);
 		}
 	} else {
 		if (state == WL_POINTER_BUTTON_STATE_PRESSED && button == BTN_LEFT) {
 			root->handleDecorationPress(this, serial);
 		}
+	}
+}
+
+void WaylandDecoration::handleMotion() {
+	if (waitForMove) {
+		root->handleDecorationPress(this, serial);
 	}
 }
 

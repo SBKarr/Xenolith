@@ -91,6 +91,8 @@ public:
 
 	virtual const Vector<gl::ImageFormat> &getSupportedDepthStencilFormat() const;
 
+	virtual Rc<renderqueue::Queue> makeRenderFontQueue() const;
+
 	Rc<Fence> acquireFence(uint32_t, bool init = true);
 
 protected:

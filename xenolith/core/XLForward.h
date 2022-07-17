@@ -89,6 +89,7 @@ using Color = geom::Color;
 using Color3B = geom::Color3B;
 using Color4B = geom::Color4B;
 using Color4F = geom::Color4F;
+using ColorMask = geom::ColorMask;
 using Padding = geom::Padding;
 namespace Anchor = geom::Anchor;
 

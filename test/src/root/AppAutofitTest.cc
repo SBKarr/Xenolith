@@ -72,7 +72,7 @@ void AutofitTest::onContentSizeDirty() {
 		_background->setPosition(_contentSize / 2.0f);
 	}
 
-	Size size(_contentSize * 0.3f);
+	Size2 size(_contentSize * 0.3f);
 
 	Vec2 positions[5] = {
 		Vec2(_contentSize.width * 0.2f, _contentSize.height * 0.2f),

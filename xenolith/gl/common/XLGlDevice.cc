@@ -136,8 +136,13 @@ void Device::invalidateObjects() {
 	_objects.clear();
 	for (auto &it : objs) {
 		if (auto ref = dynamic_cast<Ref *>(it)) {
-			log::vtext("Gl-Device", "Object ", (void *)it, " (", typeid(*it).name(),
-					") [rc:", ref->getReferenceCount(), "] was not destroyed before device destruction");
+			if (auto img = dynamic_cast<gl::ImageObject *>(it)) {
+				log::vtext("Gl-Device", "Image ", (void *)it, " \"", img->getInfo().key, "\" (", typeid(*it).name(),
+						") [rc:", ref->getReferenceCount(), "] was not destroyed before device destruction");
+			} else {
+				log::vtext("Gl-Device", "Object ", (void *)it, " (", typeid(*it).name(),
+						") [rc:", ref->getReferenceCount(), "] was not destroyed before device destruction");
+			}
 		} else {
 			log::vtext("Gl-Device", "Object ", (void *)it, " (", typeid(*it).name(),
 					") was not destroyed before device destruction");

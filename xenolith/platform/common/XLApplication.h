@@ -25,6 +25,7 @@ THE SOFTWARE.
 
 #include "XLDefine.h"
 #include "XLEventHeader.h"
+#include "XLFontLibrary.h"
 #include "SPThreadTaskQueue.h"
 #include "XLGl.h"
 
@@ -38,6 +39,10 @@ public:
 	static EventHeader onNetwork;
 	static EventHeader onUrlOpened;
 	static EventHeader onError;
+
+	using Callback = Function<void()>;
+	using ExecuteCallback = Function<bool(const Task &)>;
+	using CompleteCallback = Function<void(const Task &, bool)>;
 
 	static constexpr uint32_t ApplicationThreadId = 1;
 
@@ -83,13 +88,10 @@ public:
 	// - ckeck if DeviceIdentifier was acquired
 	virtual void update(uint64_t dt);
 
-	// Update thread queue
-	virtual void updateQueue();
-
 	// Run application with parsed command line data
 	virtual int run(Value &&);
 
-	virtual void wait(TimeInterval);
+	virtual void runLoop(TimeInterval timeout);
 
 	virtual void end();
 
@@ -98,10 +100,7 @@ public:
 
 	virtual void addView(gl::ViewInfo &&);
 
-public: // Threading, Events
-	using Callback = Function<void()>;
-	using ExecuteCallback = Function<bool(const Task &)>;
-	using CompleteCallback = Function<void(const Task &, bool)>;
+	void scheduleUpdate();
 
 	/* Checks if current calling thread is director's main thread */
 	bool isOnMainThread() const;
@@ -195,6 +194,9 @@ public: // Threading, Events
 
 	const Rc<gl::Loop> &getGlLoop() const { return _glLoop; }
 
+	const Rc<font::FontLibrary> &getFontLibrary() const { return _fontLibrary; }
+	const Rc<font::FontController> &getFontController() const { return _fontController; }
+
 #if MODULE_XENOLITH_STORAGE
 public:
 	// initialize components, that use persistent data storage
@@ -218,30 +220,35 @@ protected:
 #endif
 
 protected:
+	virtual void updateDefaultFontController(font::FontController::Builder &);
+
 	uint64_t _clockStart = 0;
+	uint64_t _updateTimer = 0;
+
 	String _userAgent;
 	String _deviceIdentifier;
 	String _deviceToken;
 
 	Data _data;
 
-	uint64_t _updateTimer = 0;
 	bool _isNetworkOnline = false;
+	bool _singleThreaded = false;
+	bool _shouldEndLoop = false;
+	bool _immediateUpdate = false;
 
 	Rc<thread::TaskQueue> _queue;
 	std::thread::id _threadId;
-	bool _singleThreaded = false;
 
 	std::unordered_map<EventHeader::EventID, std::unordered_set<const EventHandlerNode *>> _eventListeners;
 
 	Rc<gl::Instance> _instance; // api instance
 	Rc<gl::Loop> _glLoop;
+	Rc<font::FontLibrary> _fontLibrary;
+	Rc<font::FontController> _fontController;
 	log::CustomLog _appLog;
 
 	memory::pool_t *_rootPool = nullptr;
 	memory::pool_t *_updatePool = nullptr;
-
-	bool _shouldEndLoop = false;
 };
 
 }

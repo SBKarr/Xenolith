@@ -902,7 +902,7 @@ void Node::updateDisplayedOpacity(float parentOpacity) {
 }
 
 void Node::setColor(const Color4F& color, bool withOpacity) {
-	if (withOpacity) {
+	if (withOpacity && _realColor.a != color.a) {
 		_displayedColor = _realColor = color;
 
 		updateCascadeColor();
@@ -966,32 +966,33 @@ void Node::draw(RenderFrameInfo &info, NodeFlags flags) {
 
 }
 
-void Node::visit(RenderFrameInfo &info, NodeFlags parentFlags) {
+bool Node::visitGeometry(RenderFrameInfo &info, NodeFlags parentFlags) {
 	if (!_visible) {
-		return;
+		return false;
 	}
 
 	NodeFlags flags = processParentFlags(info, parentFlags);
 
+	for (auto &it : _children) {
+		it->visitGeometry(info, flags);
+	}
+
+	// on overload, we can update node's geometry after it's childrens
+
+	return true;
+}
+
+bool Node::visitDraw(RenderFrameInfo &info, NodeFlags parentFlags) {
+	if (!_visible) {
+		return false;
+	}
+
+	//
+	NodeFlags flags = processParentFlags(info, parentFlags);
+
 	bool visibleByCamera = true;
 
-	info.modelTransformStack.push_back(_modelViewTransform);
-	info.zPath.push_back(getLocalZOrder());
-
-	size_t i = 0;
-
-	if (!_children.empty()) {
-		sortAllChildren();
-		// draw children zOrder < 0
-		for (; i < _children.size(); i++) {
-			auto node = _children.at(i);
-
-			if (node && node->_zOrder < 0)
-				node->visit(info, flags);
-			else
-				break;
-		}
-
+	auto visitSelf = [&] {
 		for (auto &it : _components) {
 			it->visit(info, parentFlags);
 		}
@@ -1006,28 +1007,38 @@ void Node::visit(RenderFrameInfo &info, NodeFlags parentFlags) {
 		if (visibleByCamera) {
 			this->draw(info, flags);
 		}
+	};
+
+	info.modelTransformStack.push_back(_modelViewTransform);
+	info.zPath.push_back(getLocalZOrder());
+
+	size_t i = 0;
+
+	if (!_children.empty()) {
+		sortAllChildren();
+		// draw children zOrder < 0
+		for (; i < _children.size(); i++) {
+			auto node = _children.at(i);
+
+			if (node && node->_zOrder < 0)
+				node->visitDraw(info, flags);
+			else
+				break;
+		}
+
+		visitSelf();
 
 		for (auto it = _children.cbegin() + i; it != _children.cend(); ++it) {
-			(*it)->visit(info, flags);
+			(*it)->visitDraw(info, flags);
 		}
 	} else {
-		for (auto &it : _components) {
-			it->visit(info, parentFlags);
-		}
-
-		for (auto &it : _inputEvents) {
-			if (it->isEnabled()) {
-				info.input->addListener(it);
-			}
-		}
-
-		if (visibleByCamera) {
-			this->draw(info, flags);
-		}
+		visitSelf();
 	}
 
 	info.zPath.pop_back();
 	info.modelTransformStack.pop_back();
+
+	return true;
 }
 
 void Node::scheduleUpdate() {

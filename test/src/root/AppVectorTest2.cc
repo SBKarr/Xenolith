@@ -74,19 +74,19 @@ bool VectorTest2::init() {
 	} while (0);
 
 	do {
-		auto image = Rc<VectorImage>::create(Size(100, 150));
+		auto image = Rc<VectorImage>::create(Size2(100, 150));
 		auto path = image->addPath();
 		path->setFillColor(Color::Red_500);
 		path->setStrokeColor(Color::Green_500);
 		path->setStrokeWidth(5.0f);
-		path->setStyle(DrawStyle::Stroke);
+		path->setStyle(vg::DrawStyle::Stroke);
 		//path->moveTo(0, 0).lineTo(100, 0).lineTo(25, 75).lineTo(100, 150).lineTo(0, 150).closePath();
 		path->moveTo(100, 150).lineTo(0, 150).lineTo(100, 0).lineTo(0, 0).closePath();
 		//path->moveTo(0, 0).lineTo(100, 150).lineTo(0, 150).lineTo(100, 0).closePath();
 		//path->addOval(Rect(0, 0, 100, 100));
 		//path->addOval(Rect(0, 50, 100, 100));
 		//path->addRect(Rect(0, 0, 100, 150));
-		path->setWindingRule(Winding::EvenOdd);
+		path->setWindingRule(vg::Winding::EvenOdd);
 		path->setAntialiased(false);
 
 		_sprite3 = addChild(Rc<VectorSprite>::create(move(image)));
@@ -101,7 +101,7 @@ bool VectorTest2::init() {
 void VectorTest2::onContentSizeDirty() {
 	Node::onContentSizeDirty();
 
-	Size size(_contentSize * 0.3f);
+	Size2 size(_contentSize * 0.3f);
 	if (_sprite) {
 		_sprite->setPosition(Vec2(_contentSize / 2.0f) - Vec2(_contentSize.width / 4.0f, 0.0f));
 	}

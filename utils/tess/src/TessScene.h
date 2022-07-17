@@ -23,7 +23,7 @@
 #ifndef UTILS_TESS_SRC_TESSSCENE_H_
 #define UTILS_TESS_SRC_TESSSCENE_H_
 
-#include "XLScene.h"
+#include "XLUtilScene.h"
 #include "XLSprite.h"
 #include "XLLayer.h"
 #include "XLLabel.h"
@@ -32,19 +32,7 @@ namespace stappler::xenolith::tessapp {
 
 class AppDelegate;
 
-class FpsDisplay : public Node {
-public:
-	virtual ~FpsDisplay() { }
-
-	virtual bool init(font::FontController *fontController);
-	virtual void update(const UpdateTime &) override;
-
-protected:
-	uint32_t _frames = 0;
-	Label *_label = nullptr;
-};
-
-class TessScene : public Scene {
+class TessScene : public UtilScene {
 public:
 	virtual ~TessScene() { }
 
@@ -60,7 +48,6 @@ public:
 	virtual void onContentSizeDirty() override;
 
 protected:
-	FpsDisplay *_fps = nullptr;
 	Node *_layout = nullptr;
 };
 

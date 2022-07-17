@@ -20,14 +20,15 @@
  THE SOFTWARE.
  **/
 
+#include "AppZOrderTest.h"
+
 #include "XLDefine.h"
-#include "AppRootLayout.h"
 #include "XLTestAppDelegate.h"
 #include "XLInputListener.h"
 
 namespace stappler::xenolith::app {
 
-bool RootLayout::init() {
+bool ZOrderTest::init() {
 	if (!Node::init()) {
 		return false;
 	}
@@ -36,10 +37,10 @@ bool RootLayout::init() {
 	_background->setColorMode(ColorMode(gl::ComponentMapping::R, gl::ComponentMapping::One));
 	_background->setAnchorPoint(Anchor::Middle);
 
-	/*_logo = addChild(Rc<Sprite>::create("Xenolith.png"), 6);
+	_logo = addChild(Rc<Sprite>::create("Xenolith.png"), 6);
 	_logo->setOpacity(0.5f);
-	_logo->setContentSize(Size(308, 249));
-	_logo->setAnchorPoint(Anchor::Middle);*/
+	_logo->setContentSize(Size2(308, 249));
+	_logo->setAnchorPoint(Anchor::Middle);
 
 	Color colors[5] = {
 		Color::Red_500,
@@ -55,15 +56,12 @@ bool RootLayout::init() {
 
 	for (size_t i = 0; i < 5; ++ i) {
 		_layers[i] = addChild(Rc<Layer>::create(), indexes[i]);
-		_layers[i]->setContentSize(Size(300, 300));
+		_layers[i]->setContentSize(Size2(300, 300));
 		_layers[i]->setColor(colors[i]);
 		_layers[i]->setAnchorPoint(Anchor::Middle);
 	}
 
-	auto app = (AppDelegate *)Application::getInstance();
-	auto fontController = app->getFontController();
-
-	_label = addChild(Rc<Label>::create(fontController), 5);
+	/*_label = addChild(Rc<Label>::create(fontController), 5);
 	_label->setScale(0.5f);
 	_label->setAnchorPoint(Anchor::Middle);
 	_label->setColor(Color::Green_500, true);
@@ -78,14 +76,13 @@ bool RootLayout::init() {
 	label1Listener->addTouchRecognizer([] (GestureEvent event, const InputEvent &ev) {
 		std::cout << "Touch (Label1): " << event << ": " << ev.currentLocation << "\n";
 		return true;
-	}, InputListener::makeButtonMask({InputMouseButton::MouseRight}));
+	}, InputListener::makeButtonMask({InputMouseButton::MouseRight}));*/
 
-	_label2 = addChild(Rc<Label>::create(fontController), 5);
+	_label2 = addChild(Rc<Label>::create(), 5);
 	_label2->setAnchorPoint(Anchor::Middle);
 	_label2->setColor(Color::BlueGrey_500, true);
 	_label2->setOpacity(0.75f);
 
-	_label2->setFontFamily("Roboto");
 	_label2->setFontSize(48);
 	_label2->appendTextWithStyle("Hello", Label::Style({font::FontStyle::Italic, Label::TextDecoration::LineThrough}));
 	_label2->appendTextWithStyle("\nWorld", Label::Style({font::FontWeight::Bold, Color::Red_500, Label::TextDecoration::Underline}));
@@ -97,7 +94,7 @@ bool RootLayout::init() {
 	}, InputListener::makeButtonMask({InputMouseButton::MouseRight}));
 
 	_cursor = addChild(Rc<Layer>::create(Color::Blue_500), 10);
-	_cursor->setContentSize(Size(10, 10));
+	_cursor->setContentSize(Size2(10, 10));
 	_cursor->setAnchorPoint(Anchor::Middle);
 
 	scheduleUpdate();
@@ -127,7 +124,7 @@ bool RootLayout::init() {
 	return true;
 }
 
-void RootLayout::onContentSizeDirty() {
+void ZOrderTest::onContentSizeDirty() {
 	Node::onContentSizeDirty();
 
 	Vec2 center = _contentSize / 2.0f;
@@ -136,8 +133,6 @@ void RootLayout::onContentSizeDirty() {
 		_background->setPosition(_contentSize / 2.0f);
 		_background->setContentSize(_contentSize);
 	}
-
-	//_logo->setPosition(_contentSize / 2.0f);
 
 	Vec2 positions[5] = {
 		center + Vec2(-100, -100),
@@ -162,7 +157,7 @@ void RootLayout::onContentSizeDirty() {
 	}
 }
 
-void RootLayout::update(const UpdateTime &time) {
+void ZOrderTest::update(const UpdateTime &time) {
 	Node::update(time);
 
 	auto t = time.app % 5_usec;
@@ -173,10 +168,10 @@ void RootLayout::update(const UpdateTime &time) {
 	}
 }
 
-void RootLayout::handleClick(const Vec2 &loc) {
+void ZOrderTest::handleClick(const Vec2 &loc) {
 	auto node = addChild(Rc<Layer>::create(Color::Grey_500), 9);
 
-	node->setContentSize(Size(50, 50));
+	node->setContentSize(Size2(50, 50));
 	node->setAnchorPoint(Anchor::Middle);
 	node->setPosition(loc);
 
@@ -192,7 +187,7 @@ void RootLayout::handleClick(const Vec2 &loc) {
 	l->addScrollRecognizer([node] (GestureEvent event, const GestureScroll &scroll) {
 		if (scroll.amount.y != 0.0f) {
 			auto zRot = node->getRotation();
-			node->setRotation(zRot + scroll.amount.y / 4.0f);
+			node->setRotation(zRot + scroll.amount.y / 40.0f);
 		}
 		std::cout << "Scroll: " << event << ": " << scroll.pos << " - " << scroll.amount << "\n";
 		return true;

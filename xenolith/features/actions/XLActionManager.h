@@ -199,7 +199,7 @@ template <typename Callback>
 void ActionContainer::foreach(const Callback &cb) const {
 	if (nactions <= ReserveActions) {
 		auto target = (Action **)actions.data();
-		auto end = (Action **)(actions.data() + nactions);
+		auto end = (Action **)(actions.data()) + nactions;
 		while (target != end) {
 			cb(*target);
 			++ target;

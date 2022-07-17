@@ -24,7 +24,6 @@
 #include "XLScene.h"
 #include "XLDirector.h"
 #include "XLApplication.h"
-#include "XLNetworkHandle.h"
 
 namespace stappler::xenolith::test {
 
@@ -42,7 +41,7 @@ void NetworkTestSprite::onEnter(Scene *scene) {
 
 	auto app = scene->getDirector()->getApplication();
 
-	auto h = Rc<network::DataHandle>::create("https://geobase.stappler.org/proxy/getHeaders");
+	/*auto h = Rc<network::DataHandle>::create("https://geobase.stappler.org/proxy/getHeaders");
 	// h->addHeader("X-Test", "123");
 	h->perform(app, [] (network::Handle &handle, data::Value &data) {
 		auto url = handle.getUrl();
@@ -52,7 +51,7 @@ void NetworkTestSprite::onEnter(Scene *scene) {
 
 		log::vtext("NetworkTest", "[", resp, "] ", url, ": ", code, " - ", err);
 		std::cout << data::EncodeFormat::Pretty << data << "\n";
-	});
+	});*/
 }
 
 }

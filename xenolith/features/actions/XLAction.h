@@ -145,7 +145,7 @@ protected:
     bool _firstTick = true;
 };
 
-class Speed: public Action {
+class Speed : public Action {
 public:
 	virtual ~Speed();
 
@@ -175,6 +175,49 @@ protected:
 
 	float _speed = 1.0f;
 	Rc<ActionInterval> _innerAction;
+};
+
+
+class Sequence : public ActionInterval {
+public:
+
+	virtual Sequence* clone() const override;
+	virtual Sequence* reverse() const override;
+
+	virtual void startWithTarget(Node *target) override;
+	virtual void stop(void) override;
+	/**
+	 * @param t In seconds.
+	 */
+	virtual void update(float t) override;
+	virtual void onStopped() override;
+
+	/** initializes the action */
+	bool init(Action *pActionOne, Action *pActionTwo);
+
+protected:
+	Rc<Action> _actions[2];
+	float _split = 0.0f;
+	int _last;
+};
+
+
+class TintTo: public ActionInterval {
+public:
+	virtual ~TintTo();
+
+	bool init(float duration, const Color4F &, ColorMask = ColorMask::Color);
+
+	virtual Rc<ActionInterval> clone() const override;
+	virtual Rc<ActionInterval> reverse(void) const override;
+
+	virtual void startWithTarget(Node *target) override;
+	virtual void update(float time) override;
+
+protected:
+	ColorMask _mask = ColorMask::None;
+	Color4F _to;
+	Color4F _from;
 };
 
 }

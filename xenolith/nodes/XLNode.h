@@ -279,7 +279,14 @@ public:
 	virtual bool isOpacityModifyRGB() const { return false; };
 
 	virtual void draw(RenderFrameInfo &, NodeFlags flags);
-	virtual void visit(RenderFrameInfo &, NodeFlags parentFlags);
+
+	// visit on unsorted nodes, commit most of geometry changes
+	// on this step, we process child-to-parent changes (like nodes, based on label's size)
+	virtual bool visitGeometry(RenderFrameInfo &, NodeFlags parentFlags);
+
+	// visit on sorted nodes, push draw commands
+	// on this step, we also process parent-to-child geometry changes
+	virtual bool visitDraw(RenderFrameInfo &, NodeFlags parentFlags);
 
 	void scheduleUpdate();
 	void unscheduleUpdate();

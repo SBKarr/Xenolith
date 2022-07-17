@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,23 +20,13 @@
  THE SOFTWARE.
  **/
 
-#include "XLAppSceneResource.h"
-#include "XLAppShaders.h"
+#ifndef TEST_SRC_MENU_APPMENU_H_
+#define TEST_SRC_MENU_APPMENU_H_
 
-namespace stappler::xenolith::app {
+class AppMenu {
+public:
+	AppMenu();
+	virtual ~AppMenu();
+};
 
-bool AppSceneResource::init() {
-	/*gl::Resource::Builder builder("AppSceneRequisite");
-	builder.addProgramByRef("AppSceneRequisite_VertexListVert", gl::ProgramStage::Vertex, app::shaders::AppVert);
-	builder.addProgramByRef("AppSceneRequisite_VertexListFrag", gl::ProgramStage::Fragment, app::shaders::AppFrag);
-
-	builder.addPipeline("AppSceneRequisite_VertexList", Vector<StringView>({
-		"AppSceneRequisite_VertexListVert",
-		"AppSceneRequisite_VertexListFrag"
-	}), LayoutFormat::Vertexes, VertexFormat::V4F_C4F_T2F);
-
-	return ResourceComponent::init(Rc<gl::Resource>::create(move(builder)));*/
-	return false;
-}
-
-}
+#endif /* TEST_SRC_MENU_APPMENU_H_ */

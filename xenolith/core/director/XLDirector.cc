@@ -128,6 +128,7 @@ void Director::update() {
 	//_view->runFrame(_scene->getRenderQueue(), _screenSize);
 	_inputDispatcher->update(_time);
 	_scheduler->update(_time);
+	_actionManager->update(_time);
 }
 
 void Director::end() {

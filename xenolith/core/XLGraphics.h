@@ -240,18 +240,6 @@ protected:
 	float lineWidth = 0.0f; // 0.0f - draw triangles, < 0.0f - points,  > 0.0f - lines with width
 };
 
-enum class ColorMask : uint8_t {
-	None = 0,
-	R = 0x01,
-	G = 0x02,
-	B = 0x04,
-	A = 0x08,
-	Color = 0x07,
-	All = 0x0F
-};
-
-SP_DEFINE_ENUM_AS_MASK(ColorMask)
-
 static constexpr auto EmptyTextureName = "org.xenolith.EmptyImage";
 static constexpr auto SolidTextureName = "org.xenolith.SolidImage";
 

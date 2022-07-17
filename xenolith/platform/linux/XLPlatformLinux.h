@@ -34,6 +34,20 @@
 #include <xkbcommon/xkbcommon-compose.h>
 #include <xkbcommon/xkbcommon-names.h>
 
+#define XL_WAYLAND_DEBUG 0
+
+#if XL_X11_DEBUG
+#define XL_X11_LOG(...) log::vtext("X11", __VA_ARGS__)
+#else
+#define XL_X11_LOG(...)
+#endif
+
+#if XL_WAYLAND_DEBUG
+#define XL_WAYLAND_LOG(...) log::vtext("Wayland", __VA_ARGS__)
+#else
+#define XL_WAYLAND_LOG(...)
+#endif
+
 namespace stappler::xenolith::platform {
 
 enum class SurfaceType : uint32_t {

@@ -22,6 +22,7 @@
 
 #include "XLLabel.h"
 #include "XLEventListener.h"
+#include "XLApplication.h"
 
 namespace stappler::xenolith {
 
@@ -33,6 +34,10 @@ bool Label::init(font::FontController *source, const DescriptionStyle &style,
 		StringView str, float width, Alignment alignment) {
 	if (!Sprite::init()) {
 		return false;
+	}
+
+	if (!source) {
+		source = Application::getInstance()->getFontController();
 	}
 
 	_source = source;
@@ -61,12 +66,18 @@ bool Label::init(font::FontController *source, const DescriptionStyle &style,
 	setWidth(width);
 	setAlignment(alignment);
 
-	// updateLabel();
-
 	return true;
 }
 
-void Label::tryUpdateLabel(bool force) {
+bool Label::init(const DescriptionStyle &style, StringView str, float w, Alignment a) {
+	return init(nullptr, style, str, w, a);
+}
+
+bool Label::init(StringView str, float w, Alignment a) {
+	return init(nullptr, DescriptionStyle(), str, w, a);
+}
+
+void Label::tryUpdateLabel() {
 	if (_labelDirty) {
 		updateLabel();
 	}
@@ -196,18 +207,20 @@ static size_t Label_getQuadsCount(const font::FormatSpec *format) {
 	return ret;
 }
 
-static void Label_writeTextureQuad(const font::FormatSpec *format, const font::Metrics &m, const font::CharSpec &c,
-		const font::CharLayout &l, const font::RangeSpec &range, const font::LineSpec &line, Vector<ColorMask> &cMap,
-		uint16_t face, VertexArray::Quad &quad) {
+static void Label_pushColorMap(const font::RangeSpec &range, Vector<ColorMask> &cMap) {
 	ColorMask mask = ColorMask::None;
-	if (range.colorDirty) {
+	if (!range.colorDirty) {
 		mask |= ColorMask::Color;
 	}
-	if (range.opacityDirty) {
+	if (!range.opacityDirty) {
 		mask |= ColorMask::A;
 	}
 	cMap.push_back(mask);
+}
 
+static void Label_writeTextureQuad(const font::FormatSpec *format, const font::Metrics &m, const font::CharSpec &c,
+		const font::CharLayout &l, const font::RangeSpec &range, const font::LineSpec &line,
+		uint16_t face, VertexArray::Quad &quad) {
 	switch (range.align) {
 	case font::VerticalAlign::Sub:
 		quad.drawChar(m, l, c.pos, format->height - line.pos + m.descender / 2, range.color, range.decoration, face);
@@ -253,7 +266,8 @@ void Label::updateQuadsForeground(font::FontController *controller, FormatSpec *
 
 				if (ch.charID == c.charID) {
 					auto quad = _vertexes.addQuad();
-					Label_writeTextureQuad(format, metrics, c, ch, *it.range, *it.line, colorMap, face, quad);
+					Label_pushColorMap(*it.range, colorMap);
+					Label_writeTextureQuad(format, metrics, c, ch, *it.range, *it.line, face, quad);
 				}
 			}
 		}
@@ -266,7 +280,8 @@ void Label::updateQuadsForeground(font::FontController *controller, FormatSpec *
 
 				if (ch.charID == c.charID) {
 					auto quad = _vertexes.addQuad();
-					Label_writeTextureQuad(format, metrics, c, ch, *it.range, *it.line, colorMap, face, quad);
+					Label_pushColorMap(*it.range, colorMap);
+					Label_writeTextureQuad(format, metrics, c, ch, *it.range, *it.line, face, quad);
 				}
 			}
 			end -= 1;
@@ -305,11 +320,13 @@ void Label::updateQuadsForeground(font::FontController *controller, FormatSpec *
 			const auto underlineHeight = underlineBase;
 
 			auto quad = _vertexes.addQuad();
+			Label_pushColorMap(*it.range, colorMap);
 			quad.drawUnderlineRect(underlineX, underlineY, underlineWidth, underlineHeight, color);
 			if (frac > 0.1) {
 				color.a *= frac;
 
 				auto quad = _vertexes.addQuad();
+				Label_pushColorMap(*it.range, colorMap);
 				quad.drawUnderlineRect(underlineX, underlineY - 1, underlineWidth, 1, color);
 			}
 		}

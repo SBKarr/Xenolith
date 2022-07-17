@@ -67,6 +67,8 @@ public:
 	// invalidate swapchain image target, if drawing process was not successful
 	virtual void invalidateTarget(Rc<ImageStorage> &&) = 0;
 
+	virtual Rc<Ref> getSwapchainHandle() const = 0;
+
 	const Rc<Director> &getDirector() const { return _director; }
 	const Rc<Loop> &getLoop() const { return _loop; }
 

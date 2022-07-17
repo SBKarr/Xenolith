@@ -23,21 +23,19 @@
 #include "AppScene.h"
 
 #include "XLVkAttachment.h"
-#include "XLAppSceneResource.cc"
 #include "XLDirector.h"
 #include "XLSprite.h"
 #include "XLPlatform.h"
 #include "XLApplication.h"
 
-#include "XLGlRenderQueue.h"
 #include "XLDefaultShaders.h"
 
 #include "XLVkAttachment.h"
 #include "XLVkMaterialRenderPass.h"
 
-#include "AppRootLayout.h"
 #include "AppAutofitTest.h"
 #include "AppVectorTest2.h"
+#include "AppRootLayout.h"
 #include "XLFontLibrary.h"
 
 namespace stappler::xenolith::app {
@@ -70,9 +68,10 @@ static gl::ImageFormat AppScene_selectDepthFormat(SpanView<gl::ImageFormat> form
 	return ret;
 }
 
-static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder &builder, Extent2 extent,
-		Function<void(gl::FrameQueue &, const Rc<gl::AttachmentHandle> &, Function<void(bool)> &&)> && cb) {
-	auto &dev = app->getGlLoop()->getDevice();
+static void AppScene_makeRenderQueue(Application *app, renderqueue::Queue::Builder &builder, Extent2 extent,
+		Function<void(renderqueue::FrameQueue &, const Rc<renderqueue::AttachmentHandle> &, Function<void(bool)> &&)> && cb) {
+	using namespace renderqueue;
+
 	auto &cache = app->getResourceCache();
 
 	// load shaders by ref - do not copy content into engine
@@ -80,16 +79,16 @@ static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder 
 	auto materialVert = builder.addProgramByRef("Loader_MaterialFrag", xenolith::shaders::MaterialFrag);
 
 	// render-to-swapchain RenderPass
-	auto pass = Rc<vk::MaterialRenderPass>::create("SwapchainPass", gl::RenderOrderingHighest);
+	auto pass = Rc<vk::MaterialPass>::create("SwapchainPass", RenderOrderingHighest);
 	builder.addRenderPass(pass);
 
-	auto shaderSpecInfo = Vector<gl::SpecializationInfo>({
+	auto shaderSpecInfo = Vector<SpecializationInfo>({
 		// no specialization required for vertex shader
 		materialVert,
 		// specialization for fragment shader - use platform-dependent array sizes
-		gl::SpecializationInfo(materialFrag, {
-			gl::PredefinedConstant::SamplersArraySize,
-			gl::PredefinedConstant::TexturesArraySize
+		SpecializationInfo(materialFrag, Vector<PredefinedConstant>{
+			PredefinedConstant::SamplersArraySize,
+			PredefinedConstant::TexturesArraySize
 		})
 	});
 
@@ -100,24 +99,22 @@ static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder 
 	}));
 	auto transparentPipeline = builder.addPipeline(pass, 0, "Transparent", shaderSpecInfo, PipelineMaterialInfo({
 		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
-				gl::BlendFactor::One, gl::BlendFactor::Zero, gl::BlendOp::Add),
+				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
 		DepthInfo(false, true, gl::CompareOp::Less)
 	}));
 
-	builder.addPipeline(pass, 0, "Surface", shaderSpecInfo, PipelineMaterialInfo({
+	auto surfacePipeline = builder.addPipeline(pass, 0, "Surface", shaderSpecInfo, PipelineMaterialInfo(
 		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
-				gl::BlendFactor::One, gl::BlendFactor::Zero, gl::BlendOp::Add),
+				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
 		DepthInfo(false, true, gl::CompareOp::LessOrEqual)
-	}));
+	));
 
-	PipelineMaterialInfo debugLinesMaterialInfo({
+	builder.addPipeline(pass, 0, "DebugTriangles", shaderSpecInfo, PipelineMaterialInfo(
 		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
-				gl::BlendFactor::One, gl::BlendFactor::Zero, gl::BlendOp::Add),
-		DepthInfo(false, true, gl::CompareOp::Less)
-	});
-	debugLinesMaterialInfo.lineWidth = 1.0f;
-
-	builder.addPipeline(pass, 0, "DebugTriangles", shaderSpecInfo, debugLinesMaterialInfo);
+				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
+		DepthInfo(false, true, gl::CompareOp::Less),
+		LineWidth(1.0f)
+	));
 
 	// define internal resources (images and buffers)
 	gl::Resource::Builder resourceBuilder("LoaderResources");
@@ -127,33 +124,44 @@ static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder 
 
 	builder.setInternalResource(Rc<gl::Resource>::create(move(resourceBuilder)));
 
-	gl::ImageInfo depthImageInfo(extent, gl::ForceImageUsage(gl::ImageUsage::DepthStencilAttachment),
-			AppScene_selectDepthFormat(dev->getSupportedDepthStencilFormat()));
-
-	gl::ImageAttachment::AttachmentInfo depthAttachmentInfo;
-	depthAttachmentInfo.initialLayout = gl::AttachmentLayout::Undefined;
-	depthAttachmentInfo.finalLayout = gl::AttachmentLayout::DepthStencilAttachmentOptimal;
+	ImageAttachment::AttachmentInfo depthAttachmentInfo;
+	depthAttachmentInfo.initialLayout = AttachmentLayout::Undefined;
+	depthAttachmentInfo.finalLayout = AttachmentLayout::DepthStencilAttachmentOptimal;
 	depthAttachmentInfo.clearOnLoad = true;
 	depthAttachmentInfo.clearColor = Color4F::WHITE;
-	depthAttachmentInfo.frameSizeCallback = [] (const gl::FrameQueue &frame) {
+	depthAttachmentInfo.frameSizeCallback = [] (const FrameQueue &frame) {
 		return Extent3(frame.getExtent());
 	};
 
-	auto depth = Rc<vk::ImageAttachment>::create("CommonDepth", move(depthImageInfo), move(depthAttachmentInfo));
+	auto depth = Rc<vk::ImageAttachment>::create("CommonDepth",
+		gl::ImageInfo(
+			extent,
+			gl::ForceImageUsage(gl::ImageUsage::DepthStencilAttachment),
+			AppScene_selectDepthFormat(app->getGlLoop()->getSupportedDepthStencilFormat())),
+		ImageAttachment::AttachmentInfo{
+			.initialLayout = AttachmentLayout::Undefined,
+			.finalLayout = AttachmentLayout::DepthStencilAttachmentOptimal,
+			.clearOnLoad = true,
+			.clearColor = Color4F::WHITE,
+			.frameSizeCallback = [] (const FrameQueue &frame) {
+				return Extent3(frame.getExtent());
+			}
+	});
 
-	gl::ImageInfo outImageInfo(extent, gl::ForceImageUsage(gl::ImageUsage::ColorAttachment), platform::graphic::getCommonFormat());
-
-	// output attachment
-	gl::ImageAttachment::AttachmentInfo outAttachmentInfo;
-	outAttachmentInfo.initialLayout = gl::AttachmentLayout::Undefined;
-	outAttachmentInfo.finalLayout = gl::AttachmentLayout::PresentSrc;
-	outAttachmentInfo.clearOnLoad = true;
-	outAttachmentInfo.clearColor = Color4F(0.0f, 0.0f, 0.0f, 0.0f); // Color4F::BLACK;
-	outAttachmentInfo.frameSizeCallback = [] (const gl::FrameQueue &frame) {
-		return Extent3(frame.getExtent());
-	};
-
-	auto out = Rc<vk::ImageAttachment>::create("Output", move(outImageInfo), move(outAttachmentInfo));
+	auto out = Rc<vk::ImageAttachment>::create("Output",
+		gl::ImageInfo(
+			extent,
+			gl::ForceImageUsage(gl::ImageUsage::ColorAttachment),
+			platform::graphic::getCommonFormat()),
+		ImageAttachment::AttachmentInfo{
+			.initialLayout = AttachmentLayout::Undefined,
+			.finalLayout = AttachmentLayout::PresentSrc,
+			.clearOnLoad = true,
+			.clearColor = Color4F(1.0f, 1.0f, 1.0f, 1.0f), // Color4F::BLACK;
+			.frameSizeCallback = [] (const FrameQueue &frame) {
+				return Extent3(frame.getExtent());
+			}
+	});
 
 	// Material input attachment - per-scene list of materials
 	auto materialInput = Rc<vk::MaterialVertexAttachment>::create("MaterialInput",
@@ -162,11 +170,14 @@ static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder 
 		// ... with predefined list of materials
 		Vector<Rc<gl::Material>>({
 			Rc<gl::Material>::create(materialPipeline, initImage),
+			Rc<gl::Material>::create(transparentPipeline, initImage),
+			Rc<gl::Material>::create(surfacePipeline, initImage),
 			Rc<gl::Material>::create(materialPipeline, cache->getEmptyImage(), ColorMode::IntensityChannel),
 			Rc<gl::Material>::create(materialPipeline, cache->getSolidImage(), ColorMode::IntensityChannel),
-			Rc<gl::Material>::create(transparentPipeline, initImage),
-			Rc<gl::Material>::create(transparentPipeline, cache->getEmptyImage(), ColorMode::IntensityChannel),
-			Rc<gl::Material>::create(transparentPipeline, cache->getSolidImage(), ColorMode::IntensityChannel)
+			Rc<gl::Material>::create(transparentPipeline, cache->getEmptyImage(), ColorMode()),
+			Rc<gl::Material>::create(transparentPipeline, cache->getSolidImage(), ColorMode()),
+			Rc<gl::Material>::create(surfacePipeline, cache->getEmptyImage(), ColorMode()),
+			Rc<gl::Material>::create(surfacePipeline, cache->getSolidImage(), ColorMode())
 		})
 	);
 
@@ -176,57 +187,50 @@ static void AppScene_makeRenderQueue(Application *app, gl::RenderQueue::Builder 
 	vertexInput->setInputCallback(move(cb));
 
 	// define pass input-output
-	builder.addPassInput(pass, 0, vertexInput, gl::AttachmentDependencyInfo()); // 0
-	builder.addPassInput(pass, 0, materialInput, gl::AttachmentDependencyInfo()); // 1
-	builder.addPassDepthStencil(pass, 0, depth, gl::AttachmentDependencyInfo{
-		gl::PipelineStage::EarlyFragmentTest,
-			gl::AccessType::DepthStencilAttachmentRead | gl::AccessType::DepthStencilAttachmentWrite,
-		gl::PipelineStage::LateFragmentTest,
-			gl::AccessType::DepthStencilAttachmentRead | gl::AccessType::DepthStencilAttachmentWrite,
+	builder.addPassInput(pass, 0, vertexInput, AttachmentDependencyInfo()); // 0
+	builder.addPassInput(pass, 0, materialInput, AttachmentDependencyInfo()); // 1
+	builder.addPassDepthStencil(pass, 0, depth, AttachmentDependencyInfo{
+		PipelineStage::EarlyFragmentTest,
+			AccessType::DepthStencilAttachmentRead | AccessType::DepthStencilAttachmentWrite,
+		PipelineStage::LateFragmentTest,
+			AccessType::DepthStencilAttachmentRead | AccessType::DepthStencilAttachmentWrite,
 
 		// can be reused after RenderPass is submitted
-		gl::FrameRenderPassState::Submitted,
+		FrameRenderPassState::Submitted,
 	});
-	builder.addPassOutput(pass, 0, out, gl::AttachmentDependencyInfo{
+	builder.addPassOutput(pass, 0, out, AttachmentDependencyInfo{
 		// first used as color attachment to output colors
-		gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::ColorAttachmentWrite,
+		PipelineStage::ColorAttachmentOutput, AccessType::ColorAttachmentWrite,
 
 		// last used the same way (the only usage for this attachment)
-		gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::ColorAttachmentWrite,
+		PipelineStage::ColorAttachmentOutput, AccessType::ColorAttachmentWrite,
 
 		// can be reused after RenderPass is submitted
-		gl::FrameRenderPassState::Submitted,
+		FrameRenderPassState::Submitted,
 	});
 
 	// define global input-output
 	// samplers and materialInput are persistent between frames, only vertexes should be provided before rendering started
 	builder.addInput(vertexInput);
 	builder.addOutput(out);
-
-	// optional world-to-pass subpass dependency
-	/*builder.addSubpassDependency(pass,
-			gl::RenderSubpassDependency::External, gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::None,
-			0, gl::PipelineStage::ColorAttachmentOutput, gl::AccessType::ColorAttachmentWrite, false);*/
 }
 
 bool AppScene::init(Application *app, Extent2 extent) {
 	// build presentation RenderQueue
-	gl::RenderQueue::Builder builder("Loader", gl::RenderQueue::Continuous);
+	renderqueue::Queue::Builder builder("Loader");
 
-	AppScene_makeRenderQueue(app, builder, extent, [this] (gl::FrameQueue &frame, const Rc<gl::AttachmentHandle> &a,
+	AppScene_makeRenderQueue(app, builder, extent, [this] (renderqueue::FrameQueue &frame, const Rc<renderqueue::AttachmentHandle> &a,
 			Function<void(bool)> &&cb) {
 		on2dVertexInput(frame, a, move(cb));
 	});
 
-	if (!Scene::init(app, move(builder))) {
+	if (!UtilScene::init(app, move(builder))) {
 		return false;
 	}
 
-	//_layout = addChild(Rc<AutofitTest>::create());
-	_layout = addChild(Rc<VectorTest2>::create());
-
-	// _layout = addChild(Rc<RootLayout>::create());
-
+	// _layout = addChild(Rc<AutofitTest>::create());
+	// _layout = addChild(Rc<VectorTest2>::create());
+	_layout = addChild(Rc<RootLayout>::create());
 	// _sprite = addChild(Rc<Sprite>::create("Xenolith.png"));
 
 	/*_node1 = addChild(Rc<Sprite>::create());
@@ -240,41 +244,35 @@ bool AppScene::init(Application *app, Extent2 extent) {
 }
 
 void AppScene::onPresented(Director *dir) {
-	Scene::onPresented(dir);
+	UtilScene::onPresented(dir);
 }
 
 void AppScene::onFinished(Director *dir) {
-	Scene::onFinished(dir);
+	UtilScene::onFinished(dir);
 }
 
 void AppScene::update(const UpdateTime &time) {
-	Scene::update(time);
+	UtilScene::update(time);
 }
 
 void AppScene::onEnter(Scene *scene) {
-	Scene::onEnter(scene);
+	UtilScene::onEnter(scene);
 	std::cout << "AppScene::onEnter\n";
 }
 
 void AppScene::onExit() {
 	std::cout << "AppScene::onExit\n";
-	Scene::onExit();
+	UtilScene::onExit();
 }
 
 void AppScene::onContentSizeDirty() {
-	Scene::onContentSizeDirty();
+	UtilScene::onContentSizeDirty();
 
-	_layout->setAnchorPoint(Anchor::Middle);
-	_layout->setPosition(_contentSize / 2.0f);
-	_layout->setContentSize(_contentSize);
-}
-
-void AppScene::addFontController(const Rc<font::FontController> &c) {
-	/*_sprite = addChild(Rc<Sprite>::create(Rc<Texture>(c->getTexture())));
-
-	_sprite->setPosition(Vec2(_contentSize) / 2.0f);
-	_sprite->setAnchorPoint(Anchor::Middle);
-	_sprite->setContentSize(_contentSize / 2.0f);*/
+	if (_layout) {
+		_layout->setAnchorPoint(Anchor::Middle);
+		_layout->setPosition(_contentSize / 2.0f);
+		_layout->setContentSize(_contentSize);
+	}
 }
 
 }

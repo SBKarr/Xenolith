@@ -297,6 +297,9 @@ struct FontCharString final {
 	void addString(const String &);
 	void addString(const WideString &);
 	void addString(const char16_t *, size_t);
+	void addString(const FontCharString &);
+
+	bool empty() const { return chars.empty(); }
 
 	Vector<char16_t> chars;
 };

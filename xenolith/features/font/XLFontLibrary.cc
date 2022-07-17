@@ -32,10 +32,22 @@
 #include FT_FREETYPE_H
 #include FT_GLYPH_H
 
+#include "XLDefaultFont-RobotoMono-Bold.cc"
+#include "XLDefaultFont-RobotoMono-BoldItalic.cc"
+#include "XLDefaultFont-RobotoMono-Italic.cc"
+#include "XLDefaultFont-RobotoMono-Regular.cc"
+
 namespace stappler::xenolith::font {
 
 XL_DECLARE_EVENT_CLASS(FontController, onLoaded)
 XL_DECLARE_EVENT_CLASS(FontController, onFontSourceUpdated)
+
+struct FontController::Builder::Data {
+	String name;
+	Map<String, FontSource> dataQueries;
+	Map<String, FamilyQuery> familyQueries;
+	Map<String, String> aliases;
+};
 
 class FontController::FontSizedLayout : public Ref {
 public:
@@ -111,6 +123,214 @@ protected:
 	HashMap<FontSize, Rc<FontSizedLayout>> _faces;
 	FontLibrary *_library = nullptr;
 };
+
+FontController::Builder::~Builder() {
+	if (_data) {
+		delete _data;
+		_data = nullptr;
+	}
+}
+
+FontController::Builder::Builder(StringView name) {
+	_data = new Data();
+	_data->name = name.str<Interface>();
+}
+
+FontController::Builder::Builder(Builder &&other) {
+	_data = other._data;
+	other._data = nullptr;
+}
+
+FontController::Builder &FontController::Builder::operator=(Builder &&other) {
+	if (_data) {
+		delete _data;
+		_data = nullptr;
+	}
+
+	_data = other._data;
+	other._data = nullptr;
+	return *this;
+}
+
+StringView FontController::Builder::getName() const {
+	return _data->name;
+}
+
+const FontController::FontSource * FontController::Builder::addFontSource(StringView name, BytesView data) {
+	auto it = _data->dataQueries.find(name);
+	if (it == _data->dataQueries.end()) {
+		it = _data->dataQueries.emplace(name.str<Interface>(), FontSource()).first;
+		it->second.fontExternalData = data;
+		return &it->second;
+	}
+
+	log::vtext("FontController", "Duplicate font source: ", name);
+	return nullptr;
+}
+
+const FontController::FontSource * FontController::Builder::addFontSource(StringView name, Bytes && data) {
+	auto it = _data->dataQueries.find(name);
+	if (it == _data->dataQueries.end()) {
+		it = _data->dataQueries.emplace(name.str<Interface>(), FontSource()).first;
+		it->second.fontMemoryData = move(data);
+		return &it->second;
+	}
+
+	log::vtext("FontController", "Duplicate font source: ", name);
+	return nullptr;
+}
+
+const FontController::FontSource * FontController::Builder::addFontSource(StringView name, FilePath data) {
+	auto it = _data->dataQueries.find(name);
+	if (it == _data->dataQueries.end()) {
+		it = _data->dataQueries.emplace(name.str<Interface>(), FontSource()).first;
+		it->second.fontFilePath = data.get().str<Interface>();
+		return &it->second;
+	}
+
+	log::vtext("FontController", "Duplicate font source: ", name);
+	return nullptr;
+}
+
+const FontController::FontSource * FontController::Builder::addFontSource(StringView name, Function<Bytes()> &&cb) {
+	auto it = _data->dataQueries.find(name);
+	if (it == _data->dataQueries.end()) {
+		it = _data->dataQueries.emplace(name.str<Interface>(), FontSource()).first;
+		it->second.fontCallback = move(cb);
+		return &it->second;
+	}
+
+	log::vtext("FontController", "Duplicate font source: ", name);
+	return nullptr;
+}
+
+const FontController::FontSource *FontController::Builder::getFontSource(StringView name) const {
+	auto it = _data->dataQueries.find(name);
+	if (it != _data->dataQueries.end()) {
+		return &it->second;
+	}
+	return nullptr;
+}
+
+const FontController::FamilyQuery * FontController::Builder::addFontFaceQuery(StringView family,
+		FontStyle style, FontWeight weight, FontStretch stretch, const FontSource *source,
+		Vector<Pair<FontSize,FontCharString>> &&chars, bool front) {
+	XL_ASSERT(source, "Source should not be nullptr");
+
+	auto name = FontLayout::constructName(family, style, weight, stretch);
+	auto it = _data->familyQueries.find(name);
+	if (it == _data->familyQueries.end()) {
+		it = _data->familyQueries.emplace(name, FamilyQuery{family.str<Interface>(),
+			style, weight, stretch}).first;
+	}
+
+	addSources(&it->second, Vector<const FontSource *>{source}, front);
+	if (!chars.empty()) {
+		addChars(&it->second, move(chars));
+	}
+
+	return &it->second;
+}
+
+const FontController::FamilyQuery * FontController::Builder::addFontFaceQuery(StringView family,
+		FontStyle style, FontWeight weight, FontStretch stretch, Vector<const FontSource *> &&sources,
+		Vector<Pair<FontSize,FontCharString>> &&chars, bool front) {
+	auto name = FontLayout::constructName(family, style, weight, stretch);
+	auto it = _data->familyQueries.find(name);
+	if (it == _data->familyQueries.end()) {
+		it = _data->familyQueries.emplace(name, FamilyQuery{family.str<Interface>(),
+			style, weight, stretch}).first;
+	}
+
+	addSources(&it->second, move(sources), front);
+	if (!chars.empty()) {
+		addChars(&it->second, move(chars));
+	}
+
+	return &it->second;
+}
+
+bool FontController::Builder::addAlias(StringView newAlias, StringView familyName) {
+	auto iit = _data->aliases.find(familyName);
+	if (iit != _data->aliases.end()) {
+		_data->aliases.insert_or_assign(newAlias.str<Interface>(), iit->second);
+		return true;
+	} else {
+		// check if family defined
+		for (auto &it : _data->familyQueries) {
+			if (it.second.family == familyName) {
+				_data->aliases.insert_or_assign(newAlias.str<Interface>(), it.second.family);
+				return true;
+			}
+		}
+		return false;
+	}
+}
+
+Vector<const FontController::FamilyQuery *> FontController::Builder::getFontFamily(StringView family) const {
+	Vector<const FontController::FamilyQuery *> families;
+	for (auto &it : _data->familyQueries) {
+		if (it.second.family == family) {
+			families.emplace_back(&it.second);
+		}
+	}
+	return families;
+}
+
+Map<String, String> FontController::Builder::getAliases() const {
+	return _data->aliases;
+}
+
+void FontController::Builder::addSources(FamilyQuery *query, Vector<const FontSource *> &&sources, bool front) {
+	if (query->sources.empty() || !front) {
+		query->sources.reserve(query->sources.size() + sources.size());
+		for (auto &iit : sources) {
+			XL_ASSERT(iit, "Source should not be nullptr");
+			if (std::find(query->sources.begin(), query->sources.end(), iit) == query->sources.end()) {
+				query->sources.emplace_back(iit);
+			}
+		}
+	} else {
+		auto iit = query->sources.begin();
+		while (iit != query->sources.end()) {
+			if (std::find(sources.begin(), sources.end(), *iit) != sources.end()) {
+				iit = query->sources.erase(iit);
+			} else {
+				++ iit;
+			}
+		}
+
+		query->sources.reserve(query->sources.size() + sources.size());
+
+		auto insertIt = query->sources.begin();
+		for (auto &iit : sources) {
+			XL_ASSERT(iit, "Source should not be nullptr");
+			if (std::find(query->sources.begin(), query->sources.end(), iit) == query->sources.end()) {
+				query->sources.emplace(insertIt, iit);
+			}
+		}
+	}
+}
+
+void FontController::Builder::addChars(FamilyQuery *query, Vector<Pair<FontSize, FontCharString>> &&chars) {
+	if (query->chars.empty()) {
+		query->chars = move(chars);
+	} else {
+		for (auto &it : chars) {
+			auto iit = std::find_if(query->chars.begin(), query->chars.end(), [&] (const Pair<FontSize, FontCharString> &data) {
+				if (data.first == it.first) {
+					return true;
+				}
+				return false;
+			});
+			if (iit != query->chars.end()) {
+				iit->second.addString(it.second);
+			} else {
+				query->chars.emplace_back(move(it));
+			}
+		}
+	}
+}
 
 bool FontController::FontSizedLayout::init(FontSize size, String &&name, FontLayoutId id, FontLayout *l, Rc<FontFaceObject> &&root) {
 	_size = size;
@@ -362,6 +582,25 @@ void FontController::addFont(StringView family, FontStyle style, FontWeight weig
 	onFontSourceUpdated(this);
 }
 
+bool FontController::addAlias(StringView newAlias, StringView familyName) {
+	if (_aliases.find(newAlias) != _aliases.end()) {
+		return false;
+	}
+
+	auto iit = _aliases.find(familyName);
+	if (iit != _aliases.end()) {
+		_aliases.emplace(newAlias.str<Interface>(), iit->second);
+		return true;
+	} else {
+		auto f_it = _families.find(familyName);
+		if (f_it != _families.end()) {
+			_aliases.emplace(newAlias.str<Interface>(), familyName.str<Interface>());
+			return true;
+		}
+		return false;
+	}
+}
+
 FontLayoutId FontController::getLayout(const FontParameters &style, float scale) {
 	FontLayoutId ret = FontLayoutId(0);
 
@@ -380,6 +619,8 @@ FontLayoutId FontController::getLayout(const FontParameters &style, float scale)
 		if (ret.get() >= _sizes.size()) {
 			_sizes.emplace_back(l.get());
 		}
+	} else {
+		log::vtext("FontController", "Layout not found: ", style.getConfigName());
 	}
 	return ret;
 }
@@ -557,6 +798,11 @@ FontController::FontLayout * FontController::getFontLayout(const FontParameters 
 		family = StringView(_defaultFontFamily);
 	}
 
+	auto a_it = _aliases.find(family);
+	if (a_it != _aliases.end()) {
+		family = a_it->second;
+	}
+
 	auto cfgName = FontLayout::constructName(family, style.fontStyle, style.fontWeight, style.fontStretch);
 
 	auto it = _layouts.find(cfgName);
@@ -594,6 +840,40 @@ FontController::FontLayout * FontController::getFontLayout(const FontParameters 
 	return layout;
 }
 
+void FontController::setAliases(Map<String, String> &&aliases) {
+	if (_aliases.empty()) {
+		_aliases = move(aliases);
+	} else {
+		for (auto &it : aliases) {
+			_aliases.insert_or_assign(it.first, it.second);
+		}
+	}
+}
+
+BytesView FontLibrary::getFont(DefaultFontName name) {
+	switch (name) {
+	case DefaultFontName::None: return BytesView(); break;
+	case DefaultFontName::RobotoMono_Bold: return BytesView(s_font_RobotoMono_Bold, 59235); break;
+	case DefaultFontName::RobotoMono_BoldItalic: return BytesView(s_font_RobotoMono_BoldItalic, 65895); break;
+	case DefaultFontName::RobotoMono_Italic: return BytesView(s_font_RobotoMono_Italic, 65086); break;
+	case DefaultFontName::RobotoMono_Regular: return BytesView(s_font_RobotoMono_Regular, 58642); break;
+	}
+
+	return BytesView();
+}
+
+StringView FontLibrary::getFontName(DefaultFontName name) {
+	switch (name) {
+	case DefaultFontName::None: return StringView(); break;
+	case DefaultFontName::RobotoMono_Bold: return StringView("RobotoMono_Bold"); break;
+	case DefaultFontName::RobotoMono_BoldItalic: return StringView("RobotoMono_BoldItalic"); break;
+	case DefaultFontName::RobotoMono_Italic: return StringView("RobotoMono_Italic"); break;
+	case DefaultFontName::RobotoMono_Regular: return StringView("RobotoMono_Regular"); break;
+	}
+
+	return StringView();
+}
+
 FontLibrary::FontLibrary() {
 	FT_Init_FreeType( &_library );
 }
@@ -605,9 +885,9 @@ FontLibrary::~FontLibrary() {
 	}
 }
 
-bool FontLibrary::init(const Rc<gl::Loop> &loop, Rc<renderqueue::Queue> &&queue) {
+bool FontLibrary::init(const Rc<gl::Loop> &loop) {
 	_loop = loop;
-	_queue = move(queue);
+	_queue = _loop->makeRenderFontQueue();
 	_application = _loop->getApplication();
 	if (_queue->isCompiled()) {
 		onActivated();
@@ -761,49 +1041,54 @@ void FontLibrary::update() {
 	} while (0);
 }
 
-Rc<FontController> FontLibrary::acquireController(StringView key) {
-	Rc<FontController> ret = Rc<FontController>::create(this);
-	auto image = new Rc<gl::DynamicImage>( Rc<gl::DynamicImage>::create([&] (gl::DynamicImage::Builder &builder) {
-		builder.setImage(key,
-			gl::ImageInfo(
-					Extent2(2, 2),
-					gl::ImageUsage::Sampled | gl::ImageUsage::TransferSrc,
-					gl::RenderPassType::Graphics,
-					gl::ImageFormat::R8_UNORM
-			), [] (const gl::ImageData::DataCallback &cb) {
-				Bytes bytes; bytes.reserve(4);
-				bytes.emplace_back(0);
-				bytes.emplace_back(255);
-				bytes.emplace_back(255);
-				bytes.emplace_back(0);
-				cb(bytes);
-			}, nullptr);
-		return true;
-	}));
-	_loop->compileImage(*image, [this, ret, image] (bool success) {
-		_loop->getApplication()->performOnMainThread([this, ret, image, success] {
-			if (success) {
-				ret->setImage(move(*image));
-				ret->setLoaded(true);
-			}
-			delete image;
-		}, this);
-	});
+static Bytes openResourceFont(FontLibrary::DefaultFontName name) {
+	auto d = FontLibrary::getFont(name);
+	return data::decompress<memory::StandartInterface>(d.data(), d.size());
+}
+
+static String getResourceFontName(FontLibrary::DefaultFontName name) {
+	return toString("resource:", FontLibrary::getFontName(name));
+}
+
+static const FontController::FontSource * makeResourceFontQuery(FontController::Builder &builder, FontLibrary::DefaultFontName name) {
+	return builder.addFontSource( getResourceFontName(name), [name] { return openResourceFont(name); });
+}
+
+FontController::Builder FontLibrary::makeDefaultControllerBuilder(StringView key) {
+	FontController::Builder ret(key);
+	auto res_RobotoMono_Bold = makeResourceFontQuery(ret, DefaultFontName::RobotoMono_Bold);
+	auto res_RobotoMono_BoldItalic = makeResourceFontQuery(ret, DefaultFontName::RobotoMono_BoldItalic);
+	auto res_RobotoMono_Italic = makeResourceFontQuery(ret, DefaultFontName::RobotoMono_Italic);
+	auto res_RobotoMono_Regular = makeResourceFontQuery(ret, DefaultFontName::RobotoMono_Regular);
+
+	ret.addFontFaceQuery("monospace",
+			font::FontStyle::Normal, font::FontWeight::Bold, font::FontStretch::Normal, res_RobotoMono_Bold);
+	ret.addFontFaceQuery("monospace",
+			font::FontStyle::Italic, font::FontWeight::Bold, font::FontStretch::Normal, res_RobotoMono_BoldItalic);
+	ret.addFontFaceQuery("monospace",
+			font::FontStyle::Italic, font::FontWeight::Normal, font::FontStretch::Normal, res_RobotoMono_Italic);
+	ret.addFontFaceQuery("monospace",
+			font::FontStyle::Normal, font::FontWeight::Normal, font::FontStretch::Normal, res_RobotoMono_Regular);
+
+	ret.addAlias("default", "monospace");
+
 	return ret;
 }
 
-Rc<FontController> FontLibrary::acquireController(StringView key, FontController::Query &&query) {
+Rc<FontController> FontLibrary::acquireController(FontController::Builder &&b) {
 	Rc<FontController> ret = Rc<FontController>::create(this);
 
 	struct ControllerBuilder : Ref {
-		FontController::Query query;
-		Map<String, Pair<FontController::FontQuery *, Rc<FontFaceData>>> data;
+		FontController::Builder builder;
 		Rc<FontController> controller;
+		Rc<gl::DynamicImage> dynamicImage;
 
 		bool invalid = false;
-		bool imageLoaded = false;
-		size_t pendingData = 0;
+		std::atomic<size_t> pendingData = 0;
 		FontLibrary *library = nullptr;
+
+		ControllerBuilder(FontController::Builder &&b)
+		: builder(move(b)) { }
 
 		void invalidate() {
 			controller = nullptr;
@@ -815,75 +1100,73 @@ Rc<FontController> FontLibrary::acquireController(StringView key, FontController
 				return;
 			}
 
-			for (auto &it : query.familyQueries) {
-				Vector<Rc<FontFaceData>> d; d.reserve(it.sources.size());
-				for (auto &iit : it.sources) {
-					auto vIt = data.find(iit);
-					if (vIt != data.end()) {
-						if (vIt->second.second) {
-							d.emplace_back(vIt->second.second);
+			library->getApplication()->perform([this] (const thread::Task &) -> bool {
+				for (auto &it : builder.getData()->familyQueries) {
+					Vector<Rc<FontFaceData>> d; d.reserve(it.second.sources.size());
+					for (auto &iit : it.second.sources) {
+						d.emplace_back(move(iit->data));
+					}
+
+					controller->addFont(it.second.family, it.second.style, it.second.weight, it.second.stretch, move(d));
+					for (auto &iit : it.second.chars) {
+						if (!iit.second.empty()) {
+							auto lId = controller->getLayout(FontParameters{
+								it.second.style, it.second.weight, it.second.stretch,
+								font::FontVariant::Normal,
+								font::ListStyleType::None,
+								iit.first, it.second.family
+							}, 1.0f);
+							controller->addString(lId, iit.second);
 						}
 					}
 				}
-
-				controller->addFont(it.family, it.style, it.weight, it.stretch, move(d));
-				for (auto &iit : it.chars) {
-					auto lId = controller->getLayout(FontParameters{
-						it.style, it.weight, it.stretch,
-						font::FontVariant::Normal,
-						font::ListStyleType::None,
-						iit.first, it.family
-					}, 1.0f);
-					controller->addString(lId, iit.second);
+				return true;
+			}, [this] (const Task &, bool success) {
+				if (success) {
+					controller->setAliases(builder.getAliases());
+					controller->setLoaded(true);
 				}
-			}
-
-			controller->setLoaded(true);
-			controller = nullptr;
+				controller = nullptr;
+			}, this);
 		}
 
 		void onDataLoaded(bool success) {
-			-- pendingData;
+			auto v = pendingData.fetch_sub(1);
 			if (!success) {
 				invalid = true;
-				if (pendingData == 0 && imageLoaded) {
+				if (v == 1) {
 					invalidate();
 				}
-			} else if (pendingData == 0 && imageLoaded) {
+			} else if (v == 1) {
 				loadData();
 			}
 		}
 
 		void onImageLoaded(Rc<gl::DynamicImage> &&image) {
+			auto v = pendingData.fetch_sub(1);
 			if (image) {
 				controller->setImage(move(image));
-				imageLoaded = true;
-				if (pendingData == 0) {
+				if (v == 1) {
 					loadData();
 				}
 			} else {
 				invalid = true;
-				if (pendingData == 0) {
+				if (v == 1) {
 					invalidate();
 				}
 			}
 		}
 	};
 
-	auto builder = Rc<ControllerBuilder>::alloc();
-	builder->query = move(query);
+	auto builder = Rc<ControllerBuilder>::alloc(move(b));
 	builder->library = this;
 	builder->controller = ret;
 
-	for (auto &it : builder->query.dataQueries) {
-		builder->data.emplace(it.name, Pair<FontController::FontQuery *, Rc<FontFaceData>>(&it, nullptr));
-	}
+	builder->pendingData = builder->builder.getData()->dataQueries.size() + 1;
 
-	builder->pendingData = builder->data.size();
-
-	for (auto &it : builder->data) {
-		_application->perform([this, sourcePtr = it.second.first, targetPtr = &it.second.second] (const thread::Task &) -> bool {
-			*targetPtr = openFontData(sourcePtr->name, [&] () -> FontData {
+	for (auto &it : builder->builder.getData()->dataQueries) {
+		_application->perform([this, name = it.first, sourcePtr = &it.second, builder] (const thread::Task &) -> bool {
+			sourcePtr->data = openFontData(name, [&] () -> FontData {
 				if (sourcePtr->fontCallback) {
 					return FontData(move(sourcePtr->fontCallback));
 				} else if (!sourcePtr->fontExternalData.empty()) {
@@ -898,18 +1181,17 @@ Rc<FontController> FontLibrary::acquireController(StringView key, FontController
 				}
 				return FontData(BytesView(), false);
 			});
-			return true;
-		}, [builder] (const thread::Task &, bool success) {
-			if (success) {
+			if (sourcePtr->data) {
 				builder->onDataLoaded(true);
 			} else {
 				builder->onDataLoaded(false);
 			}
+			return true;
 		});
 	}
 
-	auto image = new Rc<gl::DynamicImage>( Rc<gl::DynamicImage>::create([&] (gl::DynamicImage::Builder &builder) {
-		builder.setImage(key,
+	builder->dynamicImage = Rc<gl::DynamicImage>::create([name = builder->builder.getName()] (gl::DynamicImage::Builder &builder) {
+		builder.setImage(name,
 			gl::ImageInfo(
 					Extent2(2, 2),
 					gl::ImageUsage::Sampled | gl::ImageUsage::TransferSrc,
@@ -924,15 +1206,15 @@ Rc<FontController> FontLibrary::acquireController(StringView key, FontController
 				cb(bytes);
 			}, nullptr);
 		return true;
-	}));
-	_loop->compileImage(*image, [this, image, builder] (bool success) {
-		_loop->getApplication()->performOnMainThread([this, image, success, builder] {
+	});
+
+	_loop->compileImage(builder->dynamicImage, [this, builder] (bool success) {
+		_loop->getApplication()->performOnMainThread([this, success, builder] {
 			if (success) {
-				builder->onImageLoaded(move(*image));
+				builder->onImageLoaded(move(builder->dynamicImage));
 			} else {
 				builder->onImageLoaded(nullptr);
 			}
-			delete image;
 		}, this);
 	});
 

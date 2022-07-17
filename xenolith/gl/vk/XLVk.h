@@ -40,11 +40,13 @@ THE SOFTWARE.
 
 namespace stappler::xenolith::vk {
 
+#define XL_VK_MIN_LOADER_MESSAGE_SEVERITY VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT
+#define XL_VK_MIN_MESSAGE_SEVERITY VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
+
 #if DEBUG
-#define VK_DEBUG_LOG 0
+#define VK_DEBUG_LOG 1
 #define VK_HOOK_DEBUG 0 // enable engine hooks for Vulkan calls
 static constexpr bool s_enableValidationLayers = true;
-
 #else
 #define VK_DEBUG_LOG 0
 #define VK_HOOK_DEBUG 0 // enable engine hooks for Vulkan calls

@@ -27,6 +27,7 @@
 #include "XLVkTextureSet.h"
 
 #include "XLVkTransferQueue.h"
+#include "XLVkRenderFontQueue.h"
 #include "XLVkMaterialCompiler.h"
 #include "XLVkRenderQueueCompiler.h"
 
@@ -276,10 +277,6 @@ void Loop::threadDispose() {
 
 	_internal->waitIdle();
 
-	_internal->queue->lock();
-	_internal->endDevice();
-	_internal->queue->unlock();
-
 	_internal->queue->waitForAll();
 
 	_internal->queue->lock();
@@ -289,6 +286,9 @@ void Loop::threadDispose() {
 	_internal->queue->unlock();
 
 	_internal->queue->cancelWorkers();
+	_internal->queue = nullptr;
+
+	_internal->endDevice();
 
 	_frameCache->invalidate();
 
@@ -488,7 +488,11 @@ void Loop::schedule(Function<bool(gl::Loop &)> &&cb, uint64_t delay, StringView 
 }
 
 void Loop::performInQueue(Rc<thread::Task> &&task) {
-	if (!_internal) {
+	if (!_internal || !_internal->queue) {
+		auto &tasks = task->getCompleteTasks();
+		for (auto &it : tasks) {
+			it(*task, false);
+		}
 		return;
 	}
 
@@ -496,7 +500,7 @@ void Loop::performInQueue(Rc<thread::Task> &&task) {
 }
 
 void Loop::performInQueue(Function<void()> &&func, Ref *target) {
-	if (!_internal) {
+	if (!_internal || !_internal->queue) {
 		return;
 	}
 
@@ -504,7 +508,7 @@ void Loop::performInQueue(Function<void()> &&func, Ref *target) {
 }
 
 void Loop::performOnGlThread(Function<void()> &&func, Ref *target, bool immediate) {
-	if (!_internal) {
+	if (!_internal || !_internal->queue) {
 		return;
 	}
 
@@ -518,7 +522,11 @@ void Loop::performOnGlThread(Function<void()> &&func, Ref *target, bool immediat
 }
 
 void Loop::performOnGlThread(Rc<thread::Task> &&task) {
-	if (!_internal) {
+	if (!_internal || !_internal->queue) {
+		auto &tasks = task->getCompleteTasks();
+		for (auto &it : tasks) {
+			it(*task, false);
+		}
 		return;
 	}
 
@@ -584,6 +592,10 @@ Rc<gl::Semaphore> Loop::makeSemaphore() {
 
 const Vector<gl::ImageFormat> &Loop::getSupportedDepthStencilFormat() const {
 	return _internal->device->getSupportedDepthStencilFormat();
+}
+
+Rc<renderqueue::Queue> Loop::makeRenderFontQueue() const {
+	return Rc<vk::RenderFontQueue>::create("FontQueue");
 }
 
 Rc<Fence> Loop::acquireFence(uint32_t v, bool init) {

@@ -152,11 +152,11 @@ void VectorSprite::onTransformDirty(const Mat4 &parent) {
 	Sprite::onTransformDirty(parent);
 }
 
-void VectorSprite::visit(RenderFrameInfo &frame, NodeFlags parentFlags) {
+bool VectorSprite::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 	if (_image->isDirty()) {
 		_vertexesDirty = true;
 	}
-	Sprite::visit(frame, parentFlags);
+	return Sprite::visitDraw(frame, parentFlags);
 }
 
 void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {

@@ -440,6 +440,10 @@ void View::invalidateTarget(Rc<ImageStorage> &&object) {
 	}
 }
 
+Rc<Ref> View::getSwapchainHandle() const {
+	return _swapchain.get();
+}
+
 void View::captureImage(StringView name, const Rc<gl::ImageObject> &image, AttachmentLayout l) const {
 	auto str = name.str<Interface>();
 	_device->getTextureSetLayout()->readImage(*_device, *(Loop *)_loop.get(), (Image *)image.get(), l,

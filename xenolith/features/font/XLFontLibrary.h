@@ -37,24 +37,12 @@ public:
 	static EventHeader onLoaded;
 	static EventHeader onFontSourceUpdated;
 
-	struct FontQuery {
-		String name;
+	struct FontSource {
 		String fontFilePath;
 		Bytes fontMemoryData;
 		BytesView fontExternalData;
 		Function<Bytes()> fontCallback;
-
-		FontQuery(StringView name, BytesView data)
-		: name(name.str<Interface>()), fontExternalData(data) { }
-
-		FontQuery(StringView name, Bytes && data)
-		: name(name.str<Interface>()), fontMemoryData(move(data)) { }
-
-		FontQuery(StringView name, FilePath data)
-		: name(name.str<Interface>()), fontFilePath(data.get().str<Interface>()) { }
-
-		FontQuery(StringView name, Function<Bytes()> &&cb)
-		: name(name.str<Interface>()), fontCallback(move(cb)) { }
+		Rc<FontFaceData> data;
 	};
 
 	struct FamilyQuery {
@@ -62,13 +50,51 @@ public:
 		FontStyle style;
 		FontWeight weight;
 		FontStretch stretch;
-		Vector<String> sources;
+		Vector<const FontSource *> sources;
 		Vector<Pair<FontSize, FontCharString>> chars;
 	};
 
-	struct Query {
-		Vector<FontQuery> dataQueries;
-		Vector<FamilyQuery> familyQueries;
+	class Builder {
+	public:
+		struct Data;
+
+		~Builder();
+
+		Builder(StringView);
+
+		Builder(Builder &&);
+		Builder &operator=(Builder &&);
+
+		Builder(const Builder &) = delete;
+		Builder &operator=(const Builder &) = delete;
+
+		StringView getName() const;
+
+		const FontSource * addFontSource(StringView name, BytesView data);
+		const FontSource * addFontSource(StringView name, Bytes && data);
+		const FontSource * addFontSource(StringView name, FilePath data);
+		const FontSource * addFontSource(StringView name, Function<Bytes()> &&cb);
+
+		const FontSource *getFontSource(StringView) const;
+
+		const FamilyQuery * addFontFaceQuery(StringView family, FontStyle, FontWeight, FontStretch, const FontSource *,
+				Vector<Pair<FontSize,FontCharString>> &&chars = Vector<Pair<FontSize, FontCharString>>(), bool front = false);
+
+		const FamilyQuery * addFontFaceQuery(StringView family, FontStyle, FontWeight, FontStretch, Vector<const FontSource *> &&,
+				Vector<Pair<FontSize,FontCharString>> &&chars = Vector<Pair<FontSize, FontCharString>>(), bool front = false);
+
+		bool addAlias(StringView newAlias, StringView familyName);
+
+		Vector<const FamilyQuery *> getFontFamily(StringView family) const;
+		Map<String, String> getAliases() const;
+
+		Data *getData() const { return _data; }
+
+	protected:
+		void addSources(FamilyQuery *, Vector<const FontSource *> &&, bool front);
+		void addChars(FamilyQuery *, Vector<Pair<FontSize, FontCharString>> &&);
+
+		Data *_data;
 	};
 
 	virtual ~FontController();
@@ -77,6 +103,9 @@ public:
 
 	void addFont(StringView family, FontStyle, FontWeight, FontStretch, Rc<FontFaceData> &&, bool front = false);
 	void addFont(StringView family, FontStyle, FontWeight, FontStretch, Vector<Rc<FontFaceData>> &&, bool front = false);
+
+	// replaces previous alias
+	bool addAlias(StringView newAlias, StringView familyName);
 
 	bool isLoaded() const { return _loaded; }
 	const Rc<gl::DynamicImage> &getImage() const { return _image; }
@@ -110,12 +139,15 @@ protected:
 
 	FontLayout * getFontLayout(const FontParameters &style);
 
+	void setAliases(Map<String, String> &&);
+
 	bool _loaded = false;
 	String _defaultFontFamily = "default";
 	Rc<Texture> _texture;
 	Rc<gl::DynamicImage> _image;
 	Rc<FontLibrary> _library;
 
+	Map<String, String> _aliases;
 	Vector<StringView> _familiesNames;
 	Map<StringView, Vector<FontLayout *>> _families;
 	HashMap<StringView, Rc<FontLayout>> _layouts;
@@ -128,6 +160,14 @@ protected:
 
 class FontLibrary : public Ref {
 public:
+	enum class DefaultFontName {
+		None,
+		RobotoMono_Bold,
+		RobotoMono_BoldItalic,
+		RobotoMono_Italic,
+		RobotoMono_Regular,
+	};
+
 	struct FontData {
 		bool persistent;
 		BytesView view;
@@ -148,10 +188,15 @@ public:
 		FontData(Function<Bytes()> &&cb) : persistent(true), callback(move(cb)) { }
 	};
 
+	static BytesView getFont(DefaultFontName);
+	static StringView getFontName(DefaultFontName);
+
 	FontLibrary();
 	virtual ~FontLibrary();
 
-	bool init(const Rc<gl::Loop> &, Rc<renderqueue::Queue> &&);
+	bool init(const Rc<gl::Loop> &);
+
+	const Application *getApplication() const { return _application; }
 
 	Rc<FontFaceData> openFontData(StringView, const Callback<FontData()> & = nullptr);
 
@@ -160,8 +205,9 @@ public:
 
 	void update();
 
-	Rc<FontController> acquireController(StringView);
-	Rc<FontController> acquireController(StringView, FontController::Query &&query);
+	FontController::Builder makeDefaultControllerBuilder(StringView);
+
+	Rc<FontController> acquireController(FontController::Builder &&);
 
 	void updateImage(const Rc<gl::DynamicImage> &, Vector<Pair<Rc<FontFaceObject>, Vector<char16_t>>> &&);
 

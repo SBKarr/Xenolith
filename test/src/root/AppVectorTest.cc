@@ -37,7 +37,7 @@ bool VectorTest::init() {
 	auto fontController = app->getFontController();
 
 	for (size_t i = 0; i < 5; ++ i) {
-		auto image = Rc<VectorImage>::create(Size(200, 200));
+		auto image = Rc<VectorImage>::create(Size2(200, 200));
 		auto path = image->addPath();
 		path->setFillColor(Color::Red_500);
 		path->addOval(Rect(0, 0, 100, 100));
@@ -71,7 +71,7 @@ bool VectorTest::init() {
 void VectorTest::onContentSizeDirty() {
 	Node::onContentSizeDirty();
 
-	Size size(_contentSize * 0.3f);
+	Size2 size(_contentSize * 0.3f);
 
 	Vec2 positions[5] = {
 		Vec2(_contentSize.width * 0.2f, _contentSize.height * 0.2f),

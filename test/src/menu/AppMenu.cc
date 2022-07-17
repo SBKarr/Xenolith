@@ -20,22 +20,14 @@
  THE SOFTWARE.
  **/
 
-#include "XLGlLoop.h"
-#include "XLGlInstance.h"
+#include "AppMenu.h"
 
-namespace stappler::xenolith::gl {
-
-Loop::~Loop() {
-	log::text("gl::Loop", "~Loop");
-}
-
-Loop::Loop() { }
-
-bool Loop::init(Application *app, Instance *gl) {
-	_application = app;
-	_glInstance = gl;
-	_resourceCache = Rc<ResourceCache>::create();
-	return true;
-}
+AppMenu::AppMenu() {
+	// TODO Auto-generated constructor stub
 
 }
+
+AppMenu::~AppMenu() {
+	// TODO Auto-generated destructor stub
+}
+

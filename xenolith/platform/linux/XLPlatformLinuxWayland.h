@@ -610,6 +610,7 @@ struct WaylandDisplay : Ref {
 	xdg_wm_base *xdgWmBase = nullptr;
 	Set<wl_surface *> surfaces;
 	Set<wl_surface *> decorations;
+	bool seatDirty = false;
 };
 
 enum class WaylandCursorImage {
@@ -798,6 +799,8 @@ struct WaylandSeat : Ref {
 	void initCursors();
 	void tryUpdateCursor();
 
+	void update();
+
 	InputKeyCode translateKey(uint32_t scancode) const;
 	xkb_keysym_t composeSymbol(xkb_keysym_t sym) const;
 
@@ -807,6 +810,7 @@ struct WaylandSeat : Ref {
 	bool hasPointerFrames = false;
 	wl_seat *seat;
 	String name;
+	uint32_t capabilities;
 	wl_pointer *pointer;
 	wl_keyboard *keyboard;
 	wl_touch *touch;
@@ -835,6 +839,7 @@ struct WaylandDecoration : Ref {
 
 	void setAltBuffers(Rc<WaylandBuffer> &&b, Rc<WaylandBuffer> &&a);
 	void handlePress(uint32_t serial, uint32_t button, uint32_t state);
+	void handleMotion();
 
 	void onEnter();
 	void onLeave();
@@ -867,11 +872,13 @@ struct WaylandDecoration : Ref {
 	int32_t _width = 0;
 	int32_t _height = 0;
 	uint64_t lastTouch = 0;
+	uint32_t serial = 0;
 
 	bool visible = true;
 	bool isActive = false;
 	bool alternative = false;
 	bool dirty = false;
+	bool waitForMove = false;
 };
 
 class WaylandView : public LinuxViewInterface {
@@ -971,7 +978,7 @@ public:
 	void handleKeyModifiers(uint32_t depressed, uint32_t latched, uint32_t locked);
 	void handleKeyRepeat();
 
-	void handleDecorationPress(WaylandDecoration *, uint32_t serial);
+	void handleDecorationPress(WaylandDecoration *, uint32_t serial, bool released = false);
 
 	virtual void scheduleFrame() override;
 
@@ -997,6 +1004,7 @@ protected:
 	bool _shouldClose = false;
 	bool _surfaceDirty = false;
 	bool _fullscreen = false;
+	bool _pointerInit = false;
 
 	Set<WaylandOutput *> _activeOutputs;
 

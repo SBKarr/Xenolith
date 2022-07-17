@@ -37,18 +37,9 @@ public:
 	virtual bool onFinishLaunching() override;
 	virtual bool onMainLoop() override;
 
-	virtual void update(uint64_t dt) override;
-
-	font::FontController *getFontController() const { return _fontMainController; }
-
 protected:
-	void runMainView(Rc<TessScene> &&scene);
-
 	gl::SwapchainConfig selectConfig(const gl::SurfaceInfo &info);
 	void onViewCreated(const Rc<Director> &);
-
-	Rc<font::FontLibrary> _fontLibrary;
-	Rc<font::FontController> _fontMainController;
 };
 
 }

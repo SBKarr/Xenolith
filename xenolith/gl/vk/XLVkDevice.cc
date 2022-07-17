@@ -210,7 +210,6 @@ void Device::begin(Loop &loop, gl::TaskQueue &q, Function<void(bool)> &&cb) {
 	compileSamplers(q, true);
 	_textureSetLayout->compile(*this, _immutableSamplers);
 	_textureSetLayout->initDefault(*this, loop, move(cb));
-
 	_loopThreadId = std::this_thread::get_id();
 }
 

@@ -24,7 +24,6 @@
 #define TEST_XENOLITH_SRC_XLTESTAPPDELEGATE_H_
 
 #include "XLApplication.h"
-#include "XLVkRenderFontQueue.h"
 
 namespace stappler::xenolith::app {
 
@@ -38,15 +37,9 @@ public:
     virtual bool onFinishLaunching() override;
 	virtual bool onMainLoop() override;
 
-	virtual void update(uint64_t dt) override;
-
-	font::FontController *getFontController() const { return _fontMainController; }
-
 protected:
-	void runMainView(Rc<AppScene> &&scene);
-
-	Rc<font::FontLibrary> _fontLibrary;
-	Rc<font::FontController> _fontMainController;
+	gl::SwapchainConfig selectConfig(const gl::SurfaceInfo &info);
+	void onViewCreated(const Rc<Director> &);
 };
 
 }

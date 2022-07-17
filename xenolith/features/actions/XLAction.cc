@@ -146,4 +146,39 @@ void Speed::onStopped() {
 	}
 }
 
+TintTo::~TintTo() { }
+
+bool TintTo::init(float duration, const Color4F &to, ColorMask mask) {
+	if (!ActionInterval::init(duration)) {
+		return false;
+	}
+
+	_to = to;
+	_mask = mask;
+
+	return true;
+}
+
+Rc<ActionInterval> TintTo::clone() const {
+	auto a = Rc<TintTo>::create(_duration, _to, _mask);
+	return a;
+}
+
+Rc<ActionInterval> TintTo::reverse(void) const {
+    XLASSERT(false, "reverse() not supported in TintTo");
+    return nullptr;
+}
+
+void TintTo::startWithTarget(Node *target) {
+	ActionInterval::startWithTarget(target);
+	if (target) {
+		_from = target->getColor();
+		_to.setUnmasked(_from, _mask);
+	}
+}
+
+void TintTo::update(float time) {
+	_target->setColor(progress(_from, _to, time), true);
+}
+
 }

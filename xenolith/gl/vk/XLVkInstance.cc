@@ -39,6 +39,10 @@ VKAPI_ATTR VkBool32 VKAPI_CALL s_debugCallback(VkDebugUtilsMessageSeverityFlagBi
 		messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
 	}
 	if (strcmp(pCallbackData->pMessageIdName, "Loader Message") == 0) {
+		if (messageSeverity < XL_VK_MIN_LOADER_MESSAGE_SEVERITY) {
+			return VK_FALSE;
+		}
+
 		if (messageSeverity <= VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
 			if (StringView(pCallbackData->pMessage).starts_with("Instance Extension: ")
 					|| StringView(pCallbackData->pMessage).starts_with("Device Extension: ")) {
@@ -54,6 +58,10 @@ VKAPI_ATTR VkBool32 VKAPI_CALL s_debugCallback(VkDebugUtilsMessageSeverityFlagBi
 		}
 		return VK_FALSE;
 	} else {
+		if (messageSeverity < XL_VK_MIN_MESSAGE_SEVERITY) {
+			return VK_FALSE;
+		}
+
 		if (messageSeverity <= VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
 			if (StringView(pCallbackData->pMessage).starts_with("Device Extension: ")) {
 				return VK_FALSE;
@@ -120,7 +128,6 @@ Instance::~Instance() {
 #endif
 	}
 	vkDestroyInstance(_instance, nullptr);
-	log::text("vk::Instance", "~Instance");
 }
 
 Rc<gl::Loop> Instance::makeLoop(Application *app, uint32_t deviceIndex) const {

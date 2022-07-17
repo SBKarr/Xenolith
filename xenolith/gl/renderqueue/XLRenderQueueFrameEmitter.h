@@ -94,6 +94,7 @@ protected:
 	const Attachment *_swapchainAttachment = nullptr;
 	Rc<gl::View> _swapchain;
 	Rc<ImageStorage> _renderTarget;
+	Rc<Ref> _swapchainHandle;
 };
 
 // Frame emitter is an interface, that continuously spawns frames, and can control validity of a frame

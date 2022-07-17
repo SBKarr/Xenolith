@@ -72,7 +72,8 @@ void Scene::render(RenderFrameInfo &info) {
 
 	info.input = eventDispatcher->acquireNewStorage();
 
-	visit(info, NodeFlags::None);
+	visitGeometry(info, NodeFlags::None);
+	visitDraw(info, NodeFlags::None);
 
 	eventDispatcher->commitStorage(move(info.input));
 }

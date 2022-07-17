@@ -20,22 +20,37 @@
  THE SOFTWARE.
  **/
 
-#include "XLGlLoop.h"
-#include "XLGlInstance.h"
+#ifndef TEST_SRC_ROOT_APPZORDERTEST_H_
+#define TEST_SRC_ROOT_APPZORDERTEST_H_
 
-namespace stappler::xenolith::gl {
+#include "XLLayer.h"
+#include "XLLabel.h"
 
-Loop::~Loop() {
-	log::text("gl::Loop", "~Loop");
+namespace stappler::xenolith::app {
+
+class ZOrderTest : public Node {
+public:
+	virtual ~ZOrderTest() { }
+
+	virtual bool init() override;
+
+	virtual void onContentSizeDirty() override;
+
+	virtual void update(const UpdateTime &) override;
+
+protected:
+	void handleClick(const Vec2 &);
+
+	Layer *_background = nullptr;
+	Sprite *_logo = nullptr;
+
+	Layer *_layers[5] = { nullptr };
+	Label *_label = nullptr;
+	Label *_label2 = nullptr;
+
+	Layer *_cursor = nullptr;
+};
+
 }
 
-Loop::Loop() { }
-
-bool Loop::init(Application *app, Instance *gl) {
-	_application = app;
-	_glInstance = gl;
-	_resourceCache = Rc<ResourceCache>::create();
-	return true;
-}
-
-}
+#endif /* TEST_SRC_ROOT_APPZORDERTEST_H_ */

@@ -25,12 +25,6 @@
 #include "XLTestAppDelegate.h"
 
 #include "AppScene.h"
-#include "XLPlatform.h"
-#include "XLAppShaders.h"
-#include "XLDefaultShaders.h"
-#include "XLResourceFontSource.h"
-#include "XLFontLibrary.h"
-#include "XLLabelParameters.h"
 
 namespace stappler::xenolith::app {
 
@@ -48,282 +42,51 @@ bool AppDelegate::onFinishLaunching() {
 	return true;
 }
 
-static Bytes openResourceFont(resources::fonts::FontName name) {
-	auto d = resources::fonts::getFont(name);
-	return data::decompress<memory::StandartInterface>(d.data(), d.size());
-}
-
-static String getResourceFontName(resources::fonts::FontName name) {
-	return toString("resource:", resources::fonts::getFontName(name));
-}
-
-static font::FontController::FontQuery makeResourceFontQuery(resources::fonts::FontName name) {
-	return font::FontController::FontQuery(
-		getResourceFontName(name),
-		[name] { return openResourceFont(name); }
-	);
-}
-
-
 bool AppDelegate::onMainLoop() {
-	_fontLibrary = Rc<font::FontLibrary>::create(_glLoop, Rc<vk::RenderFontQueue>::create("FontQueue"));
-
-	using FontQuery = font::FontController::FontQuery;
-	using FamilyQuery = font::FontController::FamilyQuery;
-	using FontName = resources::fonts::FontName;
-
-	_fontMainController = _fontLibrary->acquireController("AppFont", font::FontController::Query{
-		Vector<FontQuery>{
-			makeResourceFontQuery(FontName::OpenSans_Bold),
-			makeResourceFontQuery(FontName::OpenSans_BoldItalic),
-			makeResourceFontQuery(FontName::OpenSans_ExtraBold),
-			makeResourceFontQuery(FontName::OpenSans_ExtraBoldItalic),
-			makeResourceFontQuery(FontName::OpenSans_Italic),
-			makeResourceFontQuery(FontName::OpenSans_Light),
-			makeResourceFontQuery(FontName::OpenSans_LightItalic),
-			makeResourceFontQuery(FontName::OpenSans_Medium),
-			makeResourceFontQuery(FontName::OpenSans_MediumItalic),
-			makeResourceFontQuery(FontName::OpenSans_Regular),
-			makeResourceFontQuery(FontName::OpenSans_SemiBold),
-			makeResourceFontQuery(FontName::OpenSans_SemiBoldItalic),
-			makeResourceFontQuery(FontName::OpenSans_Condensed_Bold),
-			makeResourceFontQuery(FontName::OpenSans_Condensed_BoldItalic),
-			makeResourceFontQuery(FontName::OpenSans_Condensed_ExtraBold),
-			makeResourceFontQuery(FontName::OpenSans_Condensed_ExtraBoldItalic),
-			makeResourceFontQuery(FontName::OpenSans_Condensed_Italic),
-			makeResourceFontQuery(FontName::OpenSans_Condensed_Light),
-			makeResourceFontQuery(FontName::OpenSans_Condensed_LightItalic),
-			makeResourceFontQuery(FontName::OpenSans_Condensed_Medium),
-			makeResourceFontQuery(FontName::OpenSans_Condensed_MediumItalic),
-			makeResourceFontQuery(FontName::OpenSans_Condensed_Regular),
-			makeResourceFontQuery(FontName::OpenSans_Condensed_SemiBold),
-			makeResourceFontQuery(FontName::OpenSans_Condensed_SemiBoldItalic),
-			makeResourceFontQuery(FontName::OpenSans_SemiCondensed_Bold),
-			makeResourceFontQuery(FontName::OpenSans_SemiCondensed_BoldItalic),
-			makeResourceFontQuery(FontName::OpenSans_SemiCondensed_ExtraBold),
-			makeResourceFontQuery(FontName::OpenSans_SemiCondensed_ExtraBoldItalic),
-			makeResourceFontQuery(FontName::OpenSans_SemiCondensed_Italic),
-			makeResourceFontQuery(FontName::OpenSans_SemiCondensed_Light),
-			makeResourceFontQuery(FontName::OpenSans_SemiCondensed_LightItalic),
-			makeResourceFontQuery(FontName::OpenSans_SemiCondensed_Medium),
-			makeResourceFontQuery(FontName::OpenSans_SemiCondensed_MediumItalic),
-			makeResourceFontQuery(FontName::OpenSans_SemiCondensed_Regular),
-			makeResourceFontQuery(FontName::OpenSans_SemiCondensed_SemiBold),
-			makeResourceFontQuery(FontName::OpenSans_SemiCondensed_SemiBoldItalic),
-			makeResourceFontQuery(FontName::Roboto_Black),
-			makeResourceFontQuery(FontName::Roboto_BlackItalic),
-			makeResourceFontQuery(FontName::Roboto_Bold),
-			makeResourceFontQuery(FontName::Roboto_BoldItalic),
-			makeResourceFontQuery(FontName::Roboto_Italic),
-			makeResourceFontQuery(FontName::Roboto_Light),
-			makeResourceFontQuery(FontName::Roboto_LightItalic),
-			makeResourceFontQuery(FontName::Roboto_Medium),
-			makeResourceFontQuery(FontName::Roboto_MediumItalic),
-			makeResourceFontQuery(FontName::Roboto_Regular),
-			makeResourceFontQuery(FontName::Roboto_Thin),
-			makeResourceFontQuery(FontName::Roboto_ThinItalic),
-			makeResourceFontQuery(FontName::RobotoCondensed_Bold),
-			makeResourceFontQuery(FontName::RobotoCondensed_BoldItalic),
-			makeResourceFontQuery(FontName::RobotoCondensed_Italic),
-			makeResourceFontQuery(FontName::RobotoCondensed_Light),
-			makeResourceFontQuery(FontName::RobotoCondensed_LightItalic),
-			makeResourceFontQuery(FontName::RobotoCondensed_Regular),
-			makeResourceFontQuery(FontName::RobotoMono_Bold),
-			makeResourceFontQuery(FontName::RobotoMono_BoldItalic),
-			makeResourceFontQuery(FontName::RobotoMono_ExtraLight),
-			makeResourceFontQuery(FontName::RobotoMono_ExtraLightItalic),
-			makeResourceFontQuery(FontName::RobotoMono_Italic),
-			makeResourceFontQuery(FontName::RobotoMono_Light),
-			makeResourceFontQuery(FontName::RobotoMono_LightItalic),
-			makeResourceFontQuery(FontName::RobotoMono_Medium),
-			makeResourceFontQuery(FontName::RobotoMono_MediumItalic),
-			makeResourceFontQuery(FontName::RobotoMono_Regular),
-			makeResourceFontQuery(FontName::RobotoMono_SemiBold),
-			makeResourceFontQuery(FontName::RobotoMono_SemiBoldItalic),
-			makeResourceFontQuery(FontName::RobotoMono_Thin),
-			makeResourceFontQuery(FontName::RobotoMono_ThinItalic)
+	addView(gl::ViewInfo{
+		"View-test",
+		URect{0, 0, 1024, 768},
+		0,
+		[this] (const gl::SurfaceInfo &info) -> gl::SwapchainConfig {
+			return selectConfig(info);
 		},
-		Vector<FamilyQuery>{
-			FamilyQuery{"OpenSans", font::FontStyle::Normal, font::FontWeight::Bold, font::FontStretch::Normal,
-			 	Vector<String>{ getResourceFontName(FontName::OpenSans_Bold) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Italic, font::FontWeight::Bold, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_BoldItalic) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Normal, font::FontWeight::ExtraBold, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_ExtraBold) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Italic, font::FontWeight::ExtraBold, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_ExtraBoldItalic) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Italic, font::FontWeight::Normal, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_Italic) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Normal, font::FontWeight::Light, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_Light) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Italic, font::FontWeight::Light, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_LightItalic) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Normal, font::FontWeight::Medium, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_Medium) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Italic, font::FontWeight::Medium, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_MediumItalic) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Normal, font::FontWeight::Normal, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_Regular) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Normal, font::FontWeight::SemiBold, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_SemiBold) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Italic, font::FontWeight::SemiBold, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_SemiBoldItalic) }},
-
-			FamilyQuery{"OpenSans", font::FontStyle::Normal, font::FontWeight::Bold, font::FontStretch::Condensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_Condensed_Bold) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Italic, font::FontWeight::Bold, font::FontStretch::Condensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_Condensed_BoldItalic) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Normal, font::FontWeight::ExtraBold, font::FontStretch::Condensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_Condensed_ExtraBold) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Italic, font::FontWeight::ExtraBold, font::FontStretch::Condensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_Condensed_ExtraBoldItalic) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Italic, font::FontWeight::Normal, font::FontStretch::Condensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_Condensed_Italic) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Normal, font::FontWeight::Light, font::FontStretch::Condensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_Condensed_Light) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Italic, font::FontWeight::Light, font::FontStretch::Condensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_Condensed_LightItalic) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Normal, font::FontWeight::Medium, font::FontStretch::Condensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_Condensed_Medium) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Italic, font::FontWeight::Medium, font::FontStretch::Condensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_Condensed_MediumItalic) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Normal, font::FontWeight::Normal, font::FontStretch::Condensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_Condensed_Regular) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Normal, font::FontWeight::SemiBold, font::FontStretch::Condensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_Condensed_SemiBold) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Italic, font::FontWeight::SemiBold, font::FontStretch::Condensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_Condensed_SemiBoldItalic) }},
-
-			FamilyQuery{"OpenSans", font::FontStyle::Normal, font::FontWeight::Bold, font::FontStretch::SemiCondensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_SemiCondensed_Bold) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Italic, font::FontWeight::Bold, font::FontStretch::SemiCondensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_SemiCondensed_BoldItalic) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Normal, font::FontWeight::ExtraBold, font::FontStretch::SemiCondensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_SemiCondensed_ExtraBold) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Italic, font::FontWeight::ExtraBold, font::FontStretch::SemiCondensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_SemiCondensed_ExtraBoldItalic) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Italic, font::FontWeight::Normal, font::FontStretch::SemiCondensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_SemiCondensed_Italic) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Normal, font::FontWeight::Light, font::FontStretch::SemiCondensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_SemiCondensed_Light) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Italic, font::FontWeight::Light, font::FontStretch::SemiCondensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_SemiCondensed_LightItalic) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Normal, font::FontWeight::Medium, font::FontStretch::SemiCondensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_SemiCondensed_Medium) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Italic, font::FontWeight::Medium, font::FontStretch::SemiCondensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_SemiCondensed_MediumItalic) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Normal, font::FontWeight::Normal, font::FontStretch::SemiCondensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_SemiCondensed_Regular) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Normal, font::FontWeight::SemiBold, font::FontStretch::SemiCondensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_SemiCondensed_SemiBold) }},
-			FamilyQuery{"OpenSans", font::FontStyle::Italic, font::FontWeight::SemiBold, font::FontStretch::SemiCondensed,
-				Vector<String>{ getResourceFontName(FontName::OpenSans_SemiCondensed_SemiBoldItalic) }},
-
-			FamilyQuery{"Roboto", font::FontStyle::Normal, font::FontWeight::Black, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::Roboto_Black) }},
-			FamilyQuery{"Roboto", font::FontStyle::Italic, font::FontWeight::Black, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::Roboto_BlackItalic) }},
-			FamilyQuery{"Roboto", font::FontStyle::Normal, font::FontWeight::Bold, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::Roboto_Bold) }},
-			FamilyQuery{"Roboto", font::FontStyle::Italic, font::FontWeight::Bold, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::Roboto_BoldItalic) }},
-			FamilyQuery{"Roboto", font::FontStyle::Italic, font::FontWeight::Normal, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::Roboto_Italic) }},
-			FamilyQuery{"Roboto", font::FontStyle::Normal, font::FontWeight::Light, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::Roboto_Light) }},
-			FamilyQuery{"Roboto", font::FontStyle::Italic, font::FontWeight::Light, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::Roboto_LightItalic) }},
-			FamilyQuery{"Roboto", font::FontStyle::Normal, font::FontWeight::Medium, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::Roboto_Medium) }},
-			FamilyQuery{"Roboto", font::FontStyle::Italic, font::FontWeight::Medium, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::Roboto_MediumItalic) }},
-			FamilyQuery{"Roboto", font::FontStyle::Normal, font::FontWeight::Normal, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::Roboto_Regular) }},
-			FamilyQuery{"Roboto", font::FontStyle::Normal, font::FontWeight::Thin, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::Roboto_Thin) }},
-			FamilyQuery{"Roboto", font::FontStyle::Italic, font::FontWeight::Thin, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::Roboto_ThinItalic) }},
-
-			FamilyQuery{"Roboto", font::FontStyle::Normal, font::FontWeight::Bold, font::FontStretch::Condensed,
-				Vector<String>{ getResourceFontName(FontName::RobotoCondensed_Bold) }},
-			FamilyQuery{"Roboto", font::FontStyle::Italic, font::FontWeight::Bold, font::FontStretch::Condensed,
-				Vector<String>{ getResourceFontName(FontName::RobotoCondensed_BoldItalic) }},
-			FamilyQuery{"Roboto", font::FontStyle::Italic, font::FontWeight::Normal, font::FontStretch::Condensed,
-				Vector<String>{ getResourceFontName(FontName::RobotoCondensed_Italic) }},
-			FamilyQuery{"Roboto", font::FontStyle::Normal, font::FontWeight::Light, font::FontStretch::Condensed,
-				Vector<String>{ getResourceFontName(FontName::RobotoCondensed_Light) }},
-			FamilyQuery{"Roboto", font::FontStyle::Italic, font::FontWeight::Light, font::FontStretch::Condensed,
-				Vector<String>{ getResourceFontName(FontName::RobotoCondensed_LightItalic) }},
-			FamilyQuery{"Roboto", font::FontStyle::Normal, font::FontWeight::Normal, font::FontStretch::Condensed,
-				Vector<String>{ getResourceFontName(FontName::RobotoCondensed_Regular) }},
-
-			FamilyQuery{"monospace", font::FontStyle::Normal, font::FontWeight::Bold, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::RobotoMono_Bold) }},
-			FamilyQuery{"monospace", font::FontStyle::Italic, font::FontWeight::Bold, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::RobotoMono_BoldItalic) }},
-			FamilyQuery{"monospace", font::FontStyle::Normal, font::FontWeight::ExtraLight, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::RobotoMono_ExtraLight) }},
-			FamilyQuery{"monospace", font::FontStyle::Italic, font::FontWeight::ExtraLight, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::RobotoMono_ExtraLightItalic) }},
-			FamilyQuery{"monospace", font::FontStyle::Italic, font::FontWeight::Normal, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::RobotoMono_Italic) }},
-			FamilyQuery{"monospace", font::FontStyle::Normal, font::FontWeight::Medium, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::RobotoMono_Medium) }},
-			FamilyQuery{"monospace", font::FontStyle::Italic, font::FontWeight::Medium, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::RobotoMono_MediumItalic) }},
-			FamilyQuery{"monospace", font::FontStyle::Normal, font::FontWeight::Light, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::RobotoMono_Light) }},
-			FamilyQuery{"monospace", font::FontStyle::Italic, font::FontWeight::Light, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::RobotoMono_LightItalic) }},
-			FamilyQuery{"monospace", font::FontStyle::Normal, font::FontWeight::Normal, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::RobotoMono_Regular) }},
-			FamilyQuery{"monospace", font::FontStyle::Normal, font::FontWeight::SemiBold, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::RobotoMono_SemiBold) }},
-			FamilyQuery{"monospace", font::FontStyle::Italic, font::FontWeight::SemiBold, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::RobotoMono_SemiBoldItalic) }},
-			FamilyQuery{"monospace", font::FontStyle::Normal, font::FontWeight::Thin, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::RobotoMono_Thin) }},
-			FamilyQuery{"monospace", font::FontStyle::Italic, font::FontWeight::Thin, font::FontStretch::Normal,
-				Vector<String>{ getResourceFontName(FontName::RobotoMono_ThinItalic) }}
+		[this] (const Rc<Director> &dir) {
+			onViewCreated(dir);
+		},
+		[this] () {
+			end();
 		}
 	});
 
-	auto scene = Rc<AppScene>::create(this, Extent2(1024, 768));
+	runLoop(TimeInterval::milliseconds(100));
 
-	_glLoop->compileRenderQueue(scene->getRenderQueue(), [&] (bool success) {
-		performOnMainThread([&] {
-			runMainView(move(scene));
-		});
-		log::text("App", "Compiled");
-	});
+	return true;
+}
 
-	auto ret = _loop->run();
+gl::SwapchainConfig AppDelegate::selectConfig(const gl::SurfaceInfo &info) {
+	gl::SwapchainConfig ret;
+	ret.extent = info.currentExtent;
+	ret.imageCount = std::max(uint32_t(2), info.minImageCount);
+	ret.presentMode = info.presentModes.front();
 
-	_fontMainController = nullptr;
-	_fontLibrary = nullptr;
+	if (std::find(info.presentModes.begin(), info.presentModes.end(), gl::PresentMode::Immediate) != info.presentModes.end()) {
+		ret.presentModeFast = gl::PresentMode::Immediate;
+	}
+
+	ret.imageFormat = info.formats.front().first;
+	ret.colorSpace = info.formats.front().second;
+	ret.transfer = (info.supportedUsageFlags & gl::ImageUsage::TransferDst) != gl::ImageUsage::None;
+
+	if (ret.presentMode == gl::PresentMode::Mailbox) {
+		ret.imageCount = std::max(uint32_t(3), ret.imageCount);
+	}
 
 	return ret;
 }
 
-void AppDelegate::update(uint64_t dt) {
-	Application::update(dt);
-	if (_fontMainController) {
-		_fontMainController->update();
-	}
-	if (_fontLibrary) {
-		_fontLibrary->update();
-	}
-}
-
-void AppDelegate::runMainView(Rc<AppScene> &&scene) {
-	auto dir = Rc<Director>::create(this, move(scene));
-
-	auto view = platform::graphic::createView(_loop, _glLoop, "Xenolith",
-			URect{0, 0, uint32_t(_data.screenSize.width), uint32_t(_data.screenSize.height)});
-
-	view->begin(dir, [this] {
-		_loop->pushEvent(AppEvent::Terminate);
-	});
+void AppDelegate::onViewCreated(const Rc<Director> &dir) {
+	auto scene = Rc<AppScene>::create(this, dir->getScreenExtent());
+	dir->runScene(move(scene));
 }
 
 }

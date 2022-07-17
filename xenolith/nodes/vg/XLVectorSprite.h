@@ -67,7 +67,7 @@ public:
 
 	virtual void onTransformDirty(const Mat4 &) override;
 
-	virtual void visit(RenderFrameInfo &, NodeFlags parentFlags) override;
+	virtual bool visitDraw(RenderFrameInfo &, NodeFlags parentFlags) override;
 
 protected:
 	virtual void pushCommands(RenderFrameInfo &, NodeFlags flags) override;

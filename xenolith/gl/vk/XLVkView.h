@@ -64,6 +64,8 @@ public:
 	virtual bool presentImmediate(Rc<ImageStorage> &&) override;
 	virtual void invalidateTarget(Rc<ImageStorage> &&) override;
 
+	virtual Rc<Ref> getSwapchainHandle() const override;
+
 	void captureImage(StringView, const Rc<gl::ImageObject> &image, AttachmentLayout l) const;
 
 	void scheduleFence(Rc<Fence> &&);

@@ -312,6 +312,10 @@ void FontCharString::addString(const char16_t *str, size_t len) {
 	}
 }
 
+void FontCharString::addString(const FontCharString &str) {
+	addString(str.chars.data(), str.chars.size());
+}
+
 struct LayoutNodeMemory;
 
 struct LayoutNodeMemoryStorage {

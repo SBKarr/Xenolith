@@ -36,6 +36,8 @@ Instance::~Instance() {
 		_terminate();
 		_terminate = nullptr;
 	}
+
+	log::text("gl::Instance", "~Instance");
 }
 
 Rc<Loop> Instance::makeLoop(Application *, uint32_t deviceIndex) const {

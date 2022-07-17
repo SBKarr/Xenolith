@@ -23,13 +23,13 @@
 #ifndef TEST_XENOLITH_SRC_XLAPPSCENE_H_
 #define TEST_XENOLITH_SRC_XLAPPSCENE_H_
 
-#include "XLScene.h"
+#include "XLUtilScene.h"
 #include "XLSprite.h"
 #include "XLLayer.h"
 
 namespace stappler::xenolith::app {
 
-class AppScene : public Scene {
+class AppScene : public UtilScene {
 public:
 	virtual ~AppScene() { }
 
@@ -43,8 +43,6 @@ public:
 	virtual void onEnter(Scene *) override;
 	virtual void onExit() override;
 	virtual void onContentSizeDirty() override;
-
-	void addFontController(const Rc<font::FontController> &);
 
 protected:
 	Node *_layout = nullptr;

@@ -239,7 +239,18 @@ int Application::run(Value &&data) {
 		// ensure gl thread initialized
 		_glLoop->waitRinning();
 
+		_fontLibrary = Rc<font::FontLibrary>::create(_glLoop);
+
+		auto builder = _fontLibrary->makeDefaultControllerBuilder("ApplicationFontController");
+
+		updateDefaultFontController(builder);
+
+		_fontController = _fontLibrary->acquireController(move(builder));
+
 		ret = onMainLoop();
+
+		_fontController = nullptr;
+		_fontLibrary = nullptr;
 
 		_glLoop->cancel();
 		_glLoop = nullptr;
@@ -253,6 +264,20 @@ int Application::run(Value &&data) {
 	}
 
 	if (_instance) {
+		if (_instance->getReferenceCount() > 1) {
+			auto instance = _instance.get();
+			_instance = nullptr;
+
+			log::vtext("gl::Instance", "Backtrace for ", (void *)instance);
+			instance->foreachBacktrace([] (uint64_t id, Time time, const std::vector<std::string> &vec) {
+				StringStream stream;
+				stream << "[" << id << ":" << time.toHttp<Interface>() << "]:\n";
+				for (auto &it : vec) {
+					stream << "\t" << it << "\n";
+				}
+				log::text("gl::Instance", stream.str());
+			});
+		}
 		_instance = nullptr;
 	}
 
@@ -268,15 +293,25 @@ void Application::addView(gl::ViewInfo &&view) {
 	_glLoop->addView(move(view));
 }
 
-void Application::wait(TimeInterval iv) {
-	uint64_t clock = platform::device::_clock();
+void Application::runLoop(TimeInterval iv) {
+	uint32_t count = 0;
+	uint64_t clock = platform::device::_clock(platform::device::ClockType::Monotonic);
 	uint64_t lastUpdate = clock;
 	do {
-		uint32_t count = 0;
-		_queue->wait(iv - TimeInterval::microseconds(clock - lastUpdate), &count);
-		clock = platform::device::_clock();
+		count = 0;
+		if (!_immediateUpdate) {
+			_queue->wait(iv - TimeInterval::microseconds(clock - lastUpdate), &count);
+		}
+		if (count > 0) {
+			memory::pool::push(_updatePool);
+			_queue->update();
+			memory::pool::pop();
+			memory::pool::clear(_updatePool);
+		}
+		clock = platform::device::_clock(platform::device::ClockType::Monotonic);
+
 		auto dt = TimeInterval::microseconds(clock - lastUpdate);
-		if (dt >= iv) {
+		if (dt >= iv || _immediateUpdate) {
 			update(dt.toMicros());
 			lastUpdate = clock;
 		}
@@ -290,8 +325,6 @@ void Application::end() {
 }
 
 void Application::update(uint64_t dt) {
-	updateQueue();
-
 	memory::pool::push(_updatePool);
 
 	if (!_isNetworkOnline) {
@@ -306,15 +339,14 @@ void Application::update(uint64_t dt) {
 		_deviceIdentifier = platform::device::_deviceIdentifier();
 	}
 
-	memory::pool::pop();
-	memory::pool::clear(_updatePool);
-}
-
-void Application::updateQueue() {
-	memory::pool::push(_updatePool);
-	if (_queue) {
-		_queue->update();
+	if (_fontController) {
+		_fontController->update();
 	}
+
+	if (_fontLibrary) {
+		_fontLibrary->update();
+	}
+
 	memory::pool::pop();
 	memory::pool::clear(_updatePool);
 }
@@ -415,6 +447,16 @@ void Application::notification(const String &title, const String &text) {
 
 void Application::setLaunchUrl(const StringView &url) {
     _data.launchUrl = url.str<Interface>();
+}
+
+void Application::scheduleUpdate() {
+	if (isOnMainThread()) {
+		_immediateUpdate = true;
+	} else {
+		performOnMainThread([this] {
+			_immediateUpdate = true;
+		});
+	}
 }
 
 bool Application::isOnMainThread() const {
@@ -534,6 +576,10 @@ uint64_t Application::getClock() const {
 
 const Rc<ResourceCache> &Application::getResourceCache() const {
 	return _glLoop->getResourceCache();
+}
+
+void Application::updateDefaultFontController(font::FontController::Builder &builder) {
+
 }
 
 }

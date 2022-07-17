@@ -47,7 +47,7 @@ ActionContainer::ActionContainer(Node *target) : target(target) { }
 Action *ActionContainer::getActionByTag(uint32_t tag) const {
 	if (nactions <= ReserveActions) {
 		auto target = (Action **)actions.data();
-		auto end = (Action **)(actions.data() + nactions);
+		auto end = (Action **)(actions.data()) + nactions;
 		while (target != end) {
 			if ((*target)->getTag() == tag) {
 				return *target;
@@ -91,7 +91,7 @@ void ActionContainer::addAction(Action *a) {
 void ActionContainer::removeAction(Action *action) {
 	if (nactions <= ReserveActions) {
 		auto target = (Action **)actions.data();
-		auto end = (Action **)(actions.data() + nactions);
+		auto end = (Action **)(actions.data()) + nactions;
 		auto it = std::remove(target, end, action);
 		if (std::distance(it, end) > 0) {
 			action->invalidate();
@@ -117,7 +117,7 @@ void ActionContainer::removeAction(Action *action) {
 bool ActionContainer::invalidateActionByTag(uint32_t tag) {
 	if (nactions <= ReserveActions) {
 		auto target = (Action **)actions.data();
-		auto end = (Action **)(actions.data() + nactions);
+		auto end = (Action **)(actions.data()) + nactions;
 		while (target != end) {
 			if ((*target)->getTag() == tag) {
 				(*target)->invalidate();
@@ -139,7 +139,7 @@ bool ActionContainer::invalidateActionByTag(uint32_t tag) {
 void ActionContainer::invalidateAllActionsByTag(uint32_t tag) {
 	if (nactions <= ReserveActions) {
 		auto target = (Action **)actions.data();
-		auto end = (Action **)(actions.data() + nactions);
+		auto end = (Action **)(actions.data()) + nactions;
 		while (target != end) {
 			if ((*target)->getTag() == tag) {
 				(*target)->invalidate();
@@ -158,7 +158,7 @@ void ActionContainer::invalidateAllActionsByTag(uint32_t tag) {
 bool ActionContainer::removeActionByTag(uint32_t tag) {
 	if (nactions <= ReserveActions) {
 		auto target = (Action **)actions.data();
-		auto end = (Action **)(actions.data() + nactions);
+		auto end = (Action **)(actions.data()) + nactions;
 		while (target != end) {
 			if ((*target)->getTag() == tag) {
 				(*target)->invalidate();
@@ -190,7 +190,7 @@ bool ActionContainer::removeActionByTag(uint32_t tag) {
 void ActionContainer::removeAllActionsByTag(uint32_t tag) {
 	if (nactions <= ReserveActions) {
 		auto target = (Action **)actions.data();
-		auto end = (Action **)(actions.data() + nactions);
+		auto end = (Action **)(actions.data()) + nactions;
 		std::remove_if(target, end, [&] (Action *a) {
 			if (a->isDone()) {
 				a->release(0);
@@ -217,7 +217,7 @@ void ActionContainer::removeAllActionsByTag(uint32_t tag) {
 bool ActionContainer::cleanup() {
 	if (nactions <= ReserveActions) {
 		auto target = (Action **)actions.data();
-		auto end = (Action **)(actions.data() + nactions);
+		auto end = (Action **)(actions.data()) + nactions;
 		std::remove_if(target, end, [&] (Action *a) {
 			if (a->isDone()) {
 				a->release(0);

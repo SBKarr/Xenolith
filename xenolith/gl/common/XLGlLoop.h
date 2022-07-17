@@ -93,6 +93,8 @@ public:
 
 	virtual const Vector<gl::ImageFormat> &getSupportedDepthStencilFormat() const = 0;
 
+	virtual Rc<renderqueue::Queue> makeRenderFontQueue() const = 0;
+
 protected:
 	std::atomic_flag _shouldExit;
 	Rc<ResourceCache> _resourceCache;
