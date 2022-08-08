@@ -25,6 +25,8 @@
 
 #include "XLLayer.h"
 #include "XLLabel.h"
+#include "XLVectorSprite.h"
+#include "XLIconNames.h"
 
 namespace stappler::xenolith::app {
 
@@ -39,6 +41,13 @@ public:
 	virtual void update(const UpdateTime &) override;
 
 protected:
+	void updateIcon(IconName);
+
+	IconName _currentName = IconName::Social_school_outline;
+
+	Label *_label = nullptr;
+	VectorSprite *_sprite = nullptr;
+	VectorSprite *_triangles = nullptr;
 };
 
 }

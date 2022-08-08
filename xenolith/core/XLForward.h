@@ -93,8 +93,6 @@ using ColorMask = geom::ColorMask;
 using Padding = geom::Padding;
 namespace Anchor = geom::Anchor;
 
-using FilePath = ValueWrapper<StringView, class FilePathTag>;
-
 enum ScreenOrientation {
 	Landscape = 1,
 	LandscapeLeft,

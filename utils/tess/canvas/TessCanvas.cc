@@ -30,12 +30,24 @@
 
 namespace stappler::xenolith::tessapp {
 
+Color TessCanvas::getColorForIndex(uint32_t idx) {
+	switch (idx % 4) {
+	case 0: return Color::Red_500; break;
+	case 1: return Color::Green_500; break;
+	case 2: return Color::Blue_500; break;
+	case 3: return Color::Purple_500; break;
+	}
+	return Color::Red_500;
+}
+
 TessCanvas::~TessCanvas() { }
 
-bool TessCanvas::init() {
+bool TessCanvas::init(Function<void()> &&cb) {
 	if (!Node::init()) {
 		return false;
 	}
+
+	_onContourUpdated = move(cb);
 
 	auto inputListener = addInputListener(Rc<InputListener>::create());
 	inputListener->addTouchRecognizer([this] (GestureEvent event, const InputEvent &ev) {
@@ -92,18 +104,31 @@ bool TessCanvas::init() {
 	auto path = filesystem::writablePath<Interface>("path.cbor");
 	filesystem::mkdir(filepath::root(path));
 	if (filesystem::exists(path)) {
-		auto val = data::readFile<Interface>(path);
-		for (auto &it : val.asArray()) {
-			Vec2 point(it.getDouble(0), it.getDouble(1));
-			auto pt = Rc<TessPoint>::create(point, _points.size());
+		auto loadArray = [&] (ContourData &c, const Value &val) {
+			for (auto &it : val.asArray()) {
+				Vec2 point(it.getDouble(0), it.getDouble(1));
+				auto pt = Rc<TessPoint>::create(point, c.points.size());
 
-			_points.emplace_back(addChild(move(pt), 10));
+				c.points.emplace_back(addChild(move(pt), 10));
+			}
+		};
+
+		auto val = data::readFile<Interface>(path);
+		if (val.isArray()) {
+			auto &c = _contours.emplace_back(ContourData{0});
+			loadArray(c, val);
+		} else if (val.isDictionary()) {
+			auto ncontours = val.getInteger("ncontours");
+			_contours.reserve(ncontours);
+
+			for (auto &it : val.getArray("contours")) {
+				auto &c = _contours.emplace_back(ContourData{uint32_t(_contours.size())});
+				loadArray(c, it);
+			}
 		}
 	}
 
-	if (!_points.empty()) {
-		updatePoints();
-	}
+	updatePoints();
 
 	return true;
 }
@@ -131,6 +156,38 @@ void TessCanvas::onContentSizeDirty() {
 	_pathLines->getImage()->setImageSize(_contentSize);
 }
 
+void TessCanvas::setWinding(vg::Winding w) {
+	if (w != _winding) {
+		_winding = w;
+		updatePoints();
+	}
+}
+
+void TessCanvas::setDrawStyle(vg::DrawStyle s) {
+
+}
+
+void TessCanvas::setSelectedContour(uint32_t n) {
+	_contourSelected = n % _contours.size();
+	_onContourUpdated();
+}
+
+uint32_t TessCanvas::getSelectedContour() const {
+	return _contourSelected;
+}
+
+uint32_t TessCanvas::getContoursCount() const {
+	return _contours.size();
+}
+
+void TessCanvas::addContour() {
+	if (_contours.back().points.size() > 0) {
+		_contours.emplace_back(ContourData{uint32_t(_contours.size())});
+		_contourSelected = _contours.size() - 1;
+		_onContourUpdated();
+	}
+}
+
 void TessCanvas::onTouch(const InputEvent &ev) {
 	auto loc = convertToNodeSpace(ev.currentLocation);
 
@@ -146,6 +203,7 @@ void TessCanvas::onTouch(const InputEvent &ev) {
 	case InputEventName::Move:
 		if (_capturedPoint) {
 			auto loc = convertToNodeSpace(ev.currentLocation);
+			loc = Vec2(roundf(loc.x), roundf(loc.y));
 			_capturedPoint->setPoint(loc);
 			updatePoints();
 		}
@@ -175,16 +233,19 @@ void TessCanvas::onTouch(const InputEvent &ev) {
 void TessCanvas::onMouseMove(const InputEvent &ev) {
 	if (_cursor) {
 		_currentLocation = convertToNodeSpace(ev.currentLocation);
+		_currentLocation = Vec2(roundf(_currentLocation.x), roundf(_currentLocation.y));
 		if (isTouchedNodeSpace(_currentLocation)) {
 			_cursor->setPosition(_currentLocation);
 			_cursor->setVisible(_pointerInWindow);
 			if (_pointerInWindow) {
 				Vec2 pos;
 				bool touched = false;
-				for (auto &it : _points) {
-					if (it->isTouched(ev.currentLocation, 10)) {
-						touched = true;
-						pos = it->getPoint();
+				for (auto &c : _contours) {
+					for (auto &it : c.points) {
+						if (it->isTouched(ev.currentLocation, 10)) {
+							touched = true;
+							pos = it->getPoint();
+						}
 					}
 				}
 				if (touched) {
@@ -210,55 +271,85 @@ bool TessCanvas::onPointerEnter(bool value) {
 
 void TessCanvas::onActionTouch(const InputEvent &ev) {
 	if ((ev.data.modifiers & InputModifier::Ctrl) != InputModifier::None) {
-		auto it = _points.begin();
-		while (it != _points.end()) {
-			if ((*it)->isTouched(ev.currentLocation, 10)) {
-				(*it)->removeFromParent();
-				it = _points.erase(it);
-				updatePoints();
+		auto cIt = _contours.begin();
+		while (cIt != _contours.end()) {
+			auto it = cIt->points.begin();
+			while (it != cIt->points.end()) {
+				if ((*it)->isTouched(ev.currentLocation, 10)) {
+					(*it)->removeFromParent();
+					it = cIt->points.erase(it);
 
-				while (it != _points.end()) {
-					(*it)->setIndex((*it)->getIndex() - 1);
+					while (it != cIt->points.end()) {
+						(*it)->setIndex((*it)->getIndex() - 1);
+						++ it;
+					}
+
+					if (cIt->points.size() == 0 && _contours.size() != 0) {
+						_contours.erase(cIt);
+						_onContourUpdated();
+					}
+					updatePoints();
+					return;
+				} else {
 					++ it;
 				}
-				return;
-			} else {
-				++ it;
 			}
+			++ cIt;
 		}
 	} else {
 		auto loc = convertToNodeSpace(ev.currentLocation);
-		auto pt = Rc<TessPoint>::create(loc, _points.size());
+		loc = Vec2(roundf(loc.x), roundf(loc.y));
 
-		_points.emplace_back(addChild(move(pt), 10));
+		auto &c = _contours[_contourSelected];
+		auto pt = Rc<TessPoint>::create(loc, c.points.size());
+		pt->setColor(getColorForIndex(_contourSelected));
+		c.points.emplace_back(addChild(move(pt), 10));
 		updatePoints();
 	}
 }
 
 TessPoint * TessCanvas::getTouchedPoint(const Vec2 &pt) const {
-	for (auto &it : _points) {
-		if (it->isTouched(pt, 10)) {
-			return it;
+	for (auto &c : _contours) {
+		for (auto &it : c.points) {
+			if (it->isTouched(pt, 10)) {
+				return it;
+			}
 		}
 	}
 	return nullptr;
 }
 
 void TessCanvas::updatePoints() {
-	if (_points.size() > 2) {
+	uint32_t nContours = 0;
+
+	_pathFill->getImage()->clear();
+	_pathLines->getImage()->clear();
+
+	auto pathFill = _pathFill->getImage()->addPath();
+	auto pathLines = _pathLines->getImage()->addPath();
+
+	pathFill->setWindingRule(_winding);
+	pathLines->setWindingRule(_winding);
+
+	for (const ContourData &contour : _contours) {
+		if (contour.points.size() > 2) {
+
+			for (auto &it : contour.points) {
+				pathFill->lineTo(it->getPoint());
+				pathLines->lineTo(it->getPoint());
+				it->setColor(getColorForIndex(contour.index));
+			}
+
+			pathFill->closePath();
+			pathLines->closePath();
+
+			++ nContours;
+		}
+	}
+
+	if (nContours) {
 		_pathFill->setVisible(true);
 		_pathLines->setVisible(true);
-
-		_pathFill->getImage()->clear();
-		_pathLines->getImage()->clear();
-
-		auto pathFill = _pathFill->getImage()->addPath();
-		auto pathLines = _pathLines->getImage()->addPath();
-
-		for (auto &it : _points) {
-			pathFill->lineTo(it->getPoint());
-			pathLines->lineTo(it->getPoint());
-		}
 	} else {
 		_pathFill->setVisible(false);
 		_pathLines->setVisible(false);
@@ -268,8 +359,15 @@ void TessCanvas::updatePoints() {
 	filesystem::remove(path);
 
 	Value val;
-	for (auto &it : _points) {
-		val.addValue(Value({ Value(it->getPoint().x), Value(it->getPoint().y)}));
+	val.setInteger(_contours.size(), "ncountours");
+	auto &c = val.emplace("contours");
+
+	for (const ContourData &contour : _contours) {
+		Value vals;
+		for (auto &it : contour.points) {
+			vals.addValue(Value({ Value(it->getPoint().x), Value(it->getPoint().y)}));
+		}
+		c.addValue(move(vals));
 	}
 
 	data::save(val, path,data::EncodeFormat::Cbor);

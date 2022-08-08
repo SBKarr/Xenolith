@@ -24,13 +24,14 @@
 #define XENOLITH_FEATURES_ACTIONS_XLACTION_H_
 
 #include "XLDefine.h"
+#include "SPRefContainer.h"
 
 namespace stappler::xenolith {
 
 class Action : public Ref {
 public:
-    /** Default tag used for all the actions. */
-    static const uint32_t INVALID_TAG = std::numeric_limits<uint32_t>::max();
+	/** Default tag used for all the actions. */
+	static const uint32_t INVALID_TAG = std::numeric_limits<uint32_t>::max();
 
 	virtual ~Action();
 
@@ -61,9 +62,6 @@ public:
 	 */
 	virtual void update(float time);
 
-	/** overload point - called when action removed with stopAction* function */
-	virtual void onStopped();
-
 	Node* getContainer() const { return _container; }
 	Node* getTarget() const { return _target; }
 
@@ -73,11 +71,11 @@ public:
 	float getDuration() const { return _duration; }
 	virtual void setDuration(float duration) { _duration = duration; }
 
-protected:
-	friend class ActionManager;
-
 	/** Called before the action start. It will also set the target */
 	virtual void startWithTarget(Node *target);
+
+protected:
+	friend class ActionManager;
 
 	void setContainer(Node *container) { _container = container; }
 	void setTarget(Node *target) { _target = target; }
@@ -97,38 +95,75 @@ protected:
 	float _duration = std::numeric_limits<float>::quiet_NaN();
 };
 
-/** @class ActionInterval
-@brief An interval action is an action that takes place within a certain period of time.
-It has an start time, and a finish time. The finish time is the parameter
-duration plus the start time.
+class ActionInstant : public Action {
+public:
+	virtual ~ActionInstant();
 
-These ActionInterval actions have some interesting properties, like:
-- They can run normally (default)
-- They can run reversed with the reverse method
-- They can run with the time altered with the Accelerate, AccelDeccel and Speed actions.
+	virtual bool init(bool runOnce = false);
+	virtual void step(float dt) override;
 
-For example, you can simulate a Ping Pong effect running the action normally and
-then running it again in Reverse mode.
+protected:
+	bool _runOnce = false;
+	bool _performed = false;
+};
 
-Example:
+class Show : public ActionInstant {
+public:
+	virtual ~Show();
 
-Action *pingPongAction = Sequence::actions(action, action->reverse(), nullptr);
-*/
+	virtual void update(float time) override;
+};
+
+class Hide : public ActionInstant {
+public:
+	virtual ~Hide();
+
+	virtual void update(float time) override;
+};
+
+class ToggleVisibility : public ActionInstant {
+public:
+	virtual ~ToggleVisibility();
+
+	virtual void update(float time) override;
+};
+
+class RemoveSelf : public ActionInstant {
+public:
+	virtual ~RemoveSelf();
+
+	virtual bool init(bool isNeedCleanUp, bool runOnce = false);
+	virtual void update(float time) override;
+
+protected:
+	bool _isNeedCleanUp;
+};
+
+class Place : public ActionInstant {
+public:
+	virtual ~Place();
+
+	virtual bool init(const Vec2 &pos, bool runOnce = false);
+	virtual void update(float time) override;
+
+protected:
+	Vec2 _position;
+};
+
+class CallFunc : public ActionInstant {
+public:
+	virtual ~CallFunc();
+
+	virtual bool init(Function<void()> &&func, bool runOnce = false);
+	virtual void update(float time) override;
+
+protected:
+	Function<void()> _callback;
+};
+
 class ActionInterval : public Action {
 public:
 	virtual ~ActionInterval();
-
-	/** Returns a new action that performs the exactly the reverse action */
-	virtual Rc<ActionInterval> clone() const {
-        XL_ASSERT(0, "");
-		return nullptr;
-	}
-
-	/** Returns a new action that performs the exactly the reverse action */
-	virtual Rc<ActionInterval> reverse() const {
-		XL_ASSERT(0, "Reverse action is not defined");
-		return nullptr;
-	}
 
 	bool init(float duration);
 
@@ -136,15 +171,20 @@ public:
 
 	virtual bool isDone(void) const override;
 	virtual void step(float dt) override;
+	virtual void setDuration(float duration) override;
 	virtual void startWithTarget(Node *target) override;
 
-	virtual void setDuration(float duration) override;
-
 protected:
-    float _elapsed = 0.0f;
-    bool _firstTick = true;
+	float _elapsed = 0.0f;
+	bool _firstTick = true;
 };
 
+/** @class Speed
+ * @brief Changes the speed of an action, making it take longer (speed>1)
+ * or less (speed<1) time.
+ * Useful to simulate 'slow motion' or 'fast forward' effect.
+ * @warning This action can't be Sequenceable because it is not an IntervalAction.
+ */
 class Speed : public Action {
 public:
 	virtual ~Speed();
@@ -159,62 +199,146 @@ public:
 	ActionInterval* getInnerAction() const { return _innerAction; }
 	void setInnerAction(ActionInterval *action);
 
-	virtual Rc<Speed> clone() const;
-	virtual Rc<Speed> reverse() const;
-
 	virtual void stop() override;
-
 	virtual void step(float dt) override;
-
 	virtual bool isDone() const override;
 
-	virtual void onStopped() override;
-
-protected:
 	virtual void startWithTarget(Node *target) override;
 
+protected:
 	float _speed = 1.0f;
 	Rc<ActionInterval> _innerAction;
 };
 
-
 class Sequence : public ActionInterval {
 public:
+	virtual ~Sequence();
 
-	virtual Sequence* clone() const override;
-	virtual Sequence* reverse() const override;
+	template <typename ... Args>
+	bool init(Args && ... args) {
+		_duration = 0.0f;
+		reserve(sizeof...(Args));
+		return initWithActions(std::forward<Args>(args)...);
+	}
 
-	virtual void startWithTarget(Node *target) override;
 	virtual void stop(void) override;
-	/**
-	 * @param t In seconds.
-	 */
 	virtual void update(float t) override;
-	virtual void onStopped() override;
-
-	/** initializes the action */
-	bool init(Action *pActionOne, Action *pActionTwo);
+	virtual void startWithTarget(Node *target) override;
 
 protected:
-	Rc<Action> _actions[2];
-	float _split = 0.0f;
-	int _last;
+	bool reserve(size_t);
+	bool addAction(Function<void()> &&); // add callback action
+	bool addAction(float); // add timeout action
+
+	template <typename T>
+	bool addAction(const Rc<T> &t) {
+		return addAction(t.get());
+	}
+
+	bool addAction(Action *);
+
+	template <typename T, typename ... Args>
+	bool initWithActions(T &&t, Args && ... args) {
+		if (!addAction(std::forward<T>(t))) {
+			return false;
+		}
+		return initWithActions(std::forward<Args>(args)...);
+	}
+
+	template <typename T>
+	bool initWithActions(T &&t) {
+		if (addAction(std::forward<T>(t))) {
+			return ActionInterval::init(_duration);
+		}
+		return false;
+	}
+
+	struct ActionData {
+		Rc<Action> action;
+		float minThreshold = 0.0f;
+		float maxThreshold = 0.0f;
+		float threshold = 0.0f;
+	};
+
+	Vector<ActionData> _actions;
+	float _prevTime = 0.0f;
+	uint32_t _currentIdx = 0;
 };
 
+class Spawn : public ActionInterval {
+public:
+	virtual ~Spawn();
 
-class TintTo: public ActionInterval {
+	template <typename ... Args>
+	bool init(Args && ... args) {
+		_duration = 0.0f;
+		reserve(sizeof...(Args));
+		return initWithActions(std::forward<Args>(args)...);
+	}
+
+	virtual void stop(void) override;
+	virtual void update(float t) override;
+	virtual void startWithTarget(Node *target) override;
+
+protected:
+	bool reserve(size_t);
+	bool addAction(Function<void()> &&); // add callback action
+	bool addAction(float); // add timeout action
+
+	template <typename T>
+	bool addAction(const Rc<T> &t) {
+		return addAction(t.get());
+	}
+
+	bool addAction(Action *);
+
+	template <typename T, typename ... Args>
+	bool initWithActions(T &&t, Args && ... args) {
+		if (!addAction(std::forward<T>(t))) {
+			return false;
+		}
+		return initWithActions(std::forward<Args>(args)...);
+	}
+
+	template <typename T>
+	bool initWithActions(T &&t) {
+		if (addAction(std::forward<T>(t))) {
+			return ActionInterval::init(_duration);
+		}
+		return false;
+	}
+
+	struct ActionData {
+		Rc<Action> action;
+		float threshold = 0.0f;
+	};
+
+	Vector<ActionData> _actions;
+	float _prevTime = 0.0f;
+	uint32_t _currentIdx = 0;
+};
+
+/** @class DelayTime
+ * @brief Delays the action a certain amount of seconds.
+ */
+class DelayTime : public ActionInterval {
+public:
+	virtual ~DelayTime();
+
+	virtual void update(float time) override;
+};
+
+class TintTo : public ActionInterval {
 public:
 	virtual ~TintTo();
 
 	bool init(float duration, const Color4F &, ColorMask = ColorMask::Color);
 
-	virtual Rc<ActionInterval> clone() const override;
-	virtual Rc<ActionInterval> reverse(void) const override;
-
-	virtual void startWithTarget(Node *target) override;
 	virtual void update(float time) override;
 
 protected:
+	virtual void startWithTarget(Node *target) override;
+
 	ColorMask _mask = ColorMask::None;
 	Color4F _to;
 	Color4F _from;

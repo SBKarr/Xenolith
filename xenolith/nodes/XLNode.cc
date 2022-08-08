@@ -239,7 +239,7 @@ void Node::setContentSize(const Size2 &size) {
 	}
 
 	_contentSize = size;
-	_transformDirty = _contentSizeDirty = true;
+	_transformInverseDirty = _transformCacheDirty = _transformDirty = _contentSizeDirty = true;
 }
 
 void Node::setVisible(bool visible) {
@@ -669,6 +669,9 @@ void Node::onExit() {
 		_onExitCallback();
 	}
 
+	// prevent node destruction until update is ended
+	_director->autorelease(this);
+
 	_scene = nullptr;
 	_director = nullptr;
 }
@@ -973,9 +976,15 @@ bool Node::visitGeometry(RenderFrameInfo &info, NodeFlags parentFlags) {
 
 	NodeFlags flags = processParentFlags(info, parentFlags);
 
+	info.modelTransformStack.push_back(_modelViewTransform);
+	info.zPath.push_back(getLocalZOrder());
+
 	for (auto &it : _children) {
 		it->visitGeometry(info, flags);
 	}
+
+	info.zPath.pop_back();
+	info.modelTransformStack.pop_back();
 
 	// on overload, we can update node's geometry after it's childrens
 
@@ -987,7 +996,6 @@ bool Node::visitDraw(RenderFrameInfo &info, NodeFlags parentFlags) {
 		return false;
 	}
 
-	//
 	NodeFlags flags = processParentFlags(info, parentFlags);
 
 	bool visibleByCamera = true;

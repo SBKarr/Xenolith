@@ -23,8 +23,8 @@
 #ifndef XENOLITH_GL_RENDERQUEUE_XLRENDERQUEUE_H_
 #define XENOLITH_GL_RENDERQUEUE_XLRENDERQUEUE_H_
 
-#include "XLHashTable.h"
 #include "XLRenderQueueEnum.h"
+#include "SPHashTable.h"
 
 namespace stappler::xenolith::gl {
 

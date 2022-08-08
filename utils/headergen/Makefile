@@ -20,7 +20,8 @@ LOCAL_LIBS =
 LOCAL_MODULES ?= \
 	common_filesystem \
 	common_network \
-	common_bitmap
+	common_bitmap \
+	common_vg
 
 #.local_prebuild:
 #	@echo test

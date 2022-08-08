@@ -66,11 +66,22 @@ protected:
 	InputEvent getEventInfo(const InputEventData &) const;
 	void updateEventInfo(InputEvent &, const InputEventData &) const;
 
-	void setListenerExclusive(const InputEvent &currentEvent, Vector<Rc<InputListener>> &, const InputListener *l) const;
+	struct EventHandlersInfo {
+		InputEvent event;
+		Vector<Rc<InputListener>> listeners;
+		Rc<InputListener> exclusive;
+		InputListener *current = nullptr;
+		bool exclusiveDirty = true;
+
+		void handle();
+		void clear(bool cancel);
+	};
+
+	void setListenerExclusive(EventHandlersInfo &, const InputListener *l) const;
 
 	uint64_t _currentTime = 0;
-	HashMap<uint32_t, Pair<InputEvent, Vector<Rc<InputListener>>>> _activeEvents;
-	HashMap<InputKeyCode, Pair<InputEvent, Vector<Rc<InputListener>>>> _activeKeys;
+	HashMap<uint32_t, EventHandlersInfo> _activeEvents;
+	HashMap<InputKeyCode, EventHandlersInfo> _activeKeys;
 	Rc<InputListenerStorage> _events;
 	Rc<InputListenerStorage> _tmpEvents;
 	Rc<TextInputManager> _textInput;

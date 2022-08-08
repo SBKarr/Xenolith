@@ -24,10 +24,23 @@
 #define XENOLITH_NODES_VG_XLVECTORCANVAS_H_
 
 #include "XLDefine.h"
-#include "XLVectorImage.h"
+#include "SPVectorImage.h"
 #include "XLGl.h"
 
 namespace stappler::xenolith {
+
+using VectorPath = stappler::vg::VectorPath;
+using VectorImageData = stappler::vg::VectorImageData;
+using VectorImage = stappler::vg::VectorImage;
+using VectorPathRef = stappler::vg::VectorPathRef;
+
+struct VectorCanvasResult : public Ref {
+	Vector<Pair<Mat4, Rc<gl::VertexData>>> data;
+	Color4F targetColor;
+	Size2 targetSize;
+
+	void updateColor(const Color4F &);
+};
 
 class VectorCanvas : public Ref {
 public:

@@ -73,6 +73,8 @@ public:
 	float getSpf() const; // in milliseconds
 	float getLocalFrameTime() const; // in milliseconds
 
+	void autorelease(Ref *);
+
 protected:
 	// Vk Swaphain was invalidated, drop all dependent resources;
 	void invalidate();
@@ -102,6 +104,8 @@ protected:
 	Rc<Scheduler> _scheduler;
 	Rc<ActionManager> _actionManager;
 	Rc<InputDispatcher> _inputDispatcher;
+
+	Vector<Rc<Ref>> _autorelease;
 };
 
 }

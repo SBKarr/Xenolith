@@ -23,7 +23,7 @@
 #ifndef XENOLITH_GL_COMMON_XLGL_H_
 #define XENOLITH_GL_COMMON_XLGL_H_
 
-#include "XLHashTable.h"
+#include "SPHashTable.h"
 #include "XLPlatform.h"
 #include "XLRenderQueueEnum.h"
 #include "SPBitmap.h"

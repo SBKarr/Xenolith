@@ -21,7 +21,7 @@
  **/
 
 #include "AppVectorTest.h"
-#include "XLVectorImage.h"
+#include "XLVectorCanvas.h"
 
 namespace stappler::xenolith::app {
 

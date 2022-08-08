@@ -129,6 +129,8 @@ void Director::update() {
 	_inputDispatcher->update(_time);
 	_scheduler->update(_time);
 	_actionManager->update(_time);
+
+	_autorelease.clear();
 }
 
 void Director::end() {
@@ -177,6 +179,10 @@ float Director::getSpf() const {
 
 float Director::getLocalFrameTime() const {
 	return _view->getLastFrameTime() / 1000.0f;
+}
+
+void Director::autorelease(Ref *ref) {
+	_autorelease.emplace_back(ref);
 }
 
 void Director::invalidate() {

@@ -364,11 +364,9 @@ static InputMouseButton getButton(uint32_t button) {
 	case BTN_LEFT: return InputMouseButton::MouseLeft; break;
 	case BTN_RIGHT: return InputMouseButton::MouseRight; break;
 	case BTN_MIDDLE: return InputMouseButton::MouseMiddle; break;
-	case BTN_SIDE: break;
-	case BTN_EXTRA: break;
-	case BTN_FORWARD: break;
-	case BTN_BACK: break;
-	case BTN_TASK: break;
+	default:
+		return InputMouseButton(toInt(InputMouseButton::Mouse8) + (button - 0x113));
+		break;
 	}
 	return InputMouseButton::None;
 }

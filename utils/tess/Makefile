@@ -30,10 +30,10 @@ LOCAL_TOOLKIT := $(abspath ../../xenolith/xenolith.mk)
 
 LOCAL_ROOT = .
 
-LOCAL_SRCS_DIRS :=  src canvas
+LOCAL_SRCS_DIRS :=  src canvas components
 LOCAL_SRCS_OBJS := shaders/XLAppShaders.cpp ../../resources/fonts/XLResourceFontSource.cpp
 
-LOCAL_INCLUDES_DIRS := src canvas
+LOCAL_INCLUDES_DIRS := src canvas components
 LOCAL_INCLUDES_OBJS := shaders ../../resources/fonts
 
 LOCAL_SHADERS := $(wildcard $(LOCAL_ROOT)/shaders/glsl/*)

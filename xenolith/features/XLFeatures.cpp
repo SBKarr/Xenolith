@@ -30,5 +30,6 @@ THE SOFTWARE.
 
 #include "XLActionManager.cc"
 #include "XLAction.cc"
+#include "XLActionEase.cc"
 
 #include "XLLocale.cc"

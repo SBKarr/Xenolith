@@ -122,12 +122,14 @@ endif
 #
 
 include $(GLOBAL_ROOT)/common-modules.mk
+include $(XENOLITH_MAKEFILE_DIR)/xenolith-modules.mk
 
 LOCAL_MODULES += \
 	common_data \
 	common_threads \
 	common_bitmap \
 	common_tess \
+	common_vg \
 	common_zip \
 	common_brotli_lib \
 	common_backtrace

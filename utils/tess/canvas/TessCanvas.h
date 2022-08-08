@@ -33,12 +33,23 @@ class TessCursor;
 
 class TessCanvas : public Node {
 public:
+	static Color getColorForIndex(uint32_t idx);
+
 	virtual ~TessCanvas();
 
-	virtual bool init() override;
+	virtual bool init(Function<void()> &&);
 
 	virtual void onEnter(Scene *) override;
 	virtual void onContentSizeDirty() override;
+
+	void setWinding(vg::Winding);
+	void setDrawStyle(vg::DrawStyle);
+
+	void setSelectedContour(uint32_t);
+	uint32_t getSelectedContour() const;
+	uint32_t getContoursCount() const;
+
+	void addContour();
 
 protected:
 	void onTouch(const InputEvent &);
@@ -52,6 +63,13 @@ protected:
 
 	void updatePoints();
 
+	struct ContourData {
+		uint32_t index;
+		Vector<Rc<TessPoint>> points;
+	};
+
+	Function<void()> _onContourUpdated;
+
 	bool _pointerInWindow = false;
 	Vec2 _currentLocation;
 	TessCursor *_cursor = nullptr;
@@ -59,7 +77,9 @@ protected:
 	VectorSprite *_test1 = nullptr;
 	VectorSprite *_test2 = nullptr;
 
-	Vector<Rc<TessPoint>> _points;
+	vg::Winding _winding = vg::Winding::EvenOdd;
+	uint32_t _contourSelected = 0;
+	Vector<ContourData> _contours;
 
 	TessPoint *_capturedPoint = nullptr;
 	VectorSprite *_pathFill = nullptr;

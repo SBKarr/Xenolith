@@ -102,42 +102,32 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 	case InputEventName::Begin: {
 		auto v = _activeEvents.find(event.id);
 		if (v == _activeEvents.end()) {
-			v = _activeEvents.emplace(event.id, pair(getEventInfo(event), Vector<Rc<InputListener>>())).first;
+			v = _activeEvents.emplace(event.id, EventHandlersInfo{getEventInfo(event), Vector<Rc<InputListener>>()}).first;
 		} else {
-			v->second.first.data.event = InputEventName::Cancel;
-			for (auto &it : v->second.second) {
-				it->handleEvent(v->second.first);
-			}
-
-			v->second.first = getEventInfo(event);
-			v->second.second.clear();
+			v->second.clear(true);
+			v->second.event = getEventInfo(event);
 		}
 
 		_events->foreach([&] (InputListener *l) {
-			if (l->canHandleEvent(v->second.first)) {
-				v->second.second.emplace_back(l);
-				if (l->shouldSwallowEvent(v->second.first)) {
-					v->second.second.clear();
-					v->second.second.emplace_back(l);
+			if (l->canHandleEvent(v->second.event)) {
+				v->second.listeners.emplace_back(l);
+				if (l->shouldSwallowEvent(v->second.event)) {
+					v->second.listeners.clear();
+					v->second.listeners.emplace_back(l);
 					return false;
 				}
 			}
 			return true;
 		});
 
-		for (auto &it : v->second.second) {
-			it->handleEvent(v->second.first);
-		}
-
+		v->second.handle();
 		break;
 	}
 	case InputEventName::Move: {
 		auto v = _activeEvents.find(event.id);
 		if (v != _activeEvents.end()) {
-			updateEventInfo(v->second.first, event);
-			for (auto &it : v->second.second) {
-				it->handleEvent(v->second.first);
-			}
+			updateEventInfo(v->second.event, event);
+			v->second.handle();
 		}
 		break;
 	}
@@ -145,12 +135,9 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 	case InputEventName::Cancel: {
 		auto v = _activeEvents.find(event.id);
 		if (v != _activeEvents.end()) {
-			updateEventInfo(v->second.first, event);
-			for (auto &it : v->second.second) {
-				it->handleEvent(v->second.first);
-			}
-
-			v->second.second.clear();
+			updateEventInfo(v->second.event, event);
+			v->second.handle();
+			v->second.clear(false);
 			_activeEvents.erase(v);
 		}
 		break;
@@ -173,11 +160,11 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 			it->handleEvent(ev);
 		}
 		for (auto &it : _activeEvents) {
-			it.second.first.data.x = event.x;
-			it.second.first.data.y = event.y;
-			it.second.first.data.event = InputEventName::Move;
-			it.second.first.data.modifiers = event.modifiers;
-			handleInputEvent(it.second.first.data);
+			it.second.event.data.x = event.x;
+			it.second.event.data.y = event.y;
+			it.second.event.data.event = InputEventName::Move;
+			it.second.event.data.modifiers = event.modifiers;
+			handleInputEvent(it.second.event.data);
 		}
 		break;
 	}
@@ -241,11 +228,11 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 			// Mouse left window
 			auto tmpEvents = _activeEvents;
 			for (auto &it : tmpEvents) {
-				it.second.first.data.x = event.x;
-				it.second.first.data.y = event.y;
-				it.second.first.data.event = InputEventName::Cancel;
-				it.second.first.data.modifiers = event.modifiers;
-				handleInputEvent(it.second.first.data);
+				it.second.event.data.x = event.x;
+				it.second.event.data.y = event.y;
+				it.second.event.data.event = InputEventName::Cancel;
+				it.second.event.data.modifiers = event.modifiers;
+				handleInputEvent(it.second.event.data);
 			}
 			_activeEvents.clear();
 		}
@@ -257,13 +244,7 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 			if (_textInput->handleInputEvent(event)) {
 				auto v = _activeKeys.find(event.key.keycode);
 				if (v != _activeKeys.end()) {
-					v->second.first.data.event = InputEventName::KeyCanceled;
-					for (auto &it : v->second.second) {
-						it->handleEvent(v->second.first);
-					}
-
-					v->second.first = getEventInfo(event);
-					v->second.second.clear();
+					v->second.clear(true);
 					_activeKeys.erase(v);
 				}
 				return;
@@ -272,33 +253,24 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 
 		auto v = _activeKeys.find(event.key.keycode);
 		if (v == _activeKeys.end()) {
-			v = _activeKeys.emplace(event.key.keycode, pair(getEventInfo(event), Vector<Rc<InputListener>>())).first;
+			v = _activeKeys.emplace(event.key.keycode, EventHandlersInfo{getEventInfo(event), Vector<Rc<InputListener>>()}).first;
 		} else {
-			v->second.first.data.event = InputEventName::KeyCanceled;
-			for (auto &it : v->second.second) {
-				it->handleEvent(v->second.first);
-			}
-
-			v->second.first = getEventInfo(event);
-			v->second.second.clear();
+			v->second.clear(true);
+			v->second.event = getEventInfo(event);
 		}
 
 		_events->foreach([&] (InputListener *l) {
-			if (l->canHandleEvent(v->second.first)) {
-				v->second.second.emplace_back(l);
-				if (l->shouldSwallowEvent(v->second.first)) {
-					v->second.second.clear();
-					v->second.second.emplace_back(l);
+			if (l->canHandleEvent(v->second.event)) {
+				v->second.listeners.emplace_back(l);
+				if (l->shouldSwallowEvent(v->second.event)) {
+					v->second.listeners.clear();
+					v->second.listeners.emplace_back(l);
 					return false;
 				}
 			}
 			return true;
 		});
-
-		for (auto &it : v->second.second) {
-			it->handleEvent(v->second.first);
-		}
-
+		v->second.handle();
 		break;
 	}
 	case InputEventName::KeyRepeated: {
@@ -307,13 +279,7 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 			if (_textInput->handleInputEvent(event)) {
 				auto v = _activeKeys.find(event.key.keycode);
 				if (v != _activeKeys.end()) {
-					v->second.first.data.event = InputEventName::KeyCanceled;
-					for (auto &it : v->second.second) {
-						it->handleEvent(v->second.first);
-					}
-
-					v->second.first = getEventInfo(event);
-					v->second.second.clear();
+					v->second.clear(true);
 					_activeKeys.erase(v);
 				}
 				return;
@@ -322,10 +288,8 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 
 		auto v = _activeKeys.find(event.key.keycode);
 		if (v != _activeKeys.end()) {
-			updateEventInfo(v->second.first, event);
-			for (auto &it : v->second.second) {
-				it->handleEvent(v->second.first);
-			}
+			updateEventInfo(v->second.event, event);
+			v->second.handle();
 		}
 		break;
 	}
@@ -336,13 +300,7 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 			if (_textInput->handleInputEvent(event)) {
 				auto v = _activeKeys.find(event.key.keycode);
 				if (v != _activeKeys.end()) {
-					v->second.first.data.event = InputEventName::KeyCanceled;
-					for (auto &it : v->second.second) {
-						it->handleEvent(v->second.first);
-					}
-
-					v->second.first = getEventInfo(event);
-					v->second.second.clear();
+					v->second.clear(true);
 					_activeKeys.erase(v);
 				}
 				return;
@@ -351,12 +309,9 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 
 		auto v = _activeKeys.find(event.key.keycode);
 		if (v != _activeKeys.end()) {
-			updateEventInfo(v->second.first, event);
-			for (auto &it : v->second.second) {
-				it->handleEvent(v->second.first);
-			}
-
-			v->second.second.clear();
+			updateEventInfo(v->second.event, event);
+			v->second.handle();
+			v->second.clear(false);
 			_activeKeys.erase(v);
 		}
 
@@ -368,31 +323,31 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 Vector<InputEventData> InputDispatcher::getActiveEvents() const {
 	Vector<InputEventData> eventsTmp; eventsTmp.reserve(_activeEvents.size());
 	for (auto &it : _activeEvents) {
-		eventsTmp.emplace_back(it.second.first.data);
+		eventsTmp.emplace_back(it.second.event.data);
 	}
 	return eventsTmp;
 }
 
 void InputDispatcher::setListenerExclusive(const InputListener *l) {
 	for (auto &it : _activeEvents) {
-		setListenerExclusive(it.second.first, it.second.second, l);
+		setListenerExclusive(it.second, l);
 	}
 	for (auto &it : _activeKeys) {
-		setListenerExclusive(it.second.first, it.second.second, l);
+		setListenerExclusive(it.second, l);
 	}
 }
 
 void InputDispatcher::setListenerExclusiveForTouch(const InputListener *l, uint32_t id) {
 	auto it = _activeEvents.find(id);
 	if (it != _activeEvents.end()) {
-		setListenerExclusive(it->second.first, it->second.second, l);
+		setListenerExclusive(it->second, l);
 	}
 }
 
 void InputDispatcher::setListenerExclusiveForKey(const InputListener *l, InputKeyCode id) {
 	auto it = _activeKeys.find(id);
 	if (it != _activeKeys.end()) {
-		setListenerExclusive(it->second.first, it->second.second, l);
+		setListenerExclusive(it->second, l);
 	}
 }
 
@@ -427,23 +382,60 @@ void InputDispatcher::updateEventInfo(InputEvent &event, const InputEventData &d
 	}
 }
 
-void InputDispatcher::setListenerExclusive(const InputEvent &currentEvent,
-		Vector<Rc<InputListener>> &vec, const InputListener *l) const {
-	auto v = std::find(vec.begin(), vec.end(), l);
-	if (v != vec.end()) {
-		if (vec.size() > 1) {
-			auto event = currentEvent;
-			event.data.event = InputEventName::Cancel;
-			for (auto &iit : vec) {
-				if (iit != l) {
-					iit->handleEvent(event);
-				}
-			}
+void InputDispatcher::EventHandlersInfo::handle() {
+	if (exclusive) {
+		current = exclusive.get();
+		exclusive->handleEvent(event);
+		current = nullptr;
+	} else {
+		auto vec = listeners;
+		for (auto &it : vec) {
+			current = it.get();
+			it->handleEvent(event);
+			current = nullptr;
 
-			auto tmp = *v;
-			vec.clear();
-			vec.emplace_back(move(tmp));
+			if (exclusive) {
+				if (!exclusiveDirty) {
+					current = exclusive.get();
+					exclusive->handleEvent(event);
+					current = nullptr;
+				} else {
+					exclusiveDirty = true;
+				}
+				break;
+			}
 		}
+	}
+}
+
+void InputDispatcher::EventHandlersInfo::clear(bool cancel) {
+	if (cancel) {
+		event.data.event = InputEventName::Cancel;
+		handle();
+	}
+
+	listeners.clear();
+	exclusive = nullptr;
+}
+
+void InputDispatcher::setListenerExclusive(EventHandlersInfo &info, const InputListener *l) const {
+	if (info.exclusive) {
+		return;
+	}
+
+	auto v = std::find(info.listeners.begin(), info.listeners.end(), l);
+	if (v != info.listeners.end()) {
+		info.exclusive = *v;
+		info.exclusiveDirty = info.current != l;
+
+		auto event = info.event;
+		event.data.event = InputEventName::Cancel;
+		for (auto &iit : info.listeners) {
+			if (iit.get() != l) {
+				iit->handleEvent(event);
+			}
+		}
+		info.listeners.clear();
 	}
 }
 

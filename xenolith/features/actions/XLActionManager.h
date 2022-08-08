@@ -24,43 +24,18 @@
 #define XENOLITH_FEATURES_ACTIONS_XLACTIONMANAGER_H_
 
 #include "XLDefine.h"
-#include "XLHashTable.h"
 #include "XLAction.h"
+#include "SPHashTable.h"
+#include "SPRefContainer.h"
 
 namespace stappler::xenolith {
 
-class Action;
-
-struct ActionContainer {
-	static constexpr size_t ReserveActions = std::max(sizeof(Vector<Action *>) / sizeof(Action *), size_t(4));
-	static constexpr size_t ContainerSize = std::max(sizeof(Vector<Action *>), sizeof(Action *) * ReserveActions);
-
-	std::array<uint8_t, ContainerSize> actions;
+struct ActionContainer : RefContainer<Action> {
 	Rc<Node> target;
-	size_t nactions = 0;
 	bool paused = false;
 
-	~ActionContainer();
+	virtual ~ActionContainer();
 	ActionContainer(Node *);
-
-	Action *getActionByTag(uint32_t tag) const;
-
-	void addAction(Action *);
-	void removeAction(Action *);
-
-	bool invalidateActionByTag(uint32_t);
-	void invalidateAllActionsByTag(uint32_t);
-
-	bool removeActionByTag(uint32_t);
-	void removeAllActionsByTag(uint32_t);
-
-	template <typename Callback>
-	void foreach(const Callback &) const;
-
-	bool cleanup();
-
-	bool empty() const;
-	size_t size() const;
 };
 
 struct HashTraitActionContainer {
@@ -82,10 +57,18 @@ struct HashTraitActionContainer {
 	}
 };
 
+}
+
+namespace stappler {
+
 template <>
-struct HashTraitDiscovery<ActionContainer> {
-	using type = HashTraitActionContainer;
+struct HashTraitDiscovery<xenolith::ActionContainer> {
+	using type = xenolith::HashTraitActionContainer;
 };
+
+}
+
+namespace stappler::xenolith {
 
 class ActionManager : public Ref {
 public:
@@ -194,23 +177,6 @@ protected:
 	HashTable<ActionContainer> _actions;
 	Vector<PendingAction> _pending;
 };
-
-template <typename Callback>
-void ActionContainer::foreach(const Callback &cb) const {
-	if (nactions <= ReserveActions) {
-		auto target = (Action **)actions.data();
-		auto end = (Action **)(actions.data()) + nactions;
-		while (target != end) {
-			cb(*target);
-			++ target;
-		}
-	} else {
-		auto target = (Vector<Action *> *)actions.data();
-		for (auto &it : *target) {
-			cb(it);
-		}
-	}
-}
 
 }
 

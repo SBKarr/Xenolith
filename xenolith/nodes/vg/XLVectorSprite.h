@@ -24,7 +24,7 @@
 #define XENOLITH_NODES_XLVECTORSPRITE_H_
 
 #include "XLSprite.h"
-#include "XLVectorImage.h"
+#include "XLVectorCanvas.h"
 
 namespace stappler::xenolith {
 

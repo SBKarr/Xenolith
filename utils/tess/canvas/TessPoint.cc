@@ -42,7 +42,7 @@ bool TessPoint::init(const Vec2 &p, uint32_t index) {
 	auto fontController = app->getFontController();
 
 	_label = addChild(Rc<Label>::create(fontController));
-	_label->setFontSize(12);
+	_label->setFontSize(18);
 	_label->setFontFamily("monospace");
 	_label->setFontWeight(Label::FontWeight::Bold);
 	_label->setColor(Color::Black, true);

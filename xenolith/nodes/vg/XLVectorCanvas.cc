@@ -25,6 +25,22 @@
 
 namespace stappler::xenolith {
 
+void VectorCanvasResult::updateColor(const Color4F &color) {
+	auto target = Vec4(color.r, color.g, color.b, color.a) / Vec4(targetColor.r, targetColor.g, targetColor.b, targetColor.a);
+	for (auto &it : data) {
+		auto data = Rc<gl::VertexData>::alloc();
+		data->data = it.second->data;
+		data->indexes = it.second->indexes;
+
+		it.second = move(data);
+
+		for (auto &iit : it.second->data) {
+			iit.color = iit.color * target;
+		}
+	}
+	targetColor = Color4F(color.r, color.g, color.b, color.a);
+}
+
 struct VectorCanvasPathOutput {
 	Color4F color;
 	gl::VertexData *vertexes = nullptr;

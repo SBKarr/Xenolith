@@ -25,240 +25,9 @@
 
 namespace stappler::xenolith {
 
-ActionContainer::~ActionContainer() {
-	if (nactions > ReserveActions) {
-		auto target = (Vector<Action *> *)actions.data();
-		for (auto &it : *target) {
-			it->release(0);
-		}
-		target->~vector();
-	} else {
-		auto target = (Vector<Action*>*) actions.data();
-		auto it = target->begin();
-		while (it != target->end()) {
-			(*it)->release(0);
-			++it;
-		}
-	}
-}
+ActionContainer::~ActionContainer() { }
 
-ActionContainer::ActionContainer(Node *target) : target(target) { }
-
-Action *ActionContainer::getActionByTag(uint32_t tag) const {
-	if (nactions <= ReserveActions) {
-		auto target = (Action **)actions.data();
-		auto end = (Action **)(actions.data()) + nactions;
-		while (target != end) {
-			if ((*target)->getTag() == tag) {
-				return *target;
-			}
-		}
-	} else {
-		auto target = (Vector<Action *> *)actions.data();
-		for (auto &it : *target) {
-			if (it->getTag() == tag) {
-				return it;
-			}
-		}
-	}
-	return nullptr;
-}
-
-void ActionContainer::addAction(Action *a) {
-	if (nactions < ReserveActions) {
-		auto target = actions.data() + sizeof(Action *) * nactions;
-		a->retain();
-		memcpy(target, &a, sizeof(Action *));
-		++ nactions;
-	} else if (nactions > ReserveActions) {
-		auto target = (Vector<Action *> *)actions.data();
-		a->retain();
-		target->emplace_back(a);
-	} else {
-		// update to Vector storage
-		Vector<Action *> acts; acts.reserve(nactions + 1);
-		foreach([&] (Action *a) {
-			acts.emplace_back(a);
-		});
-		a->retain();
-		acts.emplace_back(a);
-
-		new (actions.data()) Vector<Action *>(move(acts));
-		++ nactions;
-	}
-}
-
-void ActionContainer::removeAction(Action *action) {
-	if (nactions <= ReserveActions) {
-		auto target = (Action **)actions.data();
-		auto end = (Action **)(actions.data()) + nactions;
-		auto it = std::remove(target, end, action);
-		if (std::distance(it, end) > 0) {
-			action->invalidate();
-			action->release(0);
-			-- nactions;
-		}
-	} else {
-		auto target = (Vector<Action *> *)actions.data();
-		auto it = target->begin();
-		while (it != target->end()) {
-			if (*it == action) {
-				action->invalidate();
-				action->release(0);
-				it = target->erase(it);
-				break;
-			} else {
-				++ it;
-			}
-		}
-	}
-}
-
-bool ActionContainer::invalidateActionByTag(uint32_t tag) {
-	if (nactions <= ReserveActions) {
-		auto target = (Action **)actions.data();
-		auto end = (Action **)(actions.data()) + nactions;
-		while (target != end) {
-			if ((*target)->getTag() == tag) {
-				(*target)->invalidate();
-				return true;
-			}
-		}
-	} else {
-		auto target = (Vector<Action *> *)actions.data();
-		for (auto &it : *target) {
-			if (it->getTag() == tag) {
-				it->invalidate();
-				return true;
-			}
-		}
-	}
-	return false;
-}
-
-void ActionContainer::invalidateAllActionsByTag(uint32_t tag) {
-	if (nactions <= ReserveActions) {
-		auto target = (Action **)actions.data();
-		auto end = (Action **)(actions.data()) + nactions;
-		while (target != end) {
-			if ((*target)->getTag() == tag) {
-				(*target)->invalidate();
-			}
-		}
-	} else {
-		auto target = (Vector<Action *> *)actions.data();
-		for (auto &it : *target) {
-			if (it->getTag() == tag) {
-				it->invalidate();
-			}
-		}
-	}
-}
-
-bool ActionContainer::removeActionByTag(uint32_t tag) {
-	if (nactions <= ReserveActions) {
-		auto target = (Action **)actions.data();
-		auto end = (Action **)(actions.data()) + nactions;
-		while (target != end) {
-			if ((*target)->getTag() == tag) {
-				(*target)->invalidate();
-				(*target)->release(0);
-				if (target + 1 != end) {
-					memmove(target, target + 1, (end - (target + 1)) * sizeof(Action *));
-				}
-				-- nactions;
-				return true;
-			}
-		}
-	} else {
-		auto target = (Vector<Action *> *)actions.data();
-		auto it = target->begin();
-		while (it != target->end()) {
-			if ((*it)->getTag() == tag) {
-				(*it)->invalidate();
-				(*it)->release(0);
-				it = target->erase(it);
-				return true;
-			} else {
-				++ it;
-			}
-		}
-	}
-	return false;
-}
-
-void ActionContainer::removeAllActionsByTag(uint32_t tag) {
-	if (nactions <= ReserveActions) {
-		auto target = (Action **)actions.data();
-		auto end = (Action **)(actions.data()) + nactions;
-		std::remove_if(target, end, [&] (Action *a) {
-			if (a->isDone()) {
-				a->release(0);
-				-- nactions;
-				return true;
-			}
-			return false;
-		});
-	} else {
-		auto target = (Vector<Action *> *)actions.data();
-		auto it = target->begin();
-		while (it != target->end()) {
-			if ((*it)->getTag() == tag) {
-				(*it)->invalidate();
-				(*it)->release(0);
-				it = target->erase(it);
-			} else {
-				++ it;
-			}
-		}
-	}
-}
-
-bool ActionContainer::cleanup() {
-	if (nactions <= ReserveActions) {
-		auto target = (Action **)actions.data();
-		auto end = (Action **)(actions.data()) + nactions;
-		std::remove_if(target, end, [&] (Action *a) {
-			if (a->isDone()) {
-				a->release(0);
-				-- nactions;
-				return true;
-			}
-			return false;
-		});
-		return nactions == 0;
-	} else {
-		auto target = (Vector<Action *> *)actions.data();
-		auto it = target->begin();
-		while (it != target->end()) {
-			if ((*it)->isDone()) {
-				(*it)->release(0);
-				it = target->erase(it);
-			} else {
-				++ it;
-			}
-		}
-		return target->empty();
-	}
-}
-
-bool ActionContainer::empty() const {
-	if (nactions <= ReserveActions) {
-		return nactions == 0;
-	} else {
-		auto target = (Vector<Action *> *)actions.data();
-		return target->empty();
-	}
-}
-
-size_t ActionContainer::size() const {
-	if (nactions <= ReserveActions) {
-		return nactions;
-	} else {
-		auto target = (Vector<Action *> *)actions.data();
-		return target->size();
-	}
-}
+ActionContainer::ActionContainer(Node *t) : target(t) { }
 
 ActionManager::~ActionManager() {
     removeAllActions();
@@ -286,7 +55,7 @@ void ActionManager::addAction(Action *action, Node *target, bool paused) {
 	}
 
 	action->setContainer(target);
-	it->addAction(action);
+	it->addItem(action);
 	action->startWithTarget(target);
 }
 
@@ -297,6 +66,7 @@ void ActionManager::removeAllActions() {
 			if (&(*it) == _current) {
 				_current->foreach([&] (Action *a) {
 					a->invalidate();
+					return true;
 				});
 			} else {
 				it = _actions.erase(it);
@@ -315,6 +85,7 @@ void ActionManager::removeAllActionsFromTarget(Node *target) {
 	if (_current && _current->target == target) {
 		_current->foreach([&] (Action *a) {
 			a->invalidate();
+			return true;
 		});
 	} else {
 		_actions.erase(target);
@@ -337,7 +108,7 @@ void ActionManager::removeAction(Action *action) {
 	} else {
 		auto it = _actions.find(target);
 		if (it != _actions.end()) {
-			it->removeAction(action);
+			it->removeItem(action);
 		}
 	}
 
@@ -354,13 +125,13 @@ void ActionManager::removeAction(Action *action) {
 
 void ActionManager::removeActionByTag(uint32_t tag, Node *target) {
 	if (_current && _current->target == target) {
-		if (_current->invalidateActionByTag(tag)) {
+		if (_current->invalidateItemByTag(tag)) {
 			return;
 		}
 	} else {
 		auto it = _actions.find(target);
 		if (it != _actions.end()) {
-			if (it->removeActionByTag(tag)) {
+			if (it->removeItemByTag(tag)) {
 				return;
 			}
 		}
@@ -379,11 +150,11 @@ void ActionManager::removeActionByTag(uint32_t tag, Node *target) {
 
 void ActionManager::removeAllActionsByTag(uint32_t tag, Node *target) {
 	if (_current && _current->target == target) {
-		_current->invalidateAllActionsByTag(tag);
+		_current->invalidateAllItemsByTag(tag);
 	} else {
 		auto it = _actions.find(target);
 		if (it != _actions.end()) {
-			it->removeAllActionsByTag(tag);
+			it->removeAllItemsByTag(tag);
 		}
 	}
 
@@ -399,11 +170,11 @@ void ActionManager::removeAllActionsByTag(uint32_t tag, Node *target) {
 
 Action *ActionManager::getActionByTag(uint32_t tag, const Node *target) const {
 	if (_current && _current->target == target) {
-		return _current->getActionByTag(tag);
+		return _current->getItemByTag(tag);
 	} else {
 		auto it = _actions.find(target);
 		if (it != _actions.end()) {
-			return it->getActionByTag(tag);
+			return it->getItemByTag(tag);
 		}
 	}
 
@@ -485,6 +256,7 @@ void ActionManager::update(const UpdateTime &time) {
 			if (a->isDone()) {
 				a->stop();
 			}
+			return true;
 		});
 		_current = nullptr;
 		if (it->cleanup()) {

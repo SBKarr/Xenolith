@@ -24,7 +24,7 @@
 #define XENOLITH_CORE_DIRECTOR_XLSCHEDULER_H_
 
 #include "XLDefine.h"
-#include "XLLinkedList.h"
+#include "SPLinkedList.h"
 
 namespace stappler::xenolith {
 

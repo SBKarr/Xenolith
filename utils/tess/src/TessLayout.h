@@ -30,6 +30,9 @@
 namespace stappler::xenolith::tessapp {
 
 class TessCanvas;
+class WindingSwitcher;
+class DrawStyleSwitcher;
+class ContourSwitcher;
 
 class TessLayout : public Node {
 public:
@@ -40,8 +43,13 @@ public:
 	virtual void onContentSizeDirty() override;
 
 protected:
+	void handleContoursUpdated();
+
 	Layer *_background = nullptr;
 	TessCanvas *_canvas = nullptr;
+	WindingSwitcher *_windingSwitcher = nullptr;
+	DrawStyleSwitcher *_drawStyleSwitcher = nullptr;
+	ContourSwitcher *_contourSwitcher = nullptr;
 };
 
 }

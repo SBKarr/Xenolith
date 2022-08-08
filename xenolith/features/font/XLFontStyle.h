@@ -25,54 +25,13 @@
 
 #include "SPGeometry.h"
 #include "SPSpanView.h"
+#include "SPSvgReader.h"
 
 namespace stappler::xenolith::font {
 
+using Metric = stappler::vg::Metric;
+
 using EnumSize = uint8_t;
-
-struct Metric {
-	enum Units : EnumSize {
-		Percent,
-		Px,
-		Em,
-		Rem,
-		Auto,
-		Dpi,
-		Dppx,
-		Contain, // only for background-size
-		Cover, // only for background-size
-		Vw,
-		Vh,
-		VMin,
-		VMax
-	};
-
-	inline bool isAuto() const { return metric == Units::Auto; }
-
-	inline bool isFixed() const {
-		switch (metric) {
-		case Units::Px:
-		case Units::Em:
-		case Units::Rem:
-		case Units::Vw:
-		case Units::Vh:
-		case Units::VMin:
-		case Units::VMax:
-			return true;
-			break;
-		default:
-			break;
-		}
-		return false;
-	}
-
-	float value = 0.0f;
-	Units metric = Units::Auto;
-
-	Metric(float value, Units m) : value(value), metric(m) { }
-
-	Metric() = default;
-};
 
 enum class Autofit : EnumSize {
 	None,
@@ -228,8 +187,6 @@ struct FontParameters {
 	inline bool operator == (const FontParameters &other) const = default;
 	inline bool operator != (const FontParameters &other) const = default;
 };
-
-bool readStyleValue(StringView r, Metric &value, bool resolutionMetric, bool allowEmptyMetric);
 
 String getFontConfigName(const StringView &fontFamily, FontSize fontSize, FontStyle fontStyle, FontWeight fontWeight,
 		FontStretch fontStretch, FontVariant fontVariant, bool caps);
