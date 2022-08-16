@@ -47,6 +47,7 @@ public:
 
 	static ButtonMask makeButtonMask(std::initializer_list<InputMouseButton> &&);
 	static EventMask makeEventMask(std::initializer_list<InputEventName> &&);
+	static KeyMask makeKeyMask(std::initializer_list<InputKeyCode> &&);
 
 	InputListener();
 	virtual ~InputListener();

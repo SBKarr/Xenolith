@@ -202,6 +202,12 @@ static bool get_cursor_settings(char **theme, int *size) {
 	static const char key_theme[] = "cursor-theme";
 	static const char key_size[] = "cursor-size";
 
+#if DEBUG
+	*theme = "Yaru";
+	*size = 24;
+	return true;
+#endif
+
 	DBusLibrary lib;
 	if (lib.handle) {
 		do {

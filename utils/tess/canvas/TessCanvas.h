@@ -78,6 +78,7 @@ protected:
 	VectorSprite *_test2 = nullptr;
 
 	vg::Winding _winding = vg::Winding::EvenOdd;
+	vg::DrawStyle _drawStyle = vg::DrawStyle::Fill;
 	uint32_t _contourSelected = 0;
 	Vector<ContourData> _contours;
 

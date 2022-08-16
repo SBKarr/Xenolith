@@ -62,9 +62,12 @@ struct VectorCanvasCacheData {
 	String name;
 	float quality = 1.0f;
 	float scale = 1.0f;
+	vg::DrawStyle style = vg::DrawStyle::Fill;
 
 	bool operator< (const VectorCanvasCacheData &other) const {
-		if (name != other.name) {
+		if (style != other.style) {
+			return toInt(style) < toInt(other.style);
+		} else if (name != other.name) {
 			return name < other.name;
 		} else if (quality != other.quality) {
 			return quality < other.quality;
@@ -140,7 +143,9 @@ static void VectorCanvasPathDrawer_pushVertex(void *ptr, uint32_t idx, const Vec
 		Vec2(0.0f, 0.0f), out->material, 0
 	};
 
-	std::cout << "Vertex: " << idx << ": " << pt << "\n";
+	if constexpr (vg::Tesselator::TessVerbose != vg::VerboseFlag::None) {
+		std::cout << "Vertex: " << idx << ": " << pt << "\n";
+	}
 }
 
 static void VectorCanvasPathDrawer_pushTriangle(void *ptr, uint32_t pt[3]) {
@@ -150,7 +155,9 @@ static void VectorCanvasPathDrawer_pushTriangle(void *ptr, uint32_t pt[3]) {
 	out->vertexes->indexes.emplace_back(pt[2]);
 	++ out->objects;
 
-	std::cout << "Face: " << pt[0] << " " << pt[1] << " " << pt[2] << "\n";
+	if constexpr (vg::Tesselator::TessVerbose != vg::VerboseFlag::None) {
+		std::cout << "Face: " << pt[0] << " " << pt[1] << " " << pt[2] << "\n";
+	}
 }
 
 Rc<VectorCanvas> VectorCanvas::getInstance() {
@@ -293,12 +300,13 @@ void VectorCanvas::Data::doDraw(const VectorPath &path, StringView cache) {
 
 	do {
 		if (!cache.empty()) {
+			auto style = path.getStyle();
 			float quality = pathDrawer.quality;
 
 			Vec3 scaleVec; transform.getScale(&scaleVec);
 			float scale = std::max(scaleVec.x, scaleVec.y);
 
-			VectorCanvasCacheData data{nullptr, cache.str<Interface>(), quality, scale };
+			VectorCanvasCacheData data{nullptr, cache.str<Interface>(), quality, scale, style};
 
 			auto it = cacheData.find(data);
 			if (it != cacheData.end()) {
@@ -441,8 +449,10 @@ uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const VectorPath &p,
 	result.pushTriangle = VectorCanvasPathDrawer_pushTriangle;
 
 	if (fillTess) {
-		if (path->isAntialiased() && (path->getStyle() == vg::DrawStyle::Fill || path->getStrokeOpacity() < 96)) {
-			fillTess->setAntialiasValue(config::VGAntialiasFactor * approxScale);
+		// draw antialias outline only if stroke is transparent enough
+		// for cached image, always draw antialias, because user can change color and opacity
+		if (path->isAntialiased() && (path->getStyle() == vg::DrawStyle::Fill || path->getStrokeOpacity() < 96 || cache)) {
+			fillTess->setAntialiasValue(config::VGAntialiasFactor / approxScale);
 		}
 		fillTess->setWindingRule(path->getWindingRule());
 		fillTess->prepare(result);
@@ -450,10 +460,10 @@ uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const VectorPath &p,
 
 	if (strokeTess) {
 		if (path->isAntialiased()) {
-			strokeTess->setAntialiasValue(config::VGAntialiasFactor * approxScale);
+			strokeTess->setAntialiasValue(config::VGAntialiasFactor / approxScale);
 		}
 
-		strokeTess->setWindingRule(vg::Winding::EvenOdd);
+		strokeTess->setWindingRule(vg::Winding::NonZero);
 		strokeTess->prepare(result);
 	}
 

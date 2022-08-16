@@ -43,7 +43,8 @@ public:
 protected:
 	void updateIcon(IconName);
 
-	IconName _currentName = IconName::Social_school_outline;
+	// IconName::Av_queue_music_outline
+	IconName _currentName = IconName::Maps_near_me_outline;
 
 	Label *_label = nullptr;
 	VectorSprite *_sprite = nullptr;

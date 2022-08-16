@@ -45,6 +45,14 @@ InputListener::EventMask InputListener::makeEventMask(std::initializer_list<Inpu
 	return ret;
 }
 
+InputListener::KeyMask InputListener::makeKeyMask(std::initializer_list<InputKeyCode> &&il) {
+	KeyMask ret;
+	for (auto &it : il) {
+		ret.set(toInt(it));
+	}
+	return ret;
+}
+
 InputListener::InputListener()
 : _enabled(true), _owner(nullptr) { }
 

@@ -164,7 +164,10 @@ void TessCanvas::setWinding(vg::Winding w) {
 }
 
 void TessCanvas::setDrawStyle(vg::DrawStyle s) {
-
+	if (_drawStyle != s) {
+		_drawStyle = s;
+		updatePoints();
+	}
 }
 
 void TessCanvas::setSelectedContour(uint32_t n) {
@@ -297,6 +300,10 @@ void TessCanvas::onActionTouch(const InputEvent &ev) {
 			++ cIt;
 		}
 	} else {
+		if (_contourSelected == 0 && _contours.empty()) {
+			_contours.emplace_back(ContourData{0});
+		}
+
 		auto loc = convertToNodeSpace(ev.currentLocation);
 		loc = Vec2(roundf(loc.x), roundf(loc.y));
 
@@ -329,11 +336,19 @@ void TessCanvas::updatePoints() {
 	auto pathLines = _pathLines->getImage()->addPath();
 
 	pathFill->setWindingRule(_winding);
+	pathFill->setStyle(_drawStyle);
+	pathFill->setStrokeWidth(25.0f);
+	pathFill->setStrokeColor(Color::Red_200);
+	//pathFill->setAntialiased(false);
+
 	pathLines->setWindingRule(_winding);
+	pathLines->setStyle(_drawStyle);
+	pathLines->setStrokeWidth(25.0f);
+	pathLines->setStrokeColor(Color::Red_200);
+	pathLines->setAntialiased(false);
 
 	for (const ContourData &contour : _contours) {
 		if (contour.points.size() > 2) {
-
 			for (auto &it : contour.points) {
 				pathFill->lineTo(it->getPoint());
 				pathLines->lineTo(it->getPoint());
