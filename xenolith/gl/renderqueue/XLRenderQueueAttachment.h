@@ -376,7 +376,7 @@ public:
 	virtual const Rc<Attachment> &getAttachment() const { return _attachment; }
 	StringView getName() const { return _attachment->getName(); }
 
-	virtual void submitInput(FrameQueue &, Rc<AttachmentInputData> &&, Function<void(bool)> &&cb) { cb(true); }
+	virtual void submitInput(FrameQueue &, Rc<AttachmentInputData> &&, Function<void(bool)> &&cb);
 
 	virtual uint32_t getDescriptorArraySize(const PassHandle &, const PipelineDescriptor &, bool isExternal) const;
 	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &, uint32_t, bool isExternal) const;

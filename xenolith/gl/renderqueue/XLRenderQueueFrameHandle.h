@@ -54,6 +54,7 @@ public:
 	const Rc<gl::View> &getSwapchain() const { return _request->getSwapchain(); }
 
 	const Rc<ImageStorage> &getRenderTarget() const { return _request->getRenderTarget(); }
+	const Vector<Rc<DependencyEvent>> &getSignalDependencies() const { return _request->getSignalDependencies(); }
 
 	const Vector<Rc<FrameQueue>> &getFrameQueues() const { return _queues; }
 
@@ -93,6 +94,8 @@ public:
 	virtual void onQueueInvalidated(FrameQueue &);
 	virtual void onOutputAttachment(FrameAttachmentData &);
 	virtual void onOutputAttachmentInvalidated(FrameAttachmentData &);
+
+	virtual void waitForDependencies(const Vector<Rc<DependencyEvent>> &, Function<void(FrameHandle &, bool)> &&);
 
 protected:
 	virtual bool setup();

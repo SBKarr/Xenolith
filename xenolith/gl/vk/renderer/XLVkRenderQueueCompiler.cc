@@ -141,26 +141,37 @@ bool RenderQueueAttachmentHandle::setup(FrameQueue &handle, Function<void(bool)>
 	return true;
 }
 
-void RenderQueueAttachmentHandle::submitInput(FrameQueue &frame, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
+void RenderQueueAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
 	_input = (RenderQueueInput *)data.get();
-
-	if (_input->queue->getInternalResource()) {
-		frame.getFrame()->performInQueue([this] (FrameHandle &frame) -> bool {
-			runShaders(frame);
-			_resource = Rc<TransferResource>::create(_device->getAllocator(), _input->queue->getInternalResource());
-			if (_resource->initialize()) {
-				return true;
-			}
-			return false;
-		}, [this, cb = move(cb)] (FrameHandle &frame, bool success) {
-			cb(success);
-		}, nullptr, "RenderQueueAttachmentHandle::submitInput _input->queue->getInternalResource");
-	} else {
-		frame.getFrame()->performOnGlThread([this, cb = move(cb)] (FrameHandle &frame) {
-			cb(true);
-			runShaders(frame);
-		}, this, true, "RenderQueueAttachmentHandle::submitInput");
+	if (!_input || q.isFinalized()) {
+		cb(false);
+		return;
 	}
+
+	q.getFrame()->waitForDependencies(data->waitDependencies, [this, cb = move(cb)] (FrameHandle &handle, bool success) {
+		if (!success || !handle.isValidFlag()) {
+			cb(false);
+			return;
+		}
+
+		if (_input->queue->getInternalResource()) {
+			handle.performInQueue([this] (FrameHandle &frame) -> bool {
+				runShaders(frame);
+				_resource = Rc<TransferResource>::create(_device->getAllocator(), _input->queue->getInternalResource());
+				if (_resource->initialize()) {
+					return true;
+				}
+				return false;
+			}, [this, cb = move(cb)] (FrameHandle &frame, bool success) {
+				cb(success);
+			}, nullptr, "RenderQueueAttachmentHandle::submitInput _input->queue->getInternalResource");
+		} else {
+			handle.performOnGlThread([this, cb = move(cb)] (FrameHandle &frame) {
+				cb(true);
+				runShaders(frame);
+			}, this, true, "RenderQueueAttachmentHandle::submitInput");
+		}
+	});
 }
 
 void RenderQueueAttachmentHandle::runShaders(FrameHandle &frame) {

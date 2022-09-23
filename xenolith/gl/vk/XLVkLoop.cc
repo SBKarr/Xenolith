@@ -33,6 +33,13 @@
 
 namespace stappler::xenolith::vk {
 
+struct DependencyRequest : public Ref {
+	Vector<Rc<renderqueue::DependencyEvent>> events;
+	Function<void(bool)> callback;
+	uint32_t signaled = 0;
+	bool success = true;
+};
+
 struct PresentationData {
 	PresentationData() { }
 
@@ -138,13 +145,13 @@ struct Loop::Internal final : memory::AllocPool {
 		h->update(true);
 	}
 
-	void compileMaterials(Rc<gl::MaterialInputData> &&req) {
+	void compileMaterials(Rc<gl::MaterialInputData> &&req, Vector<Rc<DependencyEvent>> &&deps) {
 		if (materialQueue->inProgress(req->attachment)) {
-			materialQueue->appendRequest(req->attachment, move(req));
+			materialQueue->appendRequest(req->attachment, move(req), move(deps));
 		} else {
 			auto attachment = req->attachment;
 			materialQueue->setInProgress(attachment);
-			materialQueue->runMaterialCompilationFrame(*loop, move(req));
+			materialQueue->runMaterialCompilationFrame(*loop, move(req), move(deps));
 		}
 	}
 
@@ -174,12 +181,84 @@ struct Loop::Internal final : memory::AllocPool {
 		}
 	}
 
+	void signalDependencies(const Vector<Rc<DependencyEvent>> &events, bool success) {
+		for (auto &it : events) {
+			if (!success) {
+				it->success = success;
+			}
+
+			-- it->signaled;
+
+			if (it->signaled == 0) {
+				auto iit = dependencyRequests.equal_range(it.get());
+				auto tmp = iit;
+				while (iit.first != iit.second) {
+					auto &v = iit.first->second;
+					if (!success) {
+						v->success = false;
+					}
+					++ v->signaled;
+					if (v->signaled == v->events.size()) {
+#if XL_VK_DEBUG
+						StringStream str; str << "signalDependencies:";
+						for (auto &it : v->events) {
+							str << " " << it->id;
+						}
+						str << "\n";
+						std::cout << "Signal: " << str.str();
+#endif
+
+						v->callback(iit.first->second->success);
+					}
+					++ iit.first;
+				}
+
+				dependencyRequests.erase(tmp.first, tmp.second);
+			}
+		}
+	}
+
+	void waitForDependencies(Vector<Rc<DependencyEvent>> &&events, Function<void(bool)> &&cb) {
+#if XL_VK_DEBUG
+		StringStream str; str << "waitForDependencies:";
+		for (auto &it : events) {
+			str << " " << it->id;
+		}
+		str << "\n";
+		std::cout << "Wait: " << str.str();
+#endif
+
+		auto req = Rc<DependencyRequest>::alloc();
+		req->events = move(events);
+		req->callback = move(cb);
+
+		for (auto &it : req->events) {
+			if (it->signaled == 0) {
+				if (!it->success) {
+					req->success = false;
+				}
+				++ req->signaled;
+			} else {
+				dependencyRequests.emplace(it.get(), req);
+			}
+		}
+
+		if (req->signaled == req->events.size()) {
+#if XL_VK_DEBUG
+			std::cout << "Run: " << str.str();
+#endif
+			req->callback(req->success);
+		}
+	}
+
 	memory::pool_t *pool = nullptr;
 	Loop *loop = nullptr;
 
 	memory::vector<Timer> *timers;
 	memory::vector<Timer> *reschedule;
 	memory::vector<Rc<Ref>> *autorelease;
+
+	std::multimap<DependencyEvent *, Rc<DependencyRequest>> dependencyRequests;
 
 	Mutex resourceMutex;
 
@@ -437,9 +516,9 @@ void Loop::compileResource(Rc<gl::Resource> &&req) {
 	}, this, true);
 }
 
-void Loop::compileMaterials(Rc<gl::MaterialInputData> &&req) {
-	performOnGlThread([this, req = move(req)] () mutable {
-		_internal->compileMaterials(move(req));
+void Loop::compileMaterials(Rc<gl::MaterialInputData> &&req, const Vector<Rc<DependencyEvent>> &deps) {
+	performOnGlThread([this, req = move(req), deps = deps] () mutable {
+		_internal->compileMaterials(move(req), move(deps));
 	}, this, true);
 }
 
@@ -637,6 +716,29 @@ Rc<Fence> Loop::acquireFence(uint32_t v, bool init) {
 	auto ref = Rc<Fence>::create(*_internal->device);
 	initFence(ref);
 	return ref;
+}
+
+void Loop::signalDependencies(const Vector<Rc<DependencyEvent>> &events, bool success) {
+	if (!events.empty()) {
+		if (isOnGlThread() && _internal) {
+			_internal->signalDependencies(events, success);
+			return;
+		}
+
+		performOnGlThread([this, events, success] () {
+			_internal->signalDependencies(events, success);
+		}, this, false);
+	}
+}
+
+void Loop::waitForDependencies(const Vector<Rc<DependencyEvent>> &events, Function<void(bool)> &&cb) {
+	if (events.empty()) {
+		cb(true);
+	} else {
+		performOnGlThread([this, events = events, cb = move(cb)] () mutable {
+			_internal->waitForDependencies(move(events), move(cb));
+		}, this, true);
+	}
 }
 
 }

@@ -216,6 +216,8 @@ Rc<VectorCanvasResult> VectorCanvas::draw(Rc<VectorImageData> &&image, Size2 tar
 	Mat4 t = Mat4::IDENTITY;
 	t.scale(targetSize.width / imageSize.width, targetSize.height / imageSize.height, 1.0f);
 
+	ret->targetTransform = t;
+
 	auto &m = _data->image->getViewBoxTransform();
 	if (!m.isIdentity()) {
 		t *= m;
@@ -243,16 +245,6 @@ Rc<VectorCanvasResult> VectorCanvas::draw(Rc<VectorImageData> &&image, Size2 tar
 	if (!_data->out->empty() && _data->out->back().second->data.empty()) {
 		_data->out->pop_back();
 	}
-
-	size_t nverts = 0;
-	size_t ntriangles = 0;
-
-	for (auto &it : (*_data->out)) {
-		nverts += it.second->data.size();
-		ntriangles += it.second->indexes.size() / 3;
-	}
-
-	std::cout << "Q: " << _data->pathDrawer.quality << "; Vertexes: " << nverts << "; Triangles: " << ntriangles << "\n";
 
 	_data->out = nullptr;
 	_data->image = nullptr;
@@ -421,11 +413,11 @@ uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const VectorPath &p,
 	Rc<geom::Tesselator> strokeTess = ((style & geom::DrawStyle::Stroke) != geom::DrawStyle::None) ? Rc<geom::Tesselator>::create(pool) : nullptr;
 	Rc<geom::Tesselator> fillTess = ((style & geom::DrawStyle::Fill) != geom::DrawStyle::None) ? Rc<geom::Tesselator>::create(pool) : nullptr;
 
-	geom::LineDrawer line(approxScale * quality, Rc<geom::Tesselator>(fillTess), Rc<geom::Tesselator>(strokeTess),
-			path->getStrokeWidth());
-
 	Vec3 scale; transform.getScale(&scale);
 	approxScale = std::max(scale.x, scale.y);
+
+	geom::LineDrawer line(approxScale * quality, Rc<geom::Tesselator>(fillTess), Rc<geom::Tesselator>(strokeTess),
+			path->getStrokeWidth());
 
 	auto d = path->getPoints().data();
 	for (auto &it : path->getCommands()) {

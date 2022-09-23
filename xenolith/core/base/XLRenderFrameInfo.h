@@ -37,6 +37,8 @@ struct RenderFrameInfo {
 	memory::vector<Mat4> modelTransformStack;
 	memory::pool_t *pool;
 
+	gl::StateId currentStateId;
+
 	Rc<Director> director;
 	Rc<Scene> scene;
 

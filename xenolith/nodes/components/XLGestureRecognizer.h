@@ -110,6 +110,9 @@ public:
 	virtual Vec2 getLocation() const;
 	virtual void cancel();
 
+	virtual void setMaxEvents(size_t value) { _maxEvents = value; }
+	virtual size_t getMaxEvents() const { return _maxEvents; }
+
 protected:
 	virtual bool addEvent(const InputEvent &);
 	virtual bool removeEvent(const InputEvent &, bool success);

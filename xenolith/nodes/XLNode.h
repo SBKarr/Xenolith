@@ -313,6 +313,8 @@ protected:
 	Mat4 transform(const Mat4 &parentTransform);
 	virtual NodeFlags processParentFlags(RenderFrameInfo &info, NodeFlags parentFlags);
 
+	void visitSelf(RenderFrameInfo &, NodeFlags flags, bool visibleByCamera);
+
 	bool _is3d = false;
 	bool _running = false;
 	bool _visible = true;

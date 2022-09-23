@@ -58,6 +58,30 @@ bool FrameRequest::init(const Rc<Queue> &q, const Rc<FrameEmitter> &emitter, Ext
 	return false;
 }
 
+void FrameRequest::addSignalDependency(Rc<DependencyEvent> &&dep) {
+	if (dep) {
+		if (dep->submitted.exchange(true)) {
+			++ dep->signaled;
+		}
+		_signalDependencies.emplace_back(move(dep));
+	}
+}
+
+void FrameRequest::addSignalDependencies(Vector<Rc<DependencyEvent>> &&deps) {
+	for (auto &dep : deps) {
+		if (dep->submitted.exchange(true)) {
+			++ dep->signaled;
+		}
+	}
+	if (_signalDependencies.empty()) {
+		_signalDependencies = move(deps);
+	} else {
+		for (auto &it : deps) {
+			_signalDependencies.emplace_back(move(it));
+		}
+	}
+}
+
 void FrameRequest::addInput(const Attachment *a, Rc<AttachmentInputData> &&data) {
 	_input.emplace(a, move(data));
 }
@@ -116,7 +140,7 @@ void FrameRequest::onOutputInvalidated(gl::Loop &loop, FrameAttachmentData &data
 	}
 }
 
-void FrameRequest::finalize(bool success) {
+void FrameRequest::finalize(gl::Loop &loop, bool success) {
 	if (!success) {
 		if (_swapchain && _renderTarget) {
 			_swapchain->invalidateTarget(move(_renderTarget));
@@ -127,6 +151,8 @@ void FrameRequest::finalize(bool success) {
 	if (_emitter) {
 		_emitter = nullptr;
 	}
+
+	loop.signalDependencies(_signalDependencies, success);
 }
 
 bool FrameRequest::bindSwapchainCallback(Function<bool(FrameAttachmentData &, bool)> &&cb) {

@@ -79,7 +79,7 @@ FrameHandle::~FrameHandle() {
 	s_activeFrames.erase(this);
 	s_frameMutex.unlock();
 
-	_request->finalize(_valid);
+	_request = nullptr;
 	_pool = nullptr;
 }
 
@@ -258,6 +258,8 @@ void FrameHandle::invalidate() {
 			if (_complete) {
 				_complete(*this);
 			}
+
+			_request->finalize(*_loop, _valid);
 		}
 	} else {
 		_loop->performOnGlThread([this] {
@@ -320,6 +322,14 @@ void FrameHandle::onOutputAttachmentInvalidated(FrameAttachmentData &data) {
 	_request->onOutputInvalidated(*_loop, data);
 }
 
+void FrameHandle::waitForDependencies(const Vector<Rc<DependencyEvent>> &events, Function<void(FrameHandle &, bool)> &&cb) {
+	auto linkId = retain();
+	_loop->waitForDependencies(events, [this, cb = move(cb), linkId] (bool success) {
+		cb(*this, success);
+		release(linkId);
+	});
+}
+
 void FrameHandle::onQueueInvalidated(FrameQueue &) {
 	++ _queuesCompleted;
 	invalidate();
@@ -342,6 +352,8 @@ void FrameHandle::onComplete() {
 		if (_complete) {
 			_complete(*this);
 		}
+
+		_request->finalize(*_loop, _valid);
 	}
 }
 

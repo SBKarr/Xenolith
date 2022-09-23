@@ -97,6 +97,8 @@ public:
 protected:
 	virtual Vector<VkCommandBuffer> doPrepareCommands(FrameHandle &) override;
 
+	virtual void doComplete(FrameQueue &, Function<void(bool)> &&, bool) override;
+
 	RenderFontAttachmentHandle *_fontAttachment = nullptr;
 	QueueOperations _queueOps = QueueOperations::None;
 	Rc<Image> _targetImage;
@@ -178,12 +180,18 @@ static Extent2 RenderFontAttachmentHandle_buildTextureData(SpanView<VkBufferImag
 	return font::emplaceChars(iface, span, totalSquare);
 }
 
-void RenderFontAttachmentHandle::submitInput(FrameQueue &handle, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
-	if (auto d = data.cast<gl::RenderFontInput>()) {
+void RenderFontAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
+	auto d = data.cast<gl::RenderFontInput>();
+	if (!d || q.isFinalized()) {
+		cb(false);
+		return;
+	}
+
+	q.getFrame()->waitForDependencies(data->waitDependencies, [this, cb = move(cb), d = move(d)] (FrameHandle &handle, bool success) mutable {
 		_counter = d->requests.size();
 		_input = d;
 
-		auto frame = static_cast<DeviceFrameHandle *>(handle.getFrame().get());
+		auto frame = static_cast<DeviceFrameHandle *>(&handle);
 		auto &memPool =  frame->getMemPool();
 
 		_frontBuffer = memPool->spawn(AllocationUsage::HostTransitionSource, gl::BufferInfo(
@@ -199,9 +207,9 @@ void RenderFontAttachmentHandle::submitInput(FrameQueue &handle, Rc<gl::Attachme
 		_bufferData.resize(totalCount + 1);
 
 		size_t offset = 0;
-		_onInput = move(cb);
+		_onInput = move(cb); // see RenderFontAttachmentHandle::writeAtlasData
 		for (auto &it : _input->requests) {
-			handle.getFrame()->performInQueue([this, req = &it, target = _bufferData.data() + offset] (FrameHandle &) -> bool {
+			handle.performInQueue([this, req = &it, target = _bufferData.data() + offset] (FrameHandle &) -> bool {
 				writeBufferData(*req, target);
 				return true;
 			}, [this] (FrameHandle &handle, bool success) {
@@ -211,14 +219,15 @@ void RenderFontAttachmentHandle::submitInput(FrameQueue &handle, Rc<gl::Attachme
 						writeAtlasData(handle);
 					}
 				} else {
-					handle.invalidate();
+					if (_onInput) {
+						_onInput(false);
+						_onInput = nullptr;
+					}
 				}
 			}, nullptr, "RenderFontAttachmentHandle::submitInput");
 			offset += it.second.size();
 		}
-	} else {
-		cb(false);
-	}
+	});
 }
 
 void RenderFontAttachmentHandle::writeBufferData(gl::RenderFontInput::FontRequest &req, VkBufferImageCopy *target) {
@@ -282,7 +291,7 @@ void RenderFontAttachmentHandle::writeAtlasData(FrameHandle &handle) {
 		_bufferData[_bufferData.size() - 1].imageOffset =
 				VkOffset3D({int32_t(_imageExtent.width - 1), int32_t(_imageExtent.height - 1), 0});
 
-		auto atlas = Rc<gl::ImageAtlas>::create(_bufferData.size() * 4);
+		auto atlas = Rc<gl::ImageAtlas>::create(_bufferData.size() * 4, _imageExtent);
 
 		for (auto &d : _bufferData) {
 			auto id = d.bufferImageHeight;
@@ -389,19 +398,6 @@ bool RenderFontRenderPassHandle::prepare(FrameQueue &handle, Function<void(bool)
 
 void RenderFontRenderPassHandle::finalize(FrameQueue &handle, bool successful) {
 	QueuePassHandle::finalize(handle, successful);
-
-	if (!successful) {
-		return;
-	}
-
-	auto &input = _fontAttachment->getInput();
-	input->image->updateInstance(*handle.getLoop(), _targetImage, Rc<gl::ImageAtlas>(_fontAttachment->getAtlas()));
-
-	if (input->output) {
-		auto region = _outBuffer->map(0, _outBuffer->getSize(), true);
-		input->output(_targetImage->getInfo(), BytesView(region.ptr, region.size));
-		_outBuffer->unmap(region);
-	}
 }
 
 Vector<VkCommandBuffer> RenderFontRenderPassHandle::doPrepareCommands(FrameHandle &handle) {
@@ -558,6 +554,22 @@ Vector<VkCommandBuffer> RenderFontRenderPassHandle::doPrepareCommands(FrameHandl
 
 	ret.emplace_back(buf);
 	return ret;
+}
+
+void RenderFontRenderPassHandle::doComplete(FrameQueue &queue, Function<void(bool)> &&func, bool success) {
+	if (success) {
+		auto &input = _fontAttachment->getInput();
+		input->image->updateInstance(*queue.getLoop(), _targetImage, Rc<gl::ImageAtlas>(_fontAttachment->getAtlas()),
+				queue.getFrame()->getSignalDependencies());
+
+		if (input->output) {
+			auto region = _outBuffer->map(0, _outBuffer->getSize(), true);
+			input->output(_targetImage->getInfo(), BytesView(region.ptr, region.size));
+			_outBuffer->unmap(region);
+		}
+	}
+
+	QueuePassHandle::doComplete(queue, move(func), success);
 }
 
 }

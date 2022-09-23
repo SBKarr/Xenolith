@@ -43,18 +43,20 @@ public:
 	void dropInProgress(const gl::MaterialAttachment *);
 
 	bool hasRequest(const gl::MaterialAttachment *) const;
-	void appendRequest(const gl::MaterialAttachment *, Rc<gl::MaterialInputData> &&);
-	Rc<gl::MaterialInputData> popRequest(const gl::MaterialAttachment *);
+	void appendRequest(const gl::MaterialAttachment *, Rc<gl::MaterialInputData> &&,
+			Vector<Rc<renderqueue::DependencyEvent>> &&deps);
 	void clearRequests();
 
-	Rc<FrameRequest> makeRequest(Rc<gl::MaterialInputData> &&);
-	void runMaterialCompilationFrame(gl::Loop &loop, Rc<gl::MaterialInputData> &&req);
+	Rc<FrameRequest> makeRequest(Rc<gl::MaterialInputData> &&, Vector<Rc<renderqueue::DependencyEvent>> &&deps);
+	void runMaterialCompilationFrame(gl::Loop &loop, Rc<gl::MaterialInputData> &&req,
+			Vector<Rc<renderqueue::DependencyEvent>> &&deps);
 
 protected:
 	struct MaterialRequest {
 		Map<gl::MaterialId, Rc<gl::Material>> materials;
 		Set<gl::MaterialId> dynamic;
 		Set<gl::MaterialId> remove;
+		Vector<Rc<renderqueue::DependencyEvent>> deps;
 	};
 
 	MaterialCompilationAttachment *_attachment = nullptr;

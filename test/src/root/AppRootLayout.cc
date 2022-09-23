@@ -43,6 +43,12 @@ protected:
 	bool _focus = false;
 };
 
+class RootLayoutSlider : public Node {
+public:
+protected:
+	Layer *_layer = nullptr;
+};
+
 bool RootLayoutButton::init(StringView str) {
 	if (!Node::init()) {
 		return false;
@@ -122,6 +128,9 @@ bool RootLayout::init() {
 		return false;
 	}
 
+	float initialQuality = 2.0f;
+	float initialScale = 0.5f;
+
 	auto btn = addChild(Rc<RootLayoutButton>::create("Test button"));
 	btn->setAnchorPoint(Anchor::BottomLeft);
 	btn->setPosition(Vec2(20.0f, 20.0f));
@@ -134,9 +143,9 @@ bool RootLayout::init() {
 		_sprite->setAnchorPoint(Anchor::Middle);
 		_sprite->setColor(Color::Black);
 		_sprite->setOpacity(0.5f);
-		//_sprite->setQuality(2.75f);
+		_sprite->setQuality(initialQuality);
+		_sprite->setScale(initialScale);
 	} while (0);
-
 
 	do {
 		auto image = Rc<VectorImage>::create(Size2(24, 24));
@@ -147,15 +156,64 @@ bool RootLayout::init() {
 		_triangles->setColor(Color::Green_500);
 		_triangles->setOpacity(0.5f);
 		_triangles->setLineWidth(1.0f);
+		_triangles->setQuality(initialQuality);
 		_triangles->setVisible(false);
-		_triangles->setQuality(1.25f);
-		//_triangles->setQuality(0.1f);
+		_triangles->setScale(initialScale);
 	} while (0);
+
+	_spriteLayer = addChild(Rc<Layer>::create(Color::Grey_200), -1);
+	_spriteLayer->setContentSize(Size2(256, 256));
+	_spriteLayer->setAnchorPoint(Anchor::Middle);
 
 	_label = addChild(Rc<Label>::create());
 	_label->setFontSize(32);
 	_label->setString(getIconName(_currentName));
 	_label->setAnchorPoint(Anchor::MiddleTop);
+
+	_info = addChild(Rc<Label>::create());
+	_info->setFontSize(24);
+	_info->setString("Test");
+	_info->setAnchorPoint(Anchor::MiddleTop);
+
+	_qualityLabel = addChild(Rc<Label>::create(toString("Quality: ", initialQuality)));
+	_qualityLabel->setFontSize(24);
+	_qualityLabel->setAnchorPoint(Anchor::MiddleLeft);
+
+	_qualitySlider = addChild(Rc<AppSlider>::create((initialQuality - 0.1f) / 4.9f, [this] (float val) {
+		updateQualityValue(val);
+	}));
+	_qualitySlider->setAnchorPoint(Anchor::TopLeft);
+	_qualitySlider->setContentSize(Size2(128.0f, 32.0f));
+
+	_scaleLabel = addChild(Rc<Label>::create(toString("Scale: ", initialScale)));
+	_scaleLabel->setFontSize(24);
+	_scaleLabel->setAnchorPoint(Anchor::MiddleLeft);
+
+	_scaleSlider = addChild(Rc<AppSlider>::create((initialScale - 0.1f) / 2.9f, [this] (float val) {
+		updateScaleValue(val);
+	}));
+	_scaleSlider->setAnchorPoint(Anchor::TopLeft);
+	_scaleSlider->setContentSize(Size2(128.0f, 32.0f));
+
+	_visibleLabel = addChild(Rc<Label>::create("Triangles"));
+	_visibleLabel->setFontSize(24);
+	_visibleLabel->setAnchorPoint(Anchor::MiddleLeft);
+
+	_visibleCheckbox = addChild(Rc<AppCheckbox>::create(false, [this] (bool value) {
+		_triangles->setVisible(value);
+	}));
+	_visibleCheckbox->setAnchorPoint(Anchor::TopLeft);
+	_visibleCheckbox->setContentSize(Size2(32.0f, 32.0f));
+
+	_antialiasLabel = addChild(Rc<Label>::create("Antialias"));
+	_antialiasLabel->setFontSize(24);
+	_antialiasLabel->setAnchorPoint(Anchor::MiddleLeft);
+
+	_antialiasCheckbox = addChild(Rc<AppCheckbox>::create(_antialias, [this] (bool value) {
+		updateAntialiasValue(value);
+	}));
+	_antialiasCheckbox->setAnchorPoint(Anchor::TopLeft);
+	_antialiasCheckbox->setContentSize(Size2(32.0f, 32.0f));
 
 	auto l = _sprite->addInputListener(Rc<InputListener>::create());
 	l->addTouchRecognizer([this] (GestureEvent ev, const InputEvent &data) -> bool {
@@ -196,7 +254,6 @@ bool RootLayout::init() {
 		return true;
 	}, InputListener::makeKeyMask({InputKeyCode::LEFT, InputKeyCode::RIGHT}));
 
-
 	scheduleUpdate();
 	updateIcon(_currentName);
 
@@ -206,13 +263,33 @@ bool RootLayout::init() {
 void RootLayout::onContentSizeDirty() {
 	Node::onContentSizeDirty();
 
-	_sprite->setPosition(_contentSize / 2.0f);
-	_triangles->setPosition(_contentSize / 2.0f);
+	_sprite->setPosition(Size2(_contentSize.width / 2.0f, _contentSize.height / 2.0f));
+	_triangles->setPosition(Size2(_contentSize.width / 2.0f, _contentSize.height / 2.0f));
+	_spriteLayer->setPosition(Size2(_contentSize.width / 2.0f, _contentSize.height / 2.0f));
+
 	_label->setPosition(Vec2(_contentSize / 2.0f) - Vec2(0.0f, 128.0f));
+	_info->setPosition(Vec2(_contentSize / 2.0f) - Vec2(0.0f, 180.0f));
+
+	_qualitySlider->setPosition(Vec2(16.0f, _contentSize.height - 16.0f));
+	_qualityLabel->setPosition(Vec2(156.0f, _contentSize.height - 32.0f));
+
+	_scaleSlider->setPosition(Vec2(16.0f, _contentSize.height - 16.0f - 48.0f));
+	_scaleLabel->setPosition(Vec2(156.0f, _contentSize.height - 32.0f - 48.0f));
+
+	_visibleCheckbox->setPosition(Vec2(16.0f, _contentSize.height - 16.0f - 96.0f));
+	_visibleLabel->setPosition(Vec2(64.0f, _contentSize.height - 32.0f - 96.0f));
+
+	_antialiasCheckbox->setPosition(Vec2(16.0f, _contentSize.height - 16.0f - 144.0f));
+	_antialiasLabel->setPosition(Vec2(64.0f, _contentSize.height - 32.0f - 144.0f));
 }
 
 void RootLayout::update(const UpdateTime &t) {
 	Node::update(t);
+
+	uint32_t ntriangles = _sprite->getTrianglesCount();
+	uint32_t nvertexes = _sprite->getVertexesCount();
+
+	_info->setString(toString("V: ", nvertexes, "; T: ", ntriangles));
 }
 
 void RootLayout::updateIcon(IconName name) {
@@ -220,35 +297,7 @@ void RootLayout::updateIcon(IconName name) {
 	_label->setString(toString(getIconName(_currentName), " ", toInt(_currentName), "/", toInt(IconName::Toggle_toggle_on_solid)));
 
 	StringView pathData(
-		//"M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2z"
-		//"M12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"
-		//"M9 13c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4z"
-		//"m0-6c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z"
-		//"m0 8c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"
-		//"m-6 4c.22-.72 3.31-2 6-2 2.7 0 5.8 1.29 6 2H3z"
-		//"M15.08 7.05c.84 1.18.84 2.71 0 3.89l1.68 1.69 0-7.27l-1.68 1.69z"
-		//"M9 15c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"
-		//"M16.7600002 5.35999966l-1.68 1.69c.84 1.18.84 2.71 0 3.89l1.68 1.69c2.02-2.02 2.02-5.07 0-7.27z"
-		//"M20.07 2l-1.63 1.63c2.77 3.02 2.77 7.56 0 10.74L20.07 16c3.9-3.89 3.91-9.95 0-14z"
-		//"M20.07 2l-1.63 1.63c2.77 3.02 2.77 7.56 0 10.74L20.07 16c3.9-3.89 3.91-9.95 0-14z"
-
-		//"M11 24h2v-2h-2v2z"
-		//"m-4 0h2v-2H7v2z"
-		//"m8 0h2v-2h-2v2z"
-		//"m2.71-18.29L12 0h-1v7.59L6.41 3 5 4.41 10.59 10 5 15.59 6.41 17 11 12.41V20h1l5.71-5.71-4.3-4.29 4.3-4.29z"
-		//"M13 3.83l1.88 1.88L13 7.59V3.83zm1.88 10.46L13 16.17v-3.76l1.88 1.88z"
-
-		//"M18,2L6,2L6,14L18,14z"
-		//"M10,10l-1,1l-1-1z"
-		//"M12,4l2,2h-4z"
-		//"M16,10l-1,1 l-1-1z"
-
-		//"M1.41 1.69L0 3.1l1 .99V16L14 18h.9l6 6 1.41-1.41-20.9-20.9z"
-		//"M2.99 16V6.09L12.9 16H2.99z"
-		//"M4.55 2l2 2H21v12h-2.45l2 2h.44c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2H4.55z"
-
-		//"M17.27 6.73l-4.24 10.13-1.32-3.42-.32-.83-.82-.32-3.43-1.33 10.13-4.23"
-		"M21 3L3 10.53v.98l6.84 2.65L12.48 21h.98L21 3z"
+		"M15.75 5h-1.5L9.5 16h2.1l.9-2.2h5l.9 2.2h2.1L15.75 5zm-2.62 7L15 6.98 16.87 12h-3.74zM6 19.75l3-3H7V4.25H5v12.5H3l3 3z"
 	);
 
 	do {
@@ -259,7 +308,7 @@ void RootLayout::updateIcon(IconName name) {
 			path->getPath()->init(bytes);
 		});
 		path->setWindingRule(vg::Winding::EvenOdd);
-		path->setAntialiased(false);
+		path->setAntialiased(_antialias);
 		auto t = Mat4::IDENTITY;
 		t.scale(1, -1, 1);
 		t.translate(0, -24, 0);
@@ -274,12 +323,35 @@ void RootLayout::updateIcon(IconName name) {
 			path->getPath()->init(bytes);
 		});
 		path->setWindingRule(vg::Winding::EvenOdd);
-		//path->setAntialiased(false);
+		path->setAntialiased(false);
 		auto t = Mat4::IDENTITY;
 		t.scale(1, -1, 1);
 		t.translate(0, -24, 0);
 		path->setTransform(t);
 	} while (0);
+}
+
+void RootLayout::updateQualityValue(float value) {
+	auto q = 0.1f + 4.9f * value;
+
+	_qualityLabel->setString(toString("Quality: ", q));
+	_sprite->setQuality(q);
+	_triangles->setQuality(q);
+}
+
+void RootLayout::updateScaleValue(float value) {
+	auto q = 0.1f + 2.9f * value;
+
+	_scaleLabel->setString(toString("Scale: ", q));
+	_sprite->setScale(q);
+	_triangles->setScale(q);
+}
+
+void RootLayout::updateAntialiasValue(bool value) {
+	if (_antialias != value) {
+		_antialias = value;
+		updateIcon(_currentName);
+	}
 }
 
 }

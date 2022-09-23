@@ -339,7 +339,7 @@ void TessCanvas::updatePoints() {
 	pathFill->setStyle(_drawStyle);
 	pathFill->setStrokeWidth(25.0f);
 	pathFill->setStrokeColor(Color::Red_200);
-	//pathFill->setAntialiased(false);
+	pathFill->setAntialiased(false);
 
 	pathLines->setWindingRule(_winding);
 	pathLines->setStyle(_drawStyle);

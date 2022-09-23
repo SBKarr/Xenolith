@@ -44,7 +44,8 @@ Rc<DynamicImageInstance> DynamicImage::getInstance() {
 	return _instance;
 }
 
-void DynamicImage::updateInstance(Loop &loop, const Rc<ImageObject> &obj, Rc<ImageAtlas> &&atlas) {
+void DynamicImage::updateInstance(Loop &loop, const Rc<ImageObject> &obj, Rc<ImageAtlas> &&atlas,
+		const Vector<Rc<renderqueue::DependencyEvent>> &deps) {
 	auto newInstance = Rc<DynamicImageInstance>::alloc();
 	static_cast<ImageInfo &>(newInstance->data) = obj->getInfo();
 	newInstance->data.image = obj;
@@ -61,7 +62,7 @@ void DynamicImage::updateInstance(Loop &loop, const Rc<ImageObject> &obj, Rc<Ima
 	_data.image = nullptr;
 
 	for (auto &it : _materialTrackers) {
-		it->updateDynamicImage(loop, this);
+		it->updateDynamicImage(loop, this, deps);
 	}
 }
 

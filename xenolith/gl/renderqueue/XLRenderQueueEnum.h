@@ -246,10 +246,22 @@ enum class DynamicState {
 
 SP_DEFINE_ENUM_AS_MASK(DynamicState)
 
-// dummy class for attachment input, made just to separate inputs from simple refs
+struct DependencyEvent : public Ref {
+	static uint32_t GetNextId();
+
+	virtual ~DependencyEvent() { }
+
+	uint32_t id = GetNextId();
+	std::atomic<uint32_t> signaled = 1;
+	std::atomic<bool> submitted = false;
+	bool success = true;
+};
+
+// dummy class for attachment input
 struct AttachmentInputData : public Ref {
 	virtual ~AttachmentInputData() { }
 
+	Vector<Rc<DependencyEvent>> waitDependencies;
 };
 
 }

@@ -176,7 +176,8 @@ public:
 	virtual void addDynamicTracker(MaterialId, const Rc<DynamicImage> &) const;
 	virtual void removeDynamicTracker(MaterialId, const Rc<DynamicImage> &) const;
 
-	virtual void updateDynamicImage(Loop &, const DynamicImage *) const;
+	virtual void updateDynamicImage(Loop &, const DynamicImage *,
+			const Vector<Rc<renderqueue::DependencyEvent>> & = Vector<Rc<renderqueue::DependencyEvent>>()) const;
 
 protected:
 	virtual Rc<renderqueue::AttachmentDescriptor> makeDescriptor(PassData *) override;

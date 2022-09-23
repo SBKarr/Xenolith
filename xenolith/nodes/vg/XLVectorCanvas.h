@@ -38,6 +38,7 @@ struct VectorCanvasResult : public Ref {
 	Vector<Pair<Mat4, Rc<gl::VertexData>>> data;
 	Color4F targetColor;
 	Size2 targetSize;
+	Mat4 targetTransform;
 
 	void updateColor(const Color4F &);
 };

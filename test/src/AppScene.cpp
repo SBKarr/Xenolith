@@ -20,6 +20,7 @@
  THE SOFTWARE.
  **/
 
+#include "XLDefine.h"
 #include "AppScene.h"
 
 #include "XLVkAttachment.h"

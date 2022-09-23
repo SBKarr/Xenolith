@@ -144,9 +144,9 @@ void QueuePassHandle::submit(FrameQueue &q, Rc<FrameSync> &&sync, Function<void(
 	_fence->addRelease([dev = _device, pool = move(_pool), loop = q.getLoop()] (bool success) {
 		dev->releaseCommandPool(*loop, Rc<CommandPool>(pool));
 	}, nullptr, "RenderPassHandle::submit dev->releaseCommandPool");
-	_fence->addRelease([func = move(onComplete)] (bool success) {
-		func(success);
-	}, nullptr, "RenderPassHandle::submit onComplete");
+	_fence->addRelease([this, func = move(onComplete), q = &q] (bool success) mutable {
+		doComplete(*q, move(func), success);
+	}, this, "RenderPassHandle::submit onComplete");
 
 	_pool = nullptr;
 	_sync = move(sync);
@@ -169,11 +169,7 @@ void QueuePassHandle::submit(FrameQueue &q, Rc<FrameSync> &&sync, Function<void(
 }
 
 void QueuePassHandle::finalize(FrameQueue &, bool success) {
-	/*if (!_commandsReady && !success && _swapchain) {
-		for (auto &it : _sync.swapchainSync) {
-			_swapchain->releaseSwapchainSync(Rc<SwapchainSync>(it));
-		}
-	}*/
+
 }
 
 QueueOperations QueuePassHandle::getQueueOps() const {
@@ -230,10 +226,6 @@ bool QueuePassHandle::doSubmit(FrameHandle &frame, Function<void(bool)> &&onSubm
 			queue = nullptr;
 		}
 		if (success) {
-			/*_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
-				auto fence = _fence->getFence();
-				table.vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
-			});*/
 			if (scheduleWithSwapcchain) {
 				// from frame's perspective, onComplete event, binded with fence,
 				// will occur on next Loop clock, after onSubmit event
@@ -259,6 +251,10 @@ bool QueuePassHandle::doSubmit(FrameHandle &frame, Function<void(bool)> &&onSubm
 		_sync = nullptr;
 	}, nullptr, false, "RenderPassHandle::doSubmit");
 	return success;
+}
+
+void QueuePassHandle::doComplete(FrameQueue &, Function<void(bool)> &&func, bool success) {
+	func(success);
 }
 
 auto QueuePassHandle::updateMaterials(FrameHandle &frame, const Rc<gl::MaterialSet> &data, const Vector<Rc<gl::Material>> &materials,

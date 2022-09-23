@@ -159,6 +159,26 @@ bool VectorSprite::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 	return Sprite::visitDraw(frame, parentFlags);
 }
 
+uint32_t VectorSprite::getTrianglesCount() const {
+	uint32_t ret = 0;
+	if (_result) {
+		for (auto &it : _result->data) {
+			ret += it.second->indexes.size() / 3;
+		}
+	}
+	return ret;
+}
+
+uint32_t VectorSprite::getVertexesCount() const {
+	uint32_t ret = 0;
+	if (_result) {
+		for (auto &it : _result->data) {
+			ret += it.second->data.size();
+		}
+	}
+	return ret;
+}
+
 void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 	if (!_result || _result->data.empty()) {
 		return;
@@ -186,8 +206,8 @@ void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 	} else {
 		auto transform = frame.viewProjectionStack.back() * frame.modelTransformStack.back() * _targetTransform;
 		for (auto &it : _result->data) {
-			// TODO: fix scaling
-			target->first = transform * it.first;
+			auto pathTransform = transform * it.first;
+			target->first = pathTransform;
 			target->second = it.second;
 			++ target;
 		}
@@ -257,11 +277,17 @@ void VectorSprite::updateVertexes() {
 		canvas->setColor(_displayedColor);
 		canvas->setQuality(_quality);
 
-		std::cout << targetTransform << " " << targetViewSpaceSize << "\n";
+		// std::cout << targetTransform << " " << targetViewSpaceSize << "\n";
 
 		_result = canvas->draw(_image->popData(), targetViewSpaceSize);
 		_vertexColorDirty = false; // color will be already applied
 	}
+
+	Mat4 scaleTransform;
+	scaleTransform.scale(viewScale);
+	scaleTransform.inverse();
+
+	_targetTransform *= scaleTransform;
 }
 
 void VectorSprite::updateVertexesColor() {

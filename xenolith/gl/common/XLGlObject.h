@@ -142,14 +142,20 @@ class ImageAtlas : public Ref {
 public:
 	virtual ~ImageAtlas() { }
 
-	bool init(size_t);
+	bool init(size_t, Extent2);
 
 	Vec2 getObjectByName(uint32_t) const;
 	Vec2 getObjectByOrder(uint32_t) const;
 
+	bool getObjectByName(Vec2 &, uint32_t) const;
+	bool getObjectByOrder(Vec2 &, uint32_t) const;
+
 	void addObject(uint32_t, Vec2);
 
+	Extent2 getImageExtent() const;
+
 protected:
+	Extent2 _imageExtent;
 	std::unordered_map<uint32_t, uint32_t> _names;
 	Vector<Vec2> _objects;
 };

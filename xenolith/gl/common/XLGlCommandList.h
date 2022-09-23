@@ -32,8 +32,20 @@ enum class CommandType {
 	VertexArray,
 };
 
+struct DrawStateValues {
+	renderqueue::DynamicState enabled = renderqueue::DynamicState::None;
+	URect viewport;
+	URect scissor;
+
+	bool operator==(const DrawStateValues &) const = default;
+
+	bool isScissorEnabled() const { return (enabled & renderqueue::DynamicState::Scissor) != renderqueue::DynamicState::None; }
+	bool isViewportEnabled() const { return (enabled & renderqueue::DynamicState::Viewport) != renderqueue::DynamicState::None; }
+};
+
 struct CmdVertexArray {
 	gl::MaterialId material = 0;
+	gl::StateId state = 0;
 	SpanView<Pair<Mat4, Rc<VertexData>>> vertexes;
 	SpanView<int16_t> zPath;
 	RenderingLevel renderingLevel = RenderingLevel::Solid;
@@ -59,6 +71,12 @@ public:
 	// data should be preallocated from frame's pool
 	void pushVertexArray(SpanView<Pair<Mat4, Rc<VertexData>>>, SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel);
 
+	gl::StateId addState(DrawStateValues);
+	const DrawStateValues *getState(gl::StateId) const;
+
+	void setCurrentState(gl::StateId state) { _currentState = state; }
+	gl::StateId getCurrentState() const { return _currentState; }
+
 	const Command *getFirst() const { return _first; }
 	const Command *getLast() const { return _last; }
 
@@ -66,8 +84,10 @@ protected:
 	void addCommand(Command *);
 
 	Rc<PoolRef> _pool;
+	gl::StateId _currentState = 0;
 	Command *_first = nullptr;
 	Command *_last = nullptr;
+	memory::vector<DrawStateValues> *_states = nullptr;
 };
 
 }

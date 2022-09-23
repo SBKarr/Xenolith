@@ -1000,23 +1000,6 @@ bool Node::visitDraw(RenderFrameInfo &info, NodeFlags parentFlags) {
 
 	bool visibleByCamera = true;
 
-	auto visitSelf = [&] {
-		for (auto &it : _components) {
-			it->visit(info, parentFlags);
-		}
-
-		for (auto &it : _inputEvents) {
-			if (it->isEnabled()) {
-				info.input->addListener(it);
-			}
-		}
-
-		// self draw
-		if (visibleByCamera) {
-			this->draw(info, flags);
-		}
-	};
-
 	info.modelTransformStack.push_back(_modelViewTransform);
 	info.zPath.push_back(getLocalZOrder());
 
@@ -1034,13 +1017,13 @@ bool Node::visitDraw(RenderFrameInfo &info, NodeFlags parentFlags) {
 				break;
 		}
 
-		visitSelf();
+		visitSelf(info, flags, visibleByCamera);
 
 		for (auto it = _children.cbegin() + i; it != _children.cend(); ++it) {
 			(*it)->visitDraw(info, flags);
 		}
 	} else {
-		visitSelf();
+		visitSelf(info, flags, visibleByCamera);
 	}
 
 	info.zPath.pop_back();
@@ -1131,6 +1114,23 @@ NodeFlags Node::processParentFlags(RenderFrameInfo &info, NodeFlags parentFlags)
 	}
 
 	return flags;
+}
+
+void Node::visitSelf(RenderFrameInfo &info, NodeFlags flags, bool visibleByCamera) {
+	for (auto &it : _components) {
+		it->visit(info, flags);
+	}
+
+	for (auto &it : _inputEvents) {
+		if (it->isEnabled()) {
+			info.input->addListener(it);
+		}
+	}
+
+	// self draw
+	if (visibleByCamera) {
+		this->draw(info, flags);
+	}
 }
 
 }

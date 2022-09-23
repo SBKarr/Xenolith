@@ -626,7 +626,8 @@ void MaterialAttachment::removeDynamicTracker(MaterialId id, const Rc<DynamicIma
 	}
 }
 
-void MaterialAttachment::updateDynamicImage(Loop &loop, const DynamicImage *image) const {
+void MaterialAttachment::updateDynamicImage(Loop &loop, const DynamicImage *image,
+		const Vector<Rc<renderqueue::DependencyEvent>> &deps) const {
 	auto input = Rc<MaterialInputData>::alloc();
 	input->attachment = this;
 	std::unique_lock<Mutex> lock(_dynamicMutex);
@@ -636,7 +637,7 @@ void MaterialAttachment::updateDynamicImage(Loop &loop, const DynamicImage *imag
 			input->dynamicMaterialsToUpdate.emplace_back(materialIt.first);
 		}
 	}
-	loop.compileMaterials(move(input));
+	loop.compileMaterials(move(input), deps);
 }
 
 auto MaterialAttachment::makeDescriptor(PassData *pass) -> Rc<AttachmentDescriptor> {

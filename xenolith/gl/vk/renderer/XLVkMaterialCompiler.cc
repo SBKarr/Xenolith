@@ -75,6 +75,7 @@ public:
 
 protected:
 	virtual Vector<VkCommandBuffer> doPrepareCommands(FrameHandle &) override;
+	virtual void doComplete(FrameQueue &, Function<void(bool)> &&, bool) override;
 
 	Rc<gl::MaterialSet> _outputData;
 	MaterialCompilationAttachmentHandle *_materialAttachment;
@@ -125,7 +126,8 @@ bool MaterialCompiler::hasRequest(const gl::MaterialAttachment *a) const {
 	return false;
 }
 
-void MaterialCompiler::appendRequest(const gl::MaterialAttachment *a, Rc<gl::MaterialInputData> &&req) {
+void MaterialCompiler::appendRequest(const gl::MaterialAttachment *a, Rc<gl::MaterialInputData> &&req,
+		Vector<Rc<renderqueue::DependencyEvent>> &&deps) {
 	auto it = _requests.find(a);
 	if (it == _requests.end()) {
 		it = _requests.emplace(a, MaterialRequest()).first;
@@ -162,51 +164,55 @@ void MaterialCompiler::appendRequest(const gl::MaterialAttachment *a, Rc<gl::Mat
 			it->second.remove.erase(v);
 		}
 	}
-}
 
-Rc<gl::MaterialInputData> MaterialCompiler::popRequest(const gl::MaterialAttachment *a) {
-	auto it = _requests.find(a);
-	if (it != _requests.end()) {
-		Rc<gl::MaterialInputData> ret = Rc<gl::MaterialInputData>::alloc();
-		ret->attachment = a;
-		ret->materialsToAddOrUpdate.reserve(it->second.materials.size());
-		for (auto &m : it->second.materials) {
-			ret->materialsToAddOrUpdate.emplace_back(m.second);
+	if (it->second.deps.empty()) {
+		it->second.deps = move(deps);
+	} else {
+		for (auto &iit : deps) {
+			it->second.deps.emplace_back(move(iit));
 		}
-		ret->materialsToRemove.reserve(it->second.remove.size());
-		for (auto &m : it->second.remove) {
-			ret->materialsToRemove.emplace_back(m);
-		}
-		ret->dynamicMaterialsToUpdate.reserve(it->second.dynamic.size());
-		for (auto &m : it->second.dynamic) {
-			ret->dynamicMaterialsToUpdate.emplace_back(m);
-		}
-		_requests.erase(it);
-		return ret;
 	}
-
-	return nullptr;
 }
 
 void MaterialCompiler::clearRequests() {
 	_requests.clear();
 }
 
-auto MaterialCompiler::makeRequest(Rc<gl::MaterialInputData> &&input) -> Rc<FrameRequest> {
+auto MaterialCompiler::makeRequest(Rc<gl::MaterialInputData> &&input,
+		Vector<Rc<renderqueue::DependencyEvent>> &&deps) -> Rc<FrameRequest> {
 	auto req = Rc<FrameRequest>::create(this);
 	req->addInput(_attachment, move(input));
+	req->addSignalDependencies(move(deps));
 	return req;
 }
 
-void MaterialCompiler::runMaterialCompilationFrame(gl::Loop &loop, Rc<gl::MaterialInputData> &&req) {
+void MaterialCompiler::runMaterialCompilationFrame(gl::Loop &loop, Rc<gl::MaterialInputData> &&req,
+		Vector<Rc<renderqueue::DependencyEvent>> &&deps) {
 	auto targetAttachment = req->attachment;
 
-	auto h = loop.makeFrame(makeRequest(move(req)), 0);
+	auto h = loop.makeFrame(makeRequest(move(req), move(deps)), 0);
 	h->setCompleteCallback([this, targetAttachment] (FrameHandle &handle) {
-		if (hasRequest(targetAttachment)) {
+		auto reqIt = _requests.find(targetAttachment);
+		if (reqIt != _requests.end()) {
 			if (handle.getLoop()->isRunning()) {
-				auto req = popRequest(targetAttachment);
-				runMaterialCompilationFrame(*handle.getLoop(), move(req));
+				auto deps = move(reqIt->second.deps);
+				Rc<gl::MaterialInputData> req = Rc<gl::MaterialInputData>::alloc();
+				req->attachment = targetAttachment;
+				req->materialsToAddOrUpdate.reserve(reqIt->second.materials.size());
+				for (auto &m : reqIt->second.materials) {
+					req->materialsToAddOrUpdate.emplace_back(m.second);
+				}
+				req->materialsToRemove.reserve(reqIt->second.remove.size());
+				for (auto &m : reqIt->second.remove) {
+					req->materialsToRemove.emplace_back(m);
+				}
+				req->dynamicMaterialsToUpdate.reserve(reqIt->second.dynamic.size());
+				for (auto &m : reqIt->second.dynamic) {
+					req->dynamicMaterialsToUpdate.emplace_back(m);
+				}
+				_requests.erase(reqIt);
+
+				runMaterialCompilationFrame(*handle.getLoop(), move(req), move(deps));
 			} else {
 				clearRequests();
 				dropInProgress(targetAttachment);
@@ -230,16 +236,19 @@ bool MaterialCompilationAttachmentHandle::setup(FrameQueue &handle, Function<voi
 	return true;
 }
 
-void MaterialCompilationAttachmentHandle::submitInput(FrameQueue &handle, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
-	if (auto d = data.cast<gl::MaterialInputData>()) {
-		handle.getFrame()->performOnGlThread([this, d = move(d), cb = move(cb)] (FrameHandle &handle) {
+void MaterialCompilationAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
+	auto d = data.cast<gl::MaterialInputData>();
+	if (!d || q.isFinalized()) {
+		cb(false);
+	}
+
+	q.getFrame()->waitForDependencies(data->waitDependencies, [this, d = move(d), cb = move(cb)] (FrameHandle &handle, bool success) {
+		handle.performOnGlThread([this, d = move(d), cb = move(cb)] (FrameHandle &handle) {
 			_inputData = d;
 			_originalSet = _inputData->attachment->getMaterials();
 			cb(true);
 		}, this, true, "MaterialCompilationAttachmentHandle::submitInput");
-	} else {
-		cb(false);
-	}
+	});
 }
 
 MaterialCompilationRenderPass::~MaterialCompilationRenderPass() { }
@@ -280,7 +289,6 @@ bool MaterialCompilationRenderPassHandle::prepare(FrameQueue &frame, Function<vo
 
 void MaterialCompilationRenderPassHandle::finalize(FrameQueue &handle, bool successful) {
 	QueuePassHandle::finalize(handle, successful);
-	_materialAttachment->getInputData()->attachment->setMaterials(_outputData);
 }
 
 Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(FrameHandle &handle) {
@@ -368,6 +376,14 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(F
 		return Vector<VkCommandBuffer>{buf};
 	}
 	return Vector<VkCommandBuffer>();
+}
+
+void MaterialCompilationRenderPassHandle::doComplete(FrameQueue &queue, Function<void(bool)> &&func, bool success) {
+	if (success) {
+		_materialAttachment->getInputData()->attachment->setMaterials(_outputData);
+	}
+
+	QueuePassHandle::doComplete(queue, move(func), success);
 }
 
 }

@@ -119,7 +119,7 @@ public:
 	CharLayout getChar(FontLayoutId, char16_t, uint16_t &face);
 	StringView getFontName(FontLayoutId);
 
-	void addTextureChars(FontLayoutId, SpanView<CharSpec>);
+	Rc<renderqueue::DependencyEvent> addTextureChars(FontLayoutId, SpanView<CharSpec>);
 
 	uint32_t getFamilyIndex(StringView) const;
 	StringView getFamilyName(uint32_t idx) const;
@@ -134,8 +134,6 @@ protected:
 
 	class FontSizedLayout;
 	class FontLayout;
-
-	void updateTexture(Vector<Pair<Rc<FontFaceObject>, Vector<char16_t>>> &&);
 
 	FontLayout * getFontLayout(const FontParameters &style);
 
@@ -152,6 +150,7 @@ protected:
 	Map<StringView, Vector<FontLayout *>> _families;
 	HashMap<StringView, Rc<FontLayout>> _layouts;
 	Vector<FontSizedLayout *> _sizes;
+	Rc<renderqueue::DependencyEvent> _dependency;
 
 	std::atomic<uint16_t> _nextId = 1;
 	bool _dirty = false;
@@ -209,7 +208,8 @@ public:
 
 	Rc<FontController> acquireController(FontController::Builder &&);
 
-	void updateImage(const Rc<gl::DynamicImage> &, Vector<Pair<Rc<FontFaceObject>, Vector<char16_t>>> &&);
+	void updateImage(const Rc<gl::DynamicImage> &, Vector<Pair<Rc<FontFaceObject>, Vector<char16_t>>> &&,
+			Rc<renderqueue::DependencyEvent> &&);
 
 protected:
 	FT_Face newFontFace(BytesView);
@@ -220,6 +220,7 @@ protected:
 	struct ImageQuery {
 		Rc<gl::DynamicImage> image;
 		Vector<Pair<Rc<FontFaceObject>, Vector<char16_t>>> chars;
+		Rc<renderqueue::DependencyEvent> dependency;
 	};
 
 	bool _active = false;

@@ -684,15 +684,20 @@ StringView FontController::getFontName(FontLayoutId id) {
 	return StringView();
 }
 
-void FontController::addTextureChars(FontLayoutId id, SpanView<CharSpec> chars) {
+Rc<renderqueue::DependencyEvent> FontController::addTextureChars(FontLayoutId id, SpanView<CharSpec> chars) {
 	if (id.get() < _sizes.size()) {
 		auto l = _sizes.at(id.get());
 		if (l) {
 			if (l->addTextureChars(chars)) {
+				if (!_dependency) {
+					_dependency = Rc<renderqueue::DependencyEvent>::alloc();
+				}
 				_dirty = true;
+				return _dependency;
 			}
 		}
 	}
+	return nullptr;
 }
 
 uint32_t FontController::getFamilyIndex(StringView name) const {
@@ -738,7 +743,8 @@ void FontController::update() {
 			}
 		}
 		if (!objects.empty()) {
-			updateTexture(move(objects));
+			_library->updateImage(_image, move(objects), move(_dependency));
+			_dependency = nullptr;
 		}
 		_dirty = false;
 	}
@@ -755,10 +761,6 @@ void FontController::setLoaded(bool value) {
 		onLoaded(this);
 		update();
 	}
-}
-
-void FontController::updateTexture(Vector<Pair<Rc<FontFaceObject>, Vector<char16_t>>> &&vec) {
-	_library->updateImage(_image, move(vec));
 }
 
 FontController::FontLayout * FontController::getFontLayout(const FontParameters &style) {
@@ -1221,9 +1223,10 @@ Rc<FontController> FontLibrary::acquireController(FontController::Builder &&b) {
 	return ret;
 }
 
-void FontLibrary::updateImage(const Rc<gl::DynamicImage> &image, Vector<Pair<Rc<FontFaceObject>, Vector<char16_t>>> &&data) {
+void FontLibrary::updateImage(const Rc<gl::DynamicImage> &image, Vector<Pair<Rc<FontFaceObject>, Vector<char16_t>>> &&data,
+		Rc<renderqueue::DependencyEvent> &&dep) {
 	if (!_active) {
-		_pendingImageQueries.emplace_back(ImageQuery{image, move(data)});
+		_pendingImageQueries.emplace_back(ImageQuery{image, move(data), move(dep)});
 		return;
 	}
 
@@ -1236,6 +1239,9 @@ void FontLibrary::updateImage(const Rc<gl::DynamicImage> &image, Vector<Pair<Rc<
 	};*/
 
 	auto req = Rc<renderqueue::FrameRequest>::create(_queue);
+	if (dep) {
+		req->addSignalDependency(move(dep));
+	}
 
 	for (auto &it : _queue->getInputAttachments()) {
 		req->addInput(it, move(input));
@@ -1269,7 +1275,7 @@ void FontLibrary::onActivated() {
 	_active = true;
 
 	for (auto &it : _pendingImageQueries) {
-		updateImage(it.image, move(it.chars));
+		updateImage(it.image, move(it.chars), move(it.dependency));
 	}
 
 	_pendingImageQueries.clear();

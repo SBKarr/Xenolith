@@ -206,8 +206,8 @@ static void makeMaterialIconHeader(StringView path, const Map<String, IconData> 
 
 	headerFile << LICENSE_STRING <<
 R"Text(
-#ifndef XENOLITH_FEATURES_ICONS_XLICONNAMES_H_
-#define XENOLITH_FEATURES_ICONS_XLICONNAMES_H_
+#ifndef XENOLITH_MODULES_ICONS_XLICONNAMES_H_
+#define XENOLITH_MODULES_ICONS_XLICONNAMES_H_
 
 #include "XLDefine.h"
 
@@ -223,14 +223,15 @@ enum class IconName : uint16_t {
 	}
 
 	headerFile <<
-R"Text(};
+R"Text(	Max
+};
 
 StringView getIconName(IconName);
 bool getIconData(IconName, const Callback<void(BytesView)> &);
 
 }
 
-#endif /* XENOLITH_FEATURES_ICONS_XLICONNAMES_H_ */
+#endif /* XENOLITH_MODULES_ICONS_XLICONNAMES_H_ */
 )Text";
 
 	filesystem::write(path, headerFile.str());

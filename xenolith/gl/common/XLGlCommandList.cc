@@ -74,6 +74,10 @@ CommandList::~CommandList() {
 
 bool CommandList::init(const Rc<PoolRef> &pool) {
 	_pool = pool;
+	_pool->perform([&] {
+		_states = new (_pool->getPool()) memory::vector<DrawStateValues>();
+		_states->emplace_back(DrawStateValues()); // state 0;
+	});
 	return true;
 }
 
@@ -97,6 +101,7 @@ void CommandList::pushVertexArray(Rc<VertexData> &&vert, const Mat4 &t, SpanView
 
 		cmdData->zPath = zPath.pdup(_pool->getPool());
 		cmdData->material = material;
+		cmdData->state = _currentState;
 		cmdData->renderingLevel = level;
 
 		addCommand(cmd);
@@ -117,10 +122,29 @@ void CommandList::pushVertexArray(SpanView<Pair<Mat4, Rc<VertexData>>> data, Spa
 
 		cmdData->zPath = zPath.pdup(_pool->getPool());
 		cmdData->material = material;
+		cmdData->state = _currentState;
 		cmdData->renderingLevel = level;
 
 		addCommand(cmd);
 	});
+}
+
+gl::StateId CommandList::addState(DrawStateValues values) {
+	auto it = std::find(_states->begin(), _states->end(), values);
+	if (it != _states->end()) {
+		return it - _states->begin();
+	} else {
+		_states->emplace_back(values);
+		return _states->size() - 1;
+	}
+}
+
+const DrawStateValues *CommandList::getState(gl::StateId state) const {
+	if (state < _states->size()) {
+		return &_states->at(state);
+	} else {
+		return nullptr;
+	}
 }
 
 void CommandList::addCommand(Command *cmd) {

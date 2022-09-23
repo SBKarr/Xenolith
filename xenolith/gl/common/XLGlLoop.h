@@ -40,6 +40,7 @@ public:
 	using FrameHandle = renderqueue::FrameHandle;
 	using PassData = renderqueue::PassData;
 	using ImageAttachment = renderqueue::ImageAttachment;
+	using DependencyEvent = renderqueue::DependencyEvent;
 
 	static constexpr uint32_t LoopThreadId = 2;
 
@@ -59,7 +60,7 @@ public:
 	const Rc<FrameCache> &getFrameCache() const { return _frameCache; }
 
 	virtual void compileResource(Rc<Resource> &&req) = 0;
-	virtual void compileMaterials(Rc<MaterialInputData> &&req) = 0;
+	virtual void compileMaterials(Rc<MaterialInputData> &&req, const Vector<Rc<DependencyEvent>> & = Vector<Rc<DependencyEvent>>()) = 0;
 	virtual void compileRenderQueue(const Rc<RenderQueue> &req, Function<void(bool)> && = nullptr) = 0;
 	virtual void compileImage(const Rc<DynamicImage> &, Function<void(bool)> && = nullptr) = 0;
 
@@ -94,6 +95,9 @@ public:
 	virtual const Vector<gl::ImageFormat> &getSupportedDepthStencilFormat() const = 0;
 
 	virtual Rc<renderqueue::Queue> makeRenderFontQueue() const = 0;
+
+	virtual void signalDependencies(const Vector<Rc<DependencyEvent>> &, bool success) = 0;
+	virtual void waitForDependencies(const Vector<Rc<DependencyEvent>> &, Function<void(bool)> &&) = 0;
 
 protected:
 	std::atomic_flag _shouldExit;

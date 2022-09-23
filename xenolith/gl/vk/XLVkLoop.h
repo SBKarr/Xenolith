@@ -57,7 +57,7 @@ public:
 	// virtual const Rc<gl::Device> &getDevice() const override;
 
 	virtual void compileResource(Rc<gl::Resource> &&req) override;
-	virtual void compileMaterials(Rc<gl::MaterialInputData> &&req) override;
+	virtual void compileMaterials(Rc<gl::MaterialInputData> &&req, const Vector<Rc<DependencyEvent>> & = Vector<Rc<DependencyEvent>>()) override;
 	virtual void compileRenderQueue(const Rc<RenderQueue> &req, Function<void(bool)> && = nullptr) override;
 	virtual void compileImage(const Rc<gl::DynamicImage> &, Function<void(bool)> && = nullptr) override;
 
@@ -94,6 +94,9 @@ public:
 	virtual Rc<renderqueue::Queue> makeRenderFontQueue() const;
 
 	Rc<Fence> acquireFence(uint32_t, bool init = true);
+
+	virtual void signalDependencies(const Vector<Rc<DependencyEvent>> &, bool success) override;
+	virtual void waitForDependencies(const Vector<Rc<DependencyEvent>> &, Function<void(bool)> &&) override;
 
 protected:
 	std::thread _thread;

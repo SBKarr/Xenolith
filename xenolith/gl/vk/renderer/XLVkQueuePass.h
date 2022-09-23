@@ -70,6 +70,9 @@ protected:
 	virtual Vector<VkCommandBuffer> doPrepareCommands(FrameHandle &);
 	virtual bool doSubmit(FrameHandle &frame, Function<void(bool)> &&onSubmited);
 
+	// called before OnComplete event sended to FrameHandle (so, before any finalization)
+	virtual void doComplete(FrameQueue &, Function<void(bool)> &&, bool);
+
 	struct MaterialBuffers {
 		Rc<DeviceBuffer> stagingBuffer;
 		Rc<Buffer> targetBuffer;

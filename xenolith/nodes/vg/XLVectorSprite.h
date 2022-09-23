@@ -30,11 +30,11 @@ namespace stappler::xenolith {
 
 class VectorSprite : public Sprite {
 public:
-	constexpr static float QualityWorst = 0.25f;
-	constexpr static float QualityLow = 0.75f;
-	constexpr static float QualityNormal = 1.25f;
-	constexpr static float QualityHigh = 1.75f;
-	constexpr static float QualityPerfect = 2.25f;
+	constexpr static float QualityWorst = 0.1f;
+	constexpr static float QualityLow = 0.25f;
+	constexpr static float QualityNormal = 0.75f;
+	constexpr static float QualityHigh = 1.25f;
+	constexpr static float QualityPerfect = 1.75f;
 
 	virtual ~VectorSprite() { }
 
@@ -69,6 +69,9 @@ public:
 
 	virtual bool visitDraw(RenderFrameInfo &, NodeFlags parentFlags) override;
 
+	virtual uint32_t getTrianglesCount() const;
+	virtual uint32_t getVertexesCount() const;
+
 protected:
 	virtual void pushCommands(RenderFrameInfo &, NodeFlags flags) override;
 
@@ -81,7 +84,7 @@ protected:
 	Size2 _targetSize;
 	Mat4 _targetTransform;
 	Rc<VectorImage> _image;
-	float _quality = 0.75f;
+	float _quality = QualityNormal;
 	Rc<VectorCanvasResult> _result;
 };
 

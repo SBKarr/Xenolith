@@ -82,7 +82,8 @@ uint64_t Framebuffer::getHash() const {
 
 static std::atomic<uint64_t> s_ImageViewCurrentIndex = 1;
 
-bool ImageAtlas::init(size_t count) {
+bool ImageAtlas::init(size_t count, Extent2 imageSize) {
+	_imageExtent = imageSize;
 	_names.reserve(count);
 	_objects.reserve(count);
 	return true;
@@ -105,10 +106,33 @@ Vec2 ImageAtlas::getObjectByOrder(uint32_t id) const {
 	return Vec2();
 }
 
+bool ImageAtlas::getObjectByName(Vec2 &target, uint32_t id) const {
+	auto it = _names.find(id);
+	if (it != _names.end()) {
+		if (it->second < _objects.size()) {
+			target = _objects[it->second];
+			return true;
+		}
+	}
+	return false;
+}
+
+bool ImageAtlas::getObjectByOrder(Vec2 &target, uint32_t id) const {
+	if (id < _objects.size()) {
+		target = _objects[id];
+		return true;
+	}
+	return false;
+}
+
 void ImageAtlas::addObject(uint32_t idx, Vec2 obj) {
 	_objects.emplace_back(obj);
 	auto num = _objects.size() - 1;
 	_names.emplace(idx, num);
+}
+
+Extent2 ImageAtlas::getImageExtent() const {
+	return _imageExtent;
 }
 
 bool ImageObject::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr) {

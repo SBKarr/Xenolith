@@ -61,6 +61,7 @@ class DynamicImage;
 class Semaphore;
 
 using MaterialId = uint32_t;
+using StateId = uint32_t;
 
 using MipLevels = ValueWrapper<uint32_t, class MipLevelFlag>;
 using ArrayLayers = ValueWrapper<uint32_t, class ArrayLayersFlag>;
@@ -348,6 +349,7 @@ struct VertexSpan {
 	uint32_t indexCount;
 	uint32_t instanceCount;
 	uint32_t firstIndex;
+	StateId state;
 };
 
 struct VertexData : public AttachmentInputData {

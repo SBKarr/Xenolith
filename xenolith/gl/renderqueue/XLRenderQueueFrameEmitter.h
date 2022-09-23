@@ -37,6 +37,9 @@ public:
 	bool init(const Rc<Queue> &q);
 	bool init(const Rc<Queue> &q, const Rc<FrameEmitter> &, Extent2);
 
+	void addSignalDependency(Rc<DependencyEvent> &&);
+	void addSignalDependencies(Vector<Rc<DependencyEvent>> &&);
+
 	void addInput(const Attachment *, Rc<AttachmentInputData> &&);
 	void acquireInput(Map<const Attachment *, Rc<AttachmentInputData>> &target);
 
@@ -46,7 +49,7 @@ public:
 	bool onOutputReady(gl::Loop &, FrameAttachmentData &) const;
 	void onOutputInvalidated(gl::Loop &, FrameAttachmentData &) const;
 
-	void finalize(bool success);
+	void finalize(gl::Loop &, bool success);
 
 	bool bindSwapchainCallback(Function<bool(FrameAttachmentData &, bool)> &&);
 	bool bindSwapchain(const Rc<gl::View> &);
@@ -74,6 +77,8 @@ public:
 
 	const Rc<gl::View> &getSwapchain() const { return _swapchain; }
 
+	const Vector<Rc<DependencyEvent>> &getSignalDependencies() const { return _signalDependencies; }
+
 	FrameRequest() = default;
 
 protected:
@@ -95,6 +100,8 @@ protected:
 	Rc<gl::View> _swapchain;
 	Rc<ImageStorage> _renderTarget;
 	Rc<Ref> _swapchainHandle;
+
+	Vector<Rc<DependencyEvent>> _signalDependencies;
 };
 
 // Frame emitter is an interface, that continuously spawns frames, and can control validity of a frame

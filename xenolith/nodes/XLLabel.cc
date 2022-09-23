@@ -413,7 +413,10 @@ void Label::updateVertexes() {
 
 	if (!_standalone) {
 		for (auto &it : _format->ranges) {
-			_source->addTextureChars(it.layout, SpanView<font::CharSpec>(_format->chars, it.start, it.count));
+			auto dep = _source->addTextureChars(it.layout, SpanView<font::CharSpec>(_format->chars, it.start, it.count));
+			if (dep) {
+				emplace_ordered(_pendingDependencies, move(dep));
+			}
 		}
 
 		updateQuadsForeground(_source, _format, _colorMap);

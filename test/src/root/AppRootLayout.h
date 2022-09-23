@@ -28,6 +28,9 @@
 #include "XLVectorSprite.h"
 #include "XLIconNames.h"
 
+#include "AppSlider.h"
+#include "AppCheckbox.h"
+
 namespace stappler::xenolith::app {
 
 class RootLayout : public Node {
@@ -42,13 +45,33 @@ public:
 
 protected:
 	void updateIcon(IconName);
+	void updateQualityValue(float);
+	void updateScaleValue(float);
+	void updateAntialiasValue(bool);
 
+	// Action_gavel_solid
 	// IconName::Av_queue_music_outline
-	IconName _currentName = IconName::Maps_near_me_outline;
+	IconName _currentName = IconName::Action_text_rotate_vertical_solid;
 
 	Label *_label = nullptr;
+	Label *_info = nullptr;
+	Layer *_spriteLayer = nullptr;
 	VectorSprite *_sprite = nullptr;
 	VectorSprite *_triangles = nullptr;
+
+	Label *_qualityLabel = nullptr;
+	AppSlider *_qualitySlider = nullptr;
+
+	Label *_scaleLabel = nullptr;
+	AppSlider *_scaleSlider = nullptr;
+
+	Label *_visibleLabel = nullptr;
+	AppCheckbox *_visibleCheckbox = nullptr;
+
+	Label *_antialiasLabel = nullptr;
+	AppCheckbox *_antialiasCheckbox = nullptr;
+
+	bool _antialias = false;
 };
 
 }

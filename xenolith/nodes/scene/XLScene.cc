@@ -61,6 +61,7 @@ void Scene::render(RenderFrameInfo &info) {
 	info.director = _director;
 	info.scene = this;
 	info.zPath.reserve(8);
+	info.currentStateId = 0;
 
 	info.viewProjectionStack.reserve(2);
 	info.viewProjectionStack.push_back(_director->getGeneralProjection());

@@ -23,8 +23,8 @@ THE SOFTWARE.
 // Generated with headergen
 // from material-design-icons repo: https://github.com/google/material-design-icons
 
-#ifndef XENOLITH_FEATURES_ICONS_XLICONNAMES_H_
-#define XENOLITH_FEATURES_ICONS_XLICONNAMES_H_
+#ifndef XENOLITH_MODULES_ICONS_XLICONNAMES_H_
+#define XENOLITH_MODULES_ICONS_XLICONNAMES_H_
 
 #include "XLDefine.h"
 
@@ -2866,6 +2866,7 @@ enum class IconName : uint16_t {
 	Toggle_toggle_off_solid,
 	Toggle_toggle_on_outline,
 	Toggle_toggle_on_solid,
+	Max
 };
 
 StringView getIconName(IconName);
@@ -2873,4 +2874,4 @@ bool getIconData(IconName, const Callback<void(BytesView)> &);
 
 }
 
-#endif /* XENOLITH_FEATURES_ICONS_XLICONNAMES_H_ */
+#endif /* XENOLITH_MODULES_ICONS_XLICONNAMES_H_ */

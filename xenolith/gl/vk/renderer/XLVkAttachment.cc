@@ -50,19 +50,24 @@ VertexBufferAttachmentHandle::~VertexBufferAttachmentHandle() {
 }
 
 void VertexBufferAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
-	if (auto d = data.cast<gl::VertexData>()) {
-		if (!q.getFrame()) {
+	auto d = data.cast<gl::VertexData>();
+	if (!d || q.isFinalized()) {
+		cb(false);
+		return;
+	}
+
+	q.getFrame()->waitForDependencies(data->waitDependencies, [this, d = move(d), cb = move(cb)] (FrameHandle &handle, bool success) {
+		if (!success || !handle.isValidFlag()) {
 			cb(false);
 			return;
 		}
-		q.getFrame()->performInQueue([this, d = move(d)] (FrameHandle &handle) {
+
+		handle.performInQueue([this, d = move(d)] (FrameHandle &handle) {
 			return loadVertexes(handle, d);
 		}, [this, cb = move(cb)] (FrameHandle &handle, bool success) {
 			cb(success);
 		}, this, "VertexBufferAttachmentHandle::submitInput");
-	} else {
-		cb(false);
-	}
+	});
 }
 
 bool VertexBufferAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,

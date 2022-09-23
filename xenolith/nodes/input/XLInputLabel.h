@@ -23,8 +23,8 @@
 #ifndef XENOLITH_NODES_INPUT_XLINPUTLABEL_H_
 #define XENOLITH_NODES_INPUT_XLINPUTLABEL_H_
 
+#include "../XLDynamicStateNode.h"
 #include "XLLabel.h"
-#include "XLStrictNode.h"
 #include "XLTextInputManager.h"
 
 namespace stappler::xenolith {
@@ -55,7 +55,7 @@ public:
 	virtual void onPointer(bool);
 };
 
-class InputLabelContainer : public StrictNode {
+class InputLabelContainer : public DynamicStateNode {
 public:
 	template <typename T, typename ... Args>
 	auto setLabel(const Rc<T> &ptr, Args && ... args) {

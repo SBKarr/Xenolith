@@ -140,7 +140,12 @@ void Sprite::draw(RenderFrameInfo &frame, NodeFlags flags) {
 			_materialDirty = false;
 		}
 
+		for (auto &it : _pendingDependencies) {
+			emplace_ordered(frame.commands->waitDependencies, move(it));
+		}
+
 		pushCommands(frame, flags);
+		_pendingDependencies.clear();
 	}
 }
 

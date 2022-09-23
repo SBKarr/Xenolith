@@ -22,6 +22,7 @@ THE SOFTWARE.
 
 #include "XLDefine.h"
 #include "XLComponent.cc"
+#include "XLDynamicStateNode.cc"
 #include "XLEventListener.cc"
 #include "XLGestureRecognizer.cc"
 #include "XLInputListener.cc"
@@ -35,5 +36,4 @@ THE SOFTWARE.
 #include "XLVectorCanvas.cc"
 #include "XLVectorSprite.cc"
 
-#include "XLStrictNode.cc"
 //#include "XLInputLabel.cc"

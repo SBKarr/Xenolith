@@ -126,6 +126,9 @@ protected:
 	ColorMode _colorMode;
 	BlendInfo _blendInfo;
 	PipelineMaterialInfo _materialInfo;
+
+	Vector<Rc<renderqueue::DependencyEvent>> _pendingDependencies;
+
 };
 
 }

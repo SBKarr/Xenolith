@@ -44,16 +44,19 @@ public:
 
 	virtual bool init(const Rc<Attachment> &, const FrameQueue &);
 
-	const Rc<gl::MaterialSet> &getMaterials() const { return _materials; }
-
 	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
 			uint32_t, bool isExternal) const override;
 
 	virtual bool writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
 			uint32_t, bool, VkDescriptorBufferInfo &) override;
 
+	const MaterialVertexAttachment *getMaterialAttachment() const;
+
+	const Rc<gl::MaterialSet> getSet() const;
+
 protected:
-	Rc<gl::MaterialSet> _materials;
+	std::mutex _mutex;
+	mutable Rc<gl::MaterialSet> _materials;
 };
 
 // this attachment should provide vertex & index buffers
@@ -89,6 +92,8 @@ public:
 	const Rc<DeviceBuffer> &getVertexes() const { return _vertexes; }
 	const Rc<DeviceBuffer> &getIndexes() const { return _indexes; }
 
+	Rc<gl::CommandList> popCommands() const;
+
 	bool empty() const;
 
 protected:
@@ -100,7 +105,9 @@ protected:
 	Rc<DeviceBuffer> _vertexes;
 	Vector<gl::VertexSpan> _spans;
 
+	Rc<gl::MaterialSet> _materialSet;
 	const MaterialVertexAttachmentHandle *_materials = nullptr;
+	mutable Rc<gl::CommandList> _commands;
 };
 
 class MaterialPass : public QueuePass {

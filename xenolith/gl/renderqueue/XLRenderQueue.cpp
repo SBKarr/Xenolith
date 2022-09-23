@@ -65,6 +65,11 @@
 
 namespace stappler::xenolith::renderqueue {
 
+uint32_t DependencyEvent::GetNextId() {
+	static std::atomic<uint32_t> s_eventId = 1;
+	return s_eventId.fetch_add(1);
+}
+
 void QueueData::clear() {
 	for (auto &it : programs) {
 		it->program = nullptr;

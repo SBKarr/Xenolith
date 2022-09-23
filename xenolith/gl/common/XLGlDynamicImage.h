@@ -49,7 +49,8 @@ public:
 
 	Rc<DynamicImageInstance> getInstance();
 
-	void updateInstance(Loop &, const Rc<ImageObject> &, Rc<ImageAtlas> && = Rc<ImageAtlas>());
+	void updateInstance(Loop &, const Rc<ImageObject> &, Rc<ImageAtlas> && = Rc<ImageAtlas>(),
+			const Vector<Rc<renderqueue::DependencyEvent>> & = Vector<Rc<renderqueue::DependencyEvent>>());
 
 	void addTracker(const MaterialAttachment *);
 	void removeTracker(const MaterialAttachment *);

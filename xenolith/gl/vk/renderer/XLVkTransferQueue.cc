@@ -906,9 +906,21 @@ bool TransferAttachmentHandle::setup(FrameQueue &handle, Function<void(bool)> &&
 	return true;
 }
 
-void TransferAttachmentHandle::submitInput(FrameQueue &handle, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
+void TransferAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
 	_resource = data.cast<TransferResource>();
-	cb(true);
+	if (!_resource || q.isFinalized()) {
+		cb(false);
+		return;
+	}
+
+	q.getFrame()->waitForDependencies(data->waitDependencies, [this, cb = move(cb)] (FrameHandle &handle, bool success) {
+		if (!success || !handle.isValidFlag()) {
+			cb(false);
+			return;
+		}
+
+		cb(success);
+	});
 }
 
 

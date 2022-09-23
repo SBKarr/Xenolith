@@ -22,6 +22,7 @@
 
 #include "XLRenderQueueAttachment.h"
 #include "XLRenderQueuePass.h"
+#include "XLRenderQueueFrameHandle.h"
 
 namespace stappler::xenolith::renderqueue {
 
@@ -596,6 +597,16 @@ bool AttachmentHandle::setup(FrameQueue &, Function<void(bool)> &&) {
 
 void AttachmentHandle::finalize(FrameQueue &, bool successful) {
 
+}
+
+void AttachmentHandle::submitInput(FrameQueue &q, Rc<AttachmentInputData> &&data, Function<void(bool)> &&cb) {
+	if (data->waitDependencies.empty()) {
+		cb(true);
+	} else {
+		q.getFrame()->waitForDependencies(data->waitDependencies, [this, cb = move(cb)] (FrameHandle &, bool success) {
+			cb(success);
+		});
+	}
 }
 
 bool AttachmentHandle::isInput() const {

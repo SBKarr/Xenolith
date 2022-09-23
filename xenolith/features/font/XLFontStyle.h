@@ -220,6 +220,7 @@ struct Metrics final {
 struct CharLayout final {
 	static uint32_t getObjectId(uint16_t sourceId, char16_t, FontAnchor);
 	static uint32_t getObjectId(uint32_t, FontAnchor);
+	static FontAnchor getAnchorForObject(uint32_t);
 
 	char16_t charID = 0;
 	int16_t xOffset = 0;
