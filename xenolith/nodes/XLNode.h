@@ -23,7 +23,7 @@ THE SOFTWARE.
 #ifndef COMPONENTS_XENOLITH_NODES_XLNODE_H_
 #define COMPONENTS_XENOLITH_NODES_XLNODE_H_
 
-#include "XLRenderFrameInfo.h"
+#include "XLComponent.h"
 
 namespace stappler::xenolith {
 
@@ -204,6 +204,12 @@ public:
 	virtual bool removeAllComponentByTag(uint64_t);
 	virtual void removeAllComponents();
 
+    template <typename T>
+    T *getComponentByType() const;
+
+    template <typename T>
+    T *getComponentByType(uint32_t tag) const;
+
 	template <typename C>
 	auto addInputListener(C *component) -> C * {
 		if (addInputListenerItem(component)) {
@@ -340,6 +346,7 @@ protected:
 	Vec3 _position;
 	Vec3 _scale = Vec3(1.0f, 1.0f, 1.0f);
 	Vec3 _rotation;
+	float _density = 1.0f;
 
 	// to support HDR, we use float colors;
 	Color4F _displayedColor = Color4F::WHITE;
@@ -368,6 +375,30 @@ protected:
 	Scheduler *_scheduler = nullptr;
 	ActionManager *_actionManager = nullptr;
 };
+
+
+template <typename T>
+auto Node::getComponentByType() const -> T * {
+	for (auto &it : _components) {
+		if (auto ret = dynamic_cast<T *>(it.get())) {
+			return ret;
+		}
+	}
+	return nullptr;
+}
+
+template <typename T>
+auto Node::getComponentByType(uint32_t tag) const -> T * {
+	for (auto &it : _components) {
+		if (it->getTag() == tag) {
+			if (auto ret = dynamic_cast<T *>(it.get())) {
+				return ret;
+			}
+		}
+	}
+	return nullptr;
+}
+
 
 }
 

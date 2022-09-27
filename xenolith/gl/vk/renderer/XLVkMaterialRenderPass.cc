@@ -191,7 +191,7 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 	std::unordered_map<gl::MaterialId, MaterialWritePlan> surfaceWritePlan;
 
 	// write plan for transparent objects, that should be drawn in order
-	Map<SpanView<int16_t>, std::unordered_map<gl::MaterialId, MaterialWritePlan>> transparentWritePlan;
+	Map<SpanView<int16_t>, std::unordered_map<gl::MaterialId, MaterialWritePlan>, ZIndexLess> transparentWritePlan;
 
 	auto emplaceWritePlan = [&] (std::unordered_map<gl::MaterialId, MaterialWritePlan> &writePlan, const gl::CmdVertexArray *cmd) {
 		auto it = writePlan.find(cmd->material);
@@ -266,6 +266,11 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 	float depthScale = 1.0f / float(paths.size() + 1);
 	float depthOffset = 1.0f - depthScale;
 	for (auto &it : paths) {
+		/*std::cout << "Path:";
+		for (auto &z : it.first) {
+			std::cout << " " << z;
+		}
+		std::cout << "\n";*/
 		it.second = depthOffset;
 		depthOffset -= depthScale;
 	}
@@ -475,9 +480,6 @@ bool MaterialPassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
 Vector<VkCommandBuffer> MaterialPassHandle::doPrepareCommands(FrameHandle &) {
 	auto table = _device->getTable();
 	auto buf = _pool->allocBuffer(*_device);
-
-	auto &fb = getFramebuffer();
-	auto currentExtent = fb->getExtent();
 
 	auto materials = _materialBuffer->getSet().get();
 

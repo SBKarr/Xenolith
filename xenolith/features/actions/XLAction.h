@@ -344,6 +344,45 @@ protected:
 	Color4F _from;
 };
 
+class ActionProgress : public ActionInterval {
+public:
+	using StartCallback = Function<void()>;
+	using UpdateCallback = Function<void(float progress)>;
+	using StopCallback = Function<void()>;
+
+    virtual bool init(float duration,
+    		UpdateCallback &&update, StartCallback &&start = nullptr, StopCallback &&stop = nullptr);
+
+    virtual bool init(float duration, float targetProgress,
+    		UpdateCallback &&update, StartCallback &&start = nullptr, StopCallback &&stop = nullptr);
+
+    virtual bool init(float duration, float sourceProgress, float targetProgress,
+    		UpdateCallback &&update, StartCallback &&start = nullptr, StopCallback &&stop = nullptr);
+
+    virtual void startWithTarget(Node *t) override;
+    virtual void update(float time) override;
+    virtual void stop() override;
+
+    void setSourceProgress(float progress) { _sourceProgress = progress; }
+    float getSourceProgress() const { return _sourceProgress; }
+
+    void setTargetProgress(float progress) { _targetProgress = progress; }
+    float getTargetProgress() const { return _targetProgress; }
+
+    void setStartCallback(StartCallback &&cb) { _onStart = move(cb); }
+    void setUpdateCallback(UpdateCallback &&cb) { _onUpdate = move(cb); }
+    void setStopCallback(StopCallback &&cb) { _onStop = move(cb); }
+
+protected:
+    bool _stopped = true;
+    float _sourceProgress = 0.0f;
+    float _targetProgress = 1.0f;
+
+    StartCallback _onStart;
+    UpdateCallback _onUpdate;
+    StopCallback _onStop;
+};
+
 }
 
 #endif /* XENOLITH_FEATURES_ACTIONS_XLACTION_H_ */

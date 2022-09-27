@@ -20,60 +20,27 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_ROOT_APPROOTLAYOUT_H_
-#define TEST_SRC_ROOT_APPROOTLAYOUT_H_
+#ifndef MODULES_GUI_XLGUILAYERROUNDED_H_
+#define MODULES_GUI_XLGUILAYERROUNDED_H_
 
-#include "XLLayer.h"
-#include "XLLabel.h"
 #include "XLVectorSprite.h"
-#include "XLIconNames.h"
 
-#include "AppSlider.h"
-#include "AppCheckbox.h"
+namespace stappler::xenolith {
 
-namespace stappler::xenolith::app {
-
-class RootLayout : public Node {
+class LayerRounded : public VectorSprite {
 public:
-	virtual ~RootLayout() { }
-
-	virtual bool init() override;
+	virtual bool init(const Color4F &, float borderRadius);
 
 	virtual void onContentSizeDirty() override;
 
-	virtual void update(const UpdateTime &) override;
+	virtual void setBorderRadius(float);
+	virtual float getBorderRadius() const { return _borderRadius; }
 
 protected:
-	void updateIcon(IconName);
-	void updateQualityValue(float);
-	void updateScaleValue(float);
-	void updateAntialiasValue(bool);
-
-	// Action_gavel_solid
-	// IconName::Av_queue_music_outline
-	IconName _currentName = IconName::Action_text_rotate_vertical_solid;
-
-	Label *_label = nullptr;
-	Label *_info = nullptr;
-	Node *_spriteLayer = nullptr;
-	VectorSprite *_sprite = nullptr;
-	VectorSprite *_triangles = nullptr;
-
-	Label *_qualityLabel = nullptr;
-	AppSlider *_qualitySlider = nullptr;
-
-	Label *_scaleLabel = nullptr;
-	AppSlider *_scaleSlider = nullptr;
-
-	Label *_visibleLabel = nullptr;
-	AppCheckbox *_visibleCheckbox = nullptr;
-
-	Label *_antialiasLabel = nullptr;
-	AppCheckbox *_antialiasCheckbox = nullptr;
-
-	bool _antialias = false;
+	float _borderRadius = 0.0f;
+	float _realBorderRadius = 0.0f;
 };
 
 }
 
-#endif /* TEST_SRC_ROOT_APPROOTLAYOUT_H_ */
+#endif /* MODULES_GUI_XLGUILAYERROUNDED_H_ */

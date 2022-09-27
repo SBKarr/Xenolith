@@ -216,11 +216,30 @@ void Sequence::stop(void) {
 		auto front = _actions.begin() + _currentIdx;
 		auto end = _actions.end();
 
-		while (front != end && front->threshold == 0.0f) {
+		front->action->stop();
+		++ front;
+		++ _currentIdx;
+
+		while (front != end && front->threshold <= std::numeric_limits<float>::epsilon()) {
+			front->action->startWithTarget(_target);
+			front->action->update(1.0);
 			front->action->stop();
+
+			// std::cout << "Index: " << _currentIdx << "\n";
+
 			++ front;
 			++ _currentIdx;
 		}
+
+		// do not update any non-instant actions, just start-stop
+		while (front != end) {
+			front->action->startWithTarget(_target);
+			front->action->stop();
+
+			++ front;
+			++ _currentIdx;
+		}
+
 		_prevTime = 1.0f;
 	}
 }
@@ -427,6 +446,51 @@ void TintTo::startWithTarget(Node *target) {
 
 void TintTo::update(float time) {
 	_target->setColor(progress(_from, _to, time), true);
+}
+
+bool ActionProgress::init(float duration, UpdateCallback &&update, StartCallback &&start, StopCallback &&stop) {
+	return init(duration, 0.0f, 1.0f, move(update), move(start), move(stop));
+}
+
+bool ActionProgress::init(float duration, float targetProgress, UpdateCallback &&update, StartCallback &&start, StopCallback &&stop) {
+	return init(duration, 0.0f, targetProgress, move(update), move(start), move(stop));
+}
+
+bool ActionProgress::init(float duration, float sourceProgress, float targetProgress,
+		UpdateCallback &&update, StartCallback &&start, StopCallback &&stop) {
+	if (!ActionInterval::init(duration)) {
+		return false;
+	}
+
+	_sourceProgress = sourceProgress;
+	_targetProgress = targetProgress;
+	_onUpdate = move(update);
+	_onStart = move(start);
+	_onStop = move(stop);
+
+	return true;
+}
+
+void ActionProgress::startWithTarget(Node *t) {
+	ActionInterval::startWithTarget(t);
+	_stopped = false;
+	if (_onStart) {
+		_onStart();
+	}
+}
+
+void ActionProgress::update(float time) {
+	if (_onUpdate) {
+		_onUpdate(_sourceProgress + (_targetProgress - _sourceProgress) * time);
+	}
+}
+
+void ActionProgress::stop() {
+	if (!_stopped && _onStop) {
+		_onStop();
+	}
+	_stopped = true;
+	ActionInterval::stop();
 }
 
 }

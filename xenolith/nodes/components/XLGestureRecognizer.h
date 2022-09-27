@@ -24,13 +24,14 @@
 #define XENOLITH_NODES_COMPONENTS_XLGESTURERECOGNIZER_H_
 
 #include "XLDefine.h"
+#include "SPMovingAverage.h"
 #include <bitset>
 
 namespace stappler::xenolith {
 
 static constexpr float TapDistanceAllowed = 16.0f;
 static constexpr float TapDistanceAllowedMulti = 32.0f;
-static constexpr TimeInterval TapIntervalAllowed = TimeInterval::microseconds(350000ULL);
+static constexpr TimeInterval TapIntervalAllowed = TimeInterval::microseconds(300000ULL);
 
 struct GestureScroll {
 	Vec2 pos;
@@ -45,7 +46,6 @@ struct GestureTap {
 	uint32_t id = maxOf<uint32_t>();
 	uint32_t count = 0;
 	Time time;
-	float density = 1.0f;
 
 	void cleanup() {
 		id = maxOf<uint32_t>();
@@ -53,6 +53,38 @@ struct GestureTap {
 		count = 0;
 	}
 };
+
+struct GesturePress {
+	Vec2 pos;
+	uint32_t id = maxOf<uint32_t>();
+	TimeInterval limit;
+	TimeInterval time;
+	int count = 0;
+
+    void cleanup() {
+		id = maxOf<uint32_t>();
+		limit.clear();
+		time.clear();
+		count = 0;
+    }
+};
+
+struct GestureSwipe {
+	Vec2 firstTouch;
+	Vec2 secondTouch;
+	Vec2 midpoint;
+	Vec2 delta;
+	Vec2 velocity;
+
+    void cleanup() {
+    	firstTouch = Vec2::ZERO;
+    	secondTouch = Vec2::ZERO;
+    	midpoint = Vec2::ZERO;
+    	delta = Vec2::ZERO;
+    	velocity = Vec2::ZERO;
+    }
+};
+
 
 enum class GestureType {
 	Touch = 1 << 0,
@@ -98,7 +130,7 @@ public:
 	virtual bool init();
 
 	virtual bool canHandleEvent(const InputEvent &event) const;
-	virtual bool handleInputEvent(const InputEvent &);
+	virtual bool handleInputEvent(const InputEvent &, float density);
 
 	uint32_t getEventCount() const;
 	bool hasEvent(const InputEvent &) const;
@@ -114,9 +146,9 @@ public:
 	virtual size_t getMaxEvents() const { return _maxEvents; }
 
 protected:
-	virtual bool addEvent(const InputEvent &);
-	virtual bool removeEvent(const InputEvent &, bool success);
-	virtual bool renewEvent(const InputEvent &);
+	virtual bool addEvent(const InputEvent &, float density);
+	virtual bool removeEvent(const InputEvent &, bool success, float density);
+	virtual bool renewEvent(const InputEvent &, float density);
 
 	virtual InputEvent *getTouchById(uint32_t id, uint32_t *index);
 
@@ -125,6 +157,7 @@ protected:
 	GestureEvent _event = GestureEvent::Cancelled;
 	EventMask _eventMask;
 	ButtonMask _buttonMask;
+	float _density = 1.0f;
 };
 
 class GestureTouchRecognizer : public GestureRecognizer {
@@ -135,14 +168,15 @@ public:
 
 	virtual bool init(InputCallback &&, ButtonMask &&);
 
+	// disable touches if no button specified
 	virtual bool canHandleEvent(const InputEvent &event) const override;
 
 	void removeRecognizedEvent(uint32_t);
 
 protected:
-	virtual bool addEvent(const InputEvent &) override;
-	virtual bool removeEvent(const InputEvent &, bool successful) override;
-	virtual bool renewEvent(const InputEvent &) override;
+	virtual bool addEvent(const InputEvent &, float density) override;
+	virtual bool removeEvent(const InputEvent &, bool successful, float density) override;
+	virtual bool renewEvent(const InputEvent &, float density) override;
 
 	InputCallback _callback;
 };
@@ -152,7 +186,6 @@ public:
 	using InputCallback = Function<void(GestureEvent, const GestureTap &)>;
 	using ButtonMask = std::bitset<toInt(InputMouseButton::Max)>;
 
-public:
 	virtual ~GestureTapRecognizer() { }
 
 	virtual bool init(InputCallback &&, ButtonMask &&);
@@ -161,14 +194,68 @@ public:
 	virtual void cancel() override;
 
 protected:
-	virtual bool addEvent(const InputEvent &) override;
-	virtual bool removeEvent(const InputEvent &, bool successful) override;
-	virtual bool renewEvent(const InputEvent &) override;
+	virtual bool addEvent(const InputEvent &, float density) override;
+	virtual bool removeEvent(const InputEvent &, bool successful, float density) override;
+	virtual bool renewEvent(const InputEvent &, float density) override;
 
 	virtual void registerTap();
 
 	GestureTap _gesture;
 	InputCallback _callback;
+};
+
+class GesturePressRecognizer : public GestureRecognizer {
+public:
+	using InputCallback = Function<bool(GestureEvent, const GesturePress &)>;
+
+	virtual ~GesturePressRecognizer() { }
+
+	virtual bool init(InputCallback &&, TimeInterval interval, bool continuous, ButtonMask &&);
+
+	virtual void update(uint64_t dt) override;
+	virtual void cancel() override;
+
+protected:
+	virtual bool addEvent(const InputEvent &, float density) override;
+	virtual bool removeEvent(const InputEvent &, bool successful, float density) override;
+	virtual bool renewEvent(const InputEvent &, float density) override;
+
+	Time _lastTime = Time::now();
+	bool _notified = false;
+
+	GesturePress _gesture;
+	InputCallback _callback;
+
+	TimeInterval _interval;
+	bool _continuous = false;
+};
+
+class GestureSwipeRecognizer : public GestureRecognizer {
+public:
+	using InputCallback = Function<bool(GestureEvent, const GestureSwipe &)>;
+
+	virtual ~GestureSwipeRecognizer() { }
+
+	virtual bool init(InputCallback &&, float threshold, bool includeThreshold, ButtonMask &&);
+
+	virtual void cancel() override;
+
+protected:
+	virtual bool addEvent(const InputEvent &, float density) override;
+	virtual bool removeEvent(const InputEvent &, bool successful, float density) override;
+	virtual bool renewEvent(const InputEvent &, float density) override;
+
+	Time _lastTime;
+	math::MovingAverage<3> _velocityX, _velocityY;
+
+	bool _swipeBegin = false;
+	uint32_t _currentTouch = maxOf<uint32_t>();
+
+	GestureSwipe _gesture;
+	InputCallback _callback;
+
+	float _threshold = 6.0f;
+	bool _includeThreshold = true;
 };
 
 class GestureScrollRecognizer : public GestureRecognizer {
@@ -179,7 +266,7 @@ public:
 
 	virtual bool init(InputCallback &&);
 
-	virtual bool handleInputEvent(const InputEvent &) override;
+	virtual bool handleInputEvent(const InputEvent &, float density) override;
 
 protected:
 	GestureScroll _gesture;
@@ -190,9 +277,11 @@ class GestureMoveRecognizer : public GestureRecognizer {
 public:
 	using InputCallback = Function<bool(GestureEvent, const InputEvent &)>;
 
+	virtual ~GestureMoveRecognizer() { }
+
 	virtual bool init(InputCallback &&);
 
-	virtual bool handleInputEvent(const InputEvent &) override;
+	virtual bool handleInputEvent(const InputEvent &, float density) override;
 
 protected:
 	InputCallback _callback;
@@ -203,14 +292,16 @@ public:
 	using InputCallback = Function<bool(GestureEvent, const InputEvent &)>;
 	using KeyMask = std::bitset<toInt(InputKeyCode::Max)>;
 
+	virtual ~GestureKeyRecognizer() { }
+
 	virtual bool init(InputCallback &&, KeyMask &&);
 
 	virtual bool canHandleEvent(const InputEvent &) const override;
 
 protected:
-	virtual bool addEvent(const InputEvent &) override;
-	virtual bool removeEvent(const InputEvent &, bool success) override;
-	virtual bool renewEvent(const InputEvent &) override;
+	virtual bool addEvent(const InputEvent &, float density) override;
+	virtual bool removeEvent(const InputEvent &, bool success, float density) override;
+	virtual bool renewEvent(const InputEvent &, float density) override;
 
 	KeyMask _keyMask;
 	KeyMask _pressedKeys;

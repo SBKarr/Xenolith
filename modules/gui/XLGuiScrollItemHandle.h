@@ -20,43 +20,49 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_NODES_XLDYNAMICSTATENODE_H_
-#define XENOLITH_NODES_XLDYNAMICSTATENODE_H_
+#ifndef MODULES_GUI_XLGUISCROLLITEMHANDLE_H_
+#define MODULES_GUI_XLGUISCROLLITEMHANDLE_H_
 
-#include "XLNode.h"
+#include "XLComponent.h"
+#include "XLGuiScrollController.h"
 
 namespace stappler::xenolith {
 
-class DynamicStateNode : public Node {
+class ScrollController;
+
+class ScrollItemHandle : public Component {
 public:
-	enum StateApplyMode {
-		DoNotApply,
-		ApplyForAll,
-		ApplyForNodesBelow,
-		ApplyForNodesAbove
-	};
+	using Item = ScrollController::Item;
+	using Callback = Function<void(const Item &)>;
 
-	virtual bool init() override;
+	virtual ~ScrollItemHandle();
 
-	virtual StateApplyMode getStateApplyMode() const { return _applyMode; }
-	virtual void setStateApplyMode(StateApplyMode value);
+	virtual void onNodeInserted(ScrollController *, Item &, size_t index);
+	virtual void onNodeUpdated(ScrollController *, Item &, size_t index);
+	virtual void onNodeRemoved(ScrollController *, Item &, size_t index);
 
-	virtual bool visitDraw(RenderFrameInfo &, NodeFlags parentFlags) override;
+	void setInsertCallback(Callback &&);
+	void setUpdateCallback(Callback &&);
+	void setRemoveCallback(Callback &&);
 
-	virtual void enableScissor(Padding outline = Padding());
-	virtual void disableScissor();
-	virtual bool isScissorEnabled() const { return _scissorEnabled; }
-	virtual Padding getScissorOutline() const { return _scissorOutline; }
+	void resize(float newSize, bool forward = true);
+	void forceResize(float newSize, bool forward = true);
+
+	void setLocked(bool);
+	bool isLocked() const;
+
+	bool isConnected() const;
 
 protected:
-	virtual gl::DrawStateValues updateState(const gl::DrawStateValues &) const;
+	ScrollController *_controller = nullptr;
+	size_t _itemIndex = 0;
 
-	StateApplyMode _applyMode = ApplyForAll;
-
-	bool _scissorEnabled = false;
-	Padding _scissorOutline;
+	Callback _insertCallback;
+	Callback _updateCallback;
+	Callback _removeCallback;
+	bool _isLocked = false;
 };
 
 }
 
-#endif /* XENOLITH_NODES_XLDYNAMICSTATENODE_H_ */
+#endif /* MODULES_GUI_XLGUISCROLLITEMHANDLE_H_ */

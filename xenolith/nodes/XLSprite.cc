@@ -32,6 +32,7 @@ Sprite::Sprite() {
 			gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add);
 	_materialInfo.setBlendInfo(_blendInfo);
 	_materialInfo.setDepthInfo(DepthInfo(false, true, gl::CompareOp::Less));
+	_applyMode = DoNotApply;
 }
 
 bool Sprite::init() {
@@ -39,7 +40,7 @@ bool Sprite::init() {
 }
 
 bool Sprite::init(StringView textureName) {
-	if (!Node::init()) {
+	if (!DynamicStateNode::init()) {
 		return false;
 	}
 
@@ -49,7 +50,7 @@ bool Sprite::init(StringView textureName) {
 }
 
 bool Sprite::init(Rc<Texture> &&texture) {
-	if (!Node::init()) {
+	if (!DynamicStateNode::init()) {
 		return false;
 	}
 

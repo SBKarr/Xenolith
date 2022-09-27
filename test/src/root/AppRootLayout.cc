@@ -24,6 +24,8 @@
 #include "XLInputListener.h"
 #include "XLAction.h"
 
+#include "XLGuiLayerRounded.h"
+
 namespace stappler::xenolith::app {
 
 class RootLayoutButton : public Node {
@@ -138,7 +140,7 @@ bool RootLayout::init() {
 	do {
 		auto image = Rc<VectorImage>::create(Size2(24, 24));
 
-		_sprite = addChild(Rc<VectorSprite>::create(move(image)));
+		_sprite = addChild(Rc<VectorSprite>::create(move(image)), 0);
 		_sprite->setContentSize(Size2(256, 256));
 		_sprite->setAnchorPoint(Anchor::Middle);
 		_sprite->setColor(Color::Black);
@@ -161,7 +163,7 @@ bool RootLayout::init() {
 		_triangles->setScale(initialScale);
 	} while (0);
 
-	_spriteLayer = addChild(Rc<Layer>::create(Color::Grey_200), -1);
+	_spriteLayer = addChild(Rc<LayerRounded>::create(Color::Grey_200, 20.0f), -1);
 	_spriteLayer->setContentSize(Size2(256, 256));
 	_spriteLayer->setAnchorPoint(Anchor::Middle);
 
@@ -253,6 +255,16 @@ bool RootLayout::init() {
 		}
 		return true;
 	}, InputListener::makeKeyMask({InputKeyCode::LEFT, InputKeyCode::RIGHT}));
+
+	l->addPressRecognizer([this] (GestureEvent event, const GesturePress &ev) {
+		std::cout << "Press: " << event << ": " << ev.pos << ": " << ev.time.toMillis() << ": " << ev.count << "\n";
+		return true;
+	}, TimeInterval::milliseconds(350), true);
+
+	l->addSwipeRecognizer([this] (GestureEvent event, const GestureSwipe &ev) {
+		std::cout << "Swipe: " << event << ": " << ev.midpoint << "\n";
+		return true;
+	});
 
 	scheduleUpdate();
 	updateIcon(_currentName);

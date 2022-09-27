@@ -20,43 +20,10 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_NODES_XLDYNAMICSTATENODE_H_
-#define XENOLITH_NODES_XLDYNAMICSTATENODE_H_
+#include "XLDefine.h"
 
-#include "XLNode.h"
-
-namespace stappler::xenolith {
-
-class DynamicStateNode : public Node {
-public:
-	enum StateApplyMode {
-		DoNotApply,
-		ApplyForAll,
-		ApplyForNodesBelow,
-		ApplyForNodesAbove
-	};
-
-	virtual bool init() override;
-
-	virtual StateApplyMode getStateApplyMode() const { return _applyMode; }
-	virtual void setStateApplyMode(StateApplyMode value);
-
-	virtual bool visitDraw(RenderFrameInfo &, NodeFlags parentFlags) override;
-
-	virtual void enableScissor(Padding outline = Padding());
-	virtual void disableScissor();
-	virtual bool isScissorEnabled() const { return _scissorEnabled; }
-	virtual Padding getScissorOutline() const { return _scissorOutline; }
-
-protected:
-	virtual gl::DrawStateValues updateState(const gl::DrawStateValues &) const;
-
-	StateApplyMode _applyMode = ApplyForAll;
-
-	bool _scissorEnabled = false;
-	Padding _scissorOutline;
-};
-
-}
-
-#endif /* XENOLITH_NODES_XLDYNAMICSTATENODE_H_ */
+#include "XLGuiLayerRounded.cc"
+#include "XLGuiActionAcceleratedMove.cc"
+#include "XLGuiScrollController.cc"
+#include "XLGuiScrollItemHandle.cc"
+#include "XLGuiScrollViewBase.cc"

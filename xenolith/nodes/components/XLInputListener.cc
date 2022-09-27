@@ -158,7 +158,7 @@ bool InputListener::handleEvent(const InputEvent &event) {
 		}
 	}
 	for (auto &it : _recognizers) {
-		if (it->handleInputEvent(event)) {
+		if (it->handleInputEvent(event, _density)) {
 			ret = true;
 		}
 	}
@@ -179,6 +179,19 @@ GestureRecognizer *InputListener::addTapRecognizer(InputCallback<GestureTap> &&c
 
 GestureRecognizer *InputListener::addScrollRecognizer(InputCallback<GestureScroll> &&cb) {
 	auto rec = Rc<GestureScrollRecognizer>::create(move(cb));
+	addEventMask(rec->getEventMask());
+	return _recognizers.emplace_back(move(rec)).get();
+}
+
+GestureRecognizer *InputListener::addPressRecognizer(InputCallback<GesturePress> &&cb, TimeInterval interval, bool continuous,
+		ButtonMask &&mask) {
+	auto rec = Rc<GesturePressRecognizer>::create(move(cb), interval, continuous, move(mask));
+	addEventMask(rec->getEventMask());
+	return _recognizers.emplace_back(move(rec)).get();
+}
+
+GestureRecognizer *InputListener::addSwipeRecognizer(InputCallback<GestureSwipe> &&cb, float threshold, bool sendThreshold, ButtonMask &&mask) {
+	auto rec = Rc<GestureSwipeRecognizer>::create(move(cb), threshold, sendThreshold, move(mask));
 	addEventMask(rec->getEventMask());
 	return _recognizers.emplace_back(move(rec)).get();
 }

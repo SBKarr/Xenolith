@@ -76,6 +76,9 @@ public:
 	void setTouchPadding(float value) { _touchPadding = value; }
 	float getTouchPadding() const { return _touchPadding; }
 
+	void setDensity(float value) { _density = value; }
+	float getDensity() const { return _density; }
+
 	void setExclusive();
 	void setExclusiveForTouch(uint32_t eventId);
 
@@ -91,8 +94,12 @@ public:
 	bool canHandleEvent(const InputEvent &event) const;
 	bool handleEvent(const InputEvent &event);
 
-	GestureRecognizer *addTouchRecognizer(InputCallback<InputEvent> &&, ButtonMask && = makeButtonMask({InputMouseButton::MouseLeft}));
-	GestureRecognizer *addTapRecognizer(InputCallback<GestureTap> &&, ButtonMask && = makeButtonMask({InputMouseButton::MouseLeft}));
+	GestureRecognizer *addTouchRecognizer(InputCallback<InputEvent> &&, ButtonMask && = makeButtonMask({InputMouseButton::Touch}));
+	GestureRecognizer *addTapRecognizer(InputCallback<GestureTap> &&, ButtonMask && = makeButtonMask({InputMouseButton::Touch}));
+	GestureRecognizer *addPressRecognizer(InputCallback<GesturePress> &&, TimeInterval interval, bool continuous = false,
+			ButtonMask && = makeButtonMask({InputMouseButton::Touch}));
+	GestureRecognizer *addSwipeRecognizer(InputCallback<GestureSwipe> &&, float threshold = TapDistanceAllowed, bool sendThreshold = false,
+			ButtonMask && = makeButtonMask({InputMouseButton::Touch}));
 	GestureRecognizer *addScrollRecognizer(InputCallback<GestureScroll> &&);
 	GestureRecognizer *addMoveRecognizer(InputCallback<InputEvent> &&);
 
@@ -119,6 +126,7 @@ protected:
 
 	float _touchPadding = 0.0f;
 	float _opacityFilter = 0.0f;
+	float _density = 1.0f;
 
 	Scene *_scene = nullptr;
 

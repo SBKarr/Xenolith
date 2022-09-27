@@ -694,6 +694,23 @@ void Node::onTransformDirty(const Mat4 &parentTransform) {
 	for (auto &it : _components) {
 		it->onTransformDirty(parentTransform);
 	}
+
+	Vec3 scale;
+	parentTransform.decompose(&scale, nullptr, nullptr);
+
+	if (_scale.x != 1.f) { scale.x *= _scale.x; }
+	if (_scale.y != 1.f) { scale.y *= _scale.y; }
+	if (_scale.z != 1.f) { scale.z *= _scale.z; }
+
+	auto density = std::min(std::min(scale.x, scale.y), scale.z);
+	if (density != _density) {
+		for (auto &it : _inputEvents) {
+			it->setDensity(density);
+		}
+		_density = density;
+	}
+
+
 }
 
 void Node::onReorderChildDirty() {

@@ -23,14 +23,14 @@
 #ifndef XENOLITH_NODES_XLSPRITE_H_
 #define XENOLITH_NODES_XLSPRITE_H_
 
-#include "XLNode.h"
+#include "XLDynamicStateNode.h"
 #include "XLFontStyle.h"
 #include "XLResourceCache.h"
 #include "XLVertexArray.h"
 
 namespace stappler::xenolith {
 
-class Sprite : public Node {
+class Sprite : public DynamicStateNode {
 public:
 	using Autofit = font::Autofit;
 

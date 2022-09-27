@@ -28,7 +28,7 @@ bool DynamicStateNode::init() {
 	return Node::init();
 }
 
-void DynamicStateNode::setApplyMode(StateApplyMode value) {
+void DynamicStateNode::setStateApplyMode(StateApplyMode value) {
 	_applyMode = value;
 }
 
@@ -40,13 +40,6 @@ bool DynamicStateNode::visitDraw(RenderFrameInfo &info, NodeFlags parentFlags) {
 	if (!_visible) {
 		return false;
 	}
-
-	NodeFlags flags = processParentFlags(info, parentFlags);
-
-	bool visibleByCamera = true;
-
-	info.modelTransformStack.push_back(_modelViewTransform);
-	info.zPath.push_back(getLocalZOrder());
 
 	auto prevStateId = info.currentStateId;
 	auto currentState = info.commands->getState(prevStateId);
@@ -68,6 +61,13 @@ bool DynamicStateNode::visitDraw(RenderFrameInfo &info, NodeFlags parentFlags) {
 	}
 
 	gl::StateId stateId = info.commands->addState(newState);
+
+	NodeFlags flags = processParentFlags(info, parentFlags);
+
+	bool visibleByCamera = true;
+
+	info.modelTransformStack.push_back(_modelViewTransform);
+	info.zPath.push_back(getLocalZOrder());
 
 	if (!_children.empty()) {
 		sortAllChildren();

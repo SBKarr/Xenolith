@@ -36,7 +36,8 @@ LOCAL_INCLUDES_OBJS := shaders ../resources/fonts
 LOCAL_SHADERS := $(wildcard $(LOCAL_ROOT)/shaders/glsl/*)
 
 LOCAL_MODULES ?= \
-	xenolith_icons
+	xenolith_icons \
+	xenolith_gui
 
 include $(STAPPLER_ROOT)/make/universal.mk
 
