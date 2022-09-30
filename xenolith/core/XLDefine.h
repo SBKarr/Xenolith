@@ -66,6 +66,9 @@ struct UpdateTime {
 
 	// microseconds since last update
 	uint64_t delta;
+
+	// seconds since last update
+	float dt;
 };
 
 }

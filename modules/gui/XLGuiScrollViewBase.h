@@ -24,8 +24,12 @@
 #define MODULES_GUI_XLGUISCROLLVIEWBASE_H_
 
 #include "XLDynamicStateNode.h"
+#include "XLGuiActionAcceleratedMove.h"
 
 namespace stappler::xenolith {
+
+class ScrollController;
+class ActionAcceleratedMove;
 
 class ScrollViewBase : public DynamicStateNode {
 public:
@@ -38,7 +42,8 @@ public:
 		Horizontal
 	};
 
-public:
+	virtual ~ScrollViewBase() { }
+
 	virtual bool init(Layout l);
 	virtual void setLayout(Layout l);
 
@@ -113,7 +118,7 @@ public:
 	virtual Vec2 convertFromScrollableSpace(Node *, Vec2);
 	virtual Vec2 convertToScrollableSpace(Node *, Vec2);
 
-public: // internal, use with care
+	// internal, use with care
 	virtual float getScrollMinPosition() const; // NaN by default
 	virtual float getScrollMaxPosition() const; // NaN by default
 	virtual float getScrollLength() const; // NaN by default
@@ -131,7 +136,7 @@ public: // internal, use with care
 	virtual void setScrollDirty(bool value);
 	virtual void updateScrollBounds();
 
-protected: // common overload points
+	// common overload points
 	virtual void onDelta(float delta);
 	virtual void onOverscrollPerformed(float velocity, float pos, float boundary);
 
@@ -157,9 +162,8 @@ protected: // common overload points
 	virtual bool onPressEnd(const Vec2 &, const TimeInterval &);
 	virtual bool onPressCancel(const Vec2 &, const TimeInterval &);
 
-	virtual void onTap(int count, Vec2 loc);
+	virtual void onTap(int count, const Vec2 &loc);
 
-protected:
 	Layout _layout = Vertical;
 
 	enum class Movement {
@@ -187,10 +191,10 @@ protected:
 	ScrollCallback _scrollCallback = nullptr;
 	OverscrollCallback _overscrollCallback = nullptr;
 	InputListener *_listener = nullptr;
-	ScrollController *_controller = nullptr;
+	ScrollController *_controller;
 
-	ActionInterval *_animationAction = nullptr;
-	ActionAcceleratedMove *_movementAction = nullptr;
+	Rc<ActionInterval> _animationAction;
+	Rc<ActionAcceleratedMove> _movementAction;
 
 	bool _bounce = false;
 	bool _scrollDirty = true;

@@ -20,29 +20,29 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_ROOT_APPVECTORTEST2_H_
-#define TEST_SRC_ROOT_APPVECTORTEST2_H_
+#ifndef TEST_SRC_ROOT_APPSCROLLTEST_H_
+#define TEST_SRC_ROOT_APPSCROLLTEST_H_
 
-#include "XLLayer.h"
-#include "XLLabel.h"
-#include "XLVectorSprite.h"
+#include "XLGuiScrollView.h"
 
 namespace stappler::xenolith::app {
 
-class VectorTest2 : public Node {
+class ScrollTest : public Node {
 public:
-	virtual ~VectorTest2() { }
+	virtual ~ScrollTest() { }
 
-	virtual bool init() override;
+	virtual bool init();
 
 	virtual void onContentSizeDirty() override;
 
 protected:
-	VectorSprite *_sprite = nullptr;
-	VectorSprite *_sprite2 = nullptr;
-	VectorSprite *_sprite3 = nullptr;
+	Node *_layer1 = nullptr;
+	Layer *_layer2 = nullptr;
+
+	ScrollView *_horizontal = nullptr;
+	ScrollView *_vertical = nullptr;
 };
 
 }
 
-#endif /* TEST_SRC_ROOT_APPVECTORTEST2_H_ */
+#endif /* TEST_SRC_ROOT_APPSCROLLTEST_H_ */

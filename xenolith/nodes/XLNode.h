@@ -36,6 +36,11 @@ class ActionManager;
 
 class Node : public Ref {
 public:
+	/* Nodes with transparent zOrder will not be added into zPath */
+	static constexpr int16_t ZOrderTransparent = minOf<int16_t>();
+	static constexpr int16_t ZOrderMax = maxOf<int16_t>();
+	static constexpr int16_t ZOrderMin = minOf<int16_t>() + 1;
+
 	static bool isParent(Node *parent, Node *node);
 	static Mat4 getChainNodeToParentTransform(Node *parent, Node *node, bool withParent);
 	static Mat4 getChainParentToNodeTransform(Node *parent, Node *node, bool withParent);

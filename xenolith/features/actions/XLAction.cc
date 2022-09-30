@@ -29,7 +29,9 @@ Action::~Action() { }
 Action::Action() { }
 
 void Action::invalidate() {
-	stop();
+	if (_target) {
+		stop();
+	}
 }
 
 void Action::stop() {
@@ -211,7 +213,6 @@ bool Speed::isDone() const {
 Sequence::~Sequence() { }
 
 void Sequence::stop(void) {
-	ActionInterval::stop();
 	if (_prevTime < 1.0f) {
 		auto front = _actions.begin() + _currentIdx;
 		auto end = _actions.end();
@@ -242,6 +243,7 @@ void Sequence::stop(void) {
 
 		_prevTime = 1.0f;
 	}
+	ActionInterval::stop();
 }
 
 void Sequence::update(float t) {
@@ -364,7 +366,6 @@ bool Sequence::addAction(Action *a) {
 Spawn::~Spawn() { }
 
 void Spawn::stop(void) {
-	ActionInterval::stop();
 	if (_prevTime < 1.0f) {
 		for (auto &it : _actions) {
 			if (it.threshold >= _prevTime) {
@@ -373,6 +374,7 @@ void Spawn::stop(void) {
 		}
 		_prevTime = 1.0f;
 	}
+	ActionInterval::stop();
 }
 
 void Spawn::update(float t) {
@@ -491,6 +493,54 @@ void ActionProgress::stop() {
 	}
 	_stopped = true;
 	ActionInterval::stop();
+}
+
+bool MoveTo::init(float duration, const Vec2 &position) {
+	if (!ActionInterval::init(duration)) {
+		return false;
+	}
+
+	_endPosition = Vec3(position.x, position.y, nan());
+	return true;
+}
+
+bool MoveTo::init(float duration, const Vec3 &position) {
+	if (!ActionInterval::init(duration)) {
+		return false;
+	}
+
+	_endPosition = position;
+	return true;
+}
+
+void MoveTo::startWithTarget(Node *target) {
+	ActionInterval::startWithTarget(target);
+	_startPosition = target->getPosition();
+	if (isnan(_endPosition.z)) {
+		_endPosition.z = _startPosition.z;
+	}
+}
+
+void MoveTo::update(float time) {
+	_target->setPosition(progress(_startPosition, _endPosition, time));
+}
+
+bool FadeTo::init(float duration, float target) {
+	if (!ActionInterval::init(duration)) {
+		return false;
+	}
+
+	_endOpacity = target;
+	return true;
+}
+
+void FadeTo::startWithTarget(Node *target) {
+	ActionInterval::startWithTarget(target);
+	_startOpacity = target->getOpacity();
+}
+
+void FadeTo::update(float time) {
+	_target->setOpacity(progress(_startOpacity, _endOpacity, time));
 }
 
 }

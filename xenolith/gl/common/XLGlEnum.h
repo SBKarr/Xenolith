@@ -443,7 +443,7 @@ enum class AttachmentStorageType {
 
 enum class ImageHints {
 	None = 0,
-	NoAlpha = 1 << 0
+	Opaque = 1 << 0
 };
 
 SP_DEFINE_ENUM_AS_MASK(ImageHints);

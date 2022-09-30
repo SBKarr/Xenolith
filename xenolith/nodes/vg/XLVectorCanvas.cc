@@ -26,19 +26,25 @@
 namespace stappler::xenolith {
 
 void VectorCanvasResult::updateColor(const Color4F &color) {
-	auto target = Vec4(color.r, color.g, color.b, color.a) / Vec4(targetColor.r, targetColor.g, targetColor.b, targetColor.a);
+	auto copyData = [] (const gl::VertexData *data) {
+		auto ret = Rc<gl::VertexData>::alloc();
+		ret->data.resize(data->data.size());
+		ret->indexes.resize(data->indexes.size());
+		memcpy(ret->data.data(), data->data.data(), data->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U));
+		memcpy(ret->indexes.data(), data->indexes.data(), data->indexes.size() * sizeof(uint32_t));
+		return ret;
+	};
+
+	mut.clear();
+	mut.reserve(data.size());
 	for (auto &it : data) {
-		auto data = Rc<gl::VertexData>::alloc();
-		data->data = it.second->data;
-		data->indexes = it.second->indexes;
-
-		it.second = move(data);
-
-		for (auto &iit : it.second->data) {
-			iit.color = iit.color * target;
+		auto &iit = mut.emplace_back(it.first, copyData(it.second));
+		for (auto &vertex : iit.second->data) {
+			vertex.color = vertex.color * color;
 		}
 	}
-	targetColor = Color4F(color.r, color.g, color.b, color.a);
+
+	targetColor = color;
 }
 
 struct VectorCanvasPathOutput {
@@ -248,6 +254,7 @@ Rc<VectorCanvasResult> VectorCanvas::draw(Rc<VectorImageData> &&image, Size2 tar
 
 	_data->out = nullptr;
 	_data->image = nullptr;
+	ret->updateColor(ret->targetColor);
 	return ret;
 }
 
@@ -334,8 +341,8 @@ void VectorCanvas::Data::doDraw(const VectorPath &path, StringView cache) {
 }
 
 void VectorCanvas::Data::writeCacheData(const VectorPath &p, gl::VertexData *out, const gl::VertexData &source) {
-	auto fillColor = pathDrawer.originalColor * p.getFillColor();
-	auto strokeColor = pathDrawer.originalColor * p.getStrokeColor();
+	auto fillColor = Color4F(p.getFillColor());
+	auto strokeColor = Color4F(p.getStrokeColor());
 
 	Vec4 fillVec = fillColor;
 	Vec4 strokeVec = strokeColor;
@@ -467,7 +474,7 @@ uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const VectorPath &p,
 		if (cache) {
 			target.color = Color4F::WHITE;
 		} else {
-			target.color = originalColor * path->getFillColor();
+			target.color = Color4F(path->getFillColor());
 		}
 		fillTess->write(result);
 	}
@@ -477,7 +484,7 @@ uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const VectorPath &p,
 		if (cache) {
 			target.color = Color4F::WHITE;
 		} else {
-			target.color = originalColor * path->getStrokeColor();
+			target.color = Color4F(path->getStrokeColor());
 		}
 		strokeTess->write(result);
 	}

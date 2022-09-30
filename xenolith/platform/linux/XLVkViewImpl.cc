@@ -64,7 +64,7 @@ void ViewImpl::threadInit() {
 					return;
 				}
 
-				_view = view.get();
+				_view = view;
 				_surface = Rc<vk::Surface>::create(_instance, _view->createWindowSurface(_instance), _view);
 				_frameInterval = _view->getScreenFrameInterval();
 			}
@@ -81,7 +81,7 @@ void ViewImpl::threadInit() {
 					return;
 				}
 
-				_view = view.get();
+				_view = view;
 				_surface = Rc<vk::Surface>::create(_instance, _view->createWindowSurface(_instance), _view);
 				_frameInterval = _view->getScreenFrameInterval();
 			}
@@ -97,8 +97,6 @@ void ViewImpl::threadInit() {
 
 void ViewImpl::threadDispose() {
 	View::threadDispose();
-	platform::device::_sleep(20000);
-	_view = nullptr;
 }
 
 bool ViewImpl::worker() {
@@ -204,6 +202,11 @@ void ViewImpl::mapWindow() {
 	if (_view) {
 		_view->mapWindow();
 	}
+}
+
+void ViewImpl::finalize() {
+	_view = nullptr;
+	View::finalize();
 }
 
 }

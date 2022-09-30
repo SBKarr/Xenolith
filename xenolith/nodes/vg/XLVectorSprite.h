@@ -79,7 +79,10 @@ protected:
 	virtual void updateVertexes() override;
 	virtual void updateVertexesColor() override;
 
+	virtual RenderingLevel getRealRenderingLevel() const;
+
 	bool _async = false;
+	bool _imageIsSolid = false;
 	uint64_t _asyncJobId = 0;
 	Size2 _targetSize;
 	Mat4 _targetTransform;

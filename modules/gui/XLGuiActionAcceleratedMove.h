@@ -65,6 +65,8 @@ public:
 	static Rc<ActionAcceleratedMove> createWithDuration(float duration, Vec2 normal, Vec2 startPoint, float startVelocity,
 			float acceleration, Function<void(Node *)> &&callback = nullptr);
 
+	virtual ~ActionAcceleratedMove() { }
+
 	virtual bool initDecceleration(Vec2 normal, Vec2 startPoint, float startVelocity,
 			float acceleration, Function<void(Node *)> &&callback = nullptr);
 	virtual bool initDecceleration(Vec2 startPoint, Vec2 endPoint,

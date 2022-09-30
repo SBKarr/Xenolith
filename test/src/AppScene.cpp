@@ -35,7 +35,8 @@
 #include "XLVkMaterialRenderPass.h"
 
 #include "AppAutofitTest.h"
-#include "AppVectorTest2.h"
+#include "AppVectorTest.h"
+#include "AppScrollTest.h"
 #include "AppRootLayout.h"
 #include "XLFontLibrary.h"
 
@@ -120,7 +121,7 @@ static void AppScene_makeRenderQueue(Application *app, renderqueue::Queue::Build
 	// define internal resources (images and buffers)
 	gl::Resource::Builder resourceBuilder("LoaderResources");
 	auto initImage = resourceBuilder.addImage("Xenolith.png",
-			gl::ImageInfo(gl::ImageFormat::R8G8B8A8_UNORM, gl::ImageUsage::Sampled, gl::ImageHints::NoAlpha),
+			gl::ImageInfo(gl::ImageFormat::R8G8B8A8_UNORM, gl::ImageUsage::Sampled, gl::ImageHints::Opaque),
 			FilePath("resources/xenolith-1.png"));
 
 	builder.setInternalResource(Rc<gl::Resource>::create(move(resourceBuilder)));
@@ -230,8 +231,9 @@ bool AppScene::init(Application *app, Extent2 extent) {
 	}
 
 	// _layout = addChild(Rc<AutofitTest>::create());
-	// _layout = addChild(Rc<VectorTest2>::create());
-	_layout = addChild(Rc<RootLayout>::create());
+	// _layout = addChild(Rc<VectorTest>::create());
+	//_layout = addChild(Rc<RootLayout>::create());
+	_layout = addChild(Rc<ScrollTest>::create());
 	// _sprite = addChild(Rc<Sprite>::create("Xenolith.png"));
 
 	/*_node1 = addChild(Rc<Sprite>::create());

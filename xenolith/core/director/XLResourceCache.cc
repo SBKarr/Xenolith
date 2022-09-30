@@ -78,10 +78,8 @@ bool Texture::hasAlpha() const {
 		switch (fmt) {
 		case gl::PixelFormat::A:
 		case gl::PixelFormat::IA:
-			return true;
-			break;
 		case gl::PixelFormat::RGBA:
-			return (info.hints & gl::ImageHints::NoAlpha) == gl::ImageHints::None;
+			return (info.hints & gl::ImageHints::Opaque) == gl::ImageHints::None;
 			break;
 		default:
 			break;
@@ -92,10 +90,8 @@ bool Texture::hasAlpha() const {
 		switch (fmt) {
 		case gl::PixelFormat::A:
 		case gl::PixelFormat::IA:
-			return true;
-			break;
 		case gl::PixelFormat::RGBA:
-			return (_data->hints & gl::ImageHints::NoAlpha) == gl::ImageHints::None;
+			return (_data->hints & gl::ImageHints::Opaque) == gl::ImageHints::None;
 			break;
 		default:
 			break;

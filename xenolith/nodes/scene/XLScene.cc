@@ -39,6 +39,8 @@ bool Scene::init(Application *app, RenderQueue::Builder &&builder) {
 		return false;
 	}
 
+	setLocalZOrder(ZOrderTransparent);
+
 	_application = app;
 	_queue = makeQueue(move(builder));
 
@@ -75,6 +77,10 @@ void Scene::render(RenderFrameInfo &info) {
 
 	visitGeometry(info, NodeFlags::None);
 	visitDraw(info, NodeFlags::None);
+
+	if (_materialDependency) {
+		emplace_ordered(info.commands->waitDependencies, Rc<renderqueue::DependencyEvent>(_materialDependency));
+	}
 
 	eventDispatcher->commitStorage(move(info.input));
 }
@@ -140,6 +146,11 @@ void Scene::on2dVertexInput(FrameQueue &frame, const Rc<renderqueue::AttachmentH
 		RenderFrameInfo info;
 		info.pool = frame->getPool()->getPool();
 		info.commands = Rc<gl::CommandList>::create(frame->getPool());
+		info.commands->setStatCallback([dir = Rc<Director>(_director)] (gl::DrawStat stat) {
+			dir->getApplication()->performOnMainThread([dir = move(dir), stat] {
+				dir->pushDrawStat(stat);
+			});
+		});
 
 		render(info);
 
@@ -150,12 +161,17 @@ void Scene::on2dVertexInput(FrameQueue &frame, const Rc<renderqueue::AttachmentH
 		// submit material updates
 		if (!_pendingMaterials.empty()) {
 			for (auto &it : _pendingMaterials) {
+				Vector<Rc<renderqueue::DependencyEvent>> events;
+				if (_materialDependency) {
+					events.emplace_back(_materialDependency);
+				}
 				auto req = Rc<gl::MaterialInputData>::alloc();
 				req->attachment = it.first;
 				req->materialsToAddOrUpdate = move(it.second);
-				frame->getLoop()->compileMaterials(move(req));
+				frame->getLoop()->compileMaterials(move(req), events);
 			}
 			_pendingMaterials.clear();
+			_materialDependency = nullptr;
 		}
 	}, this);
 }
@@ -313,6 +329,9 @@ void Scene::addPendingMaterial(const gl::MaterialAttachment *a, Rc<gl::Material>
 		it->second.emplace_back(move(material));
 	} else {
 		_pendingMaterials.emplace(a, Vector<Rc<gl::Material>>({move(material)}));
+	}
+	if (!_materialDependency) {
+		_materialDependency = Rc<renderqueue::DependencyEvent>::alloc();
 	}
 }
 

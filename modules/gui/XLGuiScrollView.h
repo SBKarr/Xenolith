@@ -25,26 +25,70 @@
 
 #include "XLGuiScrollViewBase.h"
 #include "XLGuiScrollController.h"
+#include "XLVectorSprite.h"
 
 namespace stappler::xenolith {
+
+class LayerRounded;
 
 class ScrollView : public ScrollViewBase {
 public:
 	using TapCallback = Function<void(int count, const Vec2 &loc)>;
 	using AnimationCallback = Function<void()>;
 
+	class Overscroll : public VectorSprite {
+	public:
+		enum Direction {
+			Top,
+			Left,
+			Bottom,
+			Right
+		};
+
+		static constexpr float OverscrollEdge = 0.075f;
+		static constexpr float OverscrollEdgeThreshold = 0.5f;
+		static constexpr float OverscrollScale = 1.0f / 6.0f;
+		static constexpr float OverscrollMaxHeight = 64.0f;
+
+		virtual ~Overscroll() { }
+
+		virtual bool init() override;
+		virtual bool init(Direction);
+		virtual void onContentSizeDirty() override;
+		virtual void update(const UpdateTime &time) override;
+		virtual void onEnter(Scene*) override;
+		virtual void onExit() override;
+
+		virtual void setDirection(Direction);
+		virtual Direction getDirection() const;
+
+		void setProgress(float p);
+		void incrementProgress(float dt);
+		void decrementProgress(float dt);
+
+	protected:
+		void updateProgress(VectorImage *);
+
+		bool _progressDirty = false;
+		float _progress = 0.0f;
+		uint64_t _delayStart = 0;
+		Direction _direction = Direction::Top;
+	};
+
+	virtual ~ScrollView() { }
+
 	virtual bool init(Layout l) override;
 
 	virtual void onContentSizeDirty() override;
 
-	virtual void setOverscrollColor(const Color4F &);
-	virtual const Color4F & getOverscrollColor() const;
+	virtual void setOverscrollColor(const Color4F &, bool withOpacity = false);
+	virtual Color4F getOverscrollColor() const;
 
 	virtual void setOverscrollVisible(bool value);
 	virtual bool isOverscrollVisible() const;
 
-	virtual void setIndicatorColor(const Color4F &);
-	virtual const Color4F & getIndicatorColor() const;
+	virtual void setIndicatorColor(const Color4B &, bool withOpacity = false);
+	virtual Color4F getIndicatorColor() const;
 
 	virtual void setIndicatorVisible(bool value);
 	virtual bool isIndicatorVisible() const;
@@ -66,7 +110,7 @@ public:
 	virtual void setAnimationCallback(const AnimationCallback &);
 	virtual const AnimationCallback &getAnimationCallback() const;
 
-	virtual void update(float dt) override;
+	virtual void update(const UpdateTime &time) override;
 
 	enum class Adjust {
 		None,
@@ -82,11 +126,11 @@ public:
 	virtual void load(const Value &);
 
 public:
-	virtual Rc<ActionProgress> resizeNode(Node *, float newSize, float duration, const Function<void()> &cb = nullptr);
-	virtual Rc<ActionProgress> resizeNode(ScrollController::Item *, float newSize, float duration, const Function<void()> &cb = nullptr);
+	virtual Rc<ActionProgress> resizeNode(Node *, float newSize, float duration, Function<void()> &&cb = nullptr);
+	virtual Rc<ActionProgress> resizeNode(ScrollController::Item *, float newSize, float duration, Function<void()> &&cb = nullptr);
 
-	virtual Rc<ActionProgress> removeNode(Node *, float duration, const Function<void()> &cb = nullptr, bool disable = false);
-	virtual Rc<ActionProgress> removeNode(ScrollController::Item *, float duration, const Function<void()> &cb = nullptr, bool disable = false);
+	virtual Rc<ActionProgress> removeNode(Node *, float duration, Function<void()> &&cb = nullptr, bool disable = false);
+	virtual Rc<ActionProgress> removeNode(ScrollController::Item *, float duration, Function<void()> &&cb = nullptr, bool disable = false);
 
 protected:
 	virtual void doSetScrollPosition(float pos) override;
@@ -97,14 +141,14 @@ protected:
 	virtual void onAnimationFinished() override;
 
 	virtual void updateIndicatorPosition();
-	virtual void updateIndicatorPosition(cocos2d::Node *indicator, float size, float value, bool actions, float min);
+	virtual void updateIndicatorPosition(Node *indicator, float size, float value, bool actions, float min);
 
-	virtual ScrollController::Item * getItemForNode(cocos2d::Node *) const;
+	virtual ScrollController::Item * getItemForNode(Node *) const;
 
 	Overscroll *_overflowFront = nullptr;
 	Overscroll *_overflowBack = nullptr;
 
-	RoundedSprite *_indicator = nullptr;
+	LayerRounded *_indicator = nullptr;
 	bool _indicatorVisible = true;
 	bool _indicatorIgnorePadding = false;
 
@@ -116,6 +160,7 @@ protected:
 
 	Adjust _adjust = Adjust::None;
 	float _adjustValue = 0.0f;
+	float _indicatorOpacity = 0.5f;
 };
 
 }

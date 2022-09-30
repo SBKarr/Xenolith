@@ -253,6 +253,20 @@ int Application::run(Value &&data) {
 		_fontLibrary = nullptr;
 
 		_glLoop->cancel();
+		if (_glLoop->getReferenceCount() > 1) {
+			auto loop = _glLoop.get();
+			_glLoop = nullptr;
+
+			log::vtext("gl::Loop", "Backtrace for ", (void *)loop);
+			loop->foreachBacktrace([] (uint64_t id, Time time, const std::vector<std::string> &vec) {
+				StringStream stream;
+				stream << "[" << id << ":" << time.toHttp<Interface>() << "]:\n";
+				for (auto &it : vec) {
+					stream << "\t" << it << "\n";
+				}
+				log::text("gl::Loop", stream.str());
+			});
+		}
 		_glLoop = nullptr;
 	} else {
 		log::text("Application", "Fail to launch gl loop: onFinishLaunching failed");

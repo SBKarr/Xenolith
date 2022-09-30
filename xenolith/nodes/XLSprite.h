@@ -90,7 +90,7 @@ protected:
 
 	virtual void updateBlendAndDepth();
 
-	RenderingLevel getRealRenderingLevel() const;
+	virtual RenderingLevel getRealRenderingLevel() const;
 
 	static bool getAutofitParams(Autofit autofit, const Vec2 &autofitValue, const Size2 &contentSize, const Size2 &texSize,
 			Rect &contentRect, Rect &textureRect);

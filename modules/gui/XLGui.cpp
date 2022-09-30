@@ -27,3 +27,4 @@
 #include "XLGuiScrollController.cc"
 #include "XLGuiScrollItemHandle.cc"
 #include "XLGuiScrollViewBase.cc"
+#include "XLGuiScrollView.cc"

@@ -69,6 +69,8 @@ CommandList::~CommandList() {
 		cmd = cmd->next;
 	} while (cmd);
 
+	delete _statCallback;
+
 	memory::pool::pop();
 }
 
@@ -77,6 +79,7 @@ bool CommandList::init(const Rc<PoolRef> &pool) {
 	_pool->perform([&] {
 		_states = new (_pool->getPool()) memory::vector<DrawStateValues>();
 		_states->emplace_back(DrawStateValues()); // state 0;
+		_statCallback = new (_pool->getPool()) memory::function<void(DrawStat)>();
 	});
 	return true;
 }
@@ -144,6 +147,12 @@ const DrawStateValues *CommandList::getState(gl::StateId state) const {
 		return &_states->at(state);
 	} else {
 		return nullptr;
+	}
+}
+
+void CommandList::sendStat(const DrawStat &stat) const {
+	if (*_statCallback) {
+		(*_statCallback)(stat);
 	}
 }
 

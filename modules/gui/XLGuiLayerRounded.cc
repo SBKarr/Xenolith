@@ -59,7 +59,7 @@ void LayerRounded::onContentSizeDirty() {
 				.arcTo(radius, radius, 0.0f, false, true, 0.0f, _contentSize.height - radius)
 				.closePath()
 				.setAntialiased(false)
-				.setFillColor(Color4B::WHITE)
+				.setFillColor(_pathColor)
 				.setStyle(vg::DrawStyle::Fill);
 
 		setImage(move(img));
@@ -68,6 +68,24 @@ void LayerRounded::onContentSizeDirty() {
 	}
 
 	VectorSprite::onContentSizeDirty();
+}
+
+void LayerRounded::setPathColor(const Color4B &color, bool withOpaity) {
+	if (withOpaity) {
+		_pathColor = color;
+	} else {
+		_pathColor = Color4B(color.r, color.g, color.b, _pathColor.a);
+	}
+
+	if (!_image->getPaths().empty()) {
+		for (auto &it : _image->getPaths()) {
+			it.second->setFillColor(color);
+		}
+	}
+}
+
+const Color4B &LayerRounded::getPathColor() const {
+	return _pathColor;
 }
 
 void LayerRounded::setBorderRadius(float radius) {

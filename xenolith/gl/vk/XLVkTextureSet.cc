@@ -37,7 +37,7 @@ bool TextureSetLayout::init(Device &dev, uint32_t imageLimit) {
 	_emptyImageView = Rc<ImageView>::create(dev, _emptyImage, gl::ImageViewInfo());
 
 	_solidImage = dev.getAllocator()->spawnPersistent(AllocationUsage::DeviceLocal,
-			gl::ImageInfo(Extent2(1, 1), gl::ImageUsage::Sampled, gl::ImageFormat::R8_UNORM, SolidTextureName), false);
+			gl::ImageInfo(Extent2(1, 1), gl::ImageUsage::Sampled, gl::ImageFormat::R8_UNORM, SolidTextureName, gl::ImageHints::Opaque), false);
 	_solidImageView = Rc<ImageView>::create(dev, _solidImage, gl::ImageViewInfo());
 
 	return true;

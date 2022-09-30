@@ -36,6 +36,7 @@ using VectorPathRef = stappler::vg::VectorPathRef;
 
 struct VectorCanvasResult : public Ref {
 	Vector<Pair<Mat4, Rc<gl::VertexData>>> data;
+	Vector<Pair<Mat4, Rc<gl::VertexData>>> mut;
 	Color4F targetColor;
 	Size2 targetSize;
 	Mat4 targetTransform;

@@ -112,6 +112,8 @@ void Director::update() {
     	_time.delta = config::MaxDirectorDeltaTime;
     }
 
+    _time.dt = float(_time.delta) / 1'000'000;
+
 	if (_nextScene) {
 		if (_scene) {
 			_scene->onFinished(this);
@@ -163,6 +165,10 @@ void Director::runScene(Rc<Scene> &&scene) {
 		}
 		release(linkId);
 	});
+}
+
+void Director::pushDrawStat(const gl::DrawStat &stat) {
+	_drawStat = stat;
 }
 
 float Director::getFps() const {

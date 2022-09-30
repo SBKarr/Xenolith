@@ -184,14 +184,15 @@ void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 		return;
 	}
 
-	auto reqMemSize = sizeof(Pair<Mat4, Rc<gl::VertexData>>) * _result->data.size();
+	auto &targetData = _result->mut;
+	auto reqMemSize = sizeof(Pair<Mat4, Rc<gl::VertexData>>) * targetData.size();
 
 	// pool memory is 16-bytes aligned, no problems with Mat4
-	auto tmpData = new (memory::pool::palloc(frame.pool, reqMemSize)) Pair<Mat4, Rc<gl::VertexData>>[_result->data.size()];
+	auto tmpData = new (memory::pool::palloc(frame.pool, reqMemSize)) Pair<Mat4, Rc<gl::VertexData>>[targetData.size()];
 	auto target = tmpData;
 	if (_normalized) {
 		auto transform = frame.modelTransformStack.back() * _targetTransform;
-		for (auto &it : _result->data) {
+		for (auto &it : targetData) {
 			auto modelTransform = transform * it.first;
 
 			Mat4 newMV;
@@ -205,7 +206,7 @@ void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 		}
 	} else {
 		auto transform = frame.viewProjectionStack.back() * frame.modelTransformStack.back() * _targetTransform;
-		for (auto &it : _result->data) {
+		for (auto &it : targetData) {
 			auto pathTransform = transform * it.first;
 			target->first = pathTransform;
 			target->second = it.second;
@@ -213,7 +214,7 @@ void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 		}
 	}
 
-	frame.commands->pushVertexArray(makeSpanView(tmpData, _result->data.size()), frame.zPath, _materialId, _realRenderingLevel);
+	frame.commands->pushVertexArray(makeSpanView(tmpData, targetData.size()), frame.zPath, _materialId, _realRenderingLevel);
 }
 
 void VectorSprite::initVertexes() {
@@ -288,10 +289,85 @@ void VectorSprite::updateVertexes() {
 	scaleTransform.inverse();
 
 	_targetTransform *= scaleTransform;
+
+	auto isSolidImage = [&] {
+		for (auto &it : _image->getPaths()) {
+			if (it.second->isAntialiased()) {
+				return false;
+			}
+
+			auto s = it.second->getStyle();
+			switch (s) {
+			case vg::DrawStyle::Fill:
+				if (it.second->getFillOpacity() != 255) {
+					return false;
+				}
+				break;
+			case vg::DrawStyle::FillAndStroke:
+				if (it.second->getFillOpacity() != 255) {
+					return false;
+				}
+				if (it.second->getStrokeOpacity() != 255) {
+					return false;
+				}
+				break;
+			case vg::DrawStyle::Stroke:
+				if (it.second->getStrokeOpacity() != 255) {
+					return false;
+				}
+				break;
+			default:
+				break;
+			}
+		}
+		return true;
+	};
+
+	auto isSolid = isSolidImage();
+	if (isSolid != _imageIsSolid) {
+		_materialDirty = true;
+		_imageIsSolid = isSolid;
+	}
 }
 
 void VectorSprite::updateVertexesColor() {
 	_result->updateColor(_displayedColor);
+}
+
+RenderingLevel VectorSprite::getRealRenderingLevel() const {
+	auto level = _renderingLevel;
+	if (level == RenderingLevel::Default) {
+		if (_displayedColor.a < 1.0f || !_texture || _materialInfo.getLineWidth() != 0.0f) {
+			level = RenderingLevel::Transparent;
+		} else if (_colorMode.getMode() == ColorMode::Solid) {
+			if (_texture->hasAlpha()) {
+				level = RenderingLevel::Transparent;
+			} else {
+				level = _imageIsSolid ? RenderingLevel::Solid : RenderingLevel::Transparent;
+			}
+		} else {
+			auto alphaMapping = _colorMode.getA();
+			switch (alphaMapping) {
+			case gl::ComponentMapping::Identity:
+				if (_texture->hasAlpha()) {
+					level = RenderingLevel::Transparent;
+				} else {
+					level = _imageIsSolid ? RenderingLevel::Solid : RenderingLevel::Transparent;
+				}
+				break;
+			case gl::ComponentMapping::Zero:
+				level = RenderingLevel::Transparent;
+				break;
+			case gl::ComponentMapping::One:
+				level = _imageIsSolid ? RenderingLevel::Solid : RenderingLevel::Transparent;
+				break;
+			default:
+				level = RenderingLevel::Transparent;
+				break;
+			}
+		}
+	}
+	return level;
 }
 
 }

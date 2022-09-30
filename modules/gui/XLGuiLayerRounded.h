@@ -29,6 +29,8 @@ namespace stappler::xenolith {
 
 class LayerRounded : public VectorSprite {
 public:
+	virtual ~LayerRounded() { }
+
 	virtual bool init(const Color4F &, float borderRadius);
 
 	virtual void onContentSizeDirty() override;
@@ -36,7 +38,11 @@ public:
 	virtual void setBorderRadius(float);
 	virtual float getBorderRadius() const { return _borderRadius; }
 
+	virtual void setPathColor(const Color4B &, bool withOpaity);
+	virtual const Color4B &getPathColor() const;
+
 protected:
+	Color4B _pathColor = Color::Grey_500;
 	float _borderRadius = 0.0f;
 	float _realBorderRadius = 0.0f;
 };

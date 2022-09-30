@@ -440,6 +440,13 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 		_indexes->setData(indexData);
 	}
 
+	commands->sendStat(gl::DrawStat{
+		uint32_t(globalWritePlan.vertexes),
+		uint32_t(globalWritePlan.indexes / 3),
+		uint32_t(paths.size()),
+		uint32_t(_spans.size())
+	});
+
 	_commands = commands;
 	return true;
 }

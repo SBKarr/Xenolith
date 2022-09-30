@@ -350,6 +350,8 @@ public:
 	using UpdateCallback = Function<void(float progress)>;
 	using StopCallback = Function<void()>;
 
+	virtual ~ActionProgress() { }
+
     virtual bool init(float duration,
     		UpdateCallback &&update, StartCallback &&start = nullptr, StopCallback &&stop = nullptr);
 
@@ -381,6 +383,33 @@ protected:
     StartCallback _onStart;
     UpdateCallback _onUpdate;
     StopCallback _onStop;
+};
+
+class MoveTo : public ActionInterval {
+public:
+	virtual ~MoveTo() { }
+
+	virtual bool init(float duration, const Vec2 &position);
+	virtual bool init(float duration, const Vec3 &position);
+	virtual void startWithTarget(Node *target) override;
+	virtual void update(float time) override;
+
+protected:
+	Vec3 _startPosition;
+	Vec3 _endPosition;
+};
+
+class FadeTo : public ActionInterval {
+public:
+	virtual ~FadeTo() { }
+
+	virtual bool init(float duration, float target);
+	virtual void startWithTarget(Node *target) override;
+	virtual void update(float time) override;
+
+protected:
+	float _startOpacity = 0.0f;
+	float _endOpacity = 1.0f;
 };
 
 }

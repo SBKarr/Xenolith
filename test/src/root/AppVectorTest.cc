@@ -50,7 +50,6 @@ bool VectorTest::init() {
 		_sprite[i]->setQuality(0.25f + 0.5f * i);
 
 		_labels[i] = addChild(Rc<Label>::create(fontController), 3);
-		_labels[i]->setFontFamily("Roboto");
 		_labels[i]->setAnchorPoint(Anchor::MiddleBottom);
 		_labels[i]->setColor(Color::Red_500, true);
 		_labels[i]->setFontSize(24);

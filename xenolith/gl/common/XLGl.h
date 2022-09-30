@@ -344,6 +344,13 @@ struct Quad_V3F_C4F_T2F {
 	Vertex_V4F_V4F_T2F2U br;
 };
 
+struct DrawStat {
+	uint32_t vertexes;
+	uint32_t triangles;
+	uint32_t zPaths;
+	uint32_t drawCalls;
+};
+
 struct VertexSpan {
 	MaterialId material;
 	uint32_t indexCount;

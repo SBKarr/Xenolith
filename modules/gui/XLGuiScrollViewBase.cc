@@ -69,9 +69,9 @@ bool ScrollViewBase::init(Layout layout) {
 		auto pos = getScrollPosition();
 		onSwipeBegin();
 		if (_layout == Vertical) {
-			onDelta(w.amount.y * 100.0f / _globalScale.y);
+			onDelta(- w.amount.y * 5.0f / _globalScale.y);
 		} else {
-			onDelta(- w.amount.x * 100.0f / _globalScale.x);
+			onDelta(- w.amount.x * 5.0f / _globalScale.x);
 		}
 		onScroll(getScrollPosition() - pos, false);
 		return true;
@@ -183,7 +183,7 @@ bool ScrollViewBase::addComponentItem(Component *cmp) {
 		setController(c);
 		return true;
 	} else {
-		return DynamicStateNode::addComponent(cmp);
+		return DynamicStateNode::addComponentItem(cmp);
 	}
 }
 
@@ -195,7 +195,7 @@ void ScrollViewBase::setController(ScrollController *c) {
 		}
 		_controller = c;
 		if (_controller) {
-			DynamicStateNode::addComponent(_controller);
+			DynamicStateNode::addComponentItem(_controller);
 		}
 	}
 }
@@ -483,11 +483,12 @@ Vec2 ScrollViewBase::getPointForScrollPosition(float pos) {
 }
 
 void ScrollViewBase::onDelta(float delta) {
+	auto pos = getScrollPosition();
 	if (delta < 0) {
-		if (!isnan(_scrollMin) && _scrollPosition + delta < _scrollMin) {
+		if (!isnan(_scrollMin) && pos + delta < _scrollMin) {
 			if (_bounce) {
-				float mod = 1.0f / (1.0f + (_scrollMin - (_scrollPosition + delta)) / 5.0f);
-				setScrollPosition(_scrollPosition + delta * mod);
+				float mod = 1.0f / (1.0f + (_scrollMin - (pos + delta)) / 5.0f);
+				setScrollPosition(pos + delta * mod);
 				return;
 			} else {
 				onOverscroll(delta);
@@ -496,10 +497,10 @@ void ScrollViewBase::onDelta(float delta) {
 			}
 		}
 	} else if (delta > 0) {
-		if (!isnan(_scrollMax) && _scrollPosition + delta > _scrollMax) {
+		if (!isnan(_scrollMax) && pos + delta > _scrollMax) {
 			if (_bounce) {
-				float mod = 1.0f / (1.0f + ((_scrollPosition + delta) - _scrollMax) / 5.0f);
-				setScrollPosition(_scrollPosition + delta * mod);
+				float mod = 1.0f / (1.0f + ((pos + delta) - _scrollMax) / 5.0f);
+				setScrollPosition(pos + delta * mod);
 				return;
 			} else {
 				onOverscroll(delta);
@@ -508,7 +509,7 @@ void ScrollViewBase::onDelta(float delta) {
 			}
 		}
 	}
-	setScrollPosition(_scrollPosition + delta);
+	setScrollPosition(pos + delta);
 }
 
 void ScrollViewBase::onOverscrollPerformed(float velocity, float pos, float boundary) {
@@ -889,7 +890,7 @@ bool ScrollViewBase::onPressCancel(const Vec2 &, const TimeInterval &) {
 	return true;
 }
 
-void ScrollViewBase::onTap(int count, Vec2 loc) {
+void ScrollViewBase::onTap(int count, const Vec2 &loc) {
 
 }
 

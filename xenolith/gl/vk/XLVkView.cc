@@ -189,10 +189,7 @@ void View::threadDispose() {
 	_swapchain = nullptr;
 	_surface = nullptr;
 
-	_loop->performOnGlThread([this] {
-		end();
-	}, this);
-
+	finalize();
 	release(0);
 }
 
@@ -783,6 +780,13 @@ void View::waitForFences(uint64_t min) {
 			++ it;
 		}
 	}
+}
+
+void View::finalize() {
+	_loop->performOnGlThread([this] {
+		end();
+	}, this);
+
 }
 
 }

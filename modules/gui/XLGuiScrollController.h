@@ -51,7 +51,6 @@ public:
 		ScrollItemHandle *handle = nullptr;
 	};
 
-public:
 	virtual ~ScrollController();
 
 	virtual void onAdded() override;

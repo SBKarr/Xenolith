@@ -47,7 +47,7 @@ bool FpsDisplay::init(font::FontController *fontController) {
 
 	if (fontController) {
 		_label = addChild(Rc<Label>::create(fontController), maxOf<int16_t>());
-		_label->setString("0.0\n0.0\n0.0");
+		_label->setString("0.0\n0.0\n0.0\n0 0 0 0");
 		_label->setFontFamily("monospace");
 		_label->setAnchorPoint(Anchor::BottomLeft);
 		_label->setColor(Color::Black, true);
@@ -58,6 +58,7 @@ bool FpsDisplay::init(font::FontController *fontController) {
 	}
 
 	scheduleUpdate();
+	setVisible(false);
 
 	 return true;
 }
@@ -67,9 +68,11 @@ void FpsDisplay::update(const UpdateTime &) {
 		auto fps = _director->getAvgFps();
 		auto spf = _director->getSpf();
 		auto local = _director->getLocalFrameTime();
+		auto stat = _director->getDrawStat();
 
 		if (_label) {
-			auto str = toString(std::setprecision(3), fps, "\n", spf, "\n", local);
+			auto str = toString(std::setprecision(3), fps, "\n", spf, "\n", local, "\n",
+					stat.vertexes, " ", stat.triangles, " ", stat.zPaths, " ", stat.drawCalls);
 			_label->setString(str);
 		}
 		++ _frames;

@@ -122,6 +122,11 @@ class Sprite;
 class Label;
 class Layer;
 
+class Action;
+class ActionInterval;
+class ActionInstant;
+class ActionProgress;
+
 using Task = thread::Task;
 
 template <typename Callback>

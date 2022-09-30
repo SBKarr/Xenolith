@@ -97,6 +97,8 @@ protected:
 
 	void waitForFences(uint64_t min);
 
+	virtual void finalize();
+
 	EngineOptions _options;
 
 	bool _blockDeprecation = false;

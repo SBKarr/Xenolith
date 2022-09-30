@@ -68,6 +68,10 @@ public:
 	Extent2 getScreenExtent() const { return _screenExtent; }
 	Size2 getScreenSize() const { return _screenSize; }
 
+	void pushDrawStat(const gl::DrawStat &);
+
+	const gl::DrawStat &getDrawStat() const { return _drawStat; }
+
 	float getFps() const;
 	float getAvgFps() const;
 	float getSpf() const; // in milliseconds
@@ -87,6 +91,7 @@ protected:
 
 	uint64_t _startTime = 0;
 	UpdateTime _time;
+	gl::DrawStat _drawStat;
 	bool _running = false;
 
 	Mutex _mutex;

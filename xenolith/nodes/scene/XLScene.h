@@ -103,6 +103,7 @@ protected:
 	std::unordered_map<uint64_t, Vector<Pair<MaterialInfo, gl::MaterialId>>> _materials;
 
 	Map<const gl::MaterialAttachment *, Vector<Rc<gl::Material>>> _pendingMaterials;
+	Rc<renderqueue::DependencyEvent> _materialDependency;
 };
 
 }

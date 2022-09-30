@@ -66,6 +66,11 @@ public:
 	virtual ~CommandList();
 	bool init(const Rc<PoolRef> &);
 
+	template <typename Callback>
+	void setStatCallback(Callback &&cb) {
+		*_statCallback = std::forward<Callback>(cb);
+	}
+
 	void pushVertexArray(Rc<VertexData> &&, const Mat4 &, SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel);
 
 	// data should be preallocated from frame's pool
@@ -80,6 +85,8 @@ public:
 	const Command *getFirst() const { return _first; }
 	const Command *getLast() const { return _last; }
 
+	void sendStat(const DrawStat &) const;
+
 protected:
 	void addCommand(Command *);
 
@@ -88,6 +95,7 @@ protected:
 	Command *_first = nullptr;
 	Command *_last = nullptr;
 	memory::vector<DrawStateValues> *_states = nullptr;
+	memory::function<void(DrawStat)> *_statCallback = nullptr;
 };
 
 }

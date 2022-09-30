@@ -181,6 +181,8 @@ protected:
 
 	virtual gl::SurfaceInfo getSurfaceOptions() const override;
 
+	virtual void finalize() override;
+
 	Rc<LinuxViewInterface> _view;
 	URect _rect;
 	String _name;

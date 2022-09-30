@@ -470,7 +470,6 @@ void Node::setTag(uint64_t tag) {
 	_tag = tag;
 }
 
-
 bool Node::addComponentItem(Component *com) {
 	XLASSERT(com != nullptr, "Argument must be non-nil");
 	XLASSERT(com->getOwner() == nullptr, "Component already added. It can't be added again");
@@ -992,15 +991,20 @@ bool Node::visitGeometry(RenderFrameInfo &info, NodeFlags parentFlags) {
 	}
 
 	NodeFlags flags = processParentFlags(info, parentFlags);
+	auto order = getLocalZOrder();
 
 	info.modelTransformStack.push_back(_modelViewTransform);
-	info.zPath.push_back(getLocalZOrder());
+	if (order != ZOrderTransparent) {
+		info.zPath.push_back(order);
+	}
 
 	for (auto &it : _children) {
 		it->visitGeometry(info, flags);
 	}
 
-	info.zPath.pop_back();
+	if (order != ZOrderTransparent) {
+		info.zPath.pop_back();
+	}
 	info.modelTransformStack.pop_back();
 
 	// on overload, we can update node's geometry after it's childrens
@@ -1014,11 +1018,14 @@ bool Node::visitDraw(RenderFrameInfo &info, NodeFlags parentFlags) {
 	}
 
 	NodeFlags flags = processParentFlags(info, parentFlags);
+	auto order = getLocalZOrder();
 
 	bool visibleByCamera = true;
 
 	info.modelTransformStack.push_back(_modelViewTransform);
-	info.zPath.push_back(getLocalZOrder());
+	if (order != ZOrderTransparent) {
+		info.zPath.push_back(order);
+	}
 
 	size_t i = 0;
 
@@ -1043,7 +1050,9 @@ bool Node::visitDraw(RenderFrameInfo &info, NodeFlags parentFlags) {
 		visitSelf(info, flags, visibleByCamera);
 	}
 
-	info.zPath.pop_back();
+	if (order != ZOrderTransparent) {
+		info.zPath.pop_back();
+	}
 	info.modelTransformStack.pop_back();
 
 	return true;
@@ -1124,9 +1133,8 @@ NodeFlags Node::processParentFlags(RenderFrameInfo &info, NodeFlags parentFlags)
 	}
 
 	if (_contentSizeDirty) {
-		_contentSizeDirty = false;
-
 		onContentSizeDirty();
+		_contentSizeDirty = false;
 		flags |= NodeFlags::ContentSizeDirty;
 	}
 
