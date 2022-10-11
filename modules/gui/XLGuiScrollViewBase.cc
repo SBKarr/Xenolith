@@ -46,7 +46,7 @@ bool ScrollViewBase::init(Layout layout) {
 	_listener->addPressRecognizer([this] (GestureEvent ev, const GesturePress &s) -> bool {
 		switch (ev) {
 		case GestureEvent::Began: return onPressBegin(s.pos); break;
-		case GestureEvent::Activated: return onLongPress(s.pos, s.time, s.count); break;
+		case GestureEvent::Activated: return onLongPress(s.pos, s.time, s.tickCount); break;
 		case GestureEvent::Ended: return onPressEnd(s.pos, s.time); break;
 		case GestureEvent::Cancelled: return onPressCancel(s.pos, s.time); break;
 		}

@@ -33,7 +33,7 @@ bool ScrollTest::init() {
 
 	_vertical = addChild(Rc<ScrollView>::create(ScrollView::Vertical));
 	_vertical->setAnchorPoint(Anchor::TopLeft);
-	_vertical->setIndicatorColor(Color::Black);
+	_vertical->setIndicatorColor(Color::White);
 	_vertical->enableScissor();
 	auto controller = _vertical->setController(Rc<ScrollController>::create());
 
@@ -41,7 +41,6 @@ bool ScrollTest::init() {
 		auto color = Color(Color::Tone(i), Color::Level::b500);
 		controller->addItem([this, color] (const ScrollController::Item &item) {
 			auto l = Rc<Layer>::create(color);
-			l->setVisible(false);
 			return l;
 		}, 128.0f);
 	}

@@ -204,10 +204,10 @@ VertexArray::Quad & VertexArray::Quad::drawUnderlineRect(int16_t charX, int16_t 
 	data[2].tex = Vec2(texRight, texTop);
 	data[3].tex = Vec2(texRight, texBottom);
 
-	data[0].object = font::CharLayout::getObjectId(0, 0, font::FontAnchor::BottomLeft);
-	data[1].object = font::CharLayout::getObjectId(0, 0, font::FontAnchor::TopLeft);
-	data[2].object = font::CharLayout::getObjectId(0, 0, font::FontAnchor::BottomRight);
-	data[3].object = font::CharLayout::getObjectId(0, 0, font::FontAnchor::TopRight);
+	data[0].object = font::CharLayout::getObjectId(font::CharLayout::SourceMax, 0, font::FontAnchor::BottomLeft);
+	data[1].object = font::CharLayout::getObjectId(font::CharLayout::SourceMax, 0, font::FontAnchor::TopLeft);
+	data[2].object = font::CharLayout::getObjectId(font::CharLayout::SourceMax, 0, font::FontAnchor::BottomRight);
+	data[3].object = font::CharLayout::getObjectId(font::CharLayout::SourceMax, 0, font::FontAnchor::TopRight);
 
 	return *this;
 }

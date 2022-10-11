@@ -258,13 +258,14 @@ bool GestureTouchRecognizer::renewEvent(const InputEvent &event, float density) 
 }
 
 
-bool GestureTapRecognizer::init(InputCallback &&cb, ButtonMask &&mask) {
+bool GestureTapRecognizer::init(InputCallback &&cb, ButtonMask &&mask, uint32_t maxTapCount) {
 	if (!GestureRecognizer::init()) {
 		return false;
 	}
 
 	if (cb) {
 		_maxEvents = 1;
+		_maxTapCount = maxTapCount;
 		_callback = move(cb);
 		_buttonMask = move(mask);
 		_eventMask.set(toInt(InputEventName::Begin));
@@ -307,6 +308,7 @@ bool GestureTapRecognizer::addEvent(const InputEvent &ev, float density) {
 			_gesture.count = count;
 			_gesture.time = time;
 		}
+		_gesture.id = ev.data.id;
 		_gesture.pos = ev.currentLocation;
 		return true;
 	}
@@ -343,7 +345,7 @@ void GestureTapRecognizer::registerTap() {
 	}
 
 	_gesture.time = currentTime;
-	if (_gesture.count == 2) {
+	if (_gesture.count == _maxTapCount) {
 		_event = GestureEvent::Activated;
 		if (_callback) {
 			_callback(_event, _gesture);
@@ -386,7 +388,7 @@ void GesturePressRecognizer::update(uint64_t dt) {
 		auto time = Time::now() - _lastTime;
 		if (_gesture.time.mksec() / _interval.mksec() != time.mksec() / _interval.mksec()) {
 			_gesture.time = time;
-			++ _gesture.count;
+			++ _gesture.tickCount;
 			_event = GestureEvent::Activated;
 			if (!_callback(_event, _gesture)) {
 				cancel();
@@ -694,6 +696,13 @@ bool GestureKeyRecognizer::canHandleEvent(const InputEvent &ev) const {
 		if (_keyMask.test(toInt(ev.data.key.keycode))) {
 			return true;
 		}
+	}
+	return false;
+}
+
+bool GestureKeyRecognizer::isKeyPressed(InputKeyCode code) const {
+	if (_pressedKeys.test(toInt(code))) {
+		return true;
 	}
 	return false;
 }

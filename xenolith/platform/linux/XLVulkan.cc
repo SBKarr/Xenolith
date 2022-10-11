@@ -96,20 +96,22 @@ Rc<gl::Instance> createInstance(Application *app) {
 
 	if constexpr (vk::s_enableValidationLayers) {
 #if DEBUG
-		for (const char *layerName : vk::s_validationLayers) {
-			bool layerFound = false;
+		if (app->getData().validation) {
+			for (const char *layerName : vk::s_validationLayers) {
+				bool layerFound = false;
 
-			for (const auto &layerProperties : s_InstanceAvailableLayers) {
-				if (strcmp(layerName, layerProperties.layerName) == 0) {
-					enableLayers.emplace_back(layerName);
-					layerFound = true;
-					break;
+				for (const auto &layerProperties : s_InstanceAvailableLayers) {
+					if (strcmp(layerName, layerProperties.layerName) == 0) {
+						enableLayers.emplace_back(layerName);
+						layerFound = true;
+						break;
+					}
 				}
-			}
 
-			if (!layerFound) {
-				log::format("Vk", "Required validation layer not found: %s", layerName);
-				return nullptr;
+				if (!layerFound) {
+					log::format("Vk", "Required validation layer not found: %s", layerName);
+					return nullptr;
+				}
 			}
 		}
 #endif

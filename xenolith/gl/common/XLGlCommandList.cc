@@ -24,13 +24,14 @@
 
 namespace stappler::xenolith::gl {
 
-Command *Command::create(memory::pool_t *p, CommandType t) {
+Command *Command::create(memory::pool_t *p, CommandType t, CommandFlags flags) {
 	auto commandSize = sizeof(Command);
 
 	auto bytes = memory::pool::palloc(p, commandSize);
 	auto c = new (bytes) Command;
 	c->next = nullptr;
 	c->type = t;
+	c->flags = flags;
 	switch (t) {
 	case CommandType::CommandGroup:
 		c->data = nullptr;
@@ -85,9 +86,9 @@ bool CommandList::init(const Rc<PoolRef> &pool) {
 }
 
 void CommandList::pushVertexArray(Rc<VertexData> &&vert, const Mat4 &t, SpanView<int16_t> zPath,
-		gl::MaterialId material, RenderingLevel level) {
+		gl::MaterialId material, RenderingLevel level, CommandFlags flags) {
 	_pool->perform([&] {
-		auto cmd = Command::create(_pool->getPool(), CommandType::VertexArray);
+		auto cmd = Command::create(_pool->getPool(), CommandType::VertexArray, flags);
 		auto cmdData = (CmdVertexArray *)cmd->data;
 
 		// pool memory is 16-bytes aligned, no problems with Mat4
@@ -112,9 +113,9 @@ void CommandList::pushVertexArray(Rc<VertexData> &&vert, const Mat4 &t, SpanView
 }
 
 void CommandList::pushVertexArray(SpanView<Pair<Mat4, Rc<VertexData>>> data, SpanView<int16_t> zPath,
-		gl::MaterialId material, RenderingLevel level) {
+		gl::MaterialId material, RenderingLevel level, CommandFlags flags) {
 	_pool->perform([&] {
-		auto cmd = Command::create(_pool->getPool(), CommandType::VertexArray);
+		auto cmd = Command::create(_pool->getPool(), CommandType::VertexArray, flags);
 		auto cmdData = (CmdVertexArray *)cmd->data;
 
 		cmdData->vertexes = data;
@@ -164,17 +165,5 @@ void CommandList::addCommand(Command *cmd) {
 	}
 	_last = cmd;
 }
-
-/*static void appendToBuffer(memory::pool_t *p, DrawBuffer &vec, BytesView b) {
-	// dirty hack with low-level stappler memory types to bypass safety validation
-	auto origSize = vec.size();
-	auto newSize = origSize + b.size();
-	auto newmem = max(newSize, vec.capacity() * 2);
-	auto alloc = DrawBuffer::allocator(p);
-	vec.grow_alloc(alloc, newmem);
-	memcpy(vec.data() + origSize, b.data(), b.size());
-	vec.set_size(newSize);
-}*/
-
 
 }

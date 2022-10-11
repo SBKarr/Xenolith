@@ -23,6 +23,7 @@
 #ifndef TEST_XENOLITH_SRC_XLAPPSCENE_H_
 #define TEST_XENOLITH_SRC_XLAPPSCENE_H_
 
+#include "AppTests.h"
 #include "XLUtilScene.h"
 #include "XLSprite.h"
 #include "XLLayer.h"
@@ -44,12 +45,12 @@ public:
 	virtual void onExit() override;
 	virtual void onContentSizeDirty() override;
 
+	void runLayout(LayoutName l, Rc<Node> &&);
+
+	void setActiveLayoutId(StringView, Value && = Value());
+
 protected:
 	Node *_layout = nullptr;
-	/*Layer *_layer = nullptr;
-	Sprite *_sprite = nullptr;
-	Sprite *_node1 = nullptr;
-	Sprite *_node2 = nullptr;*/
 };
 
 }

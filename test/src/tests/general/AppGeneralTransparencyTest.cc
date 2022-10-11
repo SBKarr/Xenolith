@@ -1,0 +1,104 @@
+/**
+ Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+ **/
+
+#include "AppGeneralTransparencyTest.h"
+#include "AppCheckbox.h"
+
+namespace stappler::xenolith::app {
+
+bool GeneralTransparencyTest::init() {
+	if (!LayoutTest::init(LayoutName::GeneralTransparencyTest, "Correct ordering: white, red, green, blue, teal. "
+			"Labels should be rendered as transparent (RenderingLevel::Transparent or RenderingLevel::Default) above "
+			"transparent objects. See result for default (RenderingLevel::Surface) with checkbox")) {
+		return false;
+	}
+
+	Color colors[5] = {
+		Color::Red_500,
+		Color::Green_500,
+		Color::White,
+		Color::Blue_500,
+		Color::Teal_500
+	};
+
+	int16_t indexes[5] = {
+		4, 3, 5, 2, 1
+	};
+
+	String strings[5] = {
+		"Red",
+		"Green",
+		"White",
+		"Blue",
+		"Teal"
+	};
+
+	for (size_t i = 0; i < 5; ++ i) {
+		_layers[i] = addChild(Rc<Layer>::create(), indexes[i]);
+		_layers[i]->setContentSize(Size2(300, 300));
+		_layers[i]->setColor(colors[i]);
+		_layers[i]->setOpacity(0.5f);
+		_layers[i]->setAnchorPoint(Anchor::Middle);
+
+		_labels[i] = addChild(Rc<Label>::create(), 10 + indexes[i]);
+		_labels[i]->setAnchorPoint(Anchor::Middle);
+		_labels[i]->setFontSize(28);
+		_labels[i]->setString(strings[i]);
+		_labels[i]->setRenderingLevel(RenderingLevel::Default);
+	}
+
+	_labelTransparentCheckbox = addChild(Rc<AppCheckboxWithLabel>::create("Label is surface", false, [this] (bool value) {
+		for (size_t i = 0; i < 5; ++ i) {
+			_labels[i]->setRenderingLevel(value ? RenderingLevel::Surface : RenderingLevel::Default);
+		}
+	}), Node::ZOrderMax);
+	_labelTransparentCheckbox->setAnchorPoint(Anchor::MiddleBottom);
+
+	return true;
+}
+
+void GeneralTransparencyTest::onContentSizeDirty() {
+	LayoutTest::onContentSizeDirty();
+
+	Vec2 center = _contentSize / 2.0f;
+
+	Vec2 positions[5] = {
+		center + Vec2(-100, -100),
+		center + Vec2(100, -100),
+		center,
+		center + Vec2(-100, 100),
+		center + Vec2(100, 100),
+	};
+
+	for (size_t i = 0; i < 5; ++ i) {
+		if (_layers[i]) {
+			_layers[i]->setPosition(positions[i]);
+		}
+		if (_labels[i]) {
+			_labels[i]->setPosition(positions[i]);
+		}
+	}
+
+	_labelTransparentCheckbox->setPosition(Vec2(_contentSize.width / 2.0f - 96.0f, 16.0f));
+}
+
+}

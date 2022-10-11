@@ -149,9 +149,9 @@ static void VectorCanvasPathDrawer_pushVertex(void *ptr, uint32_t idx, const Vec
 		Vec2(0.0f, 0.0f), out->material, 0
 	};
 
-	if constexpr (vg::Tesselator::TessVerbose != vg::VerboseFlag::None) {
+	/*if constexpr (vg::Tesselator::TessVerbose != vg::VerboseFlag::None) {
 		std::cout << "Vertex: " << idx << ": " << pt << "\n";
-	}
+	}*/
 }
 
 static void VectorCanvasPathDrawer_pushTriangle(void *ptr, uint32_t pt[3]) {
@@ -161,9 +161,9 @@ static void VectorCanvasPathDrawer_pushTriangle(void *ptr, uint32_t pt[3]) {
 	out->vertexes->indexes.emplace_back(pt[2]);
 	++ out->objects;
 
-	if constexpr (vg::Tesselator::TessVerbose != vg::VerboseFlag::None) {
+	/*if constexpr (vg::Tesselator::TessVerbose != vg::VerboseFlag::None) {
 		std::cout << "Face: " << pt[0] << " " << pt[1] << " " << pt[2] << "\n";
-	}
+	}*/
 }
 
 Rc<VectorCanvas> VectorCanvas::getInstance() {
@@ -412,6 +412,7 @@ void VectorCanvas::Data::saveCache() {
 
 uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const VectorPath &p, const Mat4 &transform,
 		gl::VertexData *out, bool cache) {
+	bool success = true;
 	path = &p;
 
 	float approxScale = 1.0f;
@@ -454,7 +455,9 @@ uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const VectorPath &p,
 			fillTess->setAntialiasValue(config::VGAntialiasFactor / approxScale);
 		}
 		fillTess->setWindingRule(path->getWindingRule());
-		fillTess->prepare(result);
+		if (!fillTess->prepare(result)) {
+			success = false;
+		}
 	}
 
 	if (strokeTess) {
@@ -463,7 +466,9 @@ uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const VectorPath &p,
 		}
 
 		strokeTess->setWindingRule(vg::Winding::NonZero);
-		strokeTess->prepare(result);
+		if (!strokeTess->prepare(result)) {
+			success = false;
+		}
 	}
 
 	out->data.resize(result.nvertexes);
@@ -487,6 +492,10 @@ uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const VectorPath &p,
 			target.color = Color4F(path->getStrokeColor());
 		}
 		strokeTess->write(result);
+	}
+
+	if (!success) {
+		std::cout << "Failed path:\n" << path->toString(true);
 	}
 
 	return target.objects;

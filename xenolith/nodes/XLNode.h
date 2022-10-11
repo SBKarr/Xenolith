@@ -234,6 +234,12 @@ public:
 	virtual bool addInputListenerItem(InputListener *);
 	virtual bool removeInputListener(InputListener *);
 
+	virtual StringView getName() const { return _name; }
+	virtual void setName(StringView str) { _name = str.str<Interface>(); }
+
+	virtual const Value &getDataValue() const { return _dataValue; }
+	virtual void setDataValue(Value &&val) { _dataValue = move(val); }
+
 	virtual uint64_t getTag() const { return _tag; }
 	virtual void setTag(uint64_t tag);
 
@@ -340,6 +346,9 @@ protected:
 	mutable bool _transformCacheDirty = true; // dynamic value
 	mutable bool _transformInverseDirty = true; // dynamic value
 	bool _transformDirty = true;
+
+	String _name;
+	Value _dataValue;
 
 	uint64_t _tag = InvalidTag;
 	int16_t _zOrder = 0;

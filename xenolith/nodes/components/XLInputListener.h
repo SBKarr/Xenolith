@@ -95,15 +95,16 @@ public:
 	bool handleEvent(const InputEvent &event);
 
 	GestureRecognizer *addTouchRecognizer(InputCallback<InputEvent> &&, ButtonMask && = makeButtonMask({InputMouseButton::Touch}));
-	GestureRecognizer *addTapRecognizer(InputCallback<GestureTap> &&, ButtonMask && = makeButtonMask({InputMouseButton::Touch}));
-	GestureRecognizer *addPressRecognizer(InputCallback<GesturePress> &&, TimeInterval interval, bool continuous = false,
-			ButtonMask && = makeButtonMask({InputMouseButton::Touch}));
+	GestureRecognizer *addTapRecognizer(InputCallback<GestureTap> &&, ButtonMask && = makeButtonMask({InputMouseButton::Touch}),
+			uint32_t maxTapCount = 2);
+	GestureRecognizer *addPressRecognizer(InputCallback<GesturePress> &&, TimeInterval interval = TapIntervalAllowed,
+			bool continuous = false, ButtonMask && = makeButtonMask({InputMouseButton::Touch}));
 	GestureRecognizer *addSwipeRecognizer(InputCallback<GestureSwipe> &&, float threshold = TapDistanceAllowed, bool sendThreshold = false,
 			ButtonMask && = makeButtonMask({InputMouseButton::Touch}));
 	GestureRecognizer *addScrollRecognizer(InputCallback<GestureScroll> &&);
 	GestureRecognizer *addMoveRecognizer(InputCallback<InputEvent> &&);
 
-	GestureRecognizer *addKeyRecognizer(InputCallback<InputEvent> &&, KeyMask && = KeyMask());
+	GestureKeyRecognizer *addKeyRecognizer(InputCallback<InputEvent> &&, KeyMask && = KeyMask());
 
 	void setPointerEnterCallback(Function<bool(bool)> &&);
 	void setBackgroudCallback(Function<bool(bool)> &&);

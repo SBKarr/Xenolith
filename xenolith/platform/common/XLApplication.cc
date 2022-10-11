@@ -48,22 +48,22 @@ Application *Application::getInstance() {
 }
 
 int Application::parseOptionString(Value &ret, const StringView &str, int argc, const char * argv[]) {
-	if (str.starts_with("w=") == 0) {
+	if (str.starts_with("w=")) {
 		auto s = str.sub(2).readInteger().get(0);
 		if (s > 0) {
 			ret.setInteger(s, "width");
 		}
-	} else if (str.starts_with("h=") == 0) {
+	} else if (str.starts_with("h=")) {
 		auto s = str.sub(2).readInteger().get(0);
 		if (s > 0) {
 			ret.setInteger(s, "height");
 		}
-	} else if (str.starts_with("d=") == 0) {
+	} else if (str.starts_with("d=")) {
 		auto s = str.sub(2).readDouble().get(0.0);
 		if (s > 0) {
 			ret.setDouble(s, "density");
 		}
-	} else if (str.starts_with("l=") == 0) {
+	} else if (str.starts_with("l=")) {
 		ret.setString(str.sub(2), "locale");
 	} else if (str == "phone") {
 		ret.setBool(true, "phone");
@@ -73,6 +73,8 @@ int Application::parseOptionString(Value &ret, const StringView &str, int argc, 
 		ret.setBool(true, "fixed");
 	} else if (str == "renderdoc") {
 		ret.setBool(true, "renderdoc");
+	} else if (str == "novalidation") {
+		ret.setBool(true, "novalidation");
 	}
 	return 1;
 }
@@ -211,6 +213,8 @@ int Application::run(Value &&data) {
 			_data.isFixed = it.second.getBool();
 		} else if (it.first == "renderdoc") {
 			_data.renderdoc = true;
+		} else if (it.first == "novalidation") {
+			_data.validation = false;
 		}
 	}
 
@@ -253,6 +257,10 @@ int Application::run(Value &&data) {
 		_fontLibrary = nullptr;
 
 		_glLoop->cancel();
+
+		// wait for views and threads finalization
+		platform::device::_sleep(100'000);
+
 		if (_glLoop->getReferenceCount() > 1) {
 			auto loop = _glLoop.get();
 			_glLoop = nullptr;

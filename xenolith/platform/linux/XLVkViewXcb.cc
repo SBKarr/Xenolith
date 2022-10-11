@@ -86,12 +86,38 @@ XcbView::XcbView(XcbLibrary *lib, ViewImpl *impl, StringView name, URect rect) {
 		auto versionCookie = _xcb->xcb_randr_query_version( _connection, XcbLibrary::RANDR_MAJOR_VERSION, XcbLibrary::RANDR_MINOR_VERSION);
 		if (auto versionReply = _xcb->xcb_randr_query_version_reply( _connection, versionCookie, nullptr)) {
 			if (versionReply->major_version == XcbLibrary::RANDR_MAJOR_VERSION) {
-				xcb_randr_get_screen_info_cookie_t screenInfoCookie =
-						_xcb->xcb_randr_get_screen_info_unchecked(_connection, _defaultScreen->root);
-				auto reply = _xcb->xcb_randr_get_screen_info_reply(_connection, screenInfoCookie, nullptr);
+				auto screenResCurrentCookie = _xcb->xcb_randr_get_screen_resources_current_unchecked(_connection, _defaultScreen->root);
+				auto screenResCookie = _xcb->xcb_randr_get_screen_resources_unchecked(_connection, _defaultScreen->root);
 
-				_rate = reply->rate;
+				auto replyCurrent = _xcb->xcb_randr_get_screen_resources_current_reply(_connection, screenResCurrentCookie, nullptr);
+				auto reply = _xcb->xcb_randr_get_screen_resources_reply(_connection, screenResCookie, nullptr);
 
+				auto modes = _xcb->xcb_randr_get_screen_resources_modes(reply);
+				auto nmodes = _xcb->xcb_randr_get_screen_resources_modes_length(reply);
+				while (nmodes > 0) {
+					double vTotal = modes->vtotal;
+
+					if (modes->mode_flags & XCB_RANDR_MODE_FLAG_DOUBLE_SCAN) {
+						/* doublescan doubles the number of lines */
+						vTotal *= 2;
+					}
+
+					if (modes->mode_flags & XCB_RANDR_MODE_FLAG_INTERLACE) {
+						/* interlace splits the frame into two fields */
+						/* the field rate is what is typically reported by monitors */
+						vTotal /= 2;
+					}
+
+					if (modes->htotal && vTotal) {
+						_rate = (uint16_t)floor((double) modes->dot_clock / ((double) modes->htotal * (double) vTotal));
+						break;
+					}
+
+					++ modes;
+					-- nmodes;
+				}
+
+				::free(replyCurrent);
 				::free(reply);
 			}
 
@@ -431,8 +457,8 @@ bool XcbView::poll(bool frameReady) {
 
 			String str;
 			string::utf8Encode(str, event.key.keychar);
-			// printf("Key pressed in window %d (%d) %04x '%s' %04x\n", ev->event, (int)ev->time, event.key.keysym,
-			// 		str.data(), event.key.keychar);
+			printf("Key pressed in window %d (%d) %04x '%s' %04x\n", ev->event, (int)ev->time, event.key.keysym,
+				str.data(), event.key.keychar);
 			break;
 		}
 		case XCB_KEY_RELEASE: {
@@ -477,8 +503,8 @@ bool XcbView::poll(bool frameReady) {
 
 			String str;
 			string::utf8Encode(str, event.key.keychar);
-			// printf("Key released in window %d (%d) %04x '%s' %04x\n", ev->event, (int)ev->time, event.key.keysym,
-			// 		str.data(), event.key.keychar);
+			printf("Key released in window %d (%d) %04x '%s' %04x\n", ev->event, (int)ev->time, event.key.keysym,
+					str.data(), event.key.keychar);
 			break;
 		}
 		case XCB_VISIBILITY_NOTIFY: {

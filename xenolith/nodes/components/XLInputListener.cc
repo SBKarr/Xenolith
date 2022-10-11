@@ -141,6 +141,10 @@ bool InputListener::canHandleEvent(const InputEvent &event) const {
 			return true;
 		}
 		for (auto &it : _recognizers) {
+			if (!_running || !_owner) {
+				break;
+			}
+
 			if (it->canHandleEvent(event)) {
 				return true;
 			}
@@ -158,6 +162,10 @@ bool InputListener::handleEvent(const InputEvent &event) {
 		}
 	}
 	for (auto &it : _recognizers) {
+		if (!_running || !_owner) {
+			break;
+		}
+
 		if (it->handleInputEvent(event, _density)) {
 			ret = true;
 		}
@@ -171,8 +179,8 @@ GestureRecognizer *InputListener::addTouchRecognizer(InputCallback<InputEvent> &
 	return _recognizers.emplace_back(move(rec)).get();
 }
 
-GestureRecognizer *InputListener::addTapRecognizer(InputCallback<GestureTap> &&cb, ButtonMask &&buttonMask) {
-	auto rec = Rc<GestureTapRecognizer>::create(move(cb), move(buttonMask));
+GestureRecognizer *InputListener::addTapRecognizer(InputCallback<GestureTap> &&cb, ButtonMask &&buttonMask, uint32_t maxTapCount) {
+	auto rec = Rc<GestureTapRecognizer>::create(move(cb), move(buttonMask), maxTapCount);
 	addEventMask(rec->getEventMask());
 	return _recognizers.emplace_back(move(rec)).get();
 }
@@ -202,10 +210,10 @@ GestureRecognizer *InputListener::addMoveRecognizer(InputCallback<InputEvent> &&
 	return _recognizers.emplace_back(move(rec)).get();
 }
 
-GestureRecognizer *InputListener::addKeyRecognizer(InputCallback<InputEvent> &&cb, KeyMask &&keys) {
+GestureKeyRecognizer *InputListener::addKeyRecognizer(InputCallback<InputEvent> &&cb, KeyMask &&keys) {
 	auto rec = Rc<GestureKeyRecognizer>::create(move(cb), move(keys));
 	addEventMask(rec->getEventMask());
-	return _recognizers.emplace_back(move(rec)).get();
+	return (GestureKeyRecognizer *)_recognizers.emplace_back(move(rec)).get();
 }
 
 void InputListener::setPointerEnterCallback(Function<bool(bool)> &&cb) {

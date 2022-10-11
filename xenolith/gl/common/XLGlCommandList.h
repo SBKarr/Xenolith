@@ -27,10 +27,17 @@
 
 namespace stappler::xenolith::gl {
 
-enum class CommandType {
+enum class CommandType : uint16_t {
 	CommandGroup,
 	VertexArray,
 };
+
+enum class CommandFlags : uint16_t {
+	None,
+	DoNotCount = 1 << 0
+};
+
+SP_DEFINE_ENUM_AS_MASK(CommandFlags)
 
 struct DrawStateValues {
 	renderqueue::DynamicState enabled = renderqueue::DynamicState::None;
@@ -52,12 +59,13 @@ struct CmdVertexArray {
 };
 
 struct Command {
-	static Command *create(memory::pool_t *, CommandType t);
+	static Command *create(memory::pool_t *, CommandType t, CommandFlags = CommandFlags::None);
 
 	void release();
 
 	Command *next;
 	CommandType type;
+	CommandFlags flags = CommandFlags::None;
 	void *data;
 };
 
@@ -71,10 +79,12 @@ public:
 		*_statCallback = std::forward<Callback>(cb);
 	}
 
-	void pushVertexArray(Rc<VertexData> &&, const Mat4 &, SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel);
+	void pushVertexArray(Rc<VertexData> &&, const Mat4 &, SpanView<int16_t> zPath, gl::MaterialId material,
+			RenderingLevel, CommandFlags = CommandFlags::None);
 
 	// data should be preallocated from frame's pool
-	void pushVertexArray(SpanView<Pair<Mat4, Rc<VertexData>>>, SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel);
+	void pushVertexArray(SpanView<Pair<Mat4, Rc<VertexData>>>, SpanView<int16_t> zPath, gl::MaterialId material,
+			RenderingLevel, CommandFlags = CommandFlags::None);
 
 	gl::StateId addState(DrawStateValues);
 	const DrawStateValues *getState(gl::StateId) const;

@@ -93,4 +93,33 @@ void AppSlider::updateValue() {
 	_foreground->setContentSize(Size2(_contentSize.width * _value, _contentSize.height));
 }
 
+
+bool AppSliderWithLabel::init(StringView title, float value, Function<void(float)> &&cb) {
+	if (!AppSlider::init(value, move(cb))) {
+		return false;
+	}
+
+	_label = addChild(Rc<Label>::create());
+	_label->setFontSize(24);
+	_label->setAnchorPoint(Anchor::MiddleLeft);
+	_label->setString(title);
+
+	return true;
+}
+
+void AppSliderWithLabel::onContentSizeDirty() {
+	AppSlider::onContentSizeDirty();
+
+	_label->setPosition(Vec2(_contentSize.width + 16.0f, _contentSize.height / 2.0f));
+}
+
+void AppSliderWithLabel::setString(StringView str) {
+	_label->setString(str);
+}
+
+StringView AppSliderWithLabel::getString() const {
+	return _label->getString8();
+}
+
+
 }

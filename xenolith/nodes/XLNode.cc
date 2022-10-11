@@ -729,6 +729,16 @@ void Node::cleanup() {
 	for (auto &child : _children) {
 		child->cleanup();
 	}
+
+	this->removeAllComponents();
+
+	for (auto &it : _inputEvents) {
+		if (this->isRunning()) {
+			it->onExit();
+		}
+		it->setOwner(nullptr);
+	}
+	_inputEvents.clear();
 }
 
 Rect Node::getBoundingBox() const {

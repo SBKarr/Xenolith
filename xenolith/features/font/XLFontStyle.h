@@ -218,6 +218,11 @@ struct Metrics final {
 };
 
 struct CharLayout final {
+	static constexpr uint32_t CharMask = 0x0000FFFFU;
+	static constexpr uint32_t AnchorMask = 0x00030000U;
+	static constexpr uint32_t SourceMask = 0xFFFC0000U;
+	static constexpr uint32_t SourceMax = (SourceMask >> 18);
+
 	static uint32_t getObjectId(uint16_t sourceId, char16_t, FontAnchor);
 	static uint32_t getObjectId(uint32_t, FontAnchor);
 	static FontAnchor getAnchorForObject(uint32_t);

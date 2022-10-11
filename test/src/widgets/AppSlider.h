@@ -54,6 +54,21 @@ protected:
 	InputListener *_input = nullptr;
 };
 
+class AppSliderWithLabel : public AppSlider {
+public:
+	virtual ~AppSliderWithLabel() { }
+
+	virtual bool init(StringView, float, Function<void(float)> &&);
+
+	virtual void onContentSizeDirty() override;
+
+	virtual void setString(StringView);
+	virtual StringView getString() const;
+
+protected:
+	Label *_label = nullptr;
+};
+
 }
 
 #endif /* TEST_SRC_WIDGETS_APPSLIDER_H_ */

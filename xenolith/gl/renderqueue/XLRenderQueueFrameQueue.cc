@@ -357,6 +357,11 @@ void FrameQueue::onAttachmentAcquire(FrameAttachmentData &attachment) {
 			attachment.image = _loop->acquireImage(img, attachment.extent);
 		}
 
+		if (!attachment.image) {
+			invalidate(attachment);
+			return;
+		}
+
 		_autorelease.emplace_front(attachment.image);
 		if (attachment.image->getSignalSem()) {
 			_autorelease.emplace_front(attachment.image->getSignalSem());

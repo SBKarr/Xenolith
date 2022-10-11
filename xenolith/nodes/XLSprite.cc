@@ -220,6 +220,13 @@ void Sprite::setAutofitPosition(const Vec2 &vec) {
 	}
 }
 
+void Sprite::setSamplerIndex(uint16_t idx) {
+	if (_samplerIdx != idx) {
+		_samplerIdx = idx;
+		_materialDirty = true;
+	}
+}
+
 void Sprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 	auto &modelTransform = frame.modelTransformStack.back();
 	if (_normalized) {
@@ -229,10 +236,10 @@ void Sprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 		newMV.m[14] = floorf(modelTransform.m[14]);
 
 		frame.commands->pushVertexArray(_vertexes.dup(),
-				frame.viewProjectionStack.back() * newMV, frame.zPath, _materialId, _realRenderingLevel);
+				frame.viewProjectionStack.back() * newMV, frame.zPath, _materialId, _realRenderingLevel, _commandFlags);
 	} else {
 		frame.commands->pushVertexArray(_vertexes.dup(),
-				frame.viewProjectionStack.back() * modelTransform, frame.zPath, _materialId, _realRenderingLevel);
+				frame.viewProjectionStack.back() * modelTransform, frame.zPath, _materialId, _realRenderingLevel, _commandFlags);
 	}
 }
 
@@ -240,6 +247,7 @@ MaterialInfo Sprite::getMaterialInfo() const {
 	MaterialInfo ret;
 	ret.type = gl::MaterialType::Basic2D;
 	ret.images[0] = _texture->getIndex();
+	ret.samplers[0] = _samplerIdx;
 	ret.colorModes[0] = _colorMode;
 	ret.pipeline = _materialInfo;
 	return ret;

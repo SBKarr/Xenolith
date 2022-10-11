@@ -20,14 +20,44 @@
  THE SOFTWARE.
  **/
 
-#include "AppMenu.h"
+#ifndef TEST_SRC_TESTS_VG_APPVGICONLIST_H_
+#define TEST_SRC_TESTS_VG_APPVGICONLIST_H_
 
-AppMenu::AppMenu() {
-	// TODO Auto-generated constructor stub
+#include "AppLayoutTest.h"
+#include "XLGuiScrollView.h"
+
+namespace stappler::xenolith::app {
+
+class VgIconListPopup : public Layer {
+public:
+	virtual ~VgIconListPopup() { }
+
+	virtual bool init() override;
+
+	virtual void onContentSizeDirty() override;
+
+	void setString(StringView);
+
+protected:
+	Label *_label = nullptr;
+};
+
+class VgIconList : public LayoutTest {
+public:
+	virtual ~VgIconList() { }
+
+	virtual bool init();
+
+	virtual void onContentSizeDirty() override;
+
+protected:
+	bool rebuildScroll(ScrollController *);
+	void updatePopupLocation(const Vec2 &);
+
+	ScrollView *_scrollView = nullptr;
+	VgIconListPopup *_popup = nullptr;
+};
 
 }
 
-AppMenu::~AppMenu() {
-	// TODO Auto-generated destructor stub
-}
-
+#endif /* TEST_SRC_TESTS_VG_APPVGICONLIST_H_ */

@@ -23,55 +23,21 @@
 #ifndef TEST_SRC_ROOT_APPROOTLAYOUT_H_
 #define TEST_SRC_ROOT_APPROOTLAYOUT_H_
 
-#include "XLLayer.h"
-#include "XLLabel.h"
-#include "XLVectorSprite.h"
-#include "XLIconNames.h"
-
-#include "AppSlider.h"
-#include "AppCheckbox.h"
+#include "AppLayoutMenu.h"
+#include "XLGuiScrollView.h"
 
 namespace stappler::xenolith::app {
 
-class RootLayout : public Node {
+class RootLayout : public LayoutMenu {
 public:
 	virtual ~RootLayout() { }
 
 	virtual bool init() override;
 
-	virtual void onContentSizeDirty() override;
-
-	virtual void update(const UpdateTime &) override;
-
 protected:
-	void updateIcon(IconName);
-	void updateQualityValue(float);
-	void updateScaleValue(float);
-	void updateAntialiasValue(bool);
+	virtual void makeScrollList(ScrollController *, const Vector<MenuData> &) override;
 
-	// Action_gavel_solid
-	// IconName::Av_queue_music_outline
-	IconName _currentName = IconName::Action_text_rotate_vertical_solid;
-
-	Label *_label = nullptr;
-	Label *_info = nullptr;
-	Node *_spriteLayer = nullptr;
-	VectorSprite *_sprite = nullptr;
-	VectorSprite *_triangles = nullptr;
-
-	Label *_qualityLabel = nullptr;
-	AppSlider *_qualitySlider = nullptr;
-
-	Label *_scaleLabel = nullptr;
-	AppSlider *_scaleSlider = nullptr;
-
-	Label *_visibleLabel = nullptr;
-	AppCheckbox *_visibleCheckbox = nullptr;
-
-	Label *_antialiasLabel = nullptr;
-	AppCheckbox *_antialiasCheckbox = nullptr;
-
-	bool _antialias = false;
+	ScrollView *_scrollView = nullptr;
 };
 
 }

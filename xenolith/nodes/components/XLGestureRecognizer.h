@@ -59,13 +59,13 @@ struct GesturePress {
 	uint32_t id = maxOf<uint32_t>();
 	TimeInterval limit;
 	TimeInterval time;
-	int count = 0;
+	uint32_t tickCount = 0;
 
     void cleanup() {
 		id = maxOf<uint32_t>();
 		limit.clear();
 		time.clear();
-		count = 0;
+		tickCount = 0;
     }
 };
 
@@ -111,6 +111,7 @@ enum class GestureEvent {
 	Activated,
 	Moved = Activated,
 	OnLongPress = Activated,
+	Repeat = Activated,
 
 	/** Action was successfully ended, no recognition errors was occurred */
 	Ended,
@@ -188,7 +189,7 @@ public:
 
 	virtual ~GestureTapRecognizer() { }
 
-	virtual bool init(InputCallback &&, ButtonMask &&);
+	virtual bool init(InputCallback &&, ButtonMask &&, uint32_t maxTapCount);
 
 	virtual void update(uint64_t dt) override;
 	virtual void cancel() override;
@@ -202,6 +203,7 @@ protected:
 
 	GestureTap _gesture;
 	InputCallback _callback;
+	uint32_t _maxTapCount = 2;
 };
 
 class GesturePressRecognizer : public GestureRecognizer {
@@ -297,6 +299,8 @@ public:
 	virtual bool init(InputCallback &&, KeyMask &&);
 
 	virtual bool canHandleEvent(const InputEvent &) const override;
+
+	bool isKeyPressed(InputKeyCode) const;
 
 protected:
 	virtual bool addEvent(const InputEvent &, float density) override;

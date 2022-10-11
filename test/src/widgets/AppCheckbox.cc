@@ -22,6 +22,7 @@
 
 #include "AppCheckbox.h"
 #include "XLInputListener.h"
+#include "XLLabel.h"
 
 namespace stappler::xenolith::app {
 
@@ -34,6 +35,7 @@ bool AppCheckbox::init(bool value, Function<void(bool)> &&cb) {
 	_callback = move(cb);
 
 	setColor(_backgroundColor);
+	setContentSize(Size2(32.0f, 32.0f));
 
 	_input = addInputListener(Rc<InputListener>::create());
 	_input->addTapRecognizer([this] (GestureEvent ev, const GestureTap &data) {
@@ -92,6 +94,25 @@ void AppCheckbox::updateValue() {
 	} else {
 		setColor(_backgroundColor);
 	}
+}
+
+bool AppCheckboxWithLabel::init(StringView title, bool value, Function<void(bool)> &&cb) {
+	if (!AppCheckbox::init(value, move(cb))) {
+		return false;
+	}
+
+	_label = addChild(Rc<Label>::create());
+	_label->setFontSize(24);
+	_label->setAnchorPoint(Anchor::MiddleLeft);
+	_label->setString(title);
+
+	return true;
+}
+
+void AppCheckboxWithLabel::onContentSizeDirty() {
+	AppCheckbox::onContentSizeDirty();
+
+	_label->setPosition(Vec2(_contentSize.width + 16.0f, _contentSize.height / 2.0f));
 }
 
 }

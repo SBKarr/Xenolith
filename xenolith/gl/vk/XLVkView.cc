@@ -113,7 +113,7 @@ void View_writeImageTransfer(Device &dev, VkCommandBuffer buf, const Rc<Image> &
 }
 
 View::~View() {
-	_thread.join();
+	//_thread.join();
 }
 
 bool View::init(Loop &loop, Device &dev, gl::ViewInfo &&info) {
@@ -281,6 +281,8 @@ void View::onRemoved() {
 	std::unique_lock<Mutex> lock(_mutex);
 	_running = false;
 	_callbacks.clear();
+	lock.unlock();
+	_thread.join();
 }
 
 void View::deprecateSwapchain() {
@@ -705,6 +707,10 @@ void View::runWithSwapchainImage(Rc<ImageStorage> &&image) {
 
 void View::runScheduledPresent(Rc<SwapchainImage> &&object) {
 	_loop->performOnGlThread([this, object = move(object)] () mutable {
+		if (!_loop->isRunning()) {
+			return;
+		}
+
 		_device->acquireQueue(QueueOperations::Present, *(Loop *)_loop.get(),
 				[this, object = move(object)] (Loop &, const Rc<DeviceQueue> &queue) mutable {
 			performOnThread([this, queue, object = move(object)] () mutable {

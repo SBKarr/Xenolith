@@ -22,13 +22,14 @@
 
 #include "XLUtilScene.h"
 #include "XLLabel.h"
+#include "XLLayer.h"
 #include "XLDirector.h"
 #include "XLApplication.h"
 #include "XLFontLibrary.h"
 
 namespace stappler::xenolith {
 
-class FpsDisplay : public Node {
+class FpsDisplay : public Layer {
 public:
 	virtual ~FpsDisplay() { }
 
@@ -41,12 +42,12 @@ protected:
 };
 
 bool FpsDisplay::init(font::FontController *fontController) {
-	if (!Node::init()) {
+	if (!Layer::init(Color::White)) {
 		return false;
 	}
 
 	if (fontController) {
-		_label = addChild(Rc<Label>::create(fontController), maxOf<int16_t>());
+		_label = addChild(Rc<Label>::create(fontController), Node::ZOrderMax);
 		_label->setString("0.0\n0.0\n0.0\n0 0 0 0");
 		_label->setFontFamily("monospace");
 		_label->setAnchorPoint(Anchor::BottomLeft);
@@ -55,12 +56,13 @@ bool FpsDisplay::init(font::FontController *fontController) {
 		_label->setOnContentSizeDirtyCallback([this] {
 			setContentSize(_label->getContentSize());
 		});
+		_label->addCommandFlags(gl::CommandFlags::DoNotCount);
 	}
 
+	addCommandFlags(gl::CommandFlags::DoNotCount);
 	scheduleUpdate();
-	setVisible(false);
 
-	 return true;
+	return true;
 }
 
 void FpsDisplay::update(const UpdateTime &) {
@@ -72,7 +74,7 @@ void FpsDisplay::update(const UpdateTime &) {
 
 		if (_label) {
 			auto str = toString(std::setprecision(3), fps, "\n", spf, "\n", local, "\n",
-					stat.vertexes, " ", stat.triangles, " ", stat.zPaths, " ", stat.drawCalls);
+					stat.vertexes, " ", stat.triangles, " ", stat.zPaths, " ", stat.drawCalls, "\nPress F12\n to switch");
 			_label->setString(str);
 		}
 		++ _frames;
@@ -85,8 +87,6 @@ bool UtilScene::init(Application *app, RenderQueue::Builder &&builder) {
 	}
 
 	initialize(app);
-
-	scheduleUpdate();
 
 	return true;
 }
@@ -122,7 +122,15 @@ bool UtilScene::isFpsVisible() const {
 }
 
 void UtilScene::initialize(Application *app) {
-	_fps = addChild(Rc<FpsDisplay>::create(app->getFontController()), maxOf<int16_t>());
+	_fps = addChild(Rc<FpsDisplay>::create(app->getFontController()), Node::ZOrderMax);
+
+	auto l = addInputListener(Rc<InputListener>::create());
+	l->addKeyRecognizer([this] (GestureEvent ev, const InputEvent &) {
+		if (ev == GestureEvent::Ended) {
+			_fps->setVisible(!_fps->isVisible());
+		}
+		return true;
+	}, InputListener::makeKeyMask({InputKeyCode::F12}));
 }
 
 }

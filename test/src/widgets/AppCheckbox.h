@@ -53,6 +53,18 @@ protected:
 	InputListener *_input = nullptr;
 };
 
+class AppCheckboxWithLabel : public AppCheckbox {
+public:
+	virtual ~AppCheckboxWithLabel() { }
+
+	virtual bool init(StringView, bool, Function<void(bool)> &&);
+
+	virtual void onContentSizeDirty() override;
+
+protected:
+	Label *_label = nullptr;
+};
+
 }
 
 #endif /* TEST_SRC_WIDGETS_APPCHECKBOX_H_ */

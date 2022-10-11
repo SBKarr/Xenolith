@@ -275,7 +275,7 @@ void RenderFontAttachmentHandle::writeAtlasData(FrameHandle &handle) {
 			_bufferData[_bufferData.size() - 1] = VkBufferImageCopy({
 				VkDeviceSize(offset),
 				uint32_t(0),
-				uint32_t( font::CharLayout::getObjectId(0, char16_t(0), font::FontAnchor::BottomLeft)),
+				uint32_t( font::CharLayout::getObjectId(font::CharLayout::SourceMax, char16_t(0), font::FontAnchor::BottomLeft)),
 				VkImageSubresourceLayers({VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}),
 				VkOffset3D({0, 0, 0}),
 				VkExtent3D({1, 1, 1})

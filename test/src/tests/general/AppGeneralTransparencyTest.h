@@ -20,13 +20,27 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_MENU_APPMENU_H_
-#define TEST_SRC_MENU_APPMENU_H_
+#ifndef TEST_SRC_TESTS_GENERAL_APPGENERALTRANSPARENCYTEST_H_
+#define TEST_SRC_TESTS_GENERAL_APPGENERALTRANSPARENCYTEST_H_
 
-class AppMenu {
+#include "AppLayoutTest.h"
+
+namespace stappler::xenolith::app {
+
+class GeneralTransparencyTest : public LayoutTest {
 public:
-	AppMenu();
-	virtual ~AppMenu();
+	virtual ~GeneralTransparencyTest() { }
+
+	virtual bool init() override;
+
+	virtual void onContentSizeDirty() override;
+
+protected:
+	Layer *_layers[5] = { nullptr };
+	Label *_labels[5] = { nullptr };
+	Node *_labelTransparentCheckbox = nullptr;
 };
 
-#endif /* TEST_SRC_MENU_APPMENU_H_ */
+}
+
+#endif /* TEST_SRC_TESTS_GENERAL_APPGENERALTRANSPARENCYTEST_H_ */

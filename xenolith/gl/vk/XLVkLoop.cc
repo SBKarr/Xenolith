@@ -502,6 +502,8 @@ bool Loop::worker() {
 	}
 
 	memory::pool::destroy(pool);
+
+	_running.store(false);
 	return false;
 }
 
@@ -624,6 +626,10 @@ auto Loop::makeFrame(Rc<FrameRequest> &&req, uint64_t gen) -> Rc<FrameHandle> {
 }
 
 Rc<gl::Framebuffer> Loop::acquireFramebuffer(const PassData *data, SpanView<Rc<gl::ImageView>> views, Extent2 e) {
+	if (!_running.load()) {
+		return nullptr;
+	}
+
 	return _frameCache->acquireFramebuffer(data, views, e);
 }
 
@@ -632,6 +638,10 @@ void Loop::releaseFramebuffer(Rc<gl::Framebuffer> &&fb) {
 }
 
 auto Loop::acquireImage(const ImageAttachment *a, Extent3 e) -> Rc<ImageStorage> {
+	if (!_running.load()) {
+		return nullptr;
+	}
+
 	gl::ImageInfo info = a->getInfo();
 	info.extent = e;
 	if (a->isTransient()) {

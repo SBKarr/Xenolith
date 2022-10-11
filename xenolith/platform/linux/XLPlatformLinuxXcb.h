@@ -122,6 +122,22 @@ public:
 	uint16_t * (* xcb_randr_refresh_rates_rates) (const xcb_randr_refresh_rates_t *) = nullptr;
 	int (* xcb_randr_refresh_rates_rates_length) (const xcb_randr_refresh_rates_t *) = nullptr;
 
+	xcb_randr_get_screen_resources_cookie_t (* xcb_randr_get_screen_resources) (
+			xcb_connection_t *c, xcb_window_t window) = nullptr;
+	xcb_randr_get_screen_resources_cookie_t (* xcb_randr_get_screen_resources_unchecked) (
+			xcb_connection_t *c, xcb_window_t window) = nullptr;
+	xcb_randr_get_screen_resources_reply_t * (* xcb_randr_get_screen_resources_reply) (
+			xcb_connection_t *c, xcb_randr_get_screen_resources_cookie_t cookie, xcb_generic_error_t **e) = nullptr;
+	xcb_randr_mode_info_t * (* xcb_randr_get_screen_resources_modes) (const xcb_randr_get_screen_resources_reply_t *R) = nullptr;
+	int (* xcb_randr_get_screen_resources_modes_length) (const xcb_randr_get_screen_resources_reply_t *R) = nullptr;
+
+	xcb_randr_get_screen_resources_current_cookie_t (* xcb_randr_get_screen_resources_current) (
+			xcb_connection_t *c, xcb_window_t window) = nullptr;
+	xcb_randr_get_screen_resources_current_cookie_t (* xcb_randr_get_screen_resources_current_unchecked) (
+			xcb_connection_t *c, xcb_window_t window) = nullptr;
+	xcb_randr_get_screen_resources_current_reply_t * (* xcb_randr_get_screen_resources_current_reply) (
+			xcb_connection_t *c, xcb_randr_get_screen_resources_current_cookie_t cookie, xcb_generic_error_t **e) = nullptr;
+
 	xcb_key_symbols_t * (* xcb_key_symbols_alloc) (xcb_connection_t *c) = nullptr;
 	void (* xcb_key_symbols_free) (xcb_key_symbols_t *syms) = nullptr;
 

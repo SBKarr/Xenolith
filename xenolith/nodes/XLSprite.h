@@ -34,6 +34,9 @@ class Sprite : public DynamicStateNode {
 public:
 	using Autofit = font::Autofit;
 
+	static constexpr uint16_t SamplerIndexDefaultFilterNearest = 0;
+	static constexpr uint16_t SamplerIndexDefaultFilterLinear = 1;
+
 	Sprite();
 	virtual ~Sprite() { }
 
@@ -78,6 +81,21 @@ public:
 	virtual void setAutofitPosition(const Vec2 &);
 	virtual const Vec2 &getAutofitPosition() const { return _autofitPos; }
 
+	/** Семплеры определяются во время старта цикла графики (gl::Loop) и неизменны в последствии
+	 * По умолчанию, семплер с индексом 0 использует фильтр nearest, 1 - linear.
+	 * Разработчики приложений могут определять свою схему для семплеров,
+	 * но рекомендуем следовать соглашению в отношении 0 и 1
+	 *
+	 * Если семплер с указанным индексом не определён в движке - поведение не определено
+	 */
+	virtual void setSamplerIndex(uint16_t);
+	virtual uint16_t getSamplerIndex() const { return _samplerIdx; }
+
+	virtual void setCommandFlags(gl::CommandFlags flags) { _commandFlags = flags; }
+	virtual void addCommandFlags(gl::CommandFlags flags) { _commandFlags |= flags; }
+	virtual void removeCommandFlags(gl::CommandFlags flags) { _commandFlags &= ~flags; }
+	virtual gl::CommandFlags getCommandFlags() const { return _commandFlags; }
+
 protected:
 	virtual void pushCommands(RenderFrameInfo &, NodeFlags flags);
 
@@ -101,6 +119,7 @@ protected:
 	Rc<Texture> _texture;
 	VertexArray _vertexes;
 
+	uint16_t _samplerIdx = 0;
 	bool _flippedX = false;
 	bool _flippedY = false;
 	bool _rotated = false;
@@ -116,6 +135,7 @@ protected:
 	RenderingLevel _renderingLevel = RenderingLevel::Default;
 	RenderingLevel _realRenderingLevel = RenderingLevel::Default;
 	uint64_t _materialId = 0;
+	gl::CommandFlags _commandFlags;
 
 	bool _materialDirty = true;
 	bool _normalized = false;

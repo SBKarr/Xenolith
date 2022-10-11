@@ -20,37 +20,26 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_ROOT_APPZORDERTEST_H_
-#define TEST_SRC_ROOT_APPZORDERTEST_H_
+#ifndef TEST_SRC_TESTS_GENERAL_APPGENERALAUTOFITTEST_H_
+#define TEST_SRC_TESTS_GENERAL_APPGENERALAUTOFITTEST_H_
 
-#include "XLLayer.h"
-#include "XLLabel.h"
+#include "AppLayoutTest.h"
 
 namespace stappler::xenolith::app {
 
-class ZOrderTest : public Node {
+class GeneralAutofitTest : public LayoutTest {
 public:
-	virtual ~ZOrderTest() { }
+	virtual ~GeneralAutofitTest() { }
 
 	virtual bool init() override;
 
 	virtual void onContentSizeDirty() override;
 
-	virtual void update(const UpdateTime &) override;
-
 protected:
-	void handleClick(const Vec2 &);
-
-	Layer *_background = nullptr;
-	Sprite *_logo = nullptr;
-
-	Layer *_layers[5] = { nullptr };
-	Label *_label = nullptr;
-	Label *_label2 = nullptr;
-
-	Layer *_cursor = nullptr;
+	Node *_nodeAutofit = nullptr;
+	Node *_nodeResize = nullptr;
 };
 
 }
 
-#endif /* TEST_SRC_ROOT_APPZORDERTEST_H_ */
+#endif /* TEST_SRC_TESTS_GENERAL_APPGENERALAUTOFITTEST_H_ */

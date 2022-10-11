@@ -372,6 +372,7 @@ bool Device::acquireQueue(QueueOperations ops, Loop &loop, Function<void(Loop &,
 	}
 
 	lock.unlock();
+
 	if (queue) {
 		XL_VKDEVICE_LOG("acquireQueue ", family->index, " (", family->count, ") ", getQueueOperationsDesc(family->ops));
 		acquire(loop, queue);

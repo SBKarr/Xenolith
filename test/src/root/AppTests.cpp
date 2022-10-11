@@ -21,6 +21,10 @@
  **/
 
 #include "XLDefine.h"
+#include "AppTests.h"
+#include "AppGeneralUpdateTest.h"
+#include "AppGeneralZOrderTest.h"
+#include "AppGeneralLabelTest.h"
 
 #include "AppRootLayout.cc"
 #include "AppAutofitTest.cc"

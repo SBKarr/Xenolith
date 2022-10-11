@@ -20,8 +20,7 @@
  THE SOFTWARE.
  **/
 
-#include "AppZOrderTest.h"
-
+#include "AppZOrderTest2.h"
 #include "XLDefine.h"
 #include "XLTestAppDelegate.h"
 #include "XLInputListener.h"

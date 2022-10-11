@@ -214,7 +214,8 @@ void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 		}
 	}
 
-	frame.commands->pushVertexArray(makeSpanView(tmpData, targetData.size()), frame.zPath, _materialId, _realRenderingLevel);
+	frame.commands->pushVertexArray(makeSpanView(tmpData, targetData.size()), frame.zPath,
+			_materialId, _realRenderingLevel, _commandFlags);
 }
 
 void VectorSprite::initVertexes() {

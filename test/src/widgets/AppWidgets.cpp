@@ -23,4 +23,7 @@
 #include "XLDefine.h"
 
 #include "AppCheckbox.cc"
+#include "AppLayoutMenu.cc"
+#include "AppLayoutMenuItem.cc"
+#include "AppLayoutTest.cc"
 #include "AppSlider.cc"

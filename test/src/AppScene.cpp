@@ -120,9 +120,12 @@ static void AppScene_makeRenderQueue(Application *app, renderqueue::Queue::Build
 
 	// define internal resources (images and buffers)
 	gl::Resource::Builder resourceBuilder("LoaderResources");
-	auto initImage = resourceBuilder.addImage("Xenolith.png",
+	resourceBuilder.addImage("xenolith-1-480.png",
 			gl::ImageInfo(gl::ImageFormat::R8G8B8A8_UNORM, gl::ImageUsage::Sampled, gl::ImageHints::Opaque),
-			FilePath("resources/xenolith-1.png"));
+			FilePath("resources/xenolith-1-480.png"));
+	resourceBuilder.addImage("xenolith-2-480.png",
+			gl::ImageInfo(gl::ImageFormat::R8G8B8A8_UNORM, gl::ImageUsage::Sampled, gl::ImageHints::Opaque),
+			FilePath("resources/xenolith-2-480.png"));
 
 	builder.setInternalResource(Rc<gl::Resource>::create(move(resourceBuilder)));
 
@@ -171,9 +174,6 @@ static void AppScene_makeRenderQueue(Application *app, renderqueue::Queue::Build
 
 		// ... with predefined list of materials
 		Vector<Rc<gl::Material>>({
-			Rc<gl::Material>::create(materialPipeline, initImage),
-			Rc<gl::Material>::create(transparentPipeline, initImage),
-			Rc<gl::Material>::create(surfacePipeline, initImage),
 			Rc<gl::Material>::create(materialPipeline, cache->getEmptyImage(), ColorMode::IntensityChannel),
 			Rc<gl::Material>::create(materialPipeline, cache->getSolidImage(), ColorMode::IntensityChannel),
 			Rc<gl::Material>::create(transparentPipeline, cache->getEmptyImage(), ColorMode()),
@@ -230,16 +230,21 @@ bool AppScene::init(Application *app, Extent2 extent) {
 		return false;
 	}
 
-	// _layout = addChild(Rc<AutofitTest>::create());
-	// _layout = addChild(Rc<VectorTest>::create());
-	//_layout = addChild(Rc<RootLayout>::create());
-	_layout = addChild(Rc<ScrollTest>::create());
-	// _sprite = addChild(Rc<Sprite>::create("Xenolith.png"));
+	filesystem::mkdir(filesystem::cachesPath<Interface>());
 
-	/*_node1 = addChild(Rc<Sprite>::create());
-	_node1->setColor(Color::Teal_400);*/
+	auto dataPath = filesystem::cachesPath<Interface>("org.stappler.xenolith.test.AppScene.cbor");
+	if (auto d = data::readFile<Interface>(dataPath)) {
+		auto layoutName = getLayoutNameById(d.getString("id"));
 
-	//_node2 = addChild(Rc<test::NetworkTestSprite>::create());
+		_layout = addChild(makeLayoutNode(layoutName));
+		if (!d.getValue("data").empty()) {
+			_layout->setDataValue(move(d.getValue("data")));
+		}
+	}
+
+	if (!_layout) {
+		_layout = addChild(Rc<RootLayout>::create());
+	}
 
 	scheduleUpdate();
 
@@ -276,6 +281,26 @@ void AppScene::onContentSizeDirty() {
 		_layout->setPosition(_contentSize / 2.0f);
 		_layout->setContentSize(_contentSize);
 	}
+}
+
+void AppScene::runLayout(LayoutName l, Rc<Node> &&node) {
+	if (_layout) {
+		_layout->removeFromParent(true);
+		_layout = nullptr;
+	}
+
+	_layout = addChild(move(node));
+	_contentSizeDirty = true;
+}
+
+void AppScene::setActiveLayoutId(StringView name, Value &&data) {
+	Value sceneData({
+		pair("id", Value(name)),
+		pair("data", Value(move(data)))
+	});
+
+	auto path = filesystem::cachesPath<Interface>("org.stappler.xenolith.test.AppScene.cbor");
+	data::save(sceneData, path, data::EncodeFormat::CborCompressed);
 }
 
 }

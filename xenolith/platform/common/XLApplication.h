@@ -60,6 +60,7 @@ public:
 		float density = 1.0f;
 
 		bool renderdoc = false;
+		bool validation = true;
 	};
 
 	static Application *getInstance();

@@ -179,6 +179,9 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 		Map<gl::StateId, std::forward_list<const gl::CmdVertexArray *>> states;
 	};
 
+	uint32_t excludeVertexes = 0;
+	uint32_t excludeIndexes = 0;
+
 	Map<SpanView<int16_t>, float, ZIndexLess> paths;
 
 	// fill write plan
@@ -193,7 +196,8 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 	// write plan for transparent objects, that should be drawn in order
 	Map<SpanView<int16_t>, std::unordered_map<gl::MaterialId, MaterialWritePlan>, ZIndexLess> transparentWritePlan;
 
-	auto emplaceWritePlan = [&] (std::unordered_map<gl::MaterialId, MaterialWritePlan> &writePlan, const gl::CmdVertexArray *cmd) {
+	auto emplaceWritePlan = [&] (std::unordered_map<gl::MaterialId, MaterialWritePlan> &writePlan,
+			const gl::Command *c, const gl::CmdVertexArray *cmd) {
 		auto it = writePlan.find(cmd->material);
 		if (it == writePlan.end()) {
 			auto material = _materialSet->getMaterialById(cmd->material);
@@ -213,6 +217,11 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 
 				it->second.vertexes += iit.second->data.size();
 				it->second.indexes += iit.second->indexes.size();
+
+				if ((c->flags & gl::CommandFlags::DoNotCount) != gl::CommandFlags::None) {
+					excludeVertexes = iit.second->data.size();
+					excludeIndexes = iit.second->indexes.size();
+				}
 			}
 
 			auto iit = it->second.states.find(cmd->state);
@@ -229,21 +238,21 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 		}
 	};
 
-	auto pushVertexData = [&] (const gl::CmdVertexArray *cmd) {
+	auto pushVertexData = [&] (const gl::Command *c, const gl::CmdVertexArray *cmd) {
 		auto material = _materialSet->getMaterialById(cmd->material);
 		if (!material) {
 			return;
 		}
 		if (material->getPipeline()->isSolid()) {
-			emplaceWritePlan(solidWritePlan, cmd);
+			emplaceWritePlan(solidWritePlan, c, cmd);
 		} else if (cmd->renderingLevel == RenderingLevel::Surface) {
-			emplaceWritePlan(surfaceWritePlan, cmd);
+			emplaceWritePlan(surfaceWritePlan, c, cmd);
 		} else {
 			auto v = transparentWritePlan.find(cmd->zPath);
 			if (v == transparentWritePlan.end()) {
 				v = transparentWritePlan.emplace(cmd->zPath, std::unordered_map<gl::MaterialId, MaterialWritePlan>()).first;
 			}
-			emplaceWritePlan(v->second, cmd);
+			emplaceWritePlan(v->second, c, cmd);
 		}
 	};
 
@@ -251,7 +260,7 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 	while (cmd) {
 		switch (cmd->type) {
 		case gl::CommandType::VertexArray:
-			pushVertexData((const gl::CmdVertexArray *)cmd->data);
+			pushVertexData(cmd, (const gl::CmdVertexArray *)cmd->data);
 			break;
 		case gl::CommandType::CommandGroup:
 			break;
@@ -441,8 +450,8 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 	}
 
 	commands->sendStat(gl::DrawStat{
-		uint32_t(globalWritePlan.vertexes),
-		uint32_t(globalWritePlan.indexes / 3),
+		uint32_t(globalWritePlan.vertexes - excludeVertexes),
+		uint32_t((globalWritePlan.indexes - excludeIndexes) / 3),
 		uint32_t(paths.size()),
 		uint32_t(_spans.size())
 	});
