@@ -20,8 +20,50 @@
  THE SOFTWARE.
  **/
 
-#include "TessCursor.h"
+#ifndef TEST_SRC_WIDGETS_APPBUTTON_H_
+#define TEST_SRC_WIDGETS_APPBUTTON_H_
 
-namespace stappler::xenolith::tessapp {
+#include "XLLayer.h"
+
+namespace stappler::xenolith::app {
+
+class Button : public Layer {
+public:
+	virtual ~Button() { }
+
+	bool init(Function<void()> &&);
+
+	void setEnabled(bool);
+	bool isEnabled() const { return _enabled; }
+
+	void setCallback(Function<void()> &&);
+
+protected:
+	virtual void handleFocusEnter();
+	virtual void handleFocusLeave();
+	virtual void handleTouch();
+	virtual void updateEnabled();
+
+	Function<void()> _callback;
+	InputListener *_listener = nullptr;
+	bool _focus = false;
+	bool _enabled = false;
+};
+
+class ButtonWithLabel : public Button {
+public:
+	virtual ~ButtonWithLabel() { }
+
+	bool init(StringView, Function<void()> &&);
+
+	virtual void onContentSizeDirty() override;
+
+	void setString(StringView);
+
+protected:
+	Label *_label = nullptr;
+};
 
 }
+
+#endif /* TEST_SRC_WIDGETS_APPBUTTON_H_ */

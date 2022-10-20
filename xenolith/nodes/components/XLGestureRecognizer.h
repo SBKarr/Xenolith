@@ -33,64 +33,6 @@ static constexpr float TapDistanceAllowed = 16.0f;
 static constexpr float TapDistanceAllowedMulti = 32.0f;
 static constexpr TimeInterval TapIntervalAllowed = TimeInterval::microseconds(300000ULL);
 
-struct GestureScroll {
-	Vec2 pos;
-	Vec2 amount;
-
-	const Vec2 &location() const;
-	void cleanup();
-};
-
-struct GestureTap {
-	Vec2 pos;
-	uint32_t id = maxOf<uint32_t>();
-	uint32_t count = 0;
-	Time time;
-
-	void cleanup() {
-		id = maxOf<uint32_t>();
-		time.clear();
-		count = 0;
-	}
-};
-
-struct GesturePress {
-	Vec2 pos;
-	uint32_t id = maxOf<uint32_t>();
-	TimeInterval limit;
-	TimeInterval time;
-	uint32_t tickCount = 0;
-
-    void cleanup() {
-		id = maxOf<uint32_t>();
-		limit.clear();
-		time.clear();
-		tickCount = 0;
-    }
-};
-
-struct GestureSwipe {
-	Vec2 firstTouch;
-	Vec2 secondTouch;
-	Vec2 midpoint;
-	Vec2 delta;
-	Vec2 velocity;
-
-    void cleanup() {
-    	firstTouch = Vec2::ZERO;
-    	secondTouch = Vec2::ZERO;
-    	midpoint = Vec2::ZERO;
-    	delta = Vec2::ZERO;
-    	velocity = Vec2::ZERO;
-    }
-};
-
-
-enum class GestureType {
-	Touch = 1 << 0,
-	Scroll = 1 << 1,
-};
-
 enum class GestureEvent {
 	/** Action just started, listener should return true if it want to "capture" it.
 	 * Captured actions will be automatically propagated to end-listener
@@ -121,6 +63,69 @@ enum class GestureEvent {
 	Cancelled,
 };
 
+struct GestureData {
+	GestureEvent event = GestureEvent::Began;
+	const InputEvent *input = nullptr;
+};
+
+struct GestureScroll : GestureData {
+	Vec2 pos;
+	Vec2 amount;
+
+	const Vec2 &location() const;
+	void cleanup();
+};
+
+struct GestureTap : GestureData {
+	Vec2 pos;
+	uint32_t id = maxOf<uint32_t>();
+	uint32_t count = 0;
+	Time time;
+
+	void cleanup() {
+		id = maxOf<uint32_t>();
+		time.clear();
+		count = 0;
+	}
+};
+
+struct GesturePress : GestureData {
+	Vec2 pos;
+	uint32_t id = maxOf<uint32_t>();
+	TimeInterval limit;
+	TimeInterval time;
+	uint32_t tickCount = 0;
+
+    void cleanup() {
+		id = maxOf<uint32_t>();
+		limit.clear();
+		time.clear();
+		tickCount = 0;
+    }
+};
+
+struct GestureSwipe : GestureData {
+	Vec2 firstTouch;
+	Vec2 secondTouch;
+	Vec2 midpoint;
+	Vec2 delta;
+	Vec2 velocity;
+
+    void cleanup() {
+    	firstTouch = Vec2::ZERO;
+    	secondTouch = Vec2::ZERO;
+    	midpoint = Vec2::ZERO;
+    	delta = Vec2::ZERO;
+    	velocity = Vec2::ZERO;
+    }
+};
+
+
+enum class GestureType {
+	Touch = 1 << 0,
+	Scroll = 1 << 1,
+};
+
 class GestureRecognizer : public Ref {
 public:
 	using EventMask = std::bitset<toInt(InputEventName::Max)>;
@@ -136,7 +141,6 @@ public:
 	uint32_t getEventCount() const;
 	bool hasEvent(const InputEvent &) const;
 
-	GestureEvent getEvent() const;
 	EventMask getEventMask() const;
 
 	virtual void update(uint64_t dt);
@@ -155,7 +159,6 @@ protected:
 
 	Vector<InputEvent> _events;
 	size_t _maxEvents = 0;
-	GestureEvent _event = GestureEvent::Cancelled;
 	EventMask _eventMask;
 	ButtonMask _buttonMask;
 	float _density = 1.0f;
@@ -163,7 +166,7 @@ protected:
 
 class GestureTouchRecognizer : public GestureRecognizer {
 public:
-	using InputCallback = Function<bool(GestureEvent, const InputEvent &)>;
+	using InputCallback = Function<bool(const GestureData &)>;
 
 	virtual ~GestureTouchRecognizer() { }
 
@@ -179,12 +182,13 @@ protected:
 	virtual bool removeEvent(const InputEvent &, bool successful, float density) override;
 	virtual bool renewEvent(const InputEvent &, float density) override;
 
+	GestureData _event = GestureData{GestureEvent::Cancelled, nullptr};
 	InputCallback _callback;
 };
 
 class GestureTapRecognizer : public GestureRecognizer {
 public:
-	using InputCallback = Function<void(GestureEvent, const GestureTap &)>;
+	using InputCallback = Function<void(const GestureTap &)>;
 	using ButtonMask = std::bitset<toInt(InputMouseButton::Max)>;
 
 	virtual ~GestureTapRecognizer() { }
@@ -208,7 +212,7 @@ protected:
 
 class GesturePressRecognizer : public GestureRecognizer {
 public:
-	using InputCallback = Function<bool(GestureEvent, const GesturePress &)>;
+	using InputCallback = Function<bool(const GesturePress &)>;
 
 	virtual ~GesturePressRecognizer() { }
 
@@ -234,7 +238,7 @@ protected:
 
 class GestureSwipeRecognizer : public GestureRecognizer {
 public:
-	using InputCallback = Function<bool(GestureEvent, const GestureSwipe &)>;
+	using InputCallback = Function<bool(const GestureSwipe &)>;
 
 	virtual ~GestureSwipeRecognizer() { }
 
@@ -262,7 +266,7 @@ protected:
 
 class GestureScrollRecognizer : public GestureRecognizer {
 public:
-	using InputCallback = Function<bool(GestureEvent, const GestureScroll &)>;
+	using InputCallback = Function<bool(const GestureScroll &)>;
 
 	virtual ~GestureScrollRecognizer() { }
 
@@ -277,7 +281,7 @@ protected:
 
 class GestureMoveRecognizer : public GestureRecognizer {
 public:
-	using InputCallback = Function<bool(GestureEvent, const InputEvent &)>;
+	using InputCallback = Function<bool(const GestureData &)>;
 
 	virtual ~GestureMoveRecognizer() { }
 
@@ -286,12 +290,13 @@ public:
 	virtual bool handleInputEvent(const InputEvent &, float density) override;
 
 protected:
+	GestureData _event = GestureData{GestureEvent::Cancelled, nullptr};
 	InputCallback _callback;
 };
 
 class GestureKeyRecognizer : public GestureRecognizer {
 public:
-	using InputCallback = Function<bool(GestureEvent, const InputEvent &)>;
+	using InputCallback = Function<bool(const GestureData &)>;
 	using KeyMask = std::bitset<toInt(InputKeyCode::Max)>;
 
 	virtual ~GestureKeyRecognizer() { }

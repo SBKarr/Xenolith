@@ -38,8 +38,8 @@ bool AppCheckbox::init(bool value, Function<void(bool)> &&cb) {
 	setContentSize(Size2(32.0f, 32.0f));
 
 	_input = addInputListener(Rc<InputListener>::create());
-	_input->addTapRecognizer([this] (GestureEvent ev, const GestureTap &data) {
-		switch (ev) {
+	_input->addTapRecognizer([this] (const GestureTap &data) {
+		switch (data.event) {
 		case GestureEvent::Activated:
 			setValue(!_value);
 			break;

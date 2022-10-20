@@ -40,7 +40,7 @@ public:
 	using KeyMask = std::bitset<toInt(InputKeyCode::Max)>;
 
 	template<typename T>
-	using InputCallback = Function<bool(GestureEvent, const T &)>;
+	using InputCallback = Function<bool(const T &)>;
 
 	using DefaultEventFilter = std::function<bool(const InputEvent &)>;
 	using EventFilter = Function<bool(const InputEvent &, const DefaultEventFilter &)>;
@@ -94,7 +94,7 @@ public:
 	bool canHandleEvent(const InputEvent &event) const;
 	bool handleEvent(const InputEvent &event);
 
-	GestureRecognizer *addTouchRecognizer(InputCallback<InputEvent> &&, ButtonMask && = makeButtonMask({InputMouseButton::Touch}));
+	GestureRecognizer *addTouchRecognizer(InputCallback<GestureData> &&, ButtonMask && = makeButtonMask({InputMouseButton::Touch}));
 	GestureRecognizer *addTapRecognizer(InputCallback<GestureTap> &&, ButtonMask && = makeButtonMask({InputMouseButton::Touch}),
 			uint32_t maxTapCount = 2);
 	GestureRecognizer *addPressRecognizer(InputCallback<GesturePress> &&, TimeInterval interval = TapIntervalAllowed,
@@ -102,9 +102,9 @@ public:
 	GestureRecognizer *addSwipeRecognizer(InputCallback<GestureSwipe> &&, float threshold = TapDistanceAllowed, bool sendThreshold = false,
 			ButtonMask && = makeButtonMask({InputMouseButton::Touch}));
 	GestureRecognizer *addScrollRecognizer(InputCallback<GestureScroll> &&);
-	GestureRecognizer *addMoveRecognizer(InputCallback<InputEvent> &&);
+	GestureRecognizer *addMoveRecognizer(InputCallback<GestureData> &&);
 
-	GestureKeyRecognizer *addKeyRecognizer(InputCallback<InputEvent> &&, KeyMask && = KeyMask());
+	GestureKeyRecognizer *addKeyRecognizer(InputCallback<GestureData> &&, KeyMask && = KeyMask());
 
 	void setPointerEnterCallback(Function<bool(bool)> &&);
 	void setBackgroudCallback(Function<bool(bool)> &&);

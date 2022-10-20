@@ -41,7 +41,7 @@ bool Director::init(Application *app, gl::View *view) {
 	_pool->perform([&] {
 		_scheduler = Rc<Scheduler>::create();
 		_actionManager = Rc<ActionManager>::create();
-		_inputDispatcher = Rc<InputDispatcher>::create(_view);
+		_inputDispatcher = Rc<InputDispatcher>::create(_pool, _view);
 	});
 	_startTime = _application->getClock();
 	_time.global = 0;

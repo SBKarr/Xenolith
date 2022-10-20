@@ -38,11 +38,11 @@ bool AppSlider::init(float value, Function<void(float)> &&cb) {
 	_foreground->setAnchorPoint(Anchor::BottomLeft);
 
 	_input = addInputListener(Rc<InputListener>::create());
-	_input->addTouchRecognizer([this] (GestureEvent ev, const InputEvent &data) {
-		switch (ev) {
+	_input->addTouchRecognizer([this] (const GestureData &data) {
+		switch (data.event) {
 		case GestureEvent::Began:
 		case GestureEvent::Activated:
-			setValue(math::clamp(convertToNodeSpace(data.currentLocation).x / _contentSize.width, 0.0f, 1.0f));
+			setValue(math::clamp(convertToNodeSpace(data.input->currentLocation).x / _contentSize.width, 0.0f, 1.0f));
 			break;
 		default:
 			break;

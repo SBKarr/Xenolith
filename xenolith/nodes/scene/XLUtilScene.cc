@@ -125,8 +125,8 @@ void UtilScene::initialize(Application *app) {
 	_fps = addChild(Rc<FpsDisplay>::create(app->getFontController()), Node::ZOrderMax);
 
 	auto l = addInputListener(Rc<InputListener>::create());
-	l->addKeyRecognizer([this] (GestureEvent ev, const InputEvent &) {
-		if (ev == GestureEvent::Ended) {
+	l->addKeyRecognizer([this] (const GestureData &ev) {
+		if (ev.event == GestureEvent::Ended) {
 			_fps->setVisible(!_fps->isVisible());
 		}
 		return true;

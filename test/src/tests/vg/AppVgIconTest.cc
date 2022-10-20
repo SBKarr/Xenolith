@@ -100,15 +100,15 @@ bool VgIconTest::init() {
 	_checkboxAntialias->setContentSize(Size2(32.0f, 32.0f));
 
 	auto l = _sprite->addInputListener(Rc<InputListener>::create());
-	l->addTouchRecognizer([this] (GestureEvent ev, const InputEvent &data) -> bool {
-		if (ev == GestureEvent::Ended) {
-			if (data.data.button == InputMouseButton::Mouse8) {
+	l->addTouchRecognizer([this] (const GestureData &data) -> bool {
+		if (data.event == GestureEvent::Ended) {
+			if (data.input->data.button == InputMouseButton::Mouse8) {
 				if (_currentName == IconName::Action_3d_rotation_outline) {
 					updateIcon(IconName::Toggle_toggle_on_solid);
 				} else {
 					updateIcon(IconName(toInt(_currentName) - 1));
 				}
-			} else if (data.data.button == InputMouseButton::Mouse9) {
+			} else if (data.input->data.button == InputMouseButton::Mouse9) {
 				if (_currentName == IconName::Toggle_toggle_on_solid) {
 					updateIcon(IconName::Action_3d_rotation_outline);
 				} else {
@@ -119,15 +119,15 @@ bool VgIconTest::init() {
 		return true;
 	}, InputListener::makeButtonMask({InputMouseButton::MouseScrollLeft, InputMouseButton::MouseScrollRight, InputMouseButton::Mouse8, InputMouseButton::Mouse9}));
 
-	l->addKeyRecognizer([this] (GestureEvent event, const InputEvent &ev) {
-		if (event == GestureEvent::Ended) {
-			if (ev.data.key.keycode == InputKeyCode::LEFT) {
+	l->addKeyRecognizer([this] (const GestureData &ev) {
+		if (ev.event == GestureEvent::Ended) {
+			if (ev.input->data.key.keycode == InputKeyCode::LEFT) {
 				if (_currentName == IconName::Action_3d_rotation_outline) {
 					updateIcon(IconName::Toggle_toggle_on_solid);
 				} else {
 					updateIcon(IconName(toInt(_currentName) - 1));
 				}
-			} else if (ev.data.key.keycode == InputKeyCode::RIGHT) {
+			} else if (ev.input->data.key.keycode == InputKeyCode::RIGHT) {
 				if (_currentName == IconName::Toggle_toggle_on_solid) {
 					updateIcon(IconName::Action_3d_rotation_outline);
 				} else {

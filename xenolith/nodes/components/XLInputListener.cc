@@ -173,7 +173,7 @@ bool InputListener::handleEvent(const InputEvent &event) {
 	return ret;
 }
 
-GestureRecognizer *InputListener::addTouchRecognizer(InputCallback<InputEvent> &&cb, ButtonMask &&buttonMask) {
+GestureRecognizer *InputListener::addTouchRecognizer(InputCallback<GestureData> &&cb, ButtonMask &&buttonMask) {
 	auto rec = Rc<GestureTouchRecognizer>::create(move(cb), move(buttonMask));
 	addEventMask(rec->getEventMask());
 	return _recognizers.emplace_back(move(rec)).get();
@@ -204,13 +204,13 @@ GestureRecognizer *InputListener::addSwipeRecognizer(InputCallback<GestureSwipe>
 	return _recognizers.emplace_back(move(rec)).get();
 }
 
-GestureRecognizer *InputListener::addMoveRecognizer(InputCallback<InputEvent> &&cb) {
+GestureRecognizer *InputListener::addMoveRecognizer(InputCallback<GestureData> &&cb) {
 	auto rec = Rc<GestureMoveRecognizer>::create(move(cb));
 	addEventMask(rec->getEventMask());
 	return _recognizers.emplace_back(move(rec)).get();
 }
 
-GestureKeyRecognizer *InputListener::addKeyRecognizer(InputCallback<InputEvent> &&cb, KeyMask &&keys) {
+GestureKeyRecognizer *InputListener::addKeyRecognizer(InputCallback<GestureData> &&cb, KeyMask &&keys) {
 	auto rec = Rc<GestureKeyRecognizer>::create(move(cb), move(keys));
 	addEventMask(rec->getEventMask());
 	return (GestureKeyRecognizer *)_recognizers.emplace_back(move(rec)).get();

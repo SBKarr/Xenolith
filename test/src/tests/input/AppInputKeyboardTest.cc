@@ -147,18 +147,18 @@ bool InputKeyboardOnScreenKeyboard::init() {
 	setContentSize(Size2(120.0f, 120.0f));
 
 	auto l = addInputListener(Rc<InputListener>::create());
-	l->addTouchRecognizer([this] (GestureEvent ev, const InputEvent &input) {
-		_currentLocation = input.currentLocation;
-		switch (ev) {
+	l->addTouchRecognizer([this] (const GestureData &input) {
+		_currentLocation = input.input->currentLocation;
+		switch (input.event) {
 		case GestureEvent::Began:
-			return handleTouchBegin(input);
+			return handleTouchBegin(*input.input);
 			break;
 		case GestureEvent::Activated:
-			return handleTouchMove(input);
+			return handleTouchMove(*input.input);
 			break;
 		case GestureEvent::Ended:
 		case GestureEvent::Cancelled:
-			return handleTouchEnd(input);
+			return handleTouchEnd(*input.input);
 			break;
 		}
 		return true;
@@ -290,11 +290,11 @@ bool InputKeyboardTest::init() {
 	}
 
 	_input = addInputListener(Rc<InputListener>::create());
-	_key = _input->addKeyRecognizer([this] (GestureEvent ev, const InputEvent &input) {
+	_key = _input->addKeyRecognizer([this] (const GestureData &input) {
 		if (!_useUpdate) {
-			switch (ev) {
+			switch (input.event) {
 			case GestureEvent::Began:
-				switch (input.data.key.keycode) {
+				switch (input.input->data.key.keycode) {
 				case InputKeyCode::LEFT: _layer->setPosition(_layer->getPosition() + Vec3(-8.0f, 0.0f, 0.0f)); break;
 				case InputKeyCode::RIGHT: _layer->setPosition(_layer->getPosition() + Vec3(8.0f, 0.0f, 0.0f)); break;
 				case InputKeyCode::DOWN: _layer->setPosition(_layer->getPosition() + Vec3(0.0f, -8.0f, 0.0f)); break;
@@ -303,7 +303,7 @@ bool InputKeyboardTest::init() {
 				}
 				break;
 			case GestureEvent::Repeat:
-				switch (input.data.key.keycode) {
+				switch (input.input->data.key.keycode) {
 				case InputKeyCode::LEFT: _layer->setPosition(_layer->getPosition() + Vec3(-8.0f, 0.0f, 0.0f)); break;
 				case InputKeyCode::RIGHT: _layer->setPosition(_layer->getPosition() + Vec3(8.0f, 0.0f, 0.0f)); break;
 				case InputKeyCode::DOWN: _layer->setPosition(_layer->getPosition() + Vec3(0.0f, -8.0f, 0.0f)); break;

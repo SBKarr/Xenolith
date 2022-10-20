@@ -66,8 +66,8 @@ bool VgIconListNode::init(IconName iconName, Function<void(IconName)> &&cb) {
 	_iconName = iconName;
 
 	auto l = addInputListener(Rc<InputListener>::create());
-	l->addTapRecognizer([this] (GestureEvent ev, const GestureTap &tap) {
-		if (ev == GestureEvent::Activated && tap.count == 2 && _callback) {
+	l->addTapRecognizer([this] (const GestureTap &tap) {
+		if (tap.event == GestureEvent::Activated && tap.count == 2 && _callback) {
 			_callback(_iconName);
 		}
 		return true;
@@ -152,8 +152,8 @@ bool VgIconList::init() {
 	_popup->setContentSize(Size2(192.0f, 32.0f));
 
 	auto l = addInputListener(Rc<InputListener>::create());
-	l->addMoveRecognizer([this] (GestureEvent ev, const InputEvent &input) {
-		updatePopupLocation(input.currentLocation);
+	l->addMoveRecognizer([this] (const GestureData &input) {
+		updatePopupLocation(input.input->currentLocation);
 		return true;
 	});
 
@@ -187,6 +187,11 @@ bool VgIconList::rebuildScroll(ScrollController *c) {
 		it.pos = Vec2(xPos, yPos);
 		xPos += 72.0f;
 		++ idx;
+	}
+
+	if (_nCols != nCols) {
+		_nCols = nCols;
+		return true;
 	}
 
 	return false;

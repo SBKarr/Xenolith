@@ -28,24 +28,31 @@
 
 namespace stappler::xenolith {
 
-struct InputListenerStorage : public Ref {
-	virtual ~InputListenerStorage() { }
+class InputListenerStorage : public PoolRef {
+public:
+	virtual ~InputListenerStorage();
 
-	Vector<InputListener *> _preSceneEvents;
-	Vector<InputListener *> _sceneEvents; // in reverse order
-	Vector<InputListener *> _postSceneEvents;
+	InputListenerStorage(PoolRef *);
+
+	void clear();
+	void reserve(const InputListenerStorage *);
 
 	void addListener(InputListener *);
 
 	template <typename Callback>
 	bool foreach(const Callback &);
+
+protected:
+	memory::vector<InputListener *> *_preSceneEvents;
+	memory::vector<InputListener *> *_sceneEvents; // in reverse order
+	memory::vector<InputListener *> *_postSceneEvents;
 };
 
 class InputDispatcher : public Ref {
 public:
 	virtual ~InputDispatcher() { }
 
-	bool init(gl::View *);
+	bool init(PoolRef *, gl::View *);
 
 	void update(const UpdateTime &time);
 
@@ -85,13 +92,14 @@ protected:
 	Rc<InputListenerStorage> _events;
 	Rc<InputListenerStorage> _tmpEvents;
 	Rc<TextInputManager> _textInput;
+	Rc<PoolRef> _pool;
 };
 
 template <typename Callback>
 bool InputListenerStorage::foreach(const Callback &cb) {
-	Vector<InputListener *>::reverse_iterator it, end;
-	it = _preSceneEvents.rbegin();
-	end = _preSceneEvents.rend();
+	memory::vector<InputListener *>::reverse_iterator it, end;
+	it = _preSceneEvents->rbegin();
+	end = _preSceneEvents->rend();
 
 	for (;it != end; ++ it) {
 		if (!cb(*it)) {
@@ -99,8 +107,8 @@ bool InputListenerStorage::foreach(const Callback &cb) {
 		}
 	}
 
-	it = _sceneEvents.rbegin();
-	end = _sceneEvents.rend();
+	it = _sceneEvents->rbegin();
+	end = _sceneEvents->rend();
 
 	for (;it != end; ++ it) {
 		if (!cb(*it)) {
@@ -108,8 +116,8 @@ bool InputListenerStorage::foreach(const Callback &cb) {
 		}
 	}
 
-	it = _preSceneEvents.rbegin();
-	end = _preSceneEvents.rend();
+	it = _preSceneEvents->rbegin();
+	end = _preSceneEvents->rend();
 
 	for (;it != end; ++ it) {
 		if (!cb(*it)) {

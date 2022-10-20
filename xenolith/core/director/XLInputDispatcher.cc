@@ -24,37 +24,75 @@
 
 namespace stappler::xenolith {
 
+InputListenerStorage::~InputListenerStorage() {
+	clear();
+}
+
+InputListenerStorage::InputListenerStorage(PoolRef *p) : PoolRef(p) {
+	perform([&] {
+		_preSceneEvents = new (_pool) memory::vector<InputListener *>;
+		_sceneEvents = new (_pool) memory::vector<InputListener *>;
+		_postSceneEvents = new (_pool) memory::vector<InputListener *>;
+
+		_sceneEvents->reserve(256);
+	});
+}
+
+void InputListenerStorage::clear() {
+	for (auto &it : *_preSceneEvents) {
+		it->release(0);
+	}
+	for (auto &it : *_sceneEvents) {
+		it->release(0);
+	}
+	for (auto &it : *_postSceneEvents) {
+		it->release(0);
+	}
+
+	_preSceneEvents->clear();
+	_sceneEvents->clear();
+	_postSceneEvents->clear();
+}
+
+void InputListenerStorage::reserve(const InputListenerStorage *st) {
+	_preSceneEvents->reserve(st->_preSceneEvents->size());
+	_sceneEvents->reserve(st->_sceneEvents->size());
+	_postSceneEvents->reserve(st->_postSceneEvents->size());
+}
+
 void InputListenerStorage::addListener(InputListener *input) {
+	input->retain();
 	auto p = input->getPriority();
 	if (p == 0) {
-		_sceneEvents.emplace_back(input);
+		_sceneEvents->emplace_back(input);
 	} else if (p < 0) {
-		auto lb = std::lower_bound(_postSceneEvents.begin(), _postSceneEvents.end(), input,
+		auto lb = std::lower_bound(_postSceneEvents->begin(), _postSceneEvents->end(), input,
 				[] (InputListener *l, InputListener *r) {
 			return l->getPriority() < r->getPriority();
 		});
 
-		if (lb == _postSceneEvents.end()) {
-			_postSceneEvents.emplace_back(input);
+		if (lb == _postSceneEvents->end()) {
+			_postSceneEvents->emplace_back(input);
 		} else {
-			_postSceneEvents.emplace(lb, input);
+			_postSceneEvents->emplace(lb, input);
 		}
 	} else {
-		auto lb = std::lower_bound(_preSceneEvents.begin(), _preSceneEvents.end(), input,
+		auto lb = std::lower_bound(_preSceneEvents->begin(), _preSceneEvents->end(), input,
 				[] (InputListener *l, InputListener *r) {
 			return l->getPriority() < r->getPriority();
 		});
 
-		if (lb == _preSceneEvents.end()) {
-			_preSceneEvents.emplace_back(input);
+		if (lb == _preSceneEvents->end()) {
+			_preSceneEvents->emplace_back(input);
 		} else {
-			_preSceneEvents.emplace(lb, input);
+			_preSceneEvents->emplace(lb, input);
 		}
 	}
 }
 
-bool InputDispatcher::init(gl::View *view) {
+bool InputDispatcher::init(PoolRef *pool, gl::View *view) {
 	_textInput = Rc<TextInputManager>::create(view);
+	_pool = pool;
 	return true;
 }
 
@@ -68,12 +106,10 @@ Rc<InputListenerStorage> InputDispatcher::acquireNewStorage() {
 		req = move(_tmpEvents);
 		_tmpEvents = nullptr;
 	} else {
-		req = Rc<InputListenerStorage>::alloc();
+		req = Rc<InputListenerStorage>::alloc(_pool);
 	}
 	if (_events) {
-		req->_postSceneEvents.reserve(_events->_postSceneEvents.size());
-		req->_preSceneEvents.reserve(_events->_preSceneEvents.size());
-		req->_sceneEvents.reserve(_events->_sceneEvents.size());
+		req->reserve(_events);
 	}
 	return req;
 }
@@ -81,11 +117,8 @@ Rc<InputListenerStorage> InputDispatcher::acquireNewStorage() {
 void InputDispatcher::commitStorage(Rc<InputListenerStorage> &&storage) {
 	_tmpEvents = move(_events);
 	_events = move(storage);
-
 	if (_tmpEvents) {
-		_tmpEvents->_postSceneEvents.clear();
-		_tmpEvents->_preSceneEvents.clear();
-		_tmpEvents->_sceneEvents.clear();
+		_tmpEvents->clear();
 	}
 }
 

@@ -87,8 +87,8 @@ bool ZOrderTest::init() {
 	_label2->appendTextWithStyle("\nWorld", Label::Style({font::FontWeight::Bold, Color::Red_500, Label::TextDecoration::Underline}));
 
 	auto label2Listener = _label2->addInputListener(Rc<InputListener>::create());
-	label2Listener->addTouchRecognizer([] (GestureEvent event, const InputEvent &ev) {
-		std::cout << "Touch (Label2): " << event << ": " << ev.currentLocation << "\n";
+	label2Listener->addTouchRecognizer([] (const GestureData &ev) {
+		std::cout << "Touch (Label2): " << ev.event << ": " << ev.input->currentLocation << "\n";
 		return true;
 	}, InputListener::makeButtonMask({InputMouseButton::MouseRight}));
 
@@ -99,23 +99,23 @@ bool ZOrderTest::init() {
 	scheduleUpdate();
 
 	auto l = addInputListener(Rc<InputListener>::create());
-	l->addScrollRecognizer([] (GestureEvent event, const GestureScroll &scroll) {
-		std::cout << "Scroll: " << event << ": " << scroll.pos << " - " << scroll.amount << "\n";
+	l->addScrollRecognizer([] (const GestureScroll &scroll) {
+		std::cout << "Scroll: " << scroll.event << ": " << scroll.pos << " - " << scroll.amount << "\n";
 		return true;
 	});
-	l->addTouchRecognizer([this] (GestureEvent event, const InputEvent &ev) {
-		std::cout << "Touch (left): " << event << ": " << ev.currentLocation << "\n";
-		if (event == GestureEvent::Ended) {
-			handleClick(ev.currentLocation);
+	l->addTouchRecognizer([this] (const GestureData &ev) {
+		std::cout << "Touch (left): " << ev.event << ": " << ev.input->currentLocation << "\n";
+		if (ev.event == GestureEvent::Ended) {
+			handleClick(ev.input->currentLocation);
 		}
 		return true;
 	});
-	l->addTouchRecognizer([] (GestureEvent event, const InputEvent &ev) {
-		std::cout << "Touch (right): " << event << ": " << ev.currentLocation << "\n";
+	l->addTouchRecognizer([] (const GestureData &ev) {
+		std::cout << "Touch (right): " << ev.event << ": " << ev.input->currentLocation << "\n";
 		return true;
 	}, InputListener::makeButtonMask({InputMouseButton::MouseRight}));
-	l->addMoveRecognizer([this] (GestureEvent event, const InputEvent &ev) {
-		auto pos = convertToNodeSpace(ev.currentLocation);
+	l->addMoveRecognizer([this] (const GestureData &ev) {
+		auto pos = convertToNodeSpace(ev.input->currentLocation);
 		_cursor->setPosition(pos);
 		return true;
 	});
@@ -176,19 +176,19 @@ void ZOrderTest::handleClick(const Vec2 &loc) {
 
 	auto l = node->addInputListener(Rc<InputListener>::create());
 	l->setSwallowAllEvents();
-	l->addTouchRecognizer([node] (GestureEvent event, const InputEvent &ev) {
-		std::cout << "Touch (node): " << event << ": " << ev.currentLocation << "\n";
-		if (event == GestureEvent::Ended && node->isTouched(ev.currentLocation)) {
+	l->addTouchRecognizer([node] (const GestureData &ev) {
+		std::cout << "Touch (node): " << ev.event << ": " << ev.input->currentLocation << "\n";
+		if (ev.event == GestureEvent::Ended && node->isTouched(ev.input->currentLocation)) {
 			node->removeFromParent();
 		}
 		return true;
 	});
-	l->addScrollRecognizer([node] (GestureEvent event, const GestureScroll &scroll) {
+	l->addScrollRecognizer([node] (const GestureScroll &scroll) {
 		if (scroll.amount.y != 0.0f) {
 			auto zRot = node->getRotation();
 			node->setRotation(zRot + scroll.amount.y / 40.0f);
 		}
-		std::cout << "Scroll: " << event << ": " << scroll.pos << " - " << scroll.amount << "\n";
+		std::cout << "Scroll: " << scroll.event << ": " << scroll.pos << " - " << scroll.amount << "\n";
 		return true;
 	});
 }

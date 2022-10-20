@@ -32,6 +32,10 @@
 #include "input/AppInputTouchTest.cc"
 #include "input/AppInputKeyboardTest.cc"
 #include "input/AppInputTapPressTest.cc"
+#include "input/AppInputSwipeTest.cc"
+#include "action/AppActionEaseTest.cc"
+#include "vg/AppVgTessCanvas.cc"
+#include "vg/AppVgTessTest.cc"
 #include "vg/AppVgIconTest.cc"
 #include "vg/AppVgIconList.cc"
 
@@ -61,8 +65,8 @@ Vector<MenuData> s_inputTestsMenu({
 });
 
 Vector<MenuData> s_actionTestsMenu({
-	MenuData{LayoutName::ActionProgressTest, "General tests"},
-	MenuData{LayoutName::ActionEaseTest, "Input tests"},
+	MenuData{LayoutName::ActionProgressTest, "Progress test"},
+	MenuData{LayoutName::ActionEaseTest, "Ease test"},
 });
 
 Vector<MenuData> s_vgTestsMenu({
@@ -201,12 +205,12 @@ Rc<Node> makeLayoutNode(LayoutName name) {
 	case LayoutName::InputTouchTest: return Rc<InputTouchTest>::create(); break;
 	case LayoutName::InputKeyboardTest: return Rc<InputKeyboardTest>::create(); break;
 	case LayoutName::InputTapPressTest: return Rc<InputTapPressTest>::create(); break;
-	case LayoutName::InputSwipeTest: return Rc<RootLayout>::create(); break;
+	case LayoutName::InputSwipeTest: return Rc<InputSwipeTest>::create(); break;
 
 	case LayoutName::ActionProgressTest: return Rc<RootLayout>::create(); break;
-	case LayoutName::ActionEaseTest: return Rc<RootLayout>::create(); break;
+	case LayoutName::ActionEaseTest: return Rc<ActionEaseTest>::create(); break;
 
-	case LayoutName::VgTessTest: return Rc<RootLayout>::create(); break;
+	case LayoutName::VgTessTest: return Rc<VgTessTest>::create(); break;
 	case LayoutName::VgIconTest: return Rc<VgIconTest>::create(); break;
 	case LayoutName::VgIconList: return Rc<VgIconList>::create(); break;
 

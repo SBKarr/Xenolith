@@ -20,8 +20,36 @@
  THE SOFTWARE.
  **/
 
-#include "TessCursor.h"
+#ifndef TEST_SRC_TESTS_VG_APPVGTESSTEST_H_
+#define TEST_SRC_TESTS_VG_APPVGTESSTEST_H_
 
-namespace stappler::xenolith::tessapp {
+#include "AppLayoutTest.h"
+#include "AppVgTessCanvas.h"
+#include "XLGuiScrollView.h"
+
+namespace stappler::xenolith::app {
+
+class VgWindingSwitcher;
+class VgDrawStyleSwitcher;
+class VgContourSwitcher;
+
+class VgTessTest : public LayoutTest {
+public:
+	virtual ~VgTessTest() { }
+
+	virtual bool init() override;
+
+	virtual void onContentSizeDirty() override;
+
+protected:
+	void handleContoursUpdated();
+
+	VgTessCanvas *_canvas = nullptr;
+	VgWindingSwitcher *_windingSwitcher = nullptr;
+	VgDrawStyleSwitcher *_drawStyleSwitcher = nullptr;
+	VgContourSwitcher *_contourSwitcher = nullptr;
+};
 
 }
+
+#endif /* TEST_SRC_TESTS_VG_APPVGTESSTEST_H_ */

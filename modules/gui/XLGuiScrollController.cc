@@ -109,12 +109,7 @@ void ScrollController::onScrollPosition(bool force) {
 				}
 			}
 
-			if (isnan(start)) {
-				setScrollableAreaOffset(0.0f);
-			} else {
-				setScrollableAreaOffset(start);
-			}
-			setScrollableAreaSize(end - start);
+			setScrollableArea(isnan(start) ? 0.0f : start, end - start);
 			_scroll->updateScrollBounds();
 			_infoDirty = false;
 			force = false;
@@ -377,6 +372,7 @@ const Vector<ScrollController::Item> &ScrollController::getItems() const {
 }
 
 Vector<ScrollController::Item> &ScrollController::getItems() {
+	_infoDirty = true;
 	return _nodes;
 }
 
@@ -384,31 +380,24 @@ size_t ScrollController::size() const {
 	return _nodes.size();
 }
 
-void ScrollController::setScrollableAreaOffset(float value) {
-	if (_scrollAreaOffset != value) {
-		_scrollAreaOffset = value;
+bool ScrollController::setScrollableArea(float offset, float size) {
+	if (_scrollAreaOffset != offset || _scrollAreaSize != size) {
+		_scrollAreaOffset = offset;
+		_scrollAreaSize = size;
 		_currentMin = _scrollAreaOffset;
 		_currentMax = _scrollAreaOffset + _scrollAreaSize;
 		if (_scroll) {
 			_scroll->setScrollDirty(true);
 		}
+		return true;
 	}
+	return false;
 }
 
 float ScrollController::getScrollableAreaOffset() const {
 	return _scrollAreaOffset;
 }
 
-void ScrollController::setScrollableAreaSize(float value) {
-	if (_scrollAreaSize != value) {
-		_scrollAreaSize = value;
-		_currentMin = _scrollAreaOffset;
-		_currentMax = _scrollAreaOffset + _scrollAreaSize;
-		if (_scroll) {
-			_scroll->setScrollDirty(true);
-		}
-	}
-}
 float ScrollController::getScrollableAreaSize() const {
 	return _scrollAreaSize;
 }

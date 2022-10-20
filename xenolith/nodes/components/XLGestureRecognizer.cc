@@ -97,10 +97,6 @@ bool GestureRecognizer::hasEvent(const InputEvent &event) const {
 	return false;
 }
 
-GestureEvent GestureRecognizer::getEvent() const {
-	return _event;
-}
-
 GestureRecognizer::EventMask GestureRecognizer::getEventMask() const {
 	return _eventMask;
 }
@@ -224,10 +220,12 @@ bool GestureTouchRecognizer::addEvent(const InputEvent &event, float density) {
 	}
 
 	if (GestureRecognizer::addEvent(event, density)) {
-		_event = GestureEvent::Began;
-		if (!_callback(_event, event)) {
+		_event.event = GestureEvent::Began;
+		_event.input = &event;
+		if (!_callback(_event)) {
 			removeRecognizedEvent(event.data.id);
-			_event = GestureEvent::Cancelled;
+			_event.event = GestureEvent::Cancelled;
+			_event.input = nullptr;
 			return false;
 		}
 		return true;
@@ -237,9 +235,11 @@ bool GestureTouchRecognizer::addEvent(const InputEvent &event, float density) {
 
 bool GestureTouchRecognizer::removeEvent(const InputEvent &event, bool successful, float density) {
 	if (GestureRecognizer::removeEvent(event, successful, density)) {
-		_event = successful ? GestureEvent::Ended : GestureEvent::Cancelled;
-		_callback(_event, event);
-		_event = GestureEvent::Cancelled;
+		_event.event = successful ? GestureEvent::Ended : GestureEvent::Cancelled;
+		_event.input = &event;
+		_callback(_event);
+		_event.event = GestureEvent::Cancelled;
+		_event.input = nullptr;
 		return true;
 	}
 	return false;
@@ -247,10 +247,12 @@ bool GestureTouchRecognizer::removeEvent(const InputEvent &event, bool successfu
 
 bool GestureTouchRecognizer::renewEvent(const InputEvent &event, float density) {
 	if (GestureRecognizer::renewEvent(event, density)) {
-		_event = GestureEvent::Activated;
-		if (!_callback(_event, event)) {
+		_event.event = GestureEvent::Activated;
+		_event.input = &event;
+		if (!_callback(_event)) {
 			removeRecognizedEvent(event.data.id);
-			_event = GestureEvent::Cancelled;
+			_event.event = GestureEvent::Cancelled;
+			_event.input = nullptr;
 		}
 		return true;
 	}
@@ -282,11 +284,11 @@ void GestureTapRecognizer::update(uint64_t dt) {
 
 	auto now = Time::now();
 	if (_gesture.count > 0 && _gesture.time - now > TapIntervalAllowed) {
-		_event = GestureEvent::Activated;
-		if (_callback) {
-			_callback(_event, _gesture);
-		}
-		_event = GestureEvent::Cancelled;
+		_gesture.event = GestureEvent::Activated;
+		_gesture.input = &_events.front();
+		_callback(_gesture);
+		_gesture.event = GestureEvent::Cancelled;
+		_gesture.input = nullptr;
 		_gesture.cleanup();
 	}
 }
@@ -346,11 +348,11 @@ void GestureTapRecognizer::registerTap() {
 
 	_gesture.time = currentTime;
 	if (_gesture.count == _maxTapCount) {
-		_event = GestureEvent::Activated;
-		if (_callback) {
-			_callback(_event, _gesture);
-		}
-		_event = GestureEvent::Cancelled;
+		_gesture.event = GestureEvent::Activated;
+		_gesture.input = &_events.front();
+		_callback(_gesture);
+		_gesture.event = GestureEvent::Cancelled;
+		_gesture.input = nullptr;
 		_gesture.cleanup();
 	}
 }
@@ -389,8 +391,9 @@ void GesturePressRecognizer::update(uint64_t dt) {
 		if (_gesture.time.mksec() / _interval.mksec() != time.mksec() / _interval.mksec()) {
 			_gesture.time = time;
 			++ _gesture.tickCount;
-			_event = GestureEvent::Activated;
-			if (!_callback(_event, _gesture)) {
+			_gesture.event = GestureEvent::Activated;
+			_gesture.input = &_events.front();
+			if (!_callback(_gesture)) {
 				cancel();
 			}
 			_notified = true;
@@ -404,8 +407,9 @@ bool GesturePressRecognizer::addEvent(const InputEvent &event, float density) {
 		_gesture.pos = event.currentLocation;
 		_gesture.time.clear();
 		_gesture.limit = _interval;
-		_event = GestureEvent::Began;
-		if (!_callback(_event, _gesture)) {
+		_gesture.event = GestureEvent::Began;
+		_gesture.input = &event;
+		if (!_callback(_gesture)) {
 			cancel();
 		}
 		_lastTime = Time::now();
@@ -420,13 +424,11 @@ bool GesturePressRecognizer::removeEvent(const InputEvent &event, bool successfu
 	if (GestureRecognizer::removeEvent(event, successful, density)) {
 		float distance = event.originalLocation.getDistance(event.currentLocation);
 		_gesture.time = Time::now() - _lastTime;
-		if (successful && distance <= TapDistanceAllowed * density) {
-			_event = GestureEvent::Ended;
-		} else {
-			_event = GestureEvent::Cancelled;
-		}
-		_callback(_event, _gesture);
-		_event = GestureEvent::Cancelled;
+		_gesture.event = (successful && distance <= TapDistanceAllowed * density) ? GestureEvent::Ended : GestureEvent::Cancelled;
+		_gesture.input = &event;
+		_callback(_gesture);
+		_gesture.event = GestureEvent::Cancelled;
+		_gesture.input = nullptr;
 		_lastTime.clear();
 		_gesture.cleanup();
 		_notified = true;
@@ -492,11 +494,13 @@ bool GestureSwipeRecognizer::removeEvent(const InputEvent &event, bool successfu
             _lastTime = Time::now();
 		} else {
 			if (_swipeBegin) {
-				_event = successful ? GestureEvent::Ended : GestureEvent::Cancelled;
-				_callback(_event, _gesture);
+				_gesture.event = successful ? GestureEvent::Ended : GestureEvent::Cancelled;
+				_gesture.input = &event;
+				_callback(_gesture);
 			}
 
-			_event = GestureEvent::Cancelled;
+			_gesture.event = GestureEvent::Cancelled;
+			_gesture.input = nullptr;
 			_gesture.cleanup();
 			_swipeBegin = false;
 
@@ -534,8 +538,9 @@ bool GestureSwipeRecognizer::renewEvent(const InputEvent &event, float density) 
 				_gesture.midpoint = current;
 
 				_swipeBegin = true;
-				_event = GestureEvent::Began;
-				if (!_callback(_event, _gesture)) {
+				_gesture.event = GestureEvent::Began;
+				_gesture.input = &event;
+				if (!_callback(_gesture)) {
 					cancel();
 					return false;
 				}
@@ -552,9 +557,9 @@ bool GestureSwipeRecognizer::renewEvent(const InputEvent &event, float density) 
 				float velY = _velocityY.step(_gesture.delta.y * tm);
 
 				_gesture.velocity = Vec2(velX, velY);
-
-				_event = GestureEvent::Activated;
-				if (!_callback(_event, _gesture)) {
+				_gesture.event = GestureEvent::Activated;
+				_gesture.input = &event;
+				if (!_callback(_gesture)) {
 					cancel();
 					return false;
 				}
@@ -581,8 +586,9 @@ bool GestureSwipeRecognizer::renewEvent(const InputEvent &event, float density) 
 					_gesture.delta = _gesture.midpoint - prev;
 
 					_swipeBegin = true;
-					_event = GestureEvent::Began;
-					if (!_callback(_event, _gesture)) {
+					_gesture.event = GestureEvent::Began;
+					_gesture.input = &event;
+					if (!_callback(_gesture)) {
 						cancel();
 						return false;
 					}
@@ -599,9 +605,9 @@ bool GestureSwipeRecognizer::renewEvent(const InputEvent &event, float density) 
 					float velY = _velocityY.step(_gesture.delta.y * tm);
 
 					_gesture.velocity = Vec2(velX, velY);
-
-					_event = GestureEvent::Activated;
-					if (!_callback(_event, _gesture)) {
+					_gesture.event = GestureEvent::Activated;
+					_gesture.input = &event;
+					if (!_callback(_gesture)) {
 						cancel();
 						return false;
 					}
@@ -635,13 +641,14 @@ bool GestureScrollRecognizer::handleInputEvent(const InputEvent &event, float de
 		return false;
 	}
 
+	_gesture.event = GestureEvent::Activated;
+	_gesture.input = &event;
 	_gesture.pos = event.currentLocation;
 	_gesture.amount = Vec2(event.data.point.valueX, event.data.point.valueY);
-	_event = GestureEvent::Activated;
 	if (_callback) {
-		_callback(_event, _gesture);
+		_callback(_gesture);
 	}
-	_event = GestureEvent::Cancelled;
+	_gesture.event = GestureEvent::Cancelled;
 	return true;
 }
 
@@ -664,11 +671,13 @@ bool GestureMoveRecognizer::handleInputEvent(const InputEvent &event, float dens
 		return false;
 	}
 
-	_event = GestureEvent::Activated;
+	_event.event = GestureEvent::Activated;
+	_event.input = &event;
 	if (_callback) {
-		_callback(_event, event);
+		_callback(_event);
 	}
-	_event = GestureEvent::Cancelled;
+	_event.input = nullptr;
+	_event.event = GestureEvent::Cancelled;
 	return true;
 }
 
@@ -709,13 +718,13 @@ bool GestureKeyRecognizer::isKeyPressed(InputKeyCode code) const {
 
 bool GestureKeyRecognizer::addEvent(const InputEvent &event, float density) {
 	_pressedKeys.set(toInt(event.data.key.keycode));
-	_callback(GestureEvent::Began, event);
+	_callback(GestureData{GestureEvent::Began, &event});
 	return true;
 }
 
 bool GestureKeyRecognizer::removeEvent(const InputEvent &event, bool success, float density) {
 	if (_pressedKeys.test(toInt(event.data.key.keycode))) {
-		_callback(success ? GestureEvent::Ended : GestureEvent::Cancelled, event);
+		_callback(GestureData{success ? GestureEvent::Ended : GestureEvent::Cancelled, &event});
 		_pressedKeys.reset(toInt(event.data.key.keycode));
 		return true;
 	}
@@ -724,7 +733,7 @@ bool GestureKeyRecognizer::removeEvent(const InputEvent &event, bool success, fl
 
 bool GestureKeyRecognizer::renewEvent(const InputEvent &event, float density) {
 	if (_pressedKeys.test(toInt(event.data.key.keycode))) {
-		_callback(GestureEvent::Activated, event);
+		_callback(GestureData{GestureEvent::Activated, &event});
 		return true;
 	}
 	return false;

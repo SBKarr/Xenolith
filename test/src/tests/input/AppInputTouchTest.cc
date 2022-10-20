@@ -32,23 +32,23 @@ bool InputTouchTest::init() {
 	}
 
 	_input = addInputListener(Rc<InputListener>::create());
-	_input->addScrollRecognizer([] (GestureEvent event, const GestureScroll &scroll) {
-		std::cout << "Scroll: " << event << ": " << scroll.pos << " - " << scroll.amount << "\n";
+	_input->addScrollRecognizer([] (const GestureScroll &scroll) {
+		std::cout << "Scroll: " << scroll.event << ": " << scroll.pos << " - " << scroll.amount << "\n";
 		return true;
 	});
-	_input->addTouchRecognizer([this] (GestureEvent event, const InputEvent &ev) {
-		std::cout << "Touch (left): " << event << ": " << ev.currentLocation << "\n";
-		if (event == GestureEvent::Ended) {
-			handleClick(convertToNodeSpace(ev.currentLocation));
+	_input->addTouchRecognizer([this] (const GestureData &ev) {
+		std::cout << "Touch (left): " << ev.event << ": " << ev.input->currentLocation << "\n";
+		if (ev.event == GestureEvent::Ended) {
+			handleClick(convertToNodeSpace(ev.input->currentLocation));
 		}
 		return true;
 	});
-	_input->addTouchRecognizer([] (GestureEvent event, const InputEvent &ev) {
-		std::cout << "Touch (right): " << event << ": " << ev.currentLocation << "\n";
+	_input->addTouchRecognizer([] (const GestureData &ev) {
+		std::cout << "Touch (right): " << ev.event << ": " << ev.input->currentLocation << "\n";
 		return true;
 	}, InputListener::makeButtonMask({InputMouseButton::MouseRight}));
-	_input->addMoveRecognizer([this] (GestureEvent event, const InputEvent &ev) {
-		auto pos = convertToNodeSpace(ev.currentLocation);
+	_input->addMoveRecognizer([this] (const GestureData &ev) {
+		auto pos = convertToNodeSpace(ev.input->currentLocation);
 		_cursor->setPosition(pos);
 		return true;
 	});
@@ -71,16 +71,16 @@ void InputTouchTest::handleClick(const Vec2 &loc) {
 
 	auto l = node->addInputListener(Rc<InputListener>::create());
 	l->setSwallowAllEvents();
-	l->addTouchRecognizer([node] (GestureEvent event, const InputEvent &ev) {
-		std::cout << "Touch (node): " << event << ": " << ev.currentLocation << "\n";
-		switch (event) {
+	l->addTouchRecognizer([node] (const GestureData &ev) {
+		std::cout << "Touch (node): " << ev.event << ": " << ev.input->currentLocation << "\n";
+		switch (ev.event) {
 		case GestureEvent::Began:
 			break;
 		case GestureEvent::Moved:
-			node->setPosition(node->getParent()->convertToNodeSpace(ev.currentLocation));
+			node->setPosition(node->getParent()->convertToNodeSpace(ev.input->currentLocation));
 			break;
 		case GestureEvent::Ended:
-			if (node->isTouched(ev.currentLocation) && ev.currentLocation.distanceSquared(ev.originalLocation) < 8.0f * 8.0f) {
+			if (node->isTouched(ev.input->currentLocation) && ev.input->currentLocation.isWithinDistance(ev.input->originalLocation, 8.0f)) {
 				node->removeFromParent();
 			}
 			break;
@@ -89,12 +89,12 @@ void InputTouchTest::handleClick(const Vec2 &loc) {
 		}
 		return true;
 	});
-	l->addScrollRecognizer([node] (GestureEvent event, const GestureScroll &scroll) {
+	l->addScrollRecognizer([node] (const GestureScroll &scroll) {
 		if (scroll.amount.y != 0.0f) {
 			auto zRot = node->getRotation();
 			node->setRotation(zRot + scroll.amount.y / 40.0f);
 		}
-		std::cout << "Scroll: " << event << ": " << scroll.pos << " - " << scroll.amount << "\n";
+		std::cout << "Scroll: " << scroll.event << ": " << scroll.pos << " - " << scroll.amount << "\n";
 		return true;
 	});
 }

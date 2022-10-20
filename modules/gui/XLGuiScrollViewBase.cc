@@ -36,15 +36,15 @@ bool ScrollViewBase::init(Layout layout) {
 	_layout = layout;
 
 	_listener = addInputListener(Rc<InputListener>::create());
-	_listener->addTapRecognizer([this] (GestureEvent ev, const GestureTap &tap) {
-		if (ev == GestureEvent::Activated) {
+	_listener->addTapRecognizer([this] (const GestureTap &tap) {
+		if (tap.event == GestureEvent::Activated) {
 			onTap(tap.count, tap.pos);
 		}
 		return false;
 	}, InputListener::makeButtonMask({InputMouseButton::Touch}));
 
-	_listener->addPressRecognizer([this] (GestureEvent ev, const GesturePress &s) -> bool {
-		switch (ev) {
+	_listener->addPressRecognizer([this] (const GesturePress &s) -> bool {
+		switch (s.event) {
 		case GestureEvent::Began: return onPressBegin(s.pos); break;
 		case GestureEvent::Activated: return onLongPress(s.pos, s.time, s.tickCount); break;
 		case GestureEvent::Ended: return onPressEnd(s.pos, s.time); break;
@@ -53,8 +53,8 @@ bool ScrollViewBase::init(Layout layout) {
 		return false;
 	}, TimeInterval::milliseconds(425), true);
 
-	_listener->addSwipeRecognizer([this] (GestureEvent ev, const GestureSwipe &s) -> bool {
-		switch (ev) {
+	_listener->addSwipeRecognizer([this] (const GestureSwipe &s) -> bool {
+		switch (s.event) {
 		case GestureEvent::Began: return onSwipeEventBegin(s.midpoint, s.delta, s.velocity); break;
 		case GestureEvent::Activated: return onSwipeEvent(s.midpoint, s.delta, s.velocity); break;
 		case GestureEvent::Ended:
@@ -65,7 +65,7 @@ bool ScrollViewBase::init(Layout layout) {
 		return false;
 	});
 
-	_listener->addScrollRecognizer([this] (GestureEvent ev, const GestureScroll &w) -> bool {
+	_listener->addScrollRecognizer([this] (const GestureScroll &w) -> bool {
 		auto pos = getScrollPosition();
 		onSwipeBegin();
 		if (_layout == Vertical) {

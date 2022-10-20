@@ -47,7 +47,7 @@ bool LayoutTestBackButton::init(Function<void()> &&cb) {
 	auto image = Rc<VectorImage>::create(Size2(24.0f, 24.0f));
 
 	getIconData(IconName::Navigation_close_solid, [&] (BytesView view) {
-		image->addPath()->setPath(view).setFillColor(Color::White);
+		image->addPath("", "org.stappler.xenolith.test.LayoutTestBackButton.Close")->setPath(view).setFillColor(Color::White);
 	});
 
 	if (!VectorSprite::init(move(image))) {
@@ -63,8 +63,8 @@ bool LayoutTestBackButton::init(Function<void()> &&cb) {
 	l->setTouchFilter([] (const InputEvent &event, const InputListener::DefaultEventFilter &) {
 		return true;
 	});
-	l->addMoveRecognizer([this] (GestureEvent event, const InputEvent &ev) {
-		bool touched = isTouched(ev.currentLocation);
+	l->addMoveRecognizer([this] (const GestureData &ev) {
+		bool touched = isTouched(ev.input->currentLocation);
 		if (touched != _focus) {
 			_focus = touched;
 			if (_focus) {
@@ -75,8 +75,8 @@ bool LayoutTestBackButton::init(Function<void()> &&cb) {
 		}
 		return true;
 	});
-	l->addPressRecognizer([this] (GestureEvent event, const GesturePress &press) {
-		switch (event) {
+	l->addPressRecognizer([this] (const GesturePress &press) {
+		switch (press.event) {
 		case GestureEvent::Began:
 			return isTouched(press.pos);
 			break;

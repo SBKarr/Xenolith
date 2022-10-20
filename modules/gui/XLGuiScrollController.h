@@ -76,10 +76,8 @@ public:
 	/// It's usefull when scroll parameters (offset, size, items positions) are known
 	/// If scroll parameters are dynamic or determined in runtime - use barriers
 
-	virtual void setScrollableAreaOffset(float value);
+	virtual bool setScrollableArea(float offset, float size);
 	virtual float getScrollableAreaOffset() const; // NaN by default
-
-	virtual void setScrollableAreaSize(float value);
 	virtual float getScrollableAreaSize() const; // NaN by default
 
 	/// you should return true if this call successfully rebuilds visible objects

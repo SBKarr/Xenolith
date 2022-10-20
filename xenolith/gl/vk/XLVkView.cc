@@ -694,12 +694,14 @@ void View::runWithSwapchainImage(Rc<ImageStorage> &&image) {
 	_loop->getApplication()->performOnMainThread([this, req = move(req)] () mutable {
 		if (_director->acquireFrame(req)) {
 			_loop->performOnGlThread([this, req = move(req)] () mutable {
-				req->bindSwapchain(this);
-				auto order = _frameEmitter->submitNextFrame(move(req))->getOrder();
+				if (_loop->isRunning() && _swapchain) {
+					req->bindSwapchain(this);
+					auto order = _frameEmitter->submitNextFrame(move(req))->getOrder();
 
-				performOnThread([this, order] {
-					_frameOrder = order;
-				}, this);
+					performOnThread([this, order] {
+						_frameOrder = order;
+					}, this);
+				}
 			}, this);
 		}
 	}, this);

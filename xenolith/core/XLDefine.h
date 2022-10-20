@@ -41,9 +41,12 @@ public:
 	virtual ~PoolRef() {
 		memory::pool::destroy(_pool);
 	}
+
 	PoolRef(memory::pool_t *root = nullptr) {
 		_pool = memory::pool::create(root);
 	}
+
+	PoolRef(PoolRef *p) : PoolRef(p->_pool) { }
 
 	memory::pool_t *getPool() const { return _pool; }
 

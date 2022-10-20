@@ -20,45 +20,60 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_TESTS_VG_APPVGICONLIST_H_
-#define TEST_SRC_TESTS_VG_APPVGICONLIST_H_
+#ifndef TEST_SRC_TESTS_ACTION_APPACTIONEASETEST_H_
+#define TEST_SRC_TESTS_ACTION_APPACTIONEASETEST_H_
 
 #include "AppLayoutTest.h"
-#include "XLGuiScrollView.h"
+#include "AppSlider.h"
+#include "AppButton.h"
+#include "XLActionEase.h"
 
 namespace stappler::xenolith::app {
 
-class VgIconListPopup : public Layer {
+class ActionEaseNode : public Node {
 public:
-	virtual ~VgIconListPopup() { }
+	virtual ~ActionEaseNode() { }
 
-	virtual bool init() override;
+	bool init(StringView, Function<Rc<ActionInterval>(Rc<ActionInterval> &&)> &&);
 
 	virtual void onContentSizeDirty() override;
 
-	void setString(StringView);
+	void run();
+
+	void setTime(float value) { _time = value; }
 
 protected:
+	float _time = 1.0f;
+	Layer *_layer = nullptr;
 	Label *_label = nullptr;
+	Function<Rc<ActionInterval>(Rc<ActionInterval> &&)> _callback;
 };
 
-class VgIconList : public LayoutTest {
+class ActionEaseTest : public LayoutTest {
 public:
-	virtual ~VgIconList() { }
+	enum class Mode {
+		InOut,
+		Out,
+		In,
+	};
+
+	virtual ~ActionEaseTest() { }
 
 	virtual bool init();
 
 	virtual void onContentSizeDirty() override;
 
 protected:
-	bool rebuildScroll(ScrollController *);
-	void updatePopupLocation(const Vec2 &);
+	Rc<ActionInterval> makeAction(interpolation::Type, Rc<ActionInterval> &&) const;
+	interpolation::Type getSelectedType(interpolation::Type) const;
 
-	uint32_t _nCols = 0;
-	ScrollView *_scrollView = nullptr;
-	VgIconListPopup *_popup = nullptr;
+	Mode _mode = Mode::InOut;
+	AppSliderWithLabel *_slider = nullptr;
+	ButtonWithLabel *_button = nullptr;
+	ButtonWithLabel *_modeButton = nullptr;
+	Vector<ActionEaseNode *> _nodes;
 };
 
 }
 
-#endif /* TEST_SRC_TESTS_VG_APPVGICONLIST_H_ */
+#endif /* TEST_SRC_TESTS_ACTION_APPACTIONEASETEST_H_ */

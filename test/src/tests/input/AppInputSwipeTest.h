@@ -20,8 +20,29 @@
  THE SOFTWARE.
  **/
 
-#include "TessCursor.h"
+#ifndef TEST_SRC_TESTS_INPUT_APPINPUTSWIPETEST_H_
+#define TEST_SRC_TESTS_INPUT_APPINPUTSWIPETEST_H_
 
-namespace stappler::xenolith::tessapp {
+#include "AppLayoutTest.h"
+
+namespace stappler::xenolith::app {
+
+class InputSwipeTest : public LayoutTest {
+public:
+	virtual ~InputSwipeTest() { }
+
+	virtual bool init();
+
+	virtual void onContentSizeDirty() override;
+
+protected:
+	Vec2 getBoundedPosition(Vec2) const;
+	Rect getBoundsRect() const;
+
+	Layer *_boundsLayer = nullptr;
+	Layer *_node = nullptr;
+};
 
 }
+
+#endif /* TEST_SRC_TESTS_INPUT_APPINPUTSWIPETEST_H_ */

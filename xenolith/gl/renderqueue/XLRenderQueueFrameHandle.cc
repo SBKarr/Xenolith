@@ -273,7 +273,7 @@ void FrameHandle::setCompleteCallback(Function<void(FrameHandle &)> &&cb) {
 }
 
 bool FrameHandle::setup() {
-	_pool = Rc<PoolRef>::alloc(nullptr);
+	_pool = Rc<PoolRef>::alloc();
 
 	_pool->perform([&] {
 		auto q = Rc<FrameQueue>::create(_pool, _request->getQueue(), *this, _request->getExtent());
