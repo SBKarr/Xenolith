@@ -104,6 +104,11 @@ bool AppSliderWithLabel::init(StringView title, float value, Function<void(float
 	_label->setAnchorPoint(Anchor::MiddleLeft);
 	_label->setString(title);
 
+	_prefix = addChild(Rc<Label>::create());
+	_prefix->setFontSize(24);
+	_prefix->setAnchorPoint(Anchor::MiddleRight);
+	_prefix->setAlignment(Label::Alignment::Right);
+
 	return true;
 }
 
@@ -111,6 +116,7 @@ void AppSliderWithLabel::onContentSizeDirty() {
 	AppSlider::onContentSizeDirty();
 
 	_label->setPosition(Vec2(_contentSize.width + 16.0f, _contentSize.height / 2.0f));
+	_prefix->setPosition(Vec2(- 16.0f, _contentSize.height / 2.0f));
 }
 
 void AppSliderWithLabel::setString(StringView str) {
@@ -121,5 +127,21 @@ StringView AppSliderWithLabel::getString() const {
 	return _label->getString8();
 }
 
+void AppSliderWithLabel::setPrefix(StringView str) {
+	_prefix->setString(str);
+}
+
+StringView AppSliderWithLabel::getPrefix() const {
+	return _prefix->getString8();
+}
+
+void AppSliderWithLabel::setFontSize(Label::FontSize size) {
+	_label->setFontSize(size);
+	_prefix->setFontSize(size);
+}
+void AppSliderWithLabel::setFontSize(uint16_t size) {
+	_label->setFontSize(size);
+	_prefix->setFontSize(size);
+}
 
 }

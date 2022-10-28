@@ -30,7 +30,7 @@ namespace stappler::xenolith::app {
 
 static AppDelegate s_delegate;
 
-AppDelegate::AppDelegate() { }
+XL_DECLARE_EVENT_CLASS(AppDelegate, onSwapchainConfig);
 
 AppDelegate::~AppDelegate() { }
 
@@ -63,23 +63,60 @@ bool AppDelegate::onMainLoop() {
 	return true;
 }
 
+void AppDelegate::setPreferredPresentMode(gl::PresentMode mode) {
+	std::unique_lock<Mutex> lock(_configMutex);
+	_preferredPresentMode = mode;
+}
+
 gl::SwapchainConfig AppDelegate::selectConfig(const gl::SurfaceInfo &info) {
+	std::unique_lock<Mutex> lock(_configMutex);
 	gl::SwapchainConfig ret;
 	ret.extent = info.currentExtent;
 	ret.imageCount = std::max(uint32_t(2), info.minImageCount);
+
 	ret.presentMode = info.presentModes.front();
+	if (_preferredPresentMode != gl::PresentMode::Unsupported) {
+		for (auto &it : info.presentModes) {
+			if (it == _preferredPresentMode) {
+				ret.presentMode = it;
+				break;
+			}
+		}
+	}
 
 	if (std::find(info.presentModes.begin(), info.presentModes.end(), gl::PresentMode::Immediate) != info.presentModes.end()) {
 		ret.presentModeFast = gl::PresentMode::Immediate;
 	}
 
-	ret.imageFormat = info.formats.front().first;
-	ret.colorSpace = info.formats.front().second;
+	auto it = info.formats.begin();
+	while (it != info.formats.end()) {
+		if (it->first != platform::graphic::getCommonFormat()) {
+			++ it;
+		} else {
+			break;
+		}
+	}
+
+	if (it == info.formats.end()) {
+		ret.imageFormat = info.formats.front().first;
+		ret.colorSpace = info.formats.front().second;
+	} else {
+		ret.imageFormat = it->first;
+		ret.colorSpace = it->second;
+	}
+
 	ret.transfer = (info.supportedUsageFlags & gl::ImageUsage::TransferDst) != gl::ImageUsage::None;
 
 	if (ret.presentMode == gl::PresentMode::Mailbox) {
 		ret.imageCount = std::max(uint32_t(3), ret.imageCount);
 	}
+
+	performOnMainThread([this, info, ret] {
+		_surfaceInfo = info;
+		_swapchainConfig = ret;
+
+		onSwapchainConfig(this);
+	});
 
 	return ret;
 }

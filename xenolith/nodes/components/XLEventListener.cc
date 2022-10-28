@@ -34,19 +34,19 @@ bool EventListener::init() {
 	return true;
 }
 
-void EventListener::onEventRecieved(const Event &ev, const Callback &cb) {
+void EventListener::onEventRecieved(const Event &ev, const EventCallback &cb) {
 	if (_enabled && _owner && cb) {
 		cb(ev);
 	}
 }
 
-EventHandlerNode * EventListener::onEvent(const EventHeader &h, Callback &&callback, bool destroyAfterEvent) {
+EventHandlerNode * EventListener::onEvent(const EventHeader &h, EventCallback &&callback, bool destroyAfterEvent) {
 	return EventHandlerNode::onEvent(h, nullptr,
 			std::bind(&EventListener::onEventRecieved, this, std::placeholders::_1, std::move(callback)),
 			this, destroyAfterEvent);
 }
 
-EventHandlerNode * EventListener::onEventWithObject(const EventHeader &h, Ref *obj, Callback &&callback, bool destroyAfterEvent) {
+EventHandlerNode * EventListener::onEventWithObject(const EventHeader &h, Ref *obj, EventCallback &&callback, bool destroyAfterEvent) {
 	return EventHandlerNode::onEvent(h, obj,
 			std::bind(&EventListener::onEventRecieved, this, std::placeholders::_1, std::move(callback)),
 			this, destroyAfterEvent);

@@ -92,6 +92,7 @@ bool XkbLibrary::open(void *handle) {
 	xkb_compose_table_unref = reinterpret_cast<decltype(xkb_compose_table_unref)>(dlsym(handle, "xkb_compose_table_unref"));
 	xkb_compose_state_new = reinterpret_cast<decltype(xkb_compose_state_new)>(dlsym(handle, "xkb_compose_state_new"));
 	xkb_compose_state_feed = reinterpret_cast<decltype(xkb_compose_state_feed)>(dlsym(handle, "xkb_compose_state_feed"));
+	xkb_compose_state_reset = reinterpret_cast<decltype(xkb_compose_state_reset)>(dlsym(handle, "xkb_compose_state_reset"));
 	xkb_compose_state_get_status = reinterpret_cast<decltype(xkb_compose_state_get_status)>(dlsym(handle, "xkb_compose_state_get_status"));
 	xkb_compose_state_get_one_sym = reinterpret_cast<decltype(xkb_compose_state_get_one_sym)>(dlsym(handle, "xkb_compose_state_get_one_sym"));
 	xkb_compose_state_unref = reinterpret_cast<decltype(xkb_compose_state_unref)>(dlsym(handle, "xkb_compose_state_unref"));
@@ -119,6 +120,7 @@ bool XkbLibrary::open(void *handle) {
 			&& this->xkb_compose_table_unref
 			&& this->xkb_compose_state_new
 			&& this->xkb_compose_state_feed
+			&& this->xkb_compose_state_reset
 			&& this->xkb_compose_state_get_status
 			&& this->xkb_compose_state_get_one_sym
 			&& this->xkb_compose_state_unref) {

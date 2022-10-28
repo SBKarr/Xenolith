@@ -52,7 +52,7 @@ bool LayoutMenuItem::init(StringView str, Function<void()> &&cb) {
 			}
 		}
 		return true;
-	});
+	}, false);
 	l->addPressRecognizer([this] (const GesturePress &press) {
 		switch (press.event) {
 		case GestureEvent::Began:

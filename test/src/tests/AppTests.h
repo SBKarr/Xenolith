@@ -34,17 +34,20 @@ enum class LayoutName {
 	ActionTests,
 	VgTests,
 	GuiTests,
+	Config,
 
 	GeneralUpdateTest = 256 * 1,
 	GeneralZOrderTest,
 	GeneralLabelTest,
 	GeneralTransparencyTest,
 	GeneralAutofitTest,
+	GeneralTemporaryResourceTest,
 
 	InputTouchTest = 256 * 2,
 	InputKeyboardTest,
 	InputTapPressTest,
 	InputSwipeTest,
+	InputTextTest,
 
 	ActionProgressTest = 256 * 3,
 	ActionEaseTest,

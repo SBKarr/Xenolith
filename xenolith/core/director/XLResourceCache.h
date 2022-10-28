@@ -29,11 +29,16 @@
 
 namespace stappler::xenolith {
 
+class Scene;
+class TemporaryResource;
+
 class Texture : public NamedRef {
 public:
 	virtual ~Texture();
 
+	bool init(const gl::ImageData *);
 	bool init(const gl::ImageData *, const Rc<renderqueue::Resource> &);
+	bool init(const gl::ImageData *, const Rc<TemporaryResource> &);
 	bool init(const Rc<gl::DynamicImage> &);
 
 	virtual StringView getName() const;
@@ -45,10 +50,68 @@ public:
 
 	Extent3 getExtent() const;
 
+	bool isLoaded() const;
+
+	void onEnter(Scene *);
+	void onExit(Scene *);
+
+	const gl::ImageData *getImageData() const { return _data; }
+	Rc<TemporaryResource> getTemporary() const { return _temporary; }
+
 protected:
 	const gl::ImageData *_data = nullptr;
 	Rc<renderqueue::Resource> _resource;
 	Rc<gl::DynamicImage> _dynamic;
+	Rc<TemporaryResource> _temporary;
+};
+
+class TemporaryResource : public Ref {
+public:
+	static EventHeader onLoaded; // bool - true если ресурс загружен, false если выгружен
+
+	virtual ~TemporaryResource();
+
+	bool init(Rc<renderqueue::Resource> &&, TimeInterval timeout);
+
+	Rc<Texture> acquireTexture(StringView);
+
+	void setLoaded(bool);
+	void setRequested(bool);
+	void setTimeout(TimeInterval);
+
+	// Загружает ресурс в память, вызывает функцию по завершению со значением true
+	// Если ресурс уже загружен, вызывает функцию немедленно со значением false
+	// Возвращает true если загрузка начата и false есть ресурс уже загружен
+	bool load(Ref *, Function<void(bool)> &&);
+
+	void onEnter(Scene *, Texture *);
+	void onExit(Scene *, Texture *);
+
+	void clear();
+
+	StringView getName() const;
+
+	bool isRequested() const { return _requested; }
+	bool isLoaded() const { return _loaded; }
+
+	Time getAccessTime() const { return _atime; }
+	TimeInterval getTimeout() const { return _timeout; }
+	size_t getUsersCount() const { return _users; }
+
+	const Rc<renderqueue::Resource> &getResource() const { return _resource; }
+
+	bool isDeprecated(const UpdateTime &) const;
+
+protected:
+	bool _requested = false;
+	bool _loaded = false;
+	size_t _users = 0;
+	uint64_t _atime;
+	TimeInterval _timeout;
+	Rc<renderqueue::Resource> _resource;
+	Map<const gl::ImageData *, Rc<Texture>> _textures;
+	Set<Rc<Scene>> _scenes;
+	Vector<Pair<Rc<Ref>, Function<void(bool)>>> _callbacks;
 };
 
 class ResourceCache : public Ref {
@@ -60,6 +123,8 @@ public:
 	bool init();
 	void invalidate();
 
+	void update(Director *, const UpdateTime &);
+
 	void addImage(gl::ImageData &&);
 	void addResource(const Rc<renderqueue::Resource> &);
 	void removeResource(StringView);
@@ -69,10 +134,31 @@ public:
 	const gl::ImageData *getEmptyImage() const;
 	const gl::ImageData *getSolidImage() const;
 
+	/*const gl::BufferData * addExternalBufferByRef(StringView key, gl::BufferInfo &&, BytesView data);
+	const gl::BufferData * addExternalBuffer(StringView key, gl::BufferInfo &&, FilePath data);
+	const gl::BufferData * addExternalBuffer(StringView key, gl::BufferInfo &&, BytesView data);
+	const gl::BufferData * addExternalBuffer(StringView key, gl::BufferInfo &&, size_t,
+			const memory::function<void(const gl::BufferData::DataCallback &)> &cb);*/
+
+	Rc<Texture> addExternalImageByRef(StringView key, gl::ImageInfo &&, BytesView data, TimeInterval = TimeInterval());
+	Rc<Texture> addExternalImage(StringView key, gl::ImageInfo &&, FilePath data, TimeInterval = TimeInterval());
+	Rc<Texture> addExternalImage(StringView key, gl::ImageInfo &&, BytesView data, TimeInterval = TimeInterval());
+	Rc<Texture> addExternalImage(StringView key, gl::ImageInfo &&,
+			const memory::function<void(const gl::ImageData::DataCallback &)> &cb, TimeInterval = TimeInterval());
+
+	Rc<TemporaryResource> addTemporaryResource(Rc<renderqueue::Resource> &&, TimeInterval = TimeInterval());
+
+	Rc<TemporaryResource> getTemporaryResource(StringView str) const;
+	bool hasTemporaryResource(StringView) const;
+	void removeTemporaryResource(StringView);
+
 protected:
+	void compileResource(Director *, TemporaryResource *);
+	void clearResource(Director *, TemporaryResource *);
+
 	Map<StringView, gl::ImageData> _images;
 	Map<StringView, Rc<renderqueue::Resource>> _resources;
-
+	Map<StringView, Rc<TemporaryResource>> _temporaries;
 };
 
 }

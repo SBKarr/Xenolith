@@ -242,7 +242,7 @@ void View::update() {
 	do {
 		auto it = _scheduledPresent.begin();
 		while (it != _scheduledPresent.end()) {
-			if ((*it)->getPresentWindow() < clock) {
+			if (!(*it)->getPresentWindow() || (*it)->getPresentWindow() < clock) {
 				runScheduledPresent(move(*it));
 				it = _scheduledPresent.erase(it);
 			} else {
@@ -258,7 +258,7 @@ void View::run() {
 }
 
 void View::runWithQueue(const Rc<RenderQueue> &queue) {
-	auto req = Rc<FrameRequest>::create(queue, _frameEmitter, _screenExtent);
+	auto req = Rc<FrameRequest>::create(queue, _frameEmitter, _screenExtent, _density);
 	req->bindSwapchainCallback([this] (renderqueue::FrameAttachmentData &attachment, bool success) {
 		if (success) {
 			_initImage = move(attachment.image);
@@ -305,7 +305,7 @@ void View::deprecateSwapchain() {
 bool View::present(Rc<ImageStorage> &&object) {
 	if (object->isSwapchainImage()) {
 		auto img = (SwapchainImage *)object.get();
-		if (img->getPresentWindow() < platform::device::_clock(platform::device::ClockType::Monotonic)) {
+		if (!img->getPresentWindow() || img->getPresentWindow() < platform::device::_clock(platform::device::ClockType::Monotonic)) {
 			auto queue = _device->tryAcquireQueueSync(QueueOperations::Present);
 			if (queue) {
 				performOnThread([this, queue = move(queue), object = move(object)] () mutable {
@@ -417,6 +417,7 @@ bool View::presentImmediate(Rc<ImageStorage> &&object) {
 	if (result == VK_SUCCESS) {
 		presentFence->check(*((Loop *)_loop.get()), false);
 		dev->releaseCommandPoolUnsafe(move(pool));
+		presentFence = nullptr;
 		return true;
 	} else {
 		if (result == VK_ERROR_OUT_OF_DATE_KHR) {
@@ -504,8 +505,14 @@ void View::invalidate() {
 
 void View::scheduleSwapchainImage(uint64_t windowOffset, bool immediate) {
 	performOnThread([this, windowOffset, immediate] {
-		auto presentWindow = platform::device::_clock(platform::device::ClockType::Monotonic) + _frameInterval - getUpdateInterval() - windowOffset;
-		auto image = Rc<SwapchainImage>::create(Rc<SwapchainHandle>(_swapchain), _frameOrder, presentWindow);
+		Rc<SwapchainImage> image;
+		auto fullOffset = getUpdateInterval() + windowOffset;
+		if (fullOffset > _frameInterval) {
+			image = Rc<SwapchainImage>::create(Rc<SwapchainHandle>(_swapchain), _frameOrder, 0);
+		} else {
+			auto presentWindow = platform::device::_clock(platform::device::ClockType::Monotonic) + _frameInterval - getUpdateInterval() - windowOffset;
+			image = Rc<SwapchainImage>::create(Rc<SwapchainHandle>(_swapchain), _frameOrder, presentWindow);
+		}
 
 		// make new frame request immediately
 		runWithSwapchainImage(Rc<SwapchainImage>(image));
@@ -618,6 +625,27 @@ bool View::createSwapchain(gl::SwapchainConfig &&cfg, gl::PresentMode presentMod
 
 		if (_swapchain) {
 			setScreenExtent(cfg.extent);
+
+			Vector<uint64_t> ids;
+			auto &cache = _loop->getFrameCache();
+			for (auto &it : _swapchain->getImages()) {
+				for (auto &iit : it.views) {
+					auto id = iit.second->getIndex();
+					ids.emplace_back(iit.second->getIndex());
+					iit.second->setReleaseCallback([loop = _loop, cache, id] {
+						loop->performOnGlThread([cache, id] {
+							cache->removeImageView(id);
+						});
+					});
+				}
+			}
+
+			_loop->performOnGlThread([loop = _loop, ids] {
+				auto &cache = loop->getFrameCache();
+				for (auto &id : ids) {
+					cache->addImageView(id);
+				}
+			});
 		}
 
 		_config = move(cfg);
@@ -690,7 +718,7 @@ bool View::isImagePresentable(const gl::ImageObject &image, VkFilter &filter) co
 void View::runWithSwapchainImage(Rc<ImageStorage> &&image) {
 	image->setReady(false);
 
-	auto req = _frameEmitter->makeRequest(move(image));
+	auto req = _frameEmitter->makeRequest(move(image), _density);
 	_loop->getApplication()->performOnMainThread([this, req = move(req)] () mutable {
 		if (_director->acquireFrame(req)) {
 			_loop->performOnGlThread([this, req = move(req)] () mutable {
@@ -729,7 +757,7 @@ void View::runScheduledPresent(Rc<SwapchainImage> &&object) {
 
 void View::presentWithQueue(DeviceQueue &queue, Rc<ImageStorage> &&image) {
 	auto res = _swapchain->present(queue, move(image));
-	updateFrameInterval();
+	auto dt = updateFrameInterval();
 	if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR) {
 		_swapchain->deprecate();
 	}
@@ -749,6 +777,20 @@ void View::presentWithQueue(DeviceQueue &queue, Rc<ImageStorage> &&image) {
 		// log::vtext("View", "recreateSwapchain - View::presentWithQueue (", renderqueue::FrameHandle::GetActiveFramesCount(), ")");
 		recreateSwapchain(_swapchain->getRebuildMode());
 	} else {
+		if (_options.flattenFrameRate) {
+			const auto maxWindow = _frameInterval - getUpdateInterval() + _frameInterval / 20;
+			const auto currentWindow = std::max(dt.first, dt.second);
+
+			if (currentWindow > maxWindow) {
+				auto ft = _frameEmitter->getAvgFrameTime();
+				if (ft < maxWindow) {
+					scheduleSwapchainImage(currentWindow);
+				} else {
+					scheduleSwapchainImage(currentWindow + ft - maxWindow);
+				}
+				return;
+			}
+		}
 		scheduleSwapchainImage(0);
 	}
 }
@@ -764,13 +806,14 @@ void View::invalidateSwapchainImage(Rc<ImageStorage> &&image) {
 	}
 }
 
-void View::updateFrameInterval() {
-	std::unique_lock<Mutex> lock(_frameIntervalMutex);
+Pair<uint64_t, uint64_t> View::updateFrameInterval() {
 	auto n = platform::device::_clock();
 	auto dt = n - _lastFrameStart;
 	_lastFrameInterval = dt;
 	_avgFrameInterval.addValue(dt);
+	_avgFrameIntervalValue = _avgFrameInterval.getAverage(true);
 	_lastFrameStart = n;
+	return pair(_avgFrameIntervalValue.load(), dt);
 }
 
 void View::waitForFences(uint64_t min) {

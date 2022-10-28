@@ -93,7 +93,7 @@ WaylandView::WaylandView(WaylandLibrary *lib, ViewImpl *view, StringView name, U
 		_display->wayland->wl_region_destroy(region);
 	}
 
-	uint32_t rate = 125000;
+	uint32_t rate = 60000;
 	for (auto &it : _display->outputs) {
 		rate = std::max(rate, uint32_t(it->mode.refresh));
 	}
@@ -118,7 +118,13 @@ WaylandView::~WaylandView() {
 	_display = nullptr;
 }
 
-VkSurfaceKHR WaylandView::createWindowSurface(vk::Instance *instance) const {
+VkSurfaceKHR WaylandView::createWindowSurface(vk::Instance *instance, VkPhysicalDevice dev) const {
+	std::cout << "Create wayland surface for " << (void *)dev << " on " << (void *)_display->display << "\n";
+	auto supports = instance->vkGetPhysicalDeviceWaylandPresentationSupportKHR(dev, 0, _display->display);
+	if (!supports) {
+		return nullptr;
+	}
+
 	VkSurfaceKHR ret;
 	VkWaylandSurfaceCreateInfoKHR info{
 		VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
@@ -129,6 +135,12 @@ VkSurfaceKHR WaylandView::createWindowSurface(vk::Instance *instance) const {
 	};
 
 	if (instance->vkCreateWaylandSurfaceKHR(instance->getInstance(), &info, nullptr, &ret) == VK_SUCCESS) {
+		VkBool32 pSupported = 0;
+		instance->vkGetPhysicalDeviceSurfaceSupportKHR(dev, 0, ret, &pSupported);
+		if (!pSupported) {
+			instance->vkDestroySurfaceKHR(instance->getInstance(), ret, nullptr);
+			return nullptr;
+		}
 		return ret;
 	}
 	return nullptr;
@@ -168,7 +180,7 @@ int WaylandView::getSocketFd() const {
 uint64_t WaylandView::getScreenFrameInterval() const {
 	// On Wayland, limit on full interval causes vblank miss due Mailbox implementation, so, limit on half-interval
 	// Mailbox do appropriate sync even without specified frame interval, it's just a little help for engine
-	return _screenFrameInterval / 2;
+	return _screenFrameInterval /*/ 2*/;
 }
 
 void WaylandView::mapWindow() {
@@ -654,6 +666,7 @@ void WaylandView::handleKey(uint32_t time, uint32_t scancode, uint32_t state) {
 	});
 
 	event.key.keycode = _display->seat->translateKey(scancode);
+	event.key.compose = InputKeyComposeState::Nothing;
 	event.key.keysym = scancode;
 	event.key.keychar = 0;
 
@@ -664,7 +677,7 @@ void WaylandView::handleKey(uint32_t time, uint32_t scancode, uint32_t state) {
 		char32_t codepoint = 0;
 		if (_display->xkb && _view->isInputEnabled()) {
 			if (_display->xkb->xkb_state_key_get_syms(_display->seat->state, keycode, &keysyms) == 1) {
-				const xkb_keysym_t keysym = _display->seat->composeSymbol(keysyms[0]);
+				const xkb_keysym_t keysym = _display->seat->composeSymbol(keysyms[0], event.key.compose);
 				const uint32_t cp = _display->xkb->xkb_keysym_to_utf32(keysym);
 				if (cp != 0 && keysym != XKB_KEY_NoSymbol) {
 					codepoint = cp;

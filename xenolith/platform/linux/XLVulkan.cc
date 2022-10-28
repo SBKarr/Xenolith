@@ -143,10 +143,12 @@ Rc<gl::Instance> createInstance(Application *app) {
 
 	for (auto &extension : s_InstanceAvailableExtensions) {
 		if constexpr (vk::s_enableValidationLayers) {
-			if (strcmp(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, extension.extensionName) == 0) {
-				requiredExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-				debugExt = extension.extensionName;
-				continue;
+			if (app->getData().validation) {
+				if (strcmp(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, extension.extensionName) == 0) {
+					requiredExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+					debugExt = extension.extensionName;
+					continue;
+				}
 			}
 		}
 		if (strcmp(VK_KHR_SURFACE_EXTENSION_NAME, extension.extensionName) == 0) {
@@ -196,9 +198,11 @@ Rc<gl::Instance> createInstance(Application *app) {
 	}
 
 	if constexpr (vk::s_enableValidationLayers) {
-		if (!debugExt) {
-			log::format("Vk", "Required extension not found: %s", VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-			completeExt = false;
+		if (app->getData().validation) {
+			if (!debugExt) {
+				log::format("Vk", "Required extension not found: %s", VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+				completeExt = false;
+			}
 		}
 	}
 
@@ -250,12 +254,14 @@ Rc<gl::Instance> createInstance(Application *app) {
 	enum VkResult ret = VK_SUCCESS;
 	if constexpr (vk::s_enableValidationLayers) {
 #if VK_DEBUG_LOG
-	    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo = {};
-	    debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-	    debugCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-	    debugCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-	    debugCreateInfo.pfnUserCallback = vk::s_debugCallback;
-		createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
+		if (app->getData().validation) {
+			VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo = {};
+			debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+			debugCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+			debugCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+			debugCreateInfo.pfnUserCallback = vk::s_debugCallback;
+			createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
+		}
 #endif
 	} else {
 		createInfo.pNext = nullptr;
@@ -277,9 +283,13 @@ Rc<gl::Instance> createInstance(Application *app) {
 		uint32_t ret = 0;
 		if ((surfaceType & SurfaceType::Wayland) != SurfaceType::None) {
 			auto display = waylandLib->getActiveConnection().display;
+			std::cout << "Check if " << (void *)device << " [" << queueIdx << "] supports wayland on " << (void *)display << ": ";
 			auto supports = instance->vkGetPhysicalDeviceWaylandPresentationSupportKHR(device, queueIdx, display);
 			if (supports) {
 				ret |= toInt(SurfaceType::Wayland);
+				std::cout << "yes\n";
+			} else {
+				std::cout << "no\n";
 			}
 		}
 		if ((surfaceType & SurfaceType::XCB) != SurfaceType::None) {

@@ -71,8 +71,14 @@ XENOLITH_INCLUDES_OBJS += \
 	thirdparty
 
 # shaders
-XENOLITH_SHADERS := $(wildcard $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/*)
-XENOLITH_SHADERS_COMPILED := $(subst /glsl/,/compiled/shader_,$(XENOLITH_SHADERS))
+XENOLITH_EMBEDDER_DIR = $(realpath $(XENOLITH_MAKEFILE_DIR)/../utils/embedder)
+XENOLITH_EMBEDDER = $(XENOLITH_EMBEDDER_DIR)/stappler-build/host/embedder -f
+XENOLITH_SHADERS := $(wildcard $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/*/*)
+XENOLITH_SHADERS_COMPILED := $(subst /glsl/,/compiled/,$(XENOLITH_SHADERS))
+XENOLITH_SHADERS_LINKED := $(subst /glsl/,/linked/,$(wildcard $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/*))
+XENOLITH_SHADERS_EMBEDDED := $(subst /linked/,/embedded/,$(XENOLITH_SHADERS_LINKED))
+
+$(info $(XENOLITH_SHADERS_EMBEDDED))
 
 XENOLITH_FLAGS :=
 
@@ -140,11 +146,22 @@ include $(GLOBAL_ROOT)/make/utils/resolve-modules.mk
 include $(GLOBAL_ROOT)/make/utils/make-toolkit.mk
 
 # Shader dependencies
-$(XENOLITH_MAKEFILE_DIR)/shaders/XLDefaultShaders.cpp : $(subst /glsl/,/compiled/shader_,$(XENOLITH_SHADERS)) 
+$(XENOLITH_MAKEFILE_DIR)/shaders/XLDefaultShaders.cpp : $(XENOLITH_SHADERS_EMBEDDED) 
 
-$(XENOLITH_MAKEFILE_DIR)/shaders/compiled/shader_% : $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/%
-	@$(GLOBAL_MKDIR) $(XENOLITH_MAKEFILE_DIR)/shaders/compiled
-	${GLSLC} -V -o $(XENOLITH_MAKEFILE_DIR)/shaders/compiled/shader_$* $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/$* --vn $(subst .,_,$*)
+$(XENOLITH_EMBEDDER) :
+	$(MAKE) -C $(XENOLITH_EMBEDDER_DIR) install
+
+$(XENOLITH_MAKEFILE_DIR)/shaders/embedded/% : $(XENOLITH_MAKEFILE_DIR)/shaders/linked/% | $(XENOLITH_EMBEDDER)
+	@$(GLOBAL_MKDIR) $(dir $@)
+	$(XENOLITH_EMBEDDER) --output $@ --input $< --name $(subst .,_,$*)
+
+$(XENOLITH_MAKEFILE_DIR)/shaders/linked/% : $(XENOLITH_SHADERS_COMPILED)
+	@$(GLOBAL_MKDIR) $(dir $@)
+	spirv-link -o $@ $(subst /glsl/,/compiled/,$(wildcard $(subst /linked/,/glsl/,$@)/*))
+
+$(XENOLITH_MAKEFILE_DIR)/shaders/compiled/% : $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/%
+	@$(GLOBAL_MKDIR) $(dir $@)
+	${GLSLC} -V -o $(XENOLITH_MAKEFILE_DIR)/shaders/compiled/$* $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/$* -e $(notdir $(basename $*)) --sep main
 
 # Static library
 $(XENOLITH_OUTPUT_STATIC) : $(XENOLITH_H_GCH) $(XENOLITH_GCH) $(XENOLITH_OBJS)

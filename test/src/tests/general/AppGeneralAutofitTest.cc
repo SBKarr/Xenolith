@@ -23,6 +23,8 @@
 #include "AppGeneralAutofitTest.h"
 #include "XLSprite.h"
 #include "XLLabel.h"
+#include "XLIconNames.h"
+#include "XLInputListener.h"
 
 namespace stappler::xenolith::app {
 
@@ -40,13 +42,6 @@ protected:
 	Layer *_layers[5] = { nullptr };
 	Sprite *_sprites[5] = { nullptr };
 	Label *_labels[5] = { nullptr };
-};
-
-class GeneralAutofitTestResize : public VectorSprite {
-public:
-	virtual ~GeneralAutofitTestResize() { }
-
-	virtual bool init() override;
 };
 
 bool GeneralAutofitTestNode::init() {
@@ -118,10 +113,15 @@ void GeneralAutofitTestNode::onContentSizeDirty() {
 	}
 }
 
-
 bool GeneralAutofitTestResize::init() {
 	auto image = Rc<VectorImage>::create(Size2(24, 24));
-	return true;
+
+	getIconData(IconName::Navigation_unfold_more_solid, [&] (BytesView view) {
+		image->addPath("", "org.stappler.xenolith.test.GeneralAutofitTestResize.Resize")->setPath(view)
+				.addOval(Rect(0, 0, 24, 24)).setWindingRule(vg::Winding::EvenOdd).setFillColor(Color::White);
+	});
+
+	return VectorSprite::init(move(image));
 }
 
 bool GeneralAutofitTest::init() {
@@ -132,6 +132,53 @@ bool GeneralAutofitTest::init() {
 	_nodeAutofit = addChild(Rc<GeneralAutofitTestNode>::create());
 	_nodeAutofit->setAnchorPoint(Anchor::Middle);
 
+	_nodeResize = addChild(Rc<GeneralAutofitTestResize>::create(), 1);
+	_nodeResize->setAnchorPoint(Anchor::Middle);
+	_nodeResize->setColor(Color::Grey_200);
+	_nodeResize->setContentSize(Size2(48, 48));
+	_nodeResize->setRotation(-45.0_to_rad);
+
+	auto l = _nodeResize->addInputListener(Rc<InputListener>::create());
+	l->addMouseOverRecognizer([this] (const GestureData &data) {
+		switch (data.event) {
+		case GestureEvent::Began:
+			_nodeResize->setColor(Color::Grey_600);
+			break;
+		default:
+			_nodeResize->setColor(Color::Grey_400);
+			break;
+		}
+		return true;
+	});
+	l->addSwipeRecognizer([this] (const GestureSwipe &swipe) {
+		if (swipe.event == GestureEvent::Activated) {
+			auto tmp = _contentSize * 0.90f * 0.5f;
+			auto max = Vec2(_contentSize / 2.0f) + Vec2(tmp.width, -tmp.height);
+			auto min = Vec2(_contentSize / 2.0f) + Vec2(32.0f, -32.0f);
+			auto pos = _nodeResize->getPosition().xy();
+			auto newPos = pos + swipe.delta;
+
+			if (newPos.x < min.x) {
+				newPos.x = min.x;
+			}
+			if (newPos.x > max.x) {
+				newPos.x = max.x;
+			}
+			if (newPos.y > min.y) {
+				newPos.y = min.y;
+			}
+			if (newPos.y < max.y) {
+				newPos.y = max.y;
+			}
+			_nodeResize->setPosition(newPos);
+
+			auto newContentSize = Size2(newPos.x - _contentSize.width / 2.0f, _contentSize.height / 2.0f - newPos.y);
+			_nodeAutofit->setContentSize(newContentSize * 2.0f);
+		}
+
+		return true;
+	});
+
 	return true;
 }
 
@@ -139,7 +186,11 @@ void GeneralAutofitTest::onContentSizeDirty() {
 	LayoutTest::onContentSizeDirty();
 
 	_nodeAutofit->setPosition(_contentSize / 2.0f);
-	_nodeAutofit->setContentSize(_contentSize * 0.85f);
+	_nodeAutofit->setContentSize(_contentSize * 0.90f);
+
+	auto tmp = _nodeAutofit->getContentSize() / 2.0f;
+
+	_nodeResize->setPosition(Vec2(_contentSize / 2.0f) + Vec2(tmp.width, -tmp.height));
 }
 
 }

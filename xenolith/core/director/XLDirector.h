@@ -87,12 +87,10 @@ protected:
 
 	Extent2 _screenExtent;
 	Size2 _screenSize;
-	float _density = 1.0f;
 
 	uint64_t _startTime = 0;
 	UpdateTime _time;
 	gl::DrawStat _drawStat;
-	bool _running = false;
 
 	Mutex _mutex;
 

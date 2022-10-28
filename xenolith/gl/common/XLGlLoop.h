@@ -59,7 +59,7 @@ public:
 	const Rc<Instance> &getGlInstance() const { return _glInstance; }
 	const Rc<FrameCache> &getFrameCache() const { return _frameCache; }
 
-	virtual void compileResource(Rc<Resource> &&req) = 0;
+	virtual void compileResource(Rc<Resource> &&req, Function<void(bool)> &&) = 0;
 	virtual void compileMaterials(Rc<MaterialInputData> &&req, const Vector<Rc<DependencyEvent>> & = Vector<Rc<DependencyEvent>>()) = 0;
 	virtual void compileRenderQueue(const Rc<RenderQueue> &req, Function<void(bool)> && = nullptr) = 0;
 	virtual void compileImage(const Rc<DynamicImage> &, Function<void(bool)> && = nullptr) = 0;

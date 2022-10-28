@@ -317,6 +317,7 @@ public:
 	virtual void setOnTransformDirtyCallback(Function<void(const Mat4 &)> &&);
 	virtual void setOnReorderChildDirtyCallback(Function<void()> &&);
 
+	Director *getDirector() const { return _director; }
 	Scheduler *getScheduler() const { return _scheduler; }
 	ActionManager *getActionManager() const { return _actionManager; }
 

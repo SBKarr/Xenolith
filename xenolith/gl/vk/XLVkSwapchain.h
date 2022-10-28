@@ -65,6 +65,7 @@ public:
 	const gl::SwapchainConfig &getConfig() const { return _config; }
 	VkSwapchainKHR getSwapchain() const { return _swapchain; }
 	uint32_t getAcquiredImagesCount() const { return _acquiredImages; }
+	const Vector<SwapchainImageData> &getImages() const { return _images; }
 
 	bool isDeprecated();
 	bool isOptimal() const;

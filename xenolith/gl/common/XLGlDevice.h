@@ -58,6 +58,7 @@ public:
 	uint32_t getTextureLayoutImagesCount() const { return _textureLayoutImagesCount; }
 
 	const Vector<gl::ImageFormat> &getSupportedDepthStencilFormat() const { return _depthFormats; }
+	const Vector<gl::ImageFormat> &getSupportedColorFormat() const { return _colorFormats; }
 
 	virtual void onLoopStarted(gl::Loop &);
 	virtual void onLoopEnded(gl::Loop &);
@@ -91,6 +92,7 @@ protected:
 
 	Vector<SamplerInfo> _samplersInfo;
 	Vector<gl::ImageFormat> _depthFormats;
+	Vector<gl::ImageFormat> _colorFormats;
 
 	uint32_t _samplersCount = 0;
 	bool _samplersCompiled = false;

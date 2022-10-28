@@ -31,6 +31,7 @@
 namespace stappler::xenolith::gl {
 
 XL_DECLARE_EVENT_CLASS(View, onScreenSize);
+XL_DECLARE_EVENT_CLASS(View, onFrameRate);
 
 View::View() { }
 
@@ -189,12 +190,10 @@ gl::ImageViewInfo View::getSwapchainImageViewInfo(const gl::ImageInfo &image) co
 }
 
 uint64_t View::getLastFrameInterval() const {
-	std::unique_lock<Mutex> lock(_frameIntervalMutex);
 	return _lastFrameInterval;
 }
 uint64_t View::getAvgFrameInterval() const {
-	std::unique_lock<Mutex> lock(_frameIntervalMutex);
-	return _avgFrameInterval.getAverage();
+	return _avgFrameIntervalValue;
 }
 
 uint64_t View::getLastFrameTime() const {
@@ -202,6 +201,19 @@ uint64_t View::getLastFrameTime() const {
 }
 uint64_t View::getAvgFrameTime() const {
 	return _frameEmitter->getAvgFrameTime();
+}
+
+uint64_t View::getFrameInterval() const {
+	std::unique_lock<Mutex> lock(_frameIntervalMutex);
+	return _frameInterval;
+}
+
+void View::setFrameInterval(uint64_t value) {
+	performOnThread([this, value] {
+		std::unique_lock<Mutex> lock(_frameIntervalMutex);
+		_frameInterval = value;
+		onFrameRate(this, int64_t(_frameInterval));
+	}, this, true);
 }
 
 }

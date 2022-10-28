@@ -84,7 +84,7 @@ private:
 	friend class ViewImpl;
 
 #if VK_DEBUG_LOG
-	VkDebugUtilsMessengerEXT debugMessenger;
+	VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
 #endif
 
 	VkInstance _instance;

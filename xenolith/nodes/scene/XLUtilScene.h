@@ -29,6 +29,8 @@ namespace stappler::xenolith {
 
 class UtilScene : public Scene {
 public:
+	class FpsDisplay;
+
 	virtual ~UtilScene() { }
 
 	virtual bool init(Application *, RenderQueue::Builder &&);
@@ -44,7 +46,7 @@ public:
 protected:
 	void initialize(Application *app);
 
-	Node *_fps = nullptr;
+	FpsDisplay *_fps = nullptr;
 };
 
 }

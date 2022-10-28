@@ -68,9 +68,17 @@ void InputListener::onEnter(Scene *scene) {
 	_scene = scene;
 
 	_scene->getDirector()->getScheduler()->scheduleUpdate(this);
+
+	for (auto &it : _recognizers) {
+		it->onEnter(this);
+	}
 }
 
 void InputListener::onExit() {
+	for (auto &it : _recognizers) {
+		it->onExit();
+	}
+
 	_scene->getDirector()->getScheduler()->unschedule(this);
 	_running = false;
 	_scene = nullptr;
@@ -174,46 +182,36 @@ bool InputListener::handleEvent(const InputEvent &event) {
 }
 
 GestureRecognizer *InputListener::addTouchRecognizer(InputCallback<GestureData> &&cb, ButtonMask &&buttonMask) {
-	auto rec = Rc<GestureTouchRecognizer>::create(move(cb), move(buttonMask));
-	addEventMask(rec->getEventMask());
-	return _recognizers.emplace_back(move(rec)).get();
+	return addRecognizer(Rc<GestureTouchRecognizer>::create(move(cb), move(buttonMask)));
 }
 
 GestureRecognizer *InputListener::addTapRecognizer(InputCallback<GestureTap> &&cb, ButtonMask &&buttonMask, uint32_t maxTapCount) {
-	auto rec = Rc<GestureTapRecognizer>::create(move(cb), move(buttonMask), maxTapCount);
-	addEventMask(rec->getEventMask());
-	return _recognizers.emplace_back(move(rec)).get();
+	return addRecognizer(Rc<GestureTapRecognizer>::create(move(cb), move(buttonMask), maxTapCount));
 }
 
 GestureRecognizer *InputListener::addScrollRecognizer(InputCallback<GestureScroll> &&cb) {
-	auto rec = Rc<GestureScrollRecognizer>::create(move(cb));
-	addEventMask(rec->getEventMask());
-	return _recognizers.emplace_back(move(rec)).get();
+	return addRecognizer(Rc<GestureScrollRecognizer>::create(move(cb)));
 }
 
 GestureRecognizer *InputListener::addPressRecognizer(InputCallback<GesturePress> &&cb, TimeInterval interval, bool continuous,
 		ButtonMask &&mask) {
-	auto rec = Rc<GesturePressRecognizer>::create(move(cb), interval, continuous, move(mask));
-	addEventMask(rec->getEventMask());
-	return _recognizers.emplace_back(move(rec)).get();
+	return addRecognizer(Rc<GesturePressRecognizer>::create(move(cb), interval, continuous, move(mask)));
 }
 
 GestureRecognizer *InputListener::addSwipeRecognizer(InputCallback<GestureSwipe> &&cb, float threshold, bool sendThreshold, ButtonMask &&mask) {
-	auto rec = Rc<GestureSwipeRecognizer>::create(move(cb), threshold, sendThreshold, move(mask));
-	addEventMask(rec->getEventMask());
-	return _recognizers.emplace_back(move(rec)).get();
+	return addRecognizer(Rc<GestureSwipeRecognizer>::create(move(cb), threshold, sendThreshold, move(mask)));
 }
 
-GestureRecognizer *InputListener::addMoveRecognizer(InputCallback<GestureData> &&cb) {
-	auto rec = Rc<GestureMoveRecognizer>::create(move(cb));
-	addEventMask(rec->getEventMask());
-	return _recognizers.emplace_back(move(rec)).get();
+GestureRecognizer *InputListener::addMoveRecognizer(InputCallback<GestureData> &&cb, bool withinNode) {
+	return addRecognizer(Rc<GestureMoveRecognizer>::create(move(cb), withinNode));
+}
+
+GestureRecognizer *InputListener::addMouseOverRecognizer(InputCallback<GestureData> &&cb, float padding) {
+	return addRecognizer(Rc<GestureMouseOverRecognizer>::create(move(cb)));
 }
 
 GestureKeyRecognizer *InputListener::addKeyRecognizer(InputCallback<GestureData> &&cb, KeyMask &&keys) {
-	auto rec = Rc<GestureKeyRecognizer>::create(move(cb), move(keys));
-	addEventMask(rec->getEventMask());
-	return (GestureKeyRecognizer *)_recognizers.emplace_back(move(rec)).get();
+	return (GestureKeyRecognizer *)addRecognizer(Rc<GestureKeyRecognizer>::create(move(cb), move(keys)));
 }
 
 void InputListener::setPointerEnterCallback(Function<bool(bool)> &&cb) {
@@ -268,7 +266,8 @@ bool InputListener::_shouldProcessEvent(const InputEvent &event) const {
 			visible = p->isVisible();
 			p = p->getParent();
 		}
-		if (visible && (!event.data.hasLocation() || node->isTouched(event.currentLocation, _touchPadding))
+		if (visible && (!event.data.hasLocation() || event.data.event == InputEventName::MouseMove
+				|| node->isTouched(event.currentLocation, _touchPadding))
 				&& node->getOpacity() >= _opacityFilter) {
 			return true;
 		}
@@ -282,6 +281,15 @@ void InputListener::addEventMask(const EventMask &mask) {
 			_eventMask.set(i);
 		}
 	}
+}
+
+GestureRecognizer *InputListener::addRecognizer(GestureRecognizer *rec) {
+	addEventMask(rec->getEventMask());
+	auto ret = _recognizers.emplace_back(move(rec)).get();
+	if (_running) {
+		ret->onEnter(this);
+	}
+	return ret;
 }
 
 }

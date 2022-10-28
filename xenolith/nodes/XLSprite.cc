@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -64,17 +64,25 @@ bool Sprite::init(Rc<Texture> &&texture) {
 
 void Sprite::setTexture(StringView textureName) {
 	if (!_running) {
+		if (_texture) {
+			_texture = nullptr;
+			_materialDirty = true;
+		}
 		_textureName = textureName.str<Interface>();
 	} else {
 		if (textureName.empty()) {
 			if (_texture) {
+				if (_running) {
+					_texture->onExit(_scene);
+				}
 				_texture = nullptr;
 				_materialDirty = true;
 			}
 		} else if (!_texture || _texture->getName() != textureName) {
 			if (auto &cache = _director->getApplication()->getResourceCache()) {
-				_texture = cache->acquireTexture(textureName);
-				_materialDirty = true;
+				if (auto tex = cache->acquireTexture(textureName)) {
+					setTexture(move(tex));
+				}
 			}
 		}
 	}
@@ -83,17 +91,29 @@ void Sprite::setTexture(StringView textureName) {
 void Sprite::setTexture(Rc<Texture> &&tex) {
 	if (_texture) {
 		if (!tex) {
+			if (_running) {
+				_texture->onExit(_scene);
+			}
 			_texture = nullptr;
 			_textureName.clear();
 			_materialDirty = true;
 		} else if (_texture->getName() != tex->getName()) {
+			if (_running) {
+				_texture->onExit(_scene);
+			}
 			_texture = move(tex);
+			if (_running) {
+				_texture->onEnter(_scene);
+			}
 			_textureName = _texture->getName().str<Interface>();
 			_materialDirty = true;
 		}
 	} else {
 		if (tex) {
 			_texture = move(tex);
+			if (_running) {
+				_texture->onEnter(_scene);
+			}
 			_textureName = _texture->getName().str<Interface>();
 			_materialDirty = true;
 		}
@@ -108,7 +128,7 @@ void Sprite::setTextureRect(const Rect &rect) {
 }
 
 void Sprite::draw(RenderFrameInfo &frame, NodeFlags flags) {
-	if (_texture) {
+	if (_texture && _texture->isLoaded()) {
 		if (_autofit != Autofit::None) {
 			auto size = _texture->getExtent();
 			if (_targetTextureSize != size) {
@@ -133,7 +153,7 @@ void Sprite::draw(RenderFrameInfo &frame, NodeFlags flags) {
 			auto info = getMaterialInfo();
 			_materialId = frame.scene->getMaterial(info);
 			if (_materialId == 0) {
-				_materialId = frame.scene->acquireMaterial(info, getMaterialImages());
+				_materialId = frame.scene->acquireMaterial(info, getMaterialImages(), isMaterialRevokable());
 				if (_materialId == 0) {
 					log::vtext("Sprite", "Material for sprite with texture '", _texture->getName(), "' not found");
 				}
@@ -160,8 +180,18 @@ void Sprite::onEnter(Scene *scene) {
 				_materialDirty = true;
 			}
 		}
-		_textureName.clear();
 	}
+
+	if (_texture) {
+		_texture->onEnter(_scene);
+	}
+}
+
+void Sprite::onExit() {
+	if (_texture) {
+		_texture->onExit(_scene);
+	}
+	Node::onExit();
 }
 
 void Sprite::onContentSizeDirty() {
@@ -257,6 +287,10 @@ Vector<gl::MaterialImage> Sprite::getMaterialImages() const {
 	Vector<gl::MaterialImage> ret;
 	ret.emplace_back(_texture->getMaterialImage());
 	return ret;
+}
+
+bool Sprite::isMaterialRevokable() const {
+	return _texture && _texture->getTemporary();
 }
 
 void Sprite::updateColor() {

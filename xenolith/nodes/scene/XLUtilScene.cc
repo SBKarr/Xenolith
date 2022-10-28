@@ -29,19 +29,30 @@
 
 namespace stappler::xenolith {
 
-class FpsDisplay : public Layer {
+class UtilScene::FpsDisplay : public Layer {
 public:
+	enum DisplayMode {
+		Fps,
+		Vertexes,
+		Cache,
+		Full,
+		Disabled,
+	};
+
 	virtual ~FpsDisplay() { }
 
 	virtual bool init(font::FontController *fontController);
 	virtual void update(const UpdateTime &) override;
 
+	void incrementMode();
+
 protected:
 	uint32_t _frames = 0;
 	Label *_label = nullptr;
+	DisplayMode _mode = Fps;
 };
 
-bool FpsDisplay::init(font::FontController *fontController) {
+bool UtilScene::FpsDisplay::init(font::FontController *fontController) {
 	if (!Layer::init(Color::White)) {
 		return false;
 	}
@@ -65,7 +76,7 @@ bool FpsDisplay::init(font::FontController *fontController) {
 	return true;
 }
 
-void FpsDisplay::update(const UpdateTime &) {
+void UtilScene::FpsDisplay::update(const UpdateTime &) {
 	if (_director) {
 		auto fps = _director->getAvgFps();
 		auto spf = _director->getSpf();
@@ -73,12 +84,46 @@ void FpsDisplay::update(const UpdateTime &) {
 		auto stat = _director->getDrawStat();
 
 		if (_label) {
-			auto str = toString(std::setprecision(3), fps, "\n", spf, "\n", local, "\n",
-					stat.vertexes, " ", stat.triangles, " ", stat.zPaths, " ", stat.drawCalls, "\nPress F12\n to switch");
+			String str;
+			switch (_mode) {
+			case Fps:
+				str = toString(std::setprecision(3),
+					"FPS: ", fps, "\nSPF: ", spf, "\nLFT: ", local,
+					"\nF12 to switch");
+				break;
+			case Vertexes:
+				str = toString(std::setprecision(3),
+					"V:", stat.vertexes, " T:", stat.triangles, "\nZ:", stat.zPaths, " C:", stat.drawCalls, " M: ", stat.materials,
+					"\nF12 to switch");
+				break;
+			case Cache:
+				str = toString(std::setprecision(3),
+					"Cache:", stat.cachedFramebuffers, "/", stat.cachedImages, "/", stat.cachedImageViews,
+					"\nF12 to switch");
+				break;
+			case Full:
+				str = toString(std::setprecision(3),
+					"FPS: ", fps, "\nSPF: ", spf, "\nLFT: ", local, "\n",
+					"V:", stat.vertexes, " T:", stat.triangles, "\nZ:", stat.zPaths, " C:", stat.drawCalls, " M: ", stat.materials, "\n"
+					"Cache:", stat.cachedFramebuffers, "/", stat.cachedImages, "/", stat.cachedImageViews,
+					"\nF12 to switch");
+				break;
+			default:
+				break;
+			}
 			_label->setString(str);
 		}
 		++ _frames;
 	}
+}
+
+void UtilScene::FpsDisplay::incrementMode() {
+	_mode = DisplayMode(toInt(_mode) + 1);
+	if (_mode > Disabled) {
+		_mode = Fps;
+	}
+
+	setVisible(_mode != Disabled);
 }
 
 bool UtilScene::init(Application *app, RenderQueue::Builder &&builder) {
@@ -127,7 +172,7 @@ void UtilScene::initialize(Application *app) {
 	auto l = addInputListener(Rc<InputListener>::create());
 	l->addKeyRecognizer([this] (const GestureData &ev) {
 		if (ev.event == GestureEvent::Ended) {
-			_fps->setVisible(!_fps->isVisible());
+			_fps->incrementMode();
 		}
 		return true;
 	}, InputListener::makeKeyMask({InputKeyCode::F12}));

@@ -156,47 +156,47 @@ bool Device::init(const vk::Instance *inst, DeviceInfo && info, const Features &
 
 	_allocator = Rc<Allocator>::create(*this, _info.device, _info.features, _info.properties);
 
-	auto imageLimit = _info.properties.device10.properties.limits.maxPerStageDescriptorSampledImages;
+	auto maxDescriptors = _info.properties.device10.properties.limits.maxPerStageDescriptorSampledImages;
+	auto maxResources = _info.properties.device10.properties.limits.maxPerStageResources - 16;
+
+	auto imageLimit = std::min(maxResources, maxDescriptors);
+	if (!_info.features.device10.features.shaderSampledImageArrayDynamicIndexing) {
+		imageLimit = 1;
+	}
 	_textureLayoutImagesCount = imageLimit = std::min(imageLimit, config::MaxTextureSetImages);
 	_textureSetLayout = Rc<TextureSetLayout>::create(*this, imageLimit);
 
 	do {
 		VkFormatProperties properties;
-		_vkInstance->vkGetPhysicalDeviceFormatProperties(_info.device, VK_FORMAT_D16_UNORM, &properties);
-		_formats.emplace(VK_FORMAT_D16_UNORM, properties);
-		if ((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) {
-			_depthFormats.emplace_back(gl::ImageFormat(VK_FORMAT_D16_UNORM));
-		}
 
-		_vkInstance->vkGetPhysicalDeviceFormatProperties(_info.device, VK_FORMAT_X8_D24_UNORM_PACK32, &properties);
-		_formats.emplace(VK_FORMAT_X8_D24_UNORM_PACK32, properties);
-		if ((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) {
-			_depthFormats.emplace_back(gl::ImageFormat(VK_FORMAT_X8_D24_UNORM_PACK32));
-		}
+		auto addDepthFormat = [&] (VkFormat fmt) {
+			_vkInstance->vkGetPhysicalDeviceFormatProperties(_info.device, fmt, &properties);
+			_formats.emplace(fmt, properties);
+			if ((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) {
+				_depthFormats.emplace_back(gl::ImageFormat(fmt));
+			}
+		};
 
-		_vkInstance->vkGetPhysicalDeviceFormatProperties(_info.device, VK_FORMAT_D32_SFLOAT, &properties);
-		_formats.emplace(VK_FORMAT_D32_SFLOAT, properties);
-		if ((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) {
-			_depthFormats.emplace_back(gl::ImageFormat(VK_FORMAT_D32_SFLOAT));
-		}
+		auto addColorFormat = [&] (VkFormat fmt) {
+			_vkInstance->vkGetPhysicalDeviceFormatProperties(_info.device, fmt, &properties);
+			_formats.emplace(fmt, properties);
+			if ((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0 && (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) != 0) {
+				_colorFormats.emplace_back(gl::ImageFormat(fmt));
+			}
+		};
 
-		_vkInstance->vkGetPhysicalDeviceFormatProperties(_info.device, VK_FORMAT_S8_UINT, &properties);
-		_formats.emplace(VK_FORMAT_S8_UINT, properties);
-		if ((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) {
-			_depthFormats.emplace_back(gl::ImageFormat(VK_FORMAT_S8_UINT));
-		}
+		addDepthFormat(VK_FORMAT_D16_UNORM);
+		addDepthFormat(VK_FORMAT_X8_D24_UNORM_PACK32);
+		addDepthFormat(VK_FORMAT_D32_SFLOAT);
+		addDepthFormat(VK_FORMAT_S8_UINT);
+		addDepthFormat(VK_FORMAT_D16_UNORM_S8_UINT);
+		addDepthFormat(VK_FORMAT_D24_UNORM_S8_UINT);
+		addDepthFormat(VK_FORMAT_D32_SFLOAT_S8_UINT);
 
-		_vkInstance->vkGetPhysicalDeviceFormatProperties(_info.device, VK_FORMAT_D16_UNORM_S8_UINT, &properties);
-		_formats.emplace(VK_FORMAT_D16_UNORM_S8_UINT, properties);
-		if ((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) {
-			_depthFormats.emplace_back(gl::ImageFormat(VK_FORMAT_D16_UNORM_S8_UINT));
-		}
-
-		_vkInstance->vkGetPhysicalDeviceFormatProperties(_info.device, VK_FORMAT_D24_UNORM_S8_UINT, &properties);
-		_formats.emplace(VK_FORMAT_D24_UNORM_S8_UINT, properties);
-		if ((properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) {
-			_depthFormats.emplace_back(gl::ImageFormat(VK_FORMAT_D24_UNORM_S8_UINT));
-		}
+		addColorFormat(VK_FORMAT_R8_UNORM);
+		addColorFormat(VK_FORMAT_R8G8_UNORM);
+		addColorFormat(VK_FORMAT_R8G8B8_UNORM);
+		addColorFormat(VK_FORMAT_R8G8B8A8_UNORM);
 	} while (0);
 
 	return true;
@@ -534,6 +534,8 @@ BytesView Device::emplaceConstant(renderqueue::PredefinedConstant c, Bytes &data
 		intData = 1;
 		return Device_emplaceConstant(data, BytesView((const uint8_t *)&intData, sizeof(uint32_t)));
 		break;
+	case renderqueue::PredefinedConstant::CurrentSamplerIdx:
+		break;
 	}
 	return BytesView();
 }
@@ -694,8 +696,10 @@ bool Device::setup(const Instance *instance, VkPhysicalDevice p, const Propertie
 	deviceCreateInfo.ppEnabledExtensionNames = requiredExtension.data();
 
 	if constexpr (s_enableValidationLayers) {
-		deviceCreateInfo.enabledLayerCount = static_cast<uint32_t>(sizeof(s_validationLayers) / sizeof(const char *));
-		deviceCreateInfo.ppEnabledLayerNames = s_validationLayers;
+		if (Application::getInstance()->getData().validation) {
+			deviceCreateInfo.enabledLayerCount = static_cast<uint32_t>(sizeof(s_validationLayers) / sizeof(const char *));
+			deviceCreateInfo.ppEnabledLayerNames = s_validationLayers;
+		}
 	} else {
 		deviceCreateInfo.enabledLayerCount = 0;
 	}

@@ -176,6 +176,8 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 		break;
 	}
 	case InputEventName::MouseMove: {
+		_pointerLocation = Vec2(event.x, event.y);
+
 		auto ev = getEventInfo(event);
 		Vector<InputListener *> listeners;
 		_events->foreach([&] (InputListener *l) {
@@ -220,8 +222,30 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 		}
 		break;
 	}
-	case InputEventName::Background:
+	case InputEventName::Background: {
+		_inBackground = event.getValue();
+
+		auto ev = getEventInfo(event);
+		Vector<InputListener *> listeners;
+		_events->foreach([&] (InputListener *l) {
+			if (l->canHandleEvent(ev)) {
+				listeners.emplace_back(l);
+				if (l->shouldSwallowEvent(ev)) {
+					listeners.clear();
+					listeners.emplace_back(l);
+					return false;
+				}
+			}
+			return true;
+		});
+		for (auto &it : listeners) {
+			it->handleEvent(ev);
+		}
+		break;
+	}
 	case InputEventName::FocusGain: {
+		_hasFocus = event.getValue();
+
 		auto ev = getEventInfo(event);
 		Vector<InputListener *> listeners;
 		_events->foreach([&] (InputListener *l) {
@@ -241,6 +265,8 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 		break;
 	}
 	case InputEventName::PointerEnter: {
+		_pointerInWindow = event.getValue();
+
 		auto ev = getEventInfo(event);
 		Vector<InputListener *> listeners;
 		_events->foreach([&] (InputListener *l) {

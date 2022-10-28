@@ -234,6 +234,7 @@ enum class PredefinedConstant {
 	SamplersDescriptorIdx,
 	TexturesArraySize,
 	TexturesDescriptorIdx,
+	CurrentSamplerIdx,
 };
 
 enum class DynamicState {

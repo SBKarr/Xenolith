@@ -33,6 +33,8 @@ static constexpr float TapDistanceAllowed = 16.0f;
 static constexpr float TapDistanceAllowedMulti = 32.0f;
 static constexpr TimeInterval TapIntervalAllowed = TimeInterval::microseconds(300000ULL);
 
+class InputListener;
+
 enum class GestureEvent {
 	/** Action just started, listener should return true if it want to "capture" it.
 	 * Captured actions will be automatically propagated to end-listener
@@ -110,6 +112,7 @@ struct GestureSwipe : GestureData {
 	Vec2 midpoint;
 	Vec2 delta;
 	Vec2 velocity;
+	float density = 1.0f;
 
     void cleanup() {
     	firstTouch = Vec2::ZERO;
@@ -137,6 +140,9 @@ public:
 
 	virtual bool canHandleEvent(const InputEvent &event) const;
 	virtual bool handleInputEvent(const InputEvent &, float density);
+
+	virtual void onEnter(InputListener *);
+	virtual void onExit();
 
 	uint32_t getEventCount() const;
 	bool hasEvent(const InputEvent &) const;
@@ -285,13 +291,19 @@ public:
 
 	virtual ~GestureMoveRecognizer() { }
 
-	virtual bool init(InputCallback &&);
+	virtual bool init(InputCallback &&, bool withinNode);
 
+	virtual bool canHandleEvent(const InputEvent &event) const override;
 	virtual bool handleInputEvent(const InputEvent &, float density) override;
+
+	virtual void onEnter(InputListener *) override;
+	virtual void onExit() override;
 
 protected:
 	GestureData _event = GestureData{GestureEvent::Cancelled, nullptr};
 	InputCallback _callback;
+	InputListener *_listener = nullptr;
+	bool _onlyWithinNode = true;
 };
 
 class GestureKeyRecognizer : public GestureRecognizer {
@@ -315,6 +327,32 @@ protected:
 	KeyMask _keyMask;
 	KeyMask _pressedKeys;
 	InputCallback _callback;
+};
+
+class GestureMouseOverRecognizer : public GestureRecognizer {
+public:
+	using InputCallback = Function<bool(const GestureData &)>;
+
+	virtual ~GestureMouseOverRecognizer() { }
+
+	virtual bool init(InputCallback &&, float padding = 0.0f);
+
+	virtual bool handleInputEvent(const InputEvent &, float density) override;
+
+	virtual void onEnter(InputListener *) override;
+	virtual void onExit() override;
+
+protected:
+	void updateState(const InputEvent &);
+
+	GestureData _event = GestureData{GestureEvent::Cancelled, nullptr};
+	bool _viewHasPointer = false;
+	bool _viewHasFocus = false;
+	bool _hasMouseOver = false;
+	bool _value = false;
+	float _padding = 0.0f;
+	InputCallback _callback;
+	InputListener *_listener = nullptr;
 };
 
 std::ostream &operator<<(std::ostream &, GestureEvent);

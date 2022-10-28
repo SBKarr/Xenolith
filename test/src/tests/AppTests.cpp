@@ -22,22 +22,27 @@
 
 #include "XLDefine.h"
 #include "AppTests.h"
-#include "AppRootLayout.h"
+
+#include "AppRootLayout.cc"
 
 #include "general/AppGeneralLabelTest.cc"
 #include "general/AppGeneralUpdateTest.cc"
 #include "general/AppGeneralZOrderTest.cc"
 #include "general/AppGeneralTransparencyTest.cc"
 #include "general/AppGeneralAutofitTest.cc"
+#include "general/AppGeneralTemporaryResourceTest.cc"
 #include "input/AppInputTouchTest.cc"
 #include "input/AppInputKeyboardTest.cc"
 #include "input/AppInputTapPressTest.cc"
 #include "input/AppInputSwipeTest.cc"
+#include "input/AppInputTextTest.cc"
 #include "action/AppActionEaseTest.cc"
 #include "vg/AppVgTessCanvas.cc"
 #include "vg/AppVgTessTest.cc"
 #include "vg/AppVgIconTest.cc"
 #include "vg/AppVgIconList.cc"
+#include "config/AppConfigMenu.cc"
+#include "config/AppConfigPresentModeSwitcher.cc"
 
 namespace stappler::xenolith::app {
 
@@ -47,6 +52,7 @@ Vector<MenuData> s_rootMenu({
 	MenuData{LayoutName::ActionTests, "Action tests"},
 	MenuData{LayoutName::VgTests, "VG tests"},
 	MenuData{LayoutName::GuiTests, "Gui tests"},
+	MenuData{LayoutName::Config, "Config"},
 });
 
 Vector<MenuData> s_generalTestsMenu({
@@ -55,6 +61,7 @@ Vector<MenuData> s_generalTestsMenu({
 	MenuData{LayoutName::GeneralLabelTest, "Label test"},
 	MenuData{LayoutName::GeneralTransparencyTest, "Transparency test"},
 	MenuData{LayoutName::GeneralAutofitTest, "Autofit test"},
+	MenuData{LayoutName::GeneralTemporaryResourceTest, "Temporary resource test"},
 });
 
 Vector<MenuData> s_inputTestsMenu({
@@ -62,6 +69,7 @@ Vector<MenuData> s_inputTestsMenu({
 	MenuData{LayoutName::InputKeyboardTest, "Keyboard test"},
 	MenuData{LayoutName::InputTapPressTest, "Tap/Press test"},
 	MenuData{LayoutName::InputSwipeTest, "Swipe test"},
+	MenuData{LayoutName::InputTextTest, "Text test"},
 });
 
 Vector<MenuData> s_actionTestsMenu({
@@ -88,6 +96,7 @@ LayoutName getRootLayoutForLayout(LayoutName name) {
 	case LayoutName::ActionTests:
 	case LayoutName::VgTests:
 	case LayoutName::GuiTests:
+	case LayoutName::Config:
 		return LayoutName::Root;
 		break;
 
@@ -96,6 +105,7 @@ LayoutName getRootLayoutForLayout(LayoutName name) {
 	case LayoutName::GeneralLabelTest:
 	case LayoutName::GeneralTransparencyTest:
 	case LayoutName::GeneralAutofitTest:
+	case LayoutName::GeneralTemporaryResourceTest:
 		return LayoutName::GeneralTests;
 		break;
 
@@ -103,6 +113,7 @@ LayoutName getRootLayoutForLayout(LayoutName name) {
 	case LayoutName::InputKeyboardTest:
 	case LayoutName::InputTapPressTest:
 	case LayoutName::InputSwipeTest:
+	case LayoutName::InputTextTest:
 		return LayoutName::InputTests;
 		break;
 
@@ -132,17 +143,20 @@ StringView getLayoutNameId(LayoutName name) {
 	case LayoutName::ActionTests: return "org.stappler.xenolith.test.ActionTests"; break;
 	case LayoutName::VgTests: return "org.stappler.xenolith.test.VgTests"; break;
 	case LayoutName::GuiTests: return "org.stappler.xenolith.test.GuiTests"; break;
+	case LayoutName::Config: return "org.stappler.xenolith.test.Config"; break;
 
 	case LayoutName::GeneralUpdateTest: return "org.stappler.xenolith.test.GeneralUpdateTest"; break;
 	case LayoutName::GeneralZOrderTest: return "org.stappler.xenolith.test.GeneralZOrderTest"; break;
 	case LayoutName::GeneralLabelTest: return "org.stappler.xenolith.test.GeneralLabelTest"; break;
 	case LayoutName::GeneralTransparencyTest: return "org.stappler.xenolith.test.GeneralTransparencyTest"; break;
 	case LayoutName::GeneralAutofitTest: return "org.stappler.xenolith.test.GeneralAutofitTest"; break;
+	case LayoutName::GeneralTemporaryResourceTest: return "org.stappler.xenolith.test.GeneralTemporaryResourceTest"; break;
 
 	case LayoutName::InputTouchTest: return "org.stappler.xenolith.test.InputTouchTest"; break;
 	case LayoutName::InputKeyboardTest: return "org.stappler.xenolith.test.InputKeyboardTest"; break;
 	case LayoutName::InputTapPressTest: return "org.stappler.xenolith.test.InputTapPressTest"; break;
 	case LayoutName::InputSwipeTest: return "org.stappler.xenolith.test.InputSwipeTest"; break;
+	case LayoutName::InputTextTest: return "org.stappler.xenolith.test.InputTextTest"; break;
 
 	case LayoutName::ActionProgressTest: return "org.stappler.xenolith.test.ActionProgressTest"; break;
 	case LayoutName::ActionEaseTest: return "org.stappler.xenolith.test.ActionEaseTest"; break;
@@ -163,17 +177,20 @@ LayoutName getLayoutNameById(StringView name) {
 	else if (name == "org.stappler.xenolith.test.ActionTests") { return LayoutName::ActionTests; }
 	else if (name == "org.stappler.xenolith.test.VgTests") { return LayoutName::VgTests; }
 	else if (name == "org.stappler.xenolith.test.GuiTests") { return LayoutName::GuiTests; }
+	else if (name == "org.stappler.xenolith.test.Config") { return LayoutName::Config; }
 
 	else if (name == "org.stappler.xenolith.test.GeneralUpdateTest") { return LayoutName::GeneralUpdateTest; }
 	else if (name == "org.stappler.xenolith.test.GeneralZOrderTest") { return LayoutName::GeneralZOrderTest; }
 	else if (name == "org.stappler.xenolith.test.GeneralLabelTest") { return LayoutName::GeneralLabelTest; }
 	else if (name == "org.stappler.xenolith.test.GeneralTransparencyTest") { return LayoutName::GeneralTransparencyTest; }
 	else if (name == "org.stappler.xenolith.test.GeneralAutofitTest") { return LayoutName::GeneralAutofitTest; }
+	else if (name == "org.stappler.xenolith.test.GeneralTemporaryResourceTest") { return LayoutName::GeneralTemporaryResourceTest; }
 
 	else if (name == "org.stappler.xenolith.test.InputTouchTest") { return LayoutName::InputTouchTest; }
 	else if (name == "org.stappler.xenolith.test.InputKeyboardTest") { return LayoutName::InputKeyboardTest; }
 	else if (name == "org.stappler.xenolith.test.InputTapPressTest") { return LayoutName::InputTapPressTest; }
 	else if (name == "org.stappler.xenolith.test.InputSwipeTest") { return LayoutName::InputSwipeTest; }
+	else if (name == "org.stappler.xenolith.test.InputTextTest") { return LayoutName::InputTextTest; }
 
 	else if (name == "org.stappler.xenolith.test.ActionProgressTest") { return LayoutName::ActionProgressTest; }
 	else if (name == "org.stappler.xenolith.test.ActionEaseTest") { return LayoutName::ActionEaseTest; }
@@ -195,17 +212,20 @@ Rc<Node> makeLayoutNode(LayoutName name) {
 	case LayoutName::ActionTests: return Rc<LayoutMenu>::create(name, s_actionTestsMenu); break;
 	case LayoutName::VgTests: return Rc<LayoutMenu>::create(name, s_vgTestsMenu); break;
 	case LayoutName::GuiTests: return Rc<LayoutMenu>::create(name, s_guiTestsMenu); break;
+	case LayoutName::Config: return Rc<ConfigMenu>::create(); break;
 
 	case LayoutName::GeneralUpdateTest: return Rc<GeneralUpdateTest>::create(); break;
 	case LayoutName::GeneralZOrderTest: return Rc<GeneralZOrderTest>::create(); break;
 	case LayoutName::GeneralLabelTest: return Rc<GeneralLabelTest>::create(); break;
 	case LayoutName::GeneralTransparencyTest: return Rc<GeneralTransparencyTest>::create(); break;
 	case LayoutName::GeneralAutofitTest: return Rc<GeneralAutofitTest>::create(); break;
+	case LayoutName::GeneralTemporaryResourceTest: return Rc<GeneralTemporaryResourceTest>::create(); break;
 
 	case LayoutName::InputTouchTest: return Rc<InputTouchTest>::create(); break;
 	case LayoutName::InputKeyboardTest: return Rc<InputKeyboardTest>::create(); break;
 	case LayoutName::InputTapPressTest: return Rc<InputTapPressTest>::create(); break;
 	case LayoutName::InputSwipeTest: return Rc<InputSwipeTest>::create(); break;
+	case LayoutName::InputTextTest: return Rc<InputTextTest>::create(); break;
 
 	case LayoutName::ActionProgressTest: return Rc<RootLayout>::create(); break;
 	case LayoutName::ActionEaseTest: return Rc<ActionEaseTest>::create(); break;

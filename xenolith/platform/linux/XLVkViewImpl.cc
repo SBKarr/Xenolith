@@ -26,6 +26,7 @@ THE SOFTWARE.
 
 #include "XLPlatformLinuxWayland.h"
 #include "XLPlatformLinuxXcb.h"
+#include "XLTextInputManager.h"
 
 #include <sys/eventfd.h>
 #include <poll.h>
@@ -42,6 +43,8 @@ bool ViewImpl::init(gl::Loop &loop, gl::Device &dev, gl::ViewInfo &&info) {
 	_rect = info.rect;
 	_name = info.name;
 
+	_density = loop.getApplication()->getData().density;
+
 	if (!View::init(static_cast<vk::Loop &>(loop), static_cast<vk::Device &>(dev), move(info))) {
 		return false;
 	}
@@ -50,6 +53,9 @@ bool ViewImpl::init(gl::Loop &loop, gl::Device &dev, gl::ViewInfo &&info) {
 }
 
 void ViewImpl::threadInit() {
+	thread::ThreadInfo::setThreadInfo(_threadName);
+	_threadId = std::this_thread::get_id();
+
 	auto presentMask = _device->getPresentatonMask();
 
 	if (auto wayland = WaylandLibrary::getInstance()) {
@@ -65,8 +71,13 @@ void ViewImpl::threadInit() {
 				}
 
 				_view = view;
-				_surface = Rc<vk::Surface>::create(_instance, _view->createWindowSurface(_instance), _view);
-				_frameInterval = _view->getScreenFrameInterval();
+				_surface = Rc<vk::Surface>::create(_instance,
+						_view->createWindowSurface(_instance, _device->getPhysicalDevice()), _view);
+				if (_surface) {
+					setFrameInterval(_view->getScreenFrameInterval());
+				} else {
+					_view = nullptr;
+				}
 			}
 		}
 	}
@@ -82,8 +93,9 @@ void ViewImpl::threadInit() {
 				}
 
 				_view = view;
-				_surface = Rc<vk::Surface>::create(_instance, _view->createWindowSurface(_instance), _view);
-				_frameInterval = _view->getScreenFrameInterval();
+				_surface = Rc<vk::Surface>::create(_instance,
+						_view->createWindowSurface(_instance, _device->getPhysicalDevice()), _view);
+				setFrameInterval(_view->getScreenFrameInterval());
 			}
 		}
 	}
@@ -169,12 +181,18 @@ void ViewImpl::updateTextInput(WideString str, uint32_t pos, uint32_t len, TextI
 void ViewImpl::runTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) {
 	performOnThread([this] {
 		_inputEnabled = true;
+		_director->getApplication()->performOnMainThread([&] () {
+			_director->getTextInputManager()->setInputEnabled(true);
+		}, this);
 	}, this);
 }
 
 void ViewImpl::cancelTextInput() {
 	performOnThread([this] {
 		_inputEnabled = false;
+		_director->getApplication()->performOnMainThread([&] () {
+			_director->getTextInputManager()->setInputEnabled(false);
+		}, this);
 	}, this);
 }
 

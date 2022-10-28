@@ -47,7 +47,9 @@ bool AppCheckbox::init(bool value, Function<void(bool)> &&cb) {
 			break;
 		}
 		return true;
-	}, InputListener::makeButtonMask({InputMouseButton::Touch}));
+	}, InputListener::makeButtonMask({InputMouseButton::Touch}), 1);
+
+	updateValue();
 
 	return true;
 }

@@ -91,9 +91,15 @@ struct Loop::Internal final : memory::AllocPool {
 	}
 
 	void endDevice() {
+		if (!device) {
+			return;
+		}
+
 		fences.clear();
 		transferQueue = nullptr;
-		materialQueue->clearRequests();
+		if (materialQueue) {
+			materialQueue->clearRequests();
+		}
 		materialQueue = nullptr;
 		renderQueueCompiler = nullptr;
 		device->end();
@@ -116,8 +122,10 @@ struct Loop::Internal final : memory::AllocPool {
 		}
 		scheduledFences.clear();
 
-		// wait for device
-		device->getTable()->vkDeviceWaitIdle(device->getDevice());
+		if (device) {
+			// wait for device
+			device->getTable()->vkDeviceWaitIdle(device->getDevice());
+		}
 
 		queue->unlock();
 
@@ -155,8 +163,9 @@ struct Loop::Internal final : memory::AllocPool {
 		}
 	}
 
-	void compileResource(Rc<gl::Resource> &&req) {
-		auto h = loop->makeFrame(transferQueue->makeRequest(Rc<TransferResource>::create(device->getAllocator(), req)), 0);
+	void compileResource(Rc<gl::Resource> &&req, Function<void(bool)> &&cb) {
+		auto h = loop->makeFrame(transferQueue->makeRequest(
+				Rc<TransferResource>::create(device->getAllocator(), move(req), move(cb))), 0);
 		h->update(true);
 	}
 
@@ -342,9 +351,20 @@ void Loop::threadInit() {
 	_internal->queue->spawnWorkers(gl::TaskQueue::Flags::Cancelable | gl::TaskQueue::Flags::Waitable, LoopThreadId,
 			config::getGlThreadCount());
 
-	_internal->setDevice(_vkInstance->makeDevice(_deviceIndex));
-
-	_frameCache = Rc<FrameCache>::create(*this, *_internal->device);
+	if (auto dev = _vkInstance->makeDevice(_deviceIndex)) {
+		_internal->setDevice(move(dev));
+		_frameCache = Rc<FrameCache>::create(*this, *_internal->device);
+	} else if (_deviceIndex != gl::Instance::DefaultDevice) {
+		log::vtext("vk::Loop", "Unable to create device with index: ", _deviceIndex, ", fallback to default");
+		if (auto dev = _vkInstance->makeDevice(gl::Instance::DefaultDevice)) {
+			_internal->setDevice(move(dev));
+			_frameCache = Rc<FrameCache>::create(*this, *_internal->device);
+		} else {
+			log::vtext("vk::Loop", "Unable to create device");
+		}
+	} else {
+		log::vtext("vk::Loop", "Unable to create device");
+	}
 
 	memory::pool::pop();
 }
@@ -468,6 +488,11 @@ static void Loop_runTimers(Loop::Internal *internal, uint64_t dt) {
 }
 
 bool Loop::worker() {
+	if (!_internal->device) {
+		_running.store(false);
+		return false;
+	}
+
 	PresentationData data;
 
 	auto pool = memory::pool::create(_internal->pool);
@@ -512,9 +537,9 @@ void Loop::cancel() {
 	_thread.join();
 }
 
-void Loop::compileResource(Rc<gl::Resource> &&req) {
-	performOnGlThread([this, req = move(req)] () mutable {
-		_internal->compileResource(move(req));
+void Loop::compileResource(Rc<gl::Resource> &&req, Function<void(bool)> &&cb) {
+	performOnGlThread([this, req = move(req), cb = move(cb)] () mutable {
+		_internal->compileResource(move(req), move(cb));
 	}, this, true);
 }
 
@@ -717,7 +742,7 @@ Rc<Fence> Loop::acquireFence(uint32_t v, bool init) {
 
 	std::unique_lock<Mutex> lock(_internal->resourceMutex);
 	if (!_internal->fences.empty()) {
-		auto ref = _internal->fences.back();
+		auto ref = move(_internal->fences.back());
 		_internal->fences.pop_back();
 		initFence(ref);
 		return ref;

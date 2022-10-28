@@ -66,6 +66,7 @@ public:
 	static Application *getInstance();
 
 	static int parseOptionString(Value &ret, const StringView &str, int argc, const char * argv[]);
+	static uint64_t getClockStatic();
 
 	Application();
 	virtual ~Application();

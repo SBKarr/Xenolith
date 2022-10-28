@@ -43,8 +43,10 @@ struct TextInputHandler {
 	Function<void(bool, const Rect &, float)> onKeyboard;
 	Function<void(bool)> onInput;
 	Function<void()> onEnded;
-	Function<bool(const Vec2 &)> onTouchFilter;
-	TextInputManager *manager = nullptr;
+	//Function<bool(const Vec2 &)> onTouchFilter;
+	Rc<TextInputManager> manager;
+
+	~TextInputHandler();
 
 	bool run(TextInputManager *, const WideStringView &str = WideStringView(), const TextInputCursor & = TextInputCursor(),
 			TextInputType = TextInputType::Empty);
@@ -62,8 +64,6 @@ struct TextInputHandler {
 	const Rect &getKeyboardRect() const;
 
 	bool isActive() const;
-
-	~TextInputHandler();
 };
 
 class TextInputManager : public Ref {
@@ -73,7 +73,7 @@ public:
 	bool init(gl::View *);
 
 	bool hasText();
-    void insertText(const WideString &sInsert);
+    void insertText(const WideString &sInsert, bool compose = false);
 	void textChanged(const WideString &text, const TextInputCursor &);
 	void cursorChanged(const TextInputCursor &);
     void deleteBackward();
@@ -132,6 +132,7 @@ protected:
 	TextInputType _type = TextInputType::Empty;
 	WideString _string;
 	TextInputCursor _cursor;
+	InputKeyComposeState _compose = InputKeyComposeState::Nothing;
 };
 
 }

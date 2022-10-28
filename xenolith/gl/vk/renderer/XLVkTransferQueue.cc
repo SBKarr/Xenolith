@@ -68,6 +68,7 @@ public:
 
 protected:
 	virtual Vector<VkCommandBuffer> doPrepareCommands(FrameHandle &) override;
+	virtual void doComplete(FrameQueue &, Function<void(bool)> &&, bool) override;
 };
 
 
@@ -171,6 +172,15 @@ void TransferResource::invalidate(Device &dev) {
 bool TransferResource::init(const Rc<Allocator> &alloc, const Rc<gl::Resource> &res, Function<void(bool)> &&cb) {
 	_alloc = alloc;
 	_resource = res;
+	if (cb) {
+		_callback = move(cb);
+	}
+	return true;
+}
+
+bool TransferResource::init(const Rc<Allocator> &alloc, Rc<gl::Resource> &&res, Function<void(bool)> &&cb) {
+	_alloc = alloc;
+	_resource = move(res);
 	if (cb) {
 		_callback = move(cb);
 	}
@@ -919,7 +929,14 @@ void TransferAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentInput
 			return;
 		}
 
-		cb(success);
+		handle.performInQueue([this] (FrameHandle &frame) -> bool {
+			if (_resource->initialize()) {
+				return true;
+			}
+			return false;
+		}, [this, cb = move(cb)] (FrameHandle &frame, bool success) {
+			cb(success);
+		}, nullptr, "TransferAttachmentHandle::submitInput");
 	});
 }
 
@@ -973,8 +990,18 @@ Vector<VkCommandBuffer> TransferRenderPassHandle::doPrepareCommands(FrameHandle 
 		return Vector<VkCommandBuffer>();
 	}
 
-	table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-		VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+	VkPipelineStageFlags targetMask = 0;
+	if ((_pool->getClass() & QueueOperations::Graphics) != QueueOperations::None) {
+		targetMask |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	}
+	if ((_pool->getClass() & QueueOperations::Compute) != QueueOperations::None) {
+		targetMask |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+	}
+	if (targetMask == 0) {
+		targetMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+	}
+
+	table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT, targetMask, 0,
 		0, nullptr,
 		outputBufferBarriers.size(), outputBufferBarriers.data(),
 		outputImageBarriers.size(), outputImageBarriers.data());
@@ -984,6 +1011,21 @@ Vector<VkCommandBuffer> TransferRenderPassHandle::doPrepareCommands(FrameHandle 
 	}
 
 	return Vector<VkCommandBuffer>({buf});
+}
+
+void TransferRenderPassHandle::doComplete(FrameQueue &queue, Function<void(bool)> &&func, bool success) {
+	if (success) {
+		auto pass = (TransferRenderPass *)_renderPass.get();
+		TransferAttachmentHandle *transfer = nullptr;
+		for (auto &it : _queueData->attachments) {
+			if (it.first->getAttachment() == pass->getAttachment()) {
+				transfer = (TransferAttachmentHandle *)it.second->handle.get();
+			}
+		}
+		transfer->getResource()->compile();
+	}
+
+	QueuePassHandle::doComplete(queue, move(func), success);
 }
 
 }

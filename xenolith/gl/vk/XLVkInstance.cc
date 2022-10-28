@@ -39,9 +39,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL s_debugCallback(VkDebugUtilsMessageSeverityFlagBi
 		messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
 	}
 	if (strcmp(pCallbackData->pMessageIdName, "Loader Message") == 0) {
-		if (messageSeverity < XL_VK_MIN_LOADER_MESSAGE_SEVERITY) {
-			return VK_FALSE;
-		}
+		//if (messageSeverity < XL_VK_MIN_LOADER_MESSAGE_SEVERITY) {
+		//	return VK_FALSE;
+		//}
 
 		if (messageSeverity <= VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
 			if (StringView(pCallbackData->pMessage).starts_with("Instance Extension: ")
@@ -88,15 +88,17 @@ Instance::Instance(VkInstance inst, const PFN_vkGetInstanceProcAddr getInstanceP
 , _checkPresentSupport(move(present)) {
 	if constexpr (s_enableValidationLayers) {
 #if VK_DEBUG_LOG
-		VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo = { };
-		debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-		debugCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-		debugCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+		if (Application::getInstance()->getData().validation) {
+			VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo = { };
+			debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+			debugCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+			debugCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 
-		debugCreateInfo.pfnUserCallback = s_debugCallback;
+			debugCreateInfo.pfnUserCallback = s_debugCallback;
 
-		if (s_createDebugUtilsMessengerEXT(_instance, vkGetInstanceProcAddr, &debugCreateInfo, nullptr, &debugMessenger) != VK_SUCCESS) {
-			log::text("Vk", "failed to set up debug messenger!");
+			if (s_createDebugUtilsMessengerEXT(_instance, vkGetInstanceProcAddr, &debugCreateInfo, nullptr, &debugMessenger) != VK_SUCCESS) {
+				log::text("Vk", "failed to set up debug messenger!");
+			}
 		}
 #endif
 	}
@@ -124,7 +126,9 @@ Instance::Instance(VkInstance inst, const PFN_vkGetInstanceProcAddr getInstanceP
 Instance::~Instance() {
 	if constexpr (s_enableValidationLayers) {
 #if VK_DEBUG_LOG
-		vkDestroyDebugUtilsMessengerEXT(_instance, debugMessenger, nullptr);
+		if (debugMessenger != VK_NULL_HANDLE) {
+			vkDestroyDebugUtilsMessengerEXT(_instance, debugMessenger, nullptr);
+		}
 #endif
 	}
 	vkDestroyInstance(_instance, nullptr);
@@ -150,7 +154,6 @@ Rc<Device> Instance::makeDevice(uint32_t deviceIndex) const {
 		}
 	} else if (deviceIndex < _devices.size()) {
 		if (_devices[deviceIndex].supportsPresentation()) {
-
 			auto requiredFeatures = DeviceInfo::Features::getOptional();
 			requiredFeatures.enableFromFeatures(DeviceInfo::Features::getRequired());
 			requiredFeatures.disableFromFeatures(_devices[deviceIndex].features);

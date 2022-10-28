@@ -106,6 +106,7 @@ public:
 	void (* xkb_compose_table_unref) (struct xkb_compose_table *table) = nullptr;
 	struct xkb_compose_state* (* xkb_compose_state_new)(struct xkb_compose_table *table, enum xkb_compose_state_flags flags) = nullptr;
 	enum xkb_compose_feed_result (* xkb_compose_state_feed) (struct xkb_compose_state *state, xkb_keysym_t keysym) = nullptr;
+	void (* xkb_compose_state_reset) (struct xkb_compose_state *state) = nullptr;
 	enum xkb_compose_status (* xkb_compose_state_get_status) (struct xkb_compose_state *state) = nullptr;
 	xkb_keysym_t (* xkb_compose_state_get_one_sym) (struct xkb_compose_state *state) = nullptr;
 	void (* xkb_compose_state_unref) (struct xkb_compose_state *state) = nullptr;
@@ -131,7 +132,7 @@ protected:
 class LinuxViewInterface : public Ref {
 public:
 	virtual ~LinuxViewInterface() { }
-	virtual VkSurfaceKHR createWindowSurface(vk::Instance *instance) const = 0;
+	virtual VkSurfaceKHR createWindowSurface(vk::Instance *instance, VkPhysicalDevice dev) const = 0;
 
 	virtual int getSocketFd() const = 0;
 

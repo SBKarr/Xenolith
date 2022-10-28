@@ -20,37 +20,38 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_ROOT_APPZORDERTEST2_H_
-#define TEST_SRC_ROOT_APPZORDERTEST2_H_
+#ifndef TEST_SRC_TESTS_GENERAL_APPGENERALTEMPORARYRESOURCETEST_H_
+#define TEST_SRC_TESTS_GENERAL_APPGENERALTEMPORARYRESOURCETEST_H_
 
-#include "XLLayer.h"
-#include "XLLabel.h"
+#include "AppLayoutTest.h"
+#include "AppSlider.h"
+#include "AppCheckbox.h"
 
 namespace stappler::xenolith::app {
 
-class ZOrderTest : public Node {
+class GeneralTemporaryResourceTest : public LayoutTest {
 public:
-	virtual ~ZOrderTest() { }
+	virtual ~GeneralTemporaryResourceTest() { }
 
 	virtual bool init() override;
 
 	virtual void onContentSizeDirty() override;
 
-	virtual void update(const UpdateTime &) override;
+	virtual void onEnter(Scene *) override;
+	virtual void onExit() override;
 
 protected:
-	void handleClick(const Vec2 &);
+	void setResourceTimeout(float);
+	void switchVisibility(bool);
 
-	Layer *_background = nullptr;
-	Sprite *_logo = nullptr;
-
-	Layer *_layers[5] = { nullptr };
+	float _timeoutValue = 0.0f;
+	Sprite *_sprite = nullptr;
 	Label *_label = nullptr;
-	Label *_label2 = nullptr;
-
-	Layer *_cursor = nullptr;
+	AppSliderWithLabel *_slider = nullptr;
+	AppCheckboxWithLabel *_checkbox = nullptr;
+	Rc<TemporaryResource> _resource;
 };
 
 }
 
-#endif /* TEST_SRC_ROOT_APPZORDERTEST2_H_ */
+#endif /* TEST_SRC_TESTS_GENERAL_APPGENERALTEMPORARYRESOURCETEST_H_ */

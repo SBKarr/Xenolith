@@ -49,7 +49,7 @@ bool Button::init(Function<void()> &&cb) {
 			}
 		}
 		return true;
-	});
+	}, false);
 	_listener->addTouchRecognizer([this] (const GestureData &ev) -> bool {
 		if (ev.event == GestureEvent::Began) {
 			if (isTouched(ev.input->currentLocation)) {

@@ -49,7 +49,7 @@ bool InputSwipeTest::init() {
 			return false;
 			break;
 		case GestureEvent::Activated:
-			_node->setPosition(getBoundedPosition(_node->getPosition().xy() + swipe.delta));
+			_node->setPosition(getBoundedPosition(_node->getPosition().xy() + swipe.delta / swipe.density));
 			return true;
 			break;
 		case GestureEvent::Ended:

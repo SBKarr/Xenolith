@@ -31,15 +31,27 @@ class AppScene;
 
 class AppDelegate : public Application {
 public:
-    AppDelegate();
+	static EventHeader onSwapchainConfig;
+
     virtual ~AppDelegate();
 
     virtual bool onFinishLaunching() override;
 	virtual bool onMainLoop() override;
 
+	gl::SurfaceInfo getSurfaceinfo() const { return _surfaceInfo; }
+	gl::SwapchainConfig getSwapchainConfig() const { return _swapchainConfig; }
+
+	void setPreferredPresentMode(gl::PresentMode);
+
 protected:
 	gl::SwapchainConfig selectConfig(const gl::SurfaceInfo &info);
 	void onViewCreated(const Rc<Director> &);
+
+	Mutex _configMutex;
+	gl::PresentMode _preferredPresentMode = gl::PresentMode::Unsupported;
+
+	gl::SurfaceInfo _surfaceInfo;
+	gl::SwapchainConfig _swapchainConfig;
 };
 
 }

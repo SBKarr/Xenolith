@@ -33,12 +33,13 @@ FrameRequest::~FrameRequest() {
 	}
 }
 
-bool FrameRequest::init(const Rc<FrameEmitter> &emitter, Rc<ImageStorage> &&target) {
+bool FrameRequest::init(const Rc<FrameEmitter> &emitter, Rc<ImageStorage> &&target, float density) {
 	auto e = target->getInfo().extent;
 	_emitter = emitter;
 	_extent = Extent2(e.width, e.height);
 	_readyForSubmit = false;
 	_renderTarget = move(target);
+	_density = density;
 	return true;
 }
 
@@ -48,10 +49,11 @@ bool FrameRequest::init(const Rc<Queue> &q) {
 	return true;
 }
 
-bool FrameRequest::init(const Rc<Queue> &q, const Rc<FrameEmitter> &emitter, Extent2 extent) {
+bool FrameRequest::init(const Rc<Queue> &q, const Rc<FrameEmitter> &emitter, Extent2 extent, float density) {
 	if (init(q)) {
 		_emitter = emitter;
 		_extent = extent;
+		_density = density;
 		_readyForSubmit = emitter->isReadyForSubmit();
 		return true;
 	}
@@ -203,6 +205,7 @@ bool FrameEmitter::init(const Rc<gl::Loop> &loop, uint64_t frameInterval) {
 	_loop = loop;
 
 	_avgFrameTime.reset(0);
+	_avgFrameTimeValue = 0;
 
 	return true;
 }
@@ -280,12 +283,10 @@ void FrameEmitter::dropFrames() {
 }
 
 uint64_t FrameEmitter::getLastFrameTime() const {
-	std::unique_lock<Mutex> lock(_frameTimeMutex);
 	return _lastFrameTime;
 }
 uint64_t FrameEmitter::getAvgFrameTime() const {
-	std::unique_lock<Mutex> lock(_frameTimeMutex);
-	return _avgFrameTime.getAverage();
+	return _avgFrameTimeValue;
 }
 
 bool FrameEmitter::isReadyForSubmit() const {
@@ -301,10 +302,9 @@ void FrameEmitter::onFrameComplete(FrameHandle &frame) {
 		return;
 	}
 
-	_frameTimeMutex.lock();
 	_lastFrameTime = frame.getTimeEnd() - frame.getTimeStart();
 	_avgFrameTime.addValue(frame.getTimeEnd() - frame.getTimeStart());
-	_frameTimeMutex.unlock();
+	_avgFrameTimeValue = _avgFrameTime.getAverage(true);
 
 	auto it = _framesPending.begin();
 	while (it != _framesPending.end()) {
@@ -405,9 +405,9 @@ void FrameEmitter::scheduleFrameTimeout() {
 	}
 }
 
-Rc<FrameRequest> FrameEmitter::makeRequest(Rc<ImageStorage> &&storage) {
+Rc<FrameRequest> FrameEmitter::makeRequest(Rc<ImageStorage> &&storage, float density) {
 	_frame = platform::device::_clock();
-	return Rc<FrameRequest>::create(this, move(storage));
+	return Rc<FrameRequest>::create(this, move(storage), density);
 }
 
 Rc<FrameHandle> FrameEmitter::submitNextFrame(Rc<FrameRequest> &&req) {
@@ -452,7 +452,9 @@ void FrameEmitter::enableCacheAttachments(const Rc<FrameHandle> &req) {
 		list.emplace(it->getRenderQueue());
 	}
 
-	if (_cacheRenderQueue != list) {
+	Extent2 targetExtent = req->getExtent();
+
+	if (_cacheRenderQueue != list || targetExtent != _cacheExtent) {
 		Set<gl::ImageInfoData> images;
 		for (auto &it : queues) {
 			for (auto &a : it->getRenderQueue()->getAttachments()) {
@@ -461,11 +463,18 @@ void FrameEmitter::enableCacheAttachments(const Rc<FrameHandle> &req) {
 					auto data = img->getInfo();
 					data.extent = img->getSizeForFrame(*it);
 					images.emplace(data);
+
+					// for possible transient attachment add transient version of image
+					if (a->isTransient()) {
+						data.usage |=  gl::ImageUsage::TransientAttachment;
+						images.emplace(data);
+					}
 				}
 			}
 		}
 
 		_cacheRenderQueue = list;
+		_cacheExtent = targetExtent;
 
 		for (auto &it : images) {
 			auto iit = _cacheImages.find(it);
@@ -481,6 +490,8 @@ void FrameEmitter::enableCacheAttachments(const Rc<FrameHandle> &req) {
 		}
 
 		_cacheImages = move(images);
+
+		_loop->getFrameCache()->removeUnreachableFramebuffers();
 	}
 }
 

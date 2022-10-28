@@ -20,13 +20,46 @@
  THE SOFTWARE.
  **/
 
-#include "XLDefine.h"
-#include "AppTests.h"
-#include "AppGeneralUpdateTest.h"
-#include "AppGeneralZOrderTest.h"
-#include "AppGeneralLabelTest.h"
+#ifndef TEST_SRC_TESTS_CONFIG_APPCONFIGMENU_H_
+#define TEST_SRC_TESTS_CONFIG_APPCONFIGMENU_H_
 
-#include "AppRootLayout.cc"
-#include "AppAutofitTest.cc"
-#include "AppVectorTest.cc"
-#include "AppScrollTest.cc"
+#include "XLGuiScrollView.h"
+#include "AppLayoutTest.h"
+
+namespace stappler::xenolith::app {
+
+class AppDelegate;
+
+class ConfigMenu : public LayoutTest {
+public:
+	enum ApplyMask {
+		ApplyPresentMode
+	};
+
+	virtual ~ConfigMenu() { }
+
+	bool init();
+
+	virtual void onEnter(Scene *) override;
+	virtual void onContentSizeDirty() override;
+
+protected:
+	void makeScrollList(ScrollController *c);
+
+	void updateAppData(AppDelegate *);
+	void updatePresentMode(gl::PresentMode);
+	void updateApplyButton();
+
+	void applyConfig();
+
+	ScrollView *_scrollView = nullptr;
+
+	uint64_t _currentRate = maxOf<uint64_t>();
+	gl::PresentMode _currentMode = gl::PresentMode::Unsupported;
+
+	Map<ApplyMask, uint32_t> _applyData;
+};
+
+}
+
+#endif /* TEST_SRC_TESTS_CONFIG_APPCONFIGMENU_H_ */

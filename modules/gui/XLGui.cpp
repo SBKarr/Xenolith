@@ -28,3 +28,5 @@
 #include "XLGuiScrollItemHandle.cc"
 #include "XLGuiScrollViewBase.cc"
 #include "XLGuiScrollView.cc"
+
+#include "XLGuiInputLabel.cc"

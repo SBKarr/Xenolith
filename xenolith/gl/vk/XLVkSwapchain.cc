@@ -33,6 +33,9 @@ Surface::~Surface() {
 }
 
 bool Surface::init(Instance *instance, VkSurfaceKHR surface, Ref *win) {
+	if (!surface) {
+		return false;
+	}
 	_instance = instance;
 	_surface = surface;
 	_window = win;
@@ -40,6 +43,12 @@ bool Surface::init(Instance *instance, VkSurfaceKHR surface, Ref *win) {
 }
 
 SwapchainHandle::~SwapchainHandle() {
+	for (auto &it : _images) {
+		for (auto &v : it.views) {
+			v.second->invalidate();
+			v.second = nullptr;
+		}
+	}
 	invalidate();
 }
 
@@ -113,7 +122,7 @@ bool SwapchainHandle::init(Device &dev, const gl::SwapchainConfig &cfg, gl::Imag
 			auto image = Rc<Image>::create(dev, it, swapchainImageInfo, _images.size());
 
 			Map<gl::ImageViewInfo, Rc<ImageView>> views;
-			views.emplace(swapchainImageViewInfo, Rc<ImageView>::create(dev, image.get(), swapchainImageViewInfo));
+			views.emplace(swapchainImageViewInfo, Rc<ImageView>::create(dev, image.get(), swapchainImageViewInfo)).first;
 
 			_images.emplace_back(SwapchainImageData{move(image), move(views)});
 		}

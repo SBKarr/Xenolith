@@ -27,12 +27,13 @@ namespace stappler::xenolith::vk {
 
 DeviceInfo::Features DeviceInfo::Features::getRequired() {
 	Features ret;
-	ret.device10.features.shaderSampledImageArrayDynamicIndexing = VK_TRUE;
+	//ret.device10.features.shaderSampledImageArrayDynamicIndexing = VK_TRUE;
 	return ret;
 }
 
 DeviceInfo::Features DeviceInfo::Features::getOptional() {
 	Features ret;
+	ret.device10.features.shaderSampledImageArrayDynamicIndexing = VK_TRUE;
 	ret.device10.features.fillModeNonSolid = VK_TRUE;
 	ret.device10.features.shaderStorageBufferArrayDynamicIndexing = VK_TRUE;
 	ret.device10.features.shaderStorageImageArrayDynamicIndexing = VK_TRUE;

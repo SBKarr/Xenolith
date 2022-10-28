@@ -419,7 +419,7 @@ enum class ImageUsage {
 
 SP_DEFINE_ENUM_AS_MASK(ImageUsage);
 
-enum class PresentMode {
+enum class PresentMode : uint32_t {
 	Unsupported,
 	Immediate,
 	FifoRelaxed,

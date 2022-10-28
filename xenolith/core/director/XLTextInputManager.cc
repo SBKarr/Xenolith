@@ -24,6 +24,62 @@
 
 namespace stappler::xenolith {
 
+TextInputHandler::~TextInputHandler() {
+	cancel();
+}
+
+bool TextInputHandler::run(TextInputManager *manager, const WideStringView &str, const TextInputCursor &cursor, TextInputType type) {
+	if (!isActive()) {
+		this->manager = manager;
+		return manager->run(this, str, cursor, type);
+	}
+	return false;
+}
+
+void TextInputHandler::cancel() {
+	if (isActive()) {
+		this->manager->cancel();
+		this->manager = nullptr;
+	}
+}
+
+// only if this handler is active
+bool TextInputHandler::setString(const WideStringView &str, const TextInputCursor &c) {
+	if (isActive()) {
+		this->manager->setString(str, c);
+		return true;
+	}
+	return false;
+}
+bool TextInputHandler::setCursor(const TextInputCursor &c) {
+	if (isActive()) {
+		this->manager->setCursor(c);
+		return true;
+	}
+	return false;
+}
+
+WideStringView TextInputHandler::getString() const {
+	return this->manager->getString();
+}
+const TextInputCursor &TextInputHandler::getCursor() const {
+	return this->manager->getCursor();
+}
+
+bool TextInputHandler::isInputEnabled() const {
+	return this->manager->isInputEnabled();
+}
+bool TextInputHandler::isKeyboardVisible() const {
+	return this->manager->isKeyboardVisible();
+}
+const Rect &TextInputHandler::getKeyboardRect() const {
+	return this->manager->getKeyboardRect();
+}
+
+bool TextInputHandler::isActive() const {
+	return this->manager && this->manager->getHandler() == this;
+}
+
 TextInputManager::TextInputManager() { }
 
 bool TextInputManager::init(gl::View *view) {
@@ -35,9 +91,9 @@ bool TextInputManager::hasText() {
 	return _string.length() != 0;
 }
 
-void TextInputManager::insertText(const WideString &sInsert) {
+void TextInputManager::insertText(const WideString &sInsert, bool compose) {
 	if (sInsert.length() > 0) {
-		if (_cursor.length > 0) {
+		if (_cursor.length > 0 && (!compose || _compose != InputKeyComposeState::Composing)) {
 			_string.erase(_string.begin() + _cursor.start, _string.begin() + _cursor.start + _cursor.length);
 			_cursor.length = 0;
 		}
@@ -49,7 +105,12 @@ void TextInputManager::insertText(const WideString &sInsert) {
 		}
 
 		_string = std::move(sText);
-		_cursor.start += sInsert.length();
+
+		if (compose) {
+			_cursor.length += sInsert.length();
+		} else {
+			_cursor.start += sInsert.length();
+		}
 
 		onTextChanged();
 	}
@@ -163,6 +224,7 @@ void TextInputManager::onKeyboardDisabled(float duration) {
 void TextInputManager::setInputEnabled(bool enabled) {
 	if (_isInputEnabled != enabled) {
 		_isInputEnabled = enabled;
+		_compose = InputKeyComposeState::Nothing;
 		if (_handler && _handler->onInput) {
 			_handler->onInput(enabled);
 		}
@@ -201,6 +263,7 @@ bool TextInputManager::run(TextInputHandler *h, const WideStringView &str, const
 		}
 		return false;
 	}
+	_compose = InputKeyComposeState::Nothing;
 	return true;
 }
 
@@ -248,13 +311,14 @@ void TextInputManager::cancel() {
 }
 
 bool TextInputManager::canHandleInputEvent(const InputEventData &data) {
-	if (_running) {
+	if (_running && _isInputEnabled) {
 		switch (data.event) {
 		case InputEventName::KeyPressed:
 		case InputEventName::KeyRepeated:
 		case InputEventName::KeyReleased:
 		case InputEventName::KeyCanceled:
-			if (data.key.keychar || data.key.keycode == InputKeyCode::BACKSPACE || data.key.keycode == InputKeyCode::DELETE) {
+			if (data.key.keychar || data.key.keycode == InputKeyCode::BACKSPACE || data.key.keycode == InputKeyCode::DELETE
+					|| data.key.keycode == InputKeyCode::ESCAPE) {
 				return true;
 			}
 			break;
@@ -275,8 +339,30 @@ bool TextInputManager::handleInputEvent(const InputEventData &data) {
 		} else if (data.key.keycode == InputKeyCode::DELETE || data.key.keychar == char32_t(0x007f)) {
 			deleteForward();
 			return true;
+		} else if (data.key.keycode == InputKeyCode::ESCAPE) {
+			cancel();
 		} else if (data.key.keychar) {
-			insertText(string::toUtf16<Interface>(data.key.keychar));
+			auto c = data.key.keychar;
+			// replace \r with \n for formatter
+			if (c == '\r') {
+				c = '\n';
+			}
+			switch (data.key.compose) {
+			case InputKeyComposeState::Nothing:
+				if (_compose == InputKeyComposeState::Composing) {
+					_cursor.start += _cursor.length;
+					_cursor.length = 0;
+				}
+				insertText(string::toUtf16<Interface>(c));
+				break;
+			case InputKeyComposeState::Composed:
+				insertText(string::toUtf16<Interface>(c), false);
+				break;
+			case InputKeyComposeState::Composing:
+				insertText(string::toUtf16<Interface>(c), true);
+				break;
+			}
+			_compose = data.key.compose;
 			return true;
 		}
 		break;

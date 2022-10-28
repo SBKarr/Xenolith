@@ -69,6 +69,10 @@ public:
 
 	const Rc<TextInputManager> &getTextInputManager() const { return _textInput; }
 
+	bool isInBackground() const { return _inBackground; }
+	bool hasFocus() const { return _hasFocus; }
+	bool isPointerWithinWindow() const { return _pointerInWindow; }
+
 protected:
 	InputEvent getEventInfo(const InputEventData &) const;
 	void updateEventInfo(InputEvent &, const InputEventData &) const;
@@ -93,6 +97,11 @@ protected:
 	Rc<InputListenerStorage> _tmpEvents;
 	Rc<TextInputManager> _textInput;
 	Rc<PoolRef> _pool;
+
+	Vec2 _pointerLocation = Vec2::ZERO;
+	bool _inBackground = false;
+	bool _hasFocus = true;
+	bool _pointerInWindow = false;
 };
 
 template <typename Callback>

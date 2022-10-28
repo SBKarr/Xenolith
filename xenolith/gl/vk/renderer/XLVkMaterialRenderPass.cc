@@ -29,6 +29,8 @@
 #include "XLVkBuffer.h"
 #include "XLVkTextureSet.h"
 
+#include "XLDefaultShaders.h"
+
 namespace stappler::xenolith::vk {
 
 MaterialVertexAttachment::~MaterialVertexAttachment() { }
@@ -132,7 +134,12 @@ void VertexMaterialAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::Attachmen
 			return;
 		}
 
+		auto &cache = handle.getLoop()->getFrameCache();
+
 		_materialSet = _materials->getSet();
+		_drawStat.cachedFramebuffers = cache->getFramebuffersCount();
+		_drawStat.cachedImages = cache->getImagesCount();
+		_drawStat.cachedImageViews = cache->getImageViewsCount();
 
 		handle.performInQueue([this, d = move(d)] (FrameHandle &handle) {
 			return loadVertexes(handle, d);
@@ -449,14 +456,187 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 		_indexes->setData(indexData);
 	}
 
-	commands->sendStat(gl::DrawStat{
-		uint32_t(globalWritePlan.vertexes - excludeVertexes),
-		uint32_t((globalWritePlan.indexes - excludeIndexes) / 3),
-		uint32_t(paths.size()),
-		uint32_t(_spans.size())
-	});
+	_drawStat.vertexes = globalWritePlan.vertexes - excludeVertexes;
+	_drawStat.triangles = (globalWritePlan.indexes - excludeIndexes) / 3;
+	_drawStat.zPaths = paths.size();
+	_drawStat.drawCalls = _spans.size();
+	_drawStat.materials = _materialSet->getMaterials().size();
+
+	commands->sendStat(_drawStat);
 
 	_commands = commands;
+	return true;
+}
+
+bool MaterialPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
+	auto selectDepthFormat = [] (SpanView<gl::ImageFormat> formats) {
+		gl::ImageFormat ret = gl::ImageFormat::Undefined;
+
+		uint32_t score = 0;
+
+		auto selectWithScore = [&] (gl::ImageFormat fmt, uint32_t sc) {
+			if (score < sc) {
+				ret = fmt;
+				score = sc;
+			}
+		};
+
+		for (auto &it : formats) {
+			switch (it) {
+			case gl::ImageFormat::D16_UNORM: selectWithScore(it, 12); break;
+			case gl::ImageFormat::X8_D24_UNORM_PACK32: selectWithScore(it, 7); break;
+			case gl::ImageFormat::D32_SFLOAT: selectWithScore(it, 9); break;
+			case gl::ImageFormat::S8_UINT: break;
+			case gl::ImageFormat::D16_UNORM_S8_UINT: selectWithScore(it, 11); break;
+			case gl::ImageFormat::D24_UNORM_S8_UINT: selectWithScore(it, 10); break;
+			case gl::ImageFormat::D32_SFLOAT_S8_UINT: selectWithScore(it, 8); break;
+			default: break;
+			}
+		}
+
+		return ret;
+	};
+
+	using namespace renderqueue;
+
+	auto &cache = info.app->getResourceCache();
+
+	// load shaders by ref - do not copy content into engine
+	auto materialFrag = info.builder->addProgramByRef("Loader_MaterialVert", xenolith::shaders::MaterialVert);
+	auto materialVert = info.builder->addProgramByRef("Loader_MaterialFrag", xenolith::shaders::MaterialFrag);
+
+	// render-to-swapchain RenderPass
+	auto pass = Rc<vk::MaterialPass>::create("SwapchainPass", RenderOrderingHighest);
+	info.builder->addRenderPass(pass);
+
+	auto shaderSpecInfo = Vector<SpecializationInfo>({
+		// no specialization required for vertex shader
+		materialVert,
+		// specialization for fragment shader - use platform-dependent array sizes
+		SpecializationInfo(materialFrag, Vector<PredefinedConstant>{
+			PredefinedConstant::SamplersArraySize,
+			PredefinedConstant::TexturesArraySize
+		})
+	});
+
+	// pipelines for material-besed rendering
+	auto materialPipeline = info.builder->addPipeline(pass, 0, "Solid", shaderSpecInfo, PipelineMaterialInfo({
+		BlendInfo(),
+		DepthInfo(true, true, gl::CompareOp::Less)
+	}));
+	auto transparentPipeline = info.builder->addPipeline(pass, 0, "Transparent", shaderSpecInfo, PipelineMaterialInfo({
+		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
+				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
+		DepthInfo(false, true, gl::CompareOp::Less)
+	}));
+	auto surfacePipeline = info.builder->addPipeline(pass, 0, "Surface", shaderSpecInfo, PipelineMaterialInfo(
+		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
+				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
+		DepthInfo(false, true, gl::CompareOp::LessOrEqual)
+	));
+
+	info.builder->addPipeline(pass, 0, "DebugTriangles", shaderSpecInfo, PipelineMaterialInfo(
+		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
+				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
+		DepthInfo(false, true, gl::CompareOp::Less),
+		LineWidth(1.0f)
+	));
+
+	// define internal resources (images and buffers)
+	gl::Resource::Builder resourceBuilder("LoaderResources");
+	if (info.resourceCallback) {
+		info.resourceCallback(resourceBuilder);
+	}
+
+	info.builder->setInternalResource(Rc<gl::Resource>::create(move(resourceBuilder)));
+
+	ImageAttachment::AttachmentInfo depthAttachmentInfo;
+	depthAttachmentInfo.initialLayout = AttachmentLayout::Undefined;
+	depthAttachmentInfo.finalLayout = AttachmentLayout::DepthStencilAttachmentOptimal;
+	depthAttachmentInfo.clearOnLoad = true;
+	depthAttachmentInfo.clearColor = Color4F::WHITE;
+	depthAttachmentInfo.frameSizeCallback = [] (const FrameQueue &frame) {
+		return Extent3(frame.getExtent());
+	};
+
+	auto depth = Rc<vk::ImageAttachment>::create("CommonDepth",
+		gl::ImageInfo(
+			info.extent,
+			gl::ForceImageUsage(gl::ImageUsage::DepthStencilAttachment),
+			selectDepthFormat(info.app->getGlLoop()->getSupportedDepthStencilFormat())),
+		ImageAttachment::AttachmentInfo{
+			.initialLayout = AttachmentLayout::Undefined,
+			.finalLayout = AttachmentLayout::DepthStencilAttachmentOptimal,
+			.clearOnLoad = true,
+			.clearColor = Color4F::WHITE,
+			.frameSizeCallback = [] (const FrameQueue &frame) {
+				return Extent3(frame.getExtent());
+			}
+	});
+
+	auto out = Rc<vk::ImageAttachment>::create("Output",
+		gl::ImageInfo(
+			info.extent,
+			gl::ForceImageUsage(gl::ImageUsage::ColorAttachment),
+			platform::graphic::getCommonFormat()),
+		ImageAttachment::AttachmentInfo{
+			.initialLayout = AttachmentLayout::Undefined,
+			.finalLayout = AttachmentLayout::PresentSrc,
+			.clearOnLoad = true,
+			.clearColor = Color4F(1.0f, 1.0f, 1.0f, 1.0f), // Color4F::BLACK;
+			.frameSizeCallback = [] (const FrameQueue &frame) {
+				return Extent3(frame.getExtent());
+			}
+	});
+
+	// Material input attachment - per-scene list of materials
+	auto materialInput = Rc<vk::MaterialVertexAttachment>::create("MaterialInput",
+		gl::BufferInfo(gl::BufferUsage::StorageBuffer),
+
+		// ... with predefined list of materials
+		Vector<Rc<gl::Material>>({
+			Rc<gl::Material>::create(gl::Material::MaterialIdInitial, materialPipeline, cache->getEmptyImage(), ColorMode::IntensityChannel),
+			Rc<gl::Material>::create(gl::Material::MaterialIdInitial, materialPipeline, cache->getSolidImage(), ColorMode::IntensityChannel),
+			Rc<gl::Material>::create(gl::Material::MaterialIdInitial, transparentPipeline, cache->getEmptyImage(), ColorMode()),
+			Rc<gl::Material>::create(gl::Material::MaterialIdInitial, transparentPipeline, cache->getSolidImage(), ColorMode()),
+			Rc<gl::Material>::create(gl::Material::MaterialIdInitial, surfacePipeline, cache->getEmptyImage(), ColorMode()),
+			Rc<gl::Material>::create(gl::Material::MaterialIdInitial, surfacePipeline, cache->getSolidImage(), ColorMode())
+		})
+	);
+
+	// Vertex input attachment - per-frame vertex list
+	auto vertexInput = Rc<vk::VertexMaterialAttachment>::create("VertexInput",
+			gl::BufferInfo(gl::BufferUsage::StorageBuffer), materialInput);
+	vertexInput->setInputCallback(move(info.vertexInputCallback));
+
+	// define pass input-output
+	info.builder->addPassInput(pass, 0, vertexInput, AttachmentDependencyInfo()); // 0
+	info.builder->addPassInput(pass, 0, materialInput, AttachmentDependencyInfo()); // 1
+	info.builder->addPassDepthStencil(pass, 0, depth, AttachmentDependencyInfo{
+		PipelineStage::EarlyFragmentTest,
+			AccessType::DepthStencilAttachmentRead | AccessType::DepthStencilAttachmentWrite,
+		PipelineStage::LateFragmentTest,
+			AccessType::DepthStencilAttachmentRead | AccessType::DepthStencilAttachmentWrite,
+
+		// can be reused after RenderPass is submitted
+		FrameRenderPassState::Submitted,
+	});
+	info.builder->addPassOutput(pass, 0, out, AttachmentDependencyInfo{
+		// first used as color attachment to output colors
+		PipelineStage::ColorAttachmentOutput, AccessType::ColorAttachmentWrite,
+
+		// last used the same way (the only usage for this attachment)
+		PipelineStage::ColorAttachmentOutput, AccessType::ColorAttachmentWrite,
+
+		// can be reused after RenderPass is submitted
+		FrameRenderPassState::Submitted,
+	});
+
+	// define global input-output
+	// materialInput is persistent between frames, only vertexes should be provided before rendering started
+	info.builder->addInput(vertexInput);
+	info.builder->addOutput(out);
+
 	return true;
 }
 

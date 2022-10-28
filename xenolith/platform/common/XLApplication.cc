@@ -79,6 +79,10 @@ int Application::parseOptionString(Value &ret, const StringView &str, int argc, 
 	return 1;
 }
 
+uint64_t Application::getClockStatic() {
+	return platform::device::_clock(platform::device::ClockType::Monotonic);
+}
+
 Application::Application() : _appLog(&log::__xenolith_log) {
 	XLASSERT(s_application == nullptr, "Application should be only one");
 

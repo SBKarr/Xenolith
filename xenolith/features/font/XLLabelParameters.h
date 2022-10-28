@@ -290,6 +290,7 @@ public:
 	VerticalAlign getVerticalAlign() const;
 
 	void setFontSize(const uint16_t &);
+	void setFontSize(const FontSize &);
 	uint16_t getFontSize() const;
 
 	void setFontStyle(const FontStyle &);

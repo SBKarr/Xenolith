@@ -182,7 +182,7 @@ protected:
 
 class ImageView : public Object {
 public:
-	virtual ~ImageView() { }
+	virtual ~ImageView();
 
 	virtual bool init(Device &, ClearCallback, ObjectType, void *ptr) override;
 	virtual void invalidate() override;

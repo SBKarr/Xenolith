@@ -659,6 +659,7 @@ Rc<Image> Allocator::spawnPersistent(AllocationUsage usage, const gl::ImageInfo 
 	auto req = getMemoryRequirements(target);
 	auto type = findMemoryType(req.requirements.memoryTypeBits, usage);
 	if (!type) {
+		log::text("vk::Allocator", "Image: spawnPersistent: Fail to find memory type");
 		return nullptr;
 	}
 
@@ -681,6 +682,7 @@ Rc<Image> Allocator::spawnPersistent(AllocationUsage usage, const gl::ImageInfo 
 			result = table.vkAllocateMemory(device, &allocInfo, nullptr, &memory);
 		});
 		if (result != VK_SUCCESS) {
+			log::text("vk::Allocator", "Image: spawnPersistent: Fail to allocate memory for dedicated allocation");
 			_device->getTable()->vkDestroyImage(_device->getDevice(), target, nullptr);
 			return nullptr;
 		}
@@ -696,6 +698,7 @@ Rc<Image> Allocator::spawnPersistent(AllocationUsage usage, const gl::ImageInfo 
 			result = table.vkAllocateMemory(device, &allocInfo, nullptr, &memory);
 		});
 		if (result != VK_SUCCESS) {
+			log::text("vk::Allocator", "Image: spawnPersistent: Fail to allocate memory for dedicated allocation");
 			_device->getTable()->vkDestroyImage(_device->getDevice(), target, nullptr);
 			return nullptr;
 		}

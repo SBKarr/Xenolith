@@ -180,6 +180,11 @@ void ProgramData::inspect(SpanView<uint32_t> data) {
 		constants.emplace_back(ProgramPushConstantBlock({it.absolute_offset, it.padded_size}));
 	}
 
+	entryPoints.reserve(shader.entry_point_count);
+	for (auto &it : makeSpanView(shader.entry_points, shader.entry_point_count)) {
+		entryPoints.emplace_back(ProgramEntryPointBlock({it.id, memory::string(it.name)}));
+	}
+
 	spvReflectDestroyShaderModule(&shader);
 }
 

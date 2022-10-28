@@ -44,6 +44,10 @@ bool Scene::init(Application *app, RenderQueue::Builder &&builder) {
 	_application = app;
 	_queue = makeQueue(move(builder));
 
+	if (!isnan(app->getData().density)) {
+		setDensity(app->getData().density);
+	}
+
 	return true;
 }
 
@@ -54,12 +58,19 @@ bool Scene::init(Application *app, RenderQueue::Builder &&builder, Size2 size) {
 
 	_application = app;
 	_queue = makeQueue(move(builder));
-	setContentSize(size);
+
+	if (!isnan(app->getData().density)) {
+		setDensity(app->getData().density);
+	}
+
+	setContentSize(size / _density);
 
 	return true;
 }
 
 void Scene::render(RenderFrameInfo &info) {
+	//auto t = getTransf
+
 	info.director = _director;
 	info.scene = this;
 	info.zPath.reserve(8);
@@ -89,7 +100,7 @@ void Scene::onContentSizeDirty() {
 	Node::onContentSizeDirty();
 
 	setAnchorPoint(Anchor::Middle);
-	setPosition(Vec2(_contentSize) / 2.0f);
+	setPosition(Vec2((_contentSize * _density) / 2.0f));
 
 	log::vtext("Scene", "ContentSize: ", _contentSize);
 }
@@ -97,7 +108,7 @@ void Scene::onContentSizeDirty() {
 void Scene::onPresented(Director *dir) {
 	_director = dir;
 	if (getContentSize() == Size2::ZERO) {
-		setContentSize(dir->getScreenSize());
+		setContentSize(dir->getScreenSize() / _density);
 	}
 
 	if (auto res = _queue->getInternalResource()) {
@@ -117,6 +128,11 @@ void Scene::onFinished(Director *dir) {
 		if (auto res = _queue->getInternalResource()) {
 			dir->getResourceCache()->removeResource(res->getName());
 		}
+		_attachmentsByType.clear();
+		_materials.clear();
+		_pending.clear();
+		_materialDependency = nullptr;
+
 		_director = nullptr;
 	}
 }
@@ -159,18 +175,27 @@ void Scene::on2dVertexInput(FrameQueue &frame, const Rc<renderqueue::AttachmentH
 		}, handle, false, "Scene::on2dVertexInput");
 
 		// submit material updates
-		if (!_pendingMaterials.empty()) {
-			for (auto &it : _pendingMaterials) {
+		if (!_pending.empty()) {
+			for (auto &it : _pending) {
 				Vector<Rc<renderqueue::DependencyEvent>> events;
 				if (_materialDependency) {
 					events.emplace_back(_materialDependency);
 				}
-				auto req = Rc<gl::MaterialInputData>::alloc();
-				req->attachment = it.first;
-				req->materialsToAddOrUpdate = move(it.second);
-				frame->getLoop()->compileMaterials(move(req), events);
+
+				if (!it.second.toAdd.empty() || !it.second.toRemove.empty()) {
+					auto req = Rc<gl::MaterialInputData>::alloc();
+					req->attachment = it.first;
+					req->materialsToAddOrUpdate = move(it.second.toAdd);
+					req->materialsToRemove = move(it.second.toRemove);
+
+					for (auto &it : req->materialsToRemove) {
+						emplace_ordered(_revokedIds, it);
+					}
+
+					frame->getLoop()->compileMaterials(move(req), events);
+				}
 			}
-			_pendingMaterials.clear();
+			_pending.clear();
 			_materialDependency = nullptr;
 		}
 	}, this);
@@ -180,15 +205,15 @@ uint64_t Scene::getMaterial(const MaterialInfo &info) const {
 	auto it = _materials.find(info.hash());
 	if (it != _materials.end()) {
 		for (auto &m : it->second) {
-			if (m.first == info) {
-				return m.second;
+			if (m.info == info) {
+				return m.id;
 			}
 		}
 	}
 	return 0;
 }
 
-uint64_t Scene::acquireMaterial(const MaterialInfo &info, Vector<gl::MaterialImage> &&images) {
+uint64_t Scene::acquireMaterial(const MaterialInfo &info, Vector<gl::MaterialImage> &&images, bool revokable) {
 	auto aIt = _attachmentsByType.find(info.type);
 	if (aIt == _attachmentsByType.end()) {
 		return 0;
@@ -210,13 +235,94 @@ uint64_t Scene::acquireMaterial(const MaterialInfo &info, Vector<gl::MaterialIma
 		}
 	}
 
-	if (auto m = Rc<gl::Material>::create(pipeline, move(images), getDataForMaterial(a.attachment, info))) {
+	gl::MaterialId newId = 0;
+	if (revokable) {
+		if (!_revokedIds.empty()) {
+			newId = _revokedIds.back();
+			_revokedIds.pop_back();
+		}
+	}
+
+	if (newId == 0) {
+		newId = aIt->second.attachment->getNextMaterialId();
+	}
+
+	if (auto m = Rc<gl::Material>::create(newId, pipeline, move(images), getDataForMaterial(a.attachment, info))) {
 		auto id = m->getId();
 		addPendingMaterial(a.attachment, move(m));
-		addMaterial(info, id);
+		addMaterial(info, id, revokable);
 		return id;
 	}
 	return 0;
+}
+
+void Scene::setDensity(float density) {
+	if (_density != density) {
+		_density = density;
+		setScale(_density);
+		_contentSizeDirty = true;
+
+		auto diff = _contentSize / _density;
+
+		setPosition(Vec2(diff / 2.0f));
+	}
+}
+
+void Scene::revokeImages(const Vector<uint64_t> &vec) {
+	Vector<uint32_t> tmpRevoke2d;
+	Vector<uint32_t> tmpRevoke3d;
+
+	Vector<uint32_t> *revoke2d = &tmpRevoke2d;
+	Vector<uint32_t> *revoke3d = &tmpRevoke3d;
+
+	for (auto &it : _attachmentsByType) {
+		switch (it.first) {
+		case gl::MaterialType::Basic2D: {
+			auto iit = _pending.find(it.second.attachment);
+			if (iit == _pending.end()) {
+				iit = _pending.emplace(it.second.attachment, PendingData()).first;
+			}
+			revoke2d = &iit->second.toRemove;
+			break;
+		}
+		case gl::MaterialType::Basic3D: {
+			auto iit = _pending.find(it.second.attachment);
+			if (iit == _pending.end()) {
+				iit = _pending.emplace(it.second.attachment,PendingData()).first;
+			}
+			revoke3d = &iit->second.toRemove;
+			break;
+		}
+		}
+	}
+
+	auto shouldRevoke = [&] (const SceneMaterialInfo &iit) {
+		for (auto &id : vec) {
+			if (iit.info.hasImage(id)) {
+				switch (iit.info.type) {
+				case gl::MaterialType::Basic2D: emplace_ordered(*revoke2d, iit.id); break;
+				case gl::MaterialType::Basic3D: emplace_ordered(*revoke3d, iit.id); break;
+				}
+				return true;
+			}
+		}
+		return false;
+	};
+
+	for (auto &it : _materials) {
+		auto iit = it.second.begin();
+		while (iit != it.second.end()) {
+			if (iit->revokable) {
+				if (shouldRevoke(*iit)) {
+					iit = it.second.erase(iit);
+				} else {
+					++ iit;
+				}
+			} else {
+				++ iit;
+			}
+		}
+	}
 }
 
 auto Scene::makeQueue(RenderQueue::Builder &&builder) -> Rc<RenderQueue> {
@@ -269,7 +375,7 @@ void Scene::readInitialMaterials() {
 				renderPass = a->getPrevRenderPass(renderPass);
 			}
 			for (auto &m : a->getInitialMaterials()) {
-				addMaterial(getMaterialInfo(a->getType(), m), m->getId());
+				addMaterial(getMaterialInfo(a->getType(), m), m->getId(), false);
 			}
 		}
 	}
@@ -324,36 +430,34 @@ bool Scene::isPipelineMatch(const PipelineInfo *data, const MaterialInfo &info) 
 }
 
 void Scene::addPendingMaterial(const gl::MaterialAttachment *a, Rc<gl::Material> &&material) {
-	auto it = _pendingMaterials.find(a);
-	if (it != _pendingMaterials.end()) {
-		it->second.emplace_back(move(material));
-	} else {
-		_pendingMaterials.emplace(a, Vector<Rc<gl::Material>>({move(material)}));
+	auto it = _pending.find(a);
+	if (it == _pending.end()) {
+		it = _pending.emplace(a, PendingData()).first;
 	}
+	it->second.toAdd.emplace_back(move(material));
 	if (!_materialDependency) {
 		_materialDependency = Rc<renderqueue::DependencyEvent>::alloc();
 	}
 }
 
-void Scene::addMaterial(const MaterialInfo &info, gl::MaterialId id) {
+void Scene::addMaterial(const MaterialInfo &info, gl::MaterialId id, bool revokable) {
 	auto materialHash = info.hash();
 	auto it = _materials.find(info.hash());
 	if (it != _materials.end()) {
-		it->second.emplace_back(info, id);
+		it->second.emplace_back(SceneMaterialInfo{info, id, revokable});
 	} else {
-		Vector<Pair<MaterialInfo, gl::MaterialId>> ids({pair(info, id)});
+		Vector<SceneMaterialInfo> ids({SceneMaterialInfo{info, id, revokable}});
 		_materials.emplace(materialHash, move(ids));
 	}
 }
 
-void Scene::listMterials() const {
+void Scene::listMaterials() const {
 	for (auto &it : _materials) {
 		std::cout << it.first << ":\n";
 		for (auto &iit : it.second) {
-			std::cout << "\t" << iit.first.description() << " -> " << iit.second << "\n";
+			std::cout << "\t" << iit.info.description() << " -> " << iit.id << "\n";
 		}
 	}
-
 }
 
 }

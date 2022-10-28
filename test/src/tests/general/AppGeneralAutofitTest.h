@@ -24,8 +24,16 @@
 #define TEST_SRC_TESTS_GENERAL_APPGENERALAUTOFITTEST_H_
 
 #include "AppLayoutTest.h"
+#include "XLVectorSprite.h"
 
 namespace stappler::xenolith::app {
+
+class GeneralAutofitTestResize : public VectorSprite {
+public:
+	virtual ~GeneralAutofitTestResize() { }
+
+	virtual bool init() override;
+};
 
 class GeneralAutofitTest : public LayoutTest {
 public:

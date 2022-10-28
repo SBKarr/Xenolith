@@ -37,8 +37,15 @@ struct SimpleGradient {
 	static SimpleGradient progress(const SimpleGradient &a, const SimpleGradient &b, float p);
 
 	SimpleGradient();
+	SimpleGradient(ColorRef);
 	SimpleGradient(ColorRef start, ColorRef end, const Vec2 & = Vertical);
 	SimpleGradient(ColorRef bl, ColorRef br, ColorRef tl, ColorRef tr);
+
+	bool hasAlpha() const;
+	bool isMono() const;
+
+	bool operator==(const SimpleGradient &) const;
+	bool operator!=(const SimpleGradient &) const;
 
 	Color4B colors[4]; // bl - br - tl - tr
 };
@@ -61,6 +68,8 @@ public:
 protected:
 	virtual void updateVertexes() override;
 	virtual void updateVertexesColor() override;
+
+	virtual RenderingLevel getRealRenderingLevel() const override;
 
 	SimpleGradient _gradient;
 };

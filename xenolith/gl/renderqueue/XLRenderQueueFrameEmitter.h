@@ -33,9 +33,9 @@ class FrameRequest final : public Ref {
 public:
 	virtual ~FrameRequest();
 
-	bool init(const Rc<FrameEmitter> &, Rc<ImageStorage> &&target);
+	bool init(const Rc<FrameEmitter> &, Rc<ImageStorage> &&target, float = 1.0f);
 	bool init(const Rc<Queue> &q);
-	bool init(const Rc<Queue> &q, const Rc<FrameEmitter> &, Extent2);
+	bool init(const Rc<Queue> &q, const Rc<FrameEmitter> &, Extent2, float = 1.0f);
 
 	void addSignalDependency(Rc<DependencyEvent> &&);
 	void addSignalDependencies(Vector<Rc<DependencyEvent>> &&);
@@ -136,7 +136,7 @@ public:
 
 	bool isReadyForSubmit() const;
 
-	Rc<FrameRequest> makeRequest(Rc<ImageStorage> &&);
+	Rc<FrameRequest> makeRequest(Rc<ImageStorage> &&, float density = 1.0f);
 	Rc<FrameHandle> submitNextFrame(Rc<FrameRequest> &&);
 
 protected:
@@ -173,12 +173,13 @@ protected:
 
 	uint64_t _lastSubmit = 0;
 
-	mutable Mutex _frameTimeMutex;
-	uint64_t _lastFrameTime = 0;
-	math::MovingAverage<16, uint64_t> _avgFrameTime;
+	std::atomic<uint64_t> _lastFrameTime = 0;
+	math::MovingAverage<20, uint64_t> _avgFrameTime;
+	std::atomic<uint64_t> _avgFrameTimeValue = 0;
 
 	uint64_t _lastTotalFrameTime = 0;
 
+	Extent2 _cacheExtent;
 	Set<Rc<Queue>> _cacheRenderQueue;
 	Set<gl::ImageInfoData> _cacheImages;
 };

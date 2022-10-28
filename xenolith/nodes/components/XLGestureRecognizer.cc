@@ -21,6 +21,10 @@
  **/
 
 #include "XLGestureRecognizer.h"
+#include "XLInputListener.h"
+#include "XLNode.h"
+#include "XLDirector.h"
+#include "XLInputDispatcher.h"
 
 namespace stappler::xenolith {
 
@@ -77,6 +81,14 @@ bool GestureRecognizer::handleInputEvent(const InputEvent &event, float density)
 	default: break;
 	}
 	return true;
+}
+
+void GestureRecognizer::onEnter(InputListener *) {
+
+}
+
+void GestureRecognizer::onExit() {
+
 }
 
 uint32_t GestureRecognizer::getEventCount() const {
@@ -526,6 +538,7 @@ bool GestureSwipeRecognizer::renewEvent(const InputEvent &event, float density) 
 			_gesture.midpoint = current;
 
 			_gesture.delta = current - prev;
+			_gesture.density = density;
 
 			if (!_swipeBegin && _gesture.delta.length() > _threshold * density) {
 				_gesture.cleanup();
@@ -570,6 +583,8 @@ bool GestureSwipeRecognizer::renewEvent(const InputEvent &event, float density) 
 			Vec2 current = event.currentLocation;
 			Vec2 second = _gesture.secondTouch;
 			Vec2 prev = _gesture.midpoint;
+
+			_gesture.density = density;
 
 			if (event.data.id != _currentTouch) {
 				second = _gesture.secondTouch = current;
@@ -652,7 +667,7 @@ bool GestureScrollRecognizer::handleInputEvent(const InputEvent &event, float de
 	return true;
 }
 
-bool GestureMoveRecognizer::init(InputCallback &&cb) {
+bool GestureMoveRecognizer::init(InputCallback &&cb, bool withinNode) {
 	if (!GestureRecognizer::init()) {
 		return false;
 	}
@@ -660,13 +675,28 @@ bool GestureMoveRecognizer::init(InputCallback &&cb) {
 	if (cb) {
 		_callback = move(cb);
 		_eventMask.set(toInt(InputEventName::MouseMove));
+		_onlyWithinNode = withinNode;
 		return true;
 	}
 
 	return false;
 }
 
+bool GestureMoveRecognizer::canHandleEvent(const InputEvent &event) const {
+	if (GestureRecognizer::canHandleEvent(event)) {
+		if (!_onlyWithinNode || (_listener && _listener->getOwner()
+				&& _listener->getOwner()->isTouched(event.currentLocation, _listener->getTouchPadding()))) {
+			return true;
+		}
+	}
+	return false;
+}
+
 bool GestureMoveRecognizer::handleInputEvent(const InputEvent &event, float density) {
+	if (!canHandleEvent(event)) {
+		return false;
+	}
+
 	if (!_eventMask.test(toInt(event.data.event))) {
 		return false;
 	}
@@ -679,6 +709,16 @@ bool GestureMoveRecognizer::handleInputEvent(const InputEvent &event, float dens
 	_event.input = nullptr;
 	_event.event = GestureEvent::Cancelled;
 	return true;
+}
+
+void GestureMoveRecognizer::onEnter(InputListener *l) {
+	GestureRecognizer::onEnter(l);
+	_listener = l;
+}
+
+void GestureMoveRecognizer::onExit() {
+	_listener = nullptr;
+	GestureRecognizer::onExit();
 }
 
 bool GestureKeyRecognizer::init(InputCallback &&cb, KeyMask &&mask) {
@@ -737,6 +777,82 @@ bool GestureKeyRecognizer::renewEvent(const InputEvent &event, float density) {
 		return true;
 	}
 	return false;
+}
+
+bool GestureMouseOverRecognizer::init(InputCallback &&cb, float padding) {
+	if (!GestureRecognizer::init()) {
+		return false;
+	}
+
+	if (cb) {
+		_callback = move(cb);
+		_eventMask.set(toInt(InputEventName::MouseMove));
+		_eventMask.set(toInt(InputEventName::FocusGain));
+		_eventMask.set(toInt(InputEventName::PointerEnter));
+		return true;
+	}
+
+	log::text("GestureKeyRecognizer", "Callback or key mask is not defined");
+	return false;
+}
+
+bool GestureMouseOverRecognizer::handleInputEvent(const InputEvent &event, float density) {
+	switch (event.data.event) {
+	case InputEventName::FocusGain:
+		if (_viewHasFocus != event.data.getValue()) {
+			_viewHasFocus = event.data.getValue();
+			updateState(event);
+		}
+		break;
+	case InputEventName::PointerEnter:
+		if (_viewHasPointer != event.data.getValue()) {
+			_viewHasPointer = event.data.getValue();
+			updateState(event);
+		}
+		break;
+	case InputEventName::MouseMove:
+		if (auto tar = _listener->getOwner()) {
+			auto v = tar->isTouched(event.currentLocation, _padding);
+			if (_hasMouseOver != v) {
+				_hasMouseOver = v;
+				updateState(event);
+			}
+		} else {
+			if (_hasMouseOver) {
+				_hasMouseOver = false;
+				updateState(event);
+			}
+		}
+		break;
+	default:
+		break;
+	}
+	return false;
+}
+
+void GestureMouseOverRecognizer::onEnter(InputListener *l) {
+	GestureRecognizer::onEnter(l);
+	_listener = l;
+
+	auto dispatcher = l->getOwner()->getDirector()->getInputDispatcher();
+
+	_viewHasPointer = dispatcher->isPointerWithinWindow();
+	_viewHasFocus = dispatcher->hasFocus();
+}
+
+void GestureMouseOverRecognizer::onExit() {
+	_listener = nullptr;
+	GestureRecognizer::onExit();
+}
+
+void GestureMouseOverRecognizer::updateState(const InputEvent &event) {
+	auto value = _viewHasFocus && _viewHasPointer && _hasMouseOver;
+	if (value != _value) {
+		_value = value;
+		_event.input = &event;
+		_event.event = _value ? GestureEvent::Began : GestureEvent::Ended;
+		_callback(_event);
+	}
 }
 
 std::ostream &operator<<(std::ostream &stream, GestureEvent ev) {

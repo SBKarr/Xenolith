@@ -35,6 +35,15 @@ String MaterialInfo::description() const {
 	return stream.str();
 }
 
+bool MaterialInfo::hasImage(uint64_t id) const {
+	for (auto &it : images) {
+		if (it == id) {
+			return true;
+		}
+	}
+	return false;
+}
+
 String PipelineMaterialInfo::data() const {
 	BytesView view((const uint8_t *)this, sizeof(PipelineMaterialInfo));
 	return toString(
@@ -1452,36 +1461,44 @@ String SwapchainConfig::description() const {
 
 bool SurfaceInfo::isSupported(const SwapchainConfig &cfg) const {
 	if (std::find(presentModes.begin(), presentModes.end(), cfg.presentMode) == presentModes.end()) {
+		log::vtext("Vk-Error", "SurfaceInfo: presentMode is not supported");
 		return false;
 	}
 
 	if (cfg.presentModeFast != PresentMode::Unsupported && std::find(presentModes.begin(), presentModes.end(),
 			cfg.presentModeFast) == presentModes.end()) {
+		log::vtext("Vk-Error", "SurfaceInfo: presentModeFast is not supported");
 		return false;
 	}
 
 	if (std::find(formats.begin(), formats.end(), pair(cfg.imageFormat, cfg.colorSpace)) == formats.end()) {
+		log::vtext("Vk-Error", "SurfaceInfo: imageFormat or colorSpace is not supported");
 		return false;
 	}
 
 	if ((supportedCompositeAlpha & cfg.alpha) == CompositeAlphaFlags::None) {
+		log::vtext("Vk-Error", "SurfaceInfo: alpha is not supported");
 		return false;
 	}
 
 	if ((supportedTransforms & cfg.transform) == SurfaceTransformFlags::None) {
+		log::vtext("Vk-Error", "SurfaceInfo: transform is not supported");
 		return false;
 	}
 
-	if (cfg.imageCount < minImageCount || cfg.imageCount > maxImageCount) {
+	if (cfg.imageCount < minImageCount || (maxImageCount != 0 && cfg.imageCount > maxImageCount)) {
+		log::vtext("Vk-Error", "SurfaceInfo: imageCount is not supported");
 		return false;
 	}
 
 	if (cfg.extent.width < minImageExtent.width || cfg.extent.width > maxImageExtent.width
 			|| cfg.extent.height < minImageExtent.height || cfg.extent.height > maxImageExtent.height) {
+		log::vtext("Vk-Error", "SurfaceInfo: extent is not supported");
 		return false;
 	}
 
 	if (cfg.transfer && (supportedUsageFlags & ImageUsage::TransferDst) == ImageUsage::None) {
+		log::vtext("Vk-Error", "SurfaceInfo: supportedUsageFlags is not supported");
 		return false;
 	}
 
@@ -1514,6 +1531,11 @@ String SurfaceInfo::description() const {
 	}
 	stream << "\n";
 	return stream.str();
+}
+
+std::ostream & operator<<(std::ostream &stream, const ImageInfoData &value) {
+	stream << "ImageInfoData: " << value.extent;
+	return stream;
 }
 
 }

@@ -199,6 +199,10 @@ XcbView::~XcbView() {
 		_xkb->xkb_state_unref(_xkbState);
 		_xkbState = nullptr;
 	}
+	if (_xkbCompose) {
+		_xkb->xkb_compose_state_unref(_xkbCompose);
+		_xkbCompose = nullptr;
+	}
 	if (_keysyms) {
 		_xcb->xcb_key_symbols_free(_keysyms);
 		_keysyms = nullptr;
@@ -213,7 +217,7 @@ bool XcbView::valid() const {
 	return _xcb->xcb_connection_has_error(_connection) == 0;
 }
 
-VkSurfaceKHR XcbView::createWindowSurface(vk::Instance *instance) const {
+VkSurfaceKHR XcbView::createWindowSurface(vk::Instance *instance, VkPhysicalDevice dev) const {
 	VkSurfaceKHR surface = VK_NULL_HANDLE;
 	VkXcbSurfaceCreateInfoKHR createInfo{VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR, nullptr, 0, _connection, _window};
 	if (instance->vkCreateXcbSurfaceKHR(instance->getInstance(), &createInfo, nullptr, &surface) != VK_SUCCESS) {
@@ -391,16 +395,14 @@ bool XcbView::poll(bool frameReady) {
 			break;
 		}
 		case XCB_FOCUS_IN: {
-			xcb_focus_in_event_t *ev = (xcb_focus_in_event_t*) e;
+			// xcb_focus_in_event_t *ev = (xcb_focus_in_event_t*) e;
 			inputEvents.emplace_back(InputEventData::BoolEvent(InputEventName::FocusGain, true));
 			updateKeysymMapping();
-			printf("XCB_FOCUS_IN: %d\n", ev->event);
 			break;
 		}
 		case XCB_FOCUS_OUT: {
-			xcb_focus_in_event_t *ev = (xcb_focus_in_event_t*) e;
+			// xcb_focus_in_event_t *ev = (xcb_focus_in_event_t*) e;
 			inputEvents.emplace_back(InputEventData::BoolEvent(InputEventName::FocusGain, false));
-			printf("XCB_FOCUS_OUT: %d\n", ev->event);
 			break;
 		}
 		case XCB_KEY_PRESS: {
@@ -436,15 +438,23 @@ bool XcbView::poll(bool frameReady) {
 
 			if (_xkb) {
 				event.key.keycode = getKeyCode(ev->detail);
+				event.key.compose = InputKeyComposeState::Nothing;
 				event.key.keysym = getKeysym(ev->detail, ev->state, false);
 				if (_view->isInputEnabled()) {
-					event.key.keychar = _xkb->xkb_state_key_get_utf32(_xkbState, ev->detail);
+					const auto keysym = composeSymbol(_xkb->xkb_state_key_get_one_sym(_xkbState, ev->detail), event.key.compose);
+					const uint32_t cp = _xkb->xkb_keysym_to_utf32(keysym);
+					if (cp != 0 && keysym != XKB_KEY_NoSymbol) {
+						event.key.keychar = cp;
+					} else {
+						event.key.keychar = 0;
+					}
 				} else {
 					event.key.keychar = 0;
 				}
 			} else {
 				auto sym = getKeysym(ev->detail, ev->state, false); // state-inpependent keysym
 				event.key.keycode = getKeysymCode(sym);
+				event.key.compose = InputKeyComposeState::Nothing;
 				event.key.keysym = sym;
 				if (_view->isInputEnabled()) {
 					event.key.keychar = _glfwKeySym2Unicode(getKeysym(ev->detail, ev->state)); // use state-dependent keysym
@@ -482,6 +492,7 @@ bool XcbView::poll(bool frameReady) {
 
 			if (_xkb) {
 				event.key.keycode = getKeyCode(ev->detail);
+				event.key.compose = InputKeyComposeState::Nothing;
 				event.key.keysym = getKeysym(ev->detail, ev->state, false);
 				if (_view->isInputEnabled()) {
 					event.key.keychar = _xkb->xkb_state_key_get_utf32(_xkbState, ev->detail);
@@ -491,6 +502,7 @@ bool XcbView::poll(bool frameReady) {
 			} else {
 				auto sym = getKeysym(ev->detail, ev->state, false); // state-inpependent keysym
 				event.key.keycode = getKeysymCode(sym);
+				event.key.compose = InputKeyComposeState::Nothing;
 				event.key.keysym = sym;
 				if (_view->isInputEnabled()) {
 					event.key.keychar = _glfwKeySym2Unicode(getKeysym(ev->detail, ev->state)); // use state-dependent keysym
@@ -723,6 +735,10 @@ void XcbView::updateXkbMapping() {
 		_xkb->xkb_keymap_unref(_xkbKeymap);
 		_xkbKeymap = nullptr;
 	}
+	if (_xkbCompose) {
+		_xkb->xkb_compose_state_unref(_xkbCompose);
+		_xkbCompose = nullptr;
+	}
 
 	_xkbKeymap = _xkb->xkb_x11_keymap_new_from_device(_xkb->getContext(), _connection, _xkbDeviceId, XKB_KEYMAP_COMPILE_NO_FLAGS);
 	if (_xkbKeymap == nullptr) {
@@ -741,6 +757,17 @@ void XcbView::updateXkbMapping() {
 	_xkb->xkb_keymap_key_for_each(_xkbKeymap, [] (struct xkb_keymap *keymap, xkb_keycode_t key, void *data) {
 		((XcbView *)data)->updateXkbKey(key);
 	}, this);
+
+	auto locale = getenv("LC_ALL");
+	if (!locale) { locale = getenv("LC_CTYPE"); }
+	if (!locale) { locale = getenv("LANG"); }
+
+	auto composeTable = _xkb->xkb_compose_table_new_from_locale(_xkb->getContext(),
+			locale ? locale : "C", XKB_COMPOSE_COMPILE_NO_FLAGS);
+	if (composeTable) {
+		_xkbCompose = _xkb->xkb_compose_state_new(composeTable, XKB_COMPOSE_STATE_NO_FLAGS);
+		_xkb->xkb_compose_table_unref(composeTable);
+	}
 }
 
 void XcbView::updateKeysymMapping() {
@@ -867,6 +894,42 @@ xcb_keysym_t XcbView::getKeysym(xcb_keycode_t code, uint16_t state, bool resolve
 	}
 
 	return XCB_NO_SYMBOL;
+}
+
+xkb_keysym_t XcbView::composeSymbol(xkb_keysym_t sym, InputKeyComposeState &compose) const {
+	std::cout << "Compose: " << sym;
+	if (sym == XKB_KEY_NoSymbol || !_xkbCompose) {
+		std::cout << ": " << sym << " (disabled)\n";
+		return sym;
+	}
+	if (_xkb->xkb_compose_state_feed(_xkbCompose, sym) != XKB_COMPOSE_FEED_ACCEPTED) {
+		std::cout << ": " << sym << " (not accepted)\n";
+		return sym;
+	}
+	auto state = _xkb->xkb_compose_state_get_status(_xkbCompose);
+	switch (state) {
+	case XKB_COMPOSE_COMPOSED:
+		compose = InputKeyComposeState::Composed;
+		sym = _xkb->xkb_compose_state_get_one_sym(_xkbCompose);
+		_xkb->xkb_compose_state_reset(_xkbCompose);
+		std::cout << ": " << sym << " (composed)\n";
+		return sym;
+	case XKB_COMPOSE_COMPOSING:
+		compose = InputKeyComposeState::Composing;
+		std::cout << ": " << sym << " (composing)\n";
+		return sym;
+	case XKB_COMPOSE_CANCELLED:
+		std::cout << ": " << sym << " (cancelled)\n";
+		_xkb->xkb_compose_state_reset(_xkbCompose);
+		return sym;
+	case XKB_COMPOSE_NOTHING:
+		_xkb->xkb_compose_state_reset(_xkbCompose);
+		std::cout << ": " << sym << " (nothing)\n";
+		return sym;
+	default:
+		std::cout << ": " << sym << " (error)\n";
+		return sym;
+	}
 }
 
 void XcbView::updateXkbKey(xcb_keycode_t code) {

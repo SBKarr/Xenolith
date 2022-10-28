@@ -65,7 +65,14 @@ public:
 	virtual void setString(StringView);
 	virtual StringView getString() const;
 
+	virtual void setPrefix(StringView);
+	virtual StringView getPrefix() const;
+
+	virtual void setFontSize(Label::FontSize);
+	virtual void setFontSize(uint16_t);
+
 protected:
+	Label *_prefix = nullptr;
 	Label *_label = nullptr;
 };
 

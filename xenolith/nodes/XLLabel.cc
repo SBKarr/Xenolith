@@ -407,7 +407,8 @@ void Label::updateVertexes() {
 		updateLabel();
 	}
 
-	if (!_format || _format->chars.size() == 0) {
+	if (!_format || _format->chars.size() == 0 || _string16.empty()) {
+		_vertexes.clear();
 		return;
 	}
 

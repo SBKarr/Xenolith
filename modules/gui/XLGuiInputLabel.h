@@ -20,16 +20,17 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_NODES_INPUT_XLINPUTLABEL_H_
-#define XENOLITH_NODES_INPUT_XLINPUTLABEL_H_
+#ifndef MODULES_GUI_XLGUIINPUTLABEL_H_
+#define MODULES_GUI_XLGUIINPUTLABEL_H_
 
-#include "../XLDynamicStateNode.h"
+#include "XLDynamicStateNode.h"
 #include "XLLabel.h"
 #include "XLTextInputManager.h"
 
 namespace stappler::xenolith {
 
 class InputLabel;
+class VectorSprite;
 
 enum class InputLabelError {
 	OverflowChars,
@@ -63,7 +64,7 @@ public:
 		return ptr.get();
 	}
 
-	virtual void setLabel(InputLabel *, int zIndex = 0);
+	virtual void setLabel(Rc<InputLabel> &&, int16_t zIndex = 0);
 	virtual InputLabel *getLabel() const;
 
 	virtual void update(const UpdateTime &time) override;
@@ -118,7 +119,7 @@ public:
 	};
 
 	virtual bool init(font::FontController *, const DescriptionStyle & = DescriptionStyle(), float width = 0);
-	virtual void visit(RenderFrameInfo &info, NodeFlags parentFlags) override;
+	virtual bool visitGeometry(RenderFrameInfo &info, NodeFlags parentFlags) override;
 
 	virtual void onContentSizeDirty() override;
 	virtual void onExit() override;
@@ -174,8 +175,8 @@ public:
 	virtual void pasteString(const WideString &);
 	virtual void eraseSelection();
 
-	virtual void setInputTouchFilter(const Function<bool(const Vec2 &)> &);
-	virtual const Function<bool(const Vec2 &)> &getInputTouchFilter() const;
+	/*virtual void setInputTouchFilter(const Function<bool(const Vec2 &)> &);
+	virtual const Function<bool(const Vec2 &)> &getInputTouchFilter() const;*/
 
 	virtual VectorSprite *getTouchedCursor(const Vec2 &, float = 4.0f);
 
@@ -251,4 +252,4 @@ protected:
 
 }
 
-#endif /* XENOLITH_NODES_INPUT_XLINPUTLABEL_H_ */
+#endif /* MODULES_GUI_XLGUIINPUTLABEL_H_ */

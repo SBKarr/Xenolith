@@ -24,8 +24,8 @@
 
 namespace stappler::xenolith {
 
-const Vec2 SimpleGradient::Vertical(0.0f, -1.0f);
-const Vec2 SimpleGradient::Horizontal(1.0f, 0.0f);
+const Vec2 SimpleGradient::Horizontal(0.0f, 1.0f);
+const Vec2 SimpleGradient::Vertical(-1.0f, 0.0f);
 
 SimpleGradient SimpleGradient::progress(const SimpleGradient &a, const SimpleGradient &b, float p) {
 	SimpleGradient ret;
@@ -41,6 +41,10 @@ SimpleGradient::SimpleGradient() {
 	colors[1] = Color4B(255, 255, 255, 255);
 	colors[2] = Color4B(255, 255, 255, 255);
 	colors[3] = Color4B(255, 255, 255, 255);
+}
+
+SimpleGradient::SimpleGradient(ColorRef color) {
+	colors[0] = colors[1] = colors[2] = colors[3] = color;
 }
 
 SimpleGradient::SimpleGradient(ColorRef start, ColorRef end, const Vec2 &alongVector) {
@@ -86,6 +90,22 @@ SimpleGradient::SimpleGradient(ColorRef bl, ColorRef br, ColorRef tl, ColorRef t
 	colors[1] = br;
 	colors[2] = tl;
 	colors[3] = tr;
+}
+
+bool SimpleGradient::hasAlpha() const {
+	return colors[0].a != 255 || colors[1].a != 255 || colors[2].a != 255 || colors[3].a != 255;
+}
+
+bool SimpleGradient::isMono() const {
+	return colors[0] == colors[1] && colors[2] == colors[3] && colors[1] == colors[2];
+}
+
+bool SimpleGradient::operator==(const SimpleGradient &other) const {
+	return memcmp(colors, other.colors, sizeof(Color4B) * 4) == 0;
+}
+
+bool SimpleGradient::operator!=(const SimpleGradient &other) const {
+	return memcmp(colors, other.colors, sizeof(Color4B) * 4) != 0;
 }
 
 bool Layer::init(const Color4F &c) {
@@ -155,6 +175,42 @@ void Layer::updateVertexesColor() {
 
 		_vertexes.getQuad(0, 0).setColor(makeSpanView(color, 4));
 	}
+}
+
+RenderingLevel Layer::getRealRenderingLevel() const {
+	auto level = _renderingLevel;
+	if (level == RenderingLevel::Default) {
+		if (_displayedColor.a < 1.0f || _gradient.hasAlpha() || !_texture || _materialInfo.getLineWidth() != 0.0f) {
+			level = RenderingLevel::Transparent;
+		} else if (_colorMode.getMode() == ColorMode::Solid) {
+			if (_texture->hasAlpha()) {
+				level = RenderingLevel::Transparent;
+			} else {
+				level = RenderingLevel::Solid;
+			}
+		} else {
+			auto alphaMapping = _colorMode.getA();
+			switch (alphaMapping) {
+			case gl::ComponentMapping::Identity:
+				if (_texture->hasAlpha()) {
+					level = RenderingLevel::Transparent;
+				} else {
+					level = RenderingLevel::Solid;
+				}
+				break;
+			case gl::ComponentMapping::Zero:
+				level = RenderingLevel::Transparent;
+				break;
+			case gl::ComponentMapping::One:
+				level = RenderingLevel::Solid;
+				break;
+			default:
+				level = RenderingLevel::Transparent;
+				break;
+			}
+		}
+	}
+	return level;
 }
 
 }

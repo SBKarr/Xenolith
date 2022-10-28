@@ -86,6 +86,7 @@ public:
 	void invalidate(Device &dev);
 
 	bool init(const Rc<Allocator> &alloc, const Rc<gl::Resource> &, Function<void(bool)> &&cb = nullptr);
+	bool init(const Rc<Allocator> &alloc, Rc<gl::Resource> &&, Function<void(bool)> &&cb = nullptr);
 
 	bool initialize();
 	bool compile();

@@ -54,6 +54,7 @@ public:
 	virtual void draw(RenderFrameInfo &, NodeFlags flags) override;
 
 	virtual void onEnter(Scene *) override;
+	virtual void onExit() override;
 	virtual void onContentSizeDirty() override;
 
 	virtual void setColorMode(const ColorMode &);
@@ -101,6 +102,7 @@ protected:
 
 	virtual MaterialInfo getMaterialInfo() const;
 	virtual Vector<gl::MaterialImage> getMaterialImages() const;
+	virtual bool isMaterialRevokable() const;
 	virtual void updateColor() override;
 	virtual void updateVertexesColor();
 	virtual void initVertexes();
@@ -135,7 +137,7 @@ protected:
 	RenderingLevel _renderingLevel = RenderingLevel::Default;
 	RenderingLevel _realRenderingLevel = RenderingLevel::Default;
 	uint64_t _materialId = 0;
-	gl::CommandFlags _commandFlags;
+	gl::CommandFlags _commandFlags = gl::CommandFlags::None;
 
 	bool _materialDirty = true;
 	bool _normalized = false;

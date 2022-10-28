@@ -125,13 +125,16 @@ bool Fence::schedule(Loop &loop) {
 				if (_releaseFn) {
 					auto releaseFn = move(_releaseFn);
 					_releaseFn = nullptr;
+					_scheduleFn = nullptr;
 					releaseFn();
+				} else {
+					_scheduleFn = nullptr;
 				}
 			}, this, true);
 		} else {
 			doRelease(false);
+			_scheduleFn = nullptr;
 		}
-		_scheduleFn = nullptr;
 		return false;
 	} else {
 		lock.unlock();

@@ -71,9 +71,9 @@ public:
 
 	void clear();
 
-	Vector<Material *> updateMaterials(const Rc<MaterialInputData> &,
+	Vector<Rc<Material>> updateMaterials(const Rc<MaterialInputData> &,
 			const Callback<Rc<ImageView>(const MaterialImage &)> &);
-	Vector<Material *> updateMaterials(const Vector<Rc<Material>> &materials, SpanView<MaterialId> dynamic, SpanView<MaterialId> remove,
+	Vector<Rc<Material>> updateMaterials(const Vector<Rc<Material>> &materials, SpanView<MaterialId> dynamic, SpanView<MaterialId> remove,
 			const Callback<Rc<ImageView>(const MaterialImage &)> &);
 
 	const BufferInfo &getInfo() const { return _info; }
@@ -117,15 +117,18 @@ protected:
 
 class Material final : public Ref {
 public:
+	// Использовать только для определения встроенных в аттачмент материалов
+	static constexpr auto MaterialIdInitial = maxOf<uint32_t>();
+
 	using PipelineData = renderqueue::PipelineData;
 
 	virtual ~Material();
 
 	// view for image must be empty
-	bool init(const PipelineData *, Vector<MaterialImage> &&, Bytes && = Bytes());
-	bool init(const PipelineData *, const Rc<DynamicImageInstance> &, Bytes && = Bytes());
-	bool init(const PipelineData *, const ImageData *, Bytes && = Bytes(), bool ownedData = false);
-	bool init(const PipelineData *, const ImageData *, ColorMode, Bytes && = Bytes(), bool ownedData = false);
+	bool init(MaterialId, const PipelineData *, Vector<MaterialImage> &&, Bytes && = Bytes());
+	bool init(MaterialId, const PipelineData *, const Rc<DynamicImageInstance> &, Bytes && = Bytes());
+	bool init(MaterialId, const PipelineData *, const ImageData *, Bytes && = Bytes(), bool ownedData = false);
+	bool init(MaterialId, const PipelineData *, const ImageData *, ColorMode, Bytes && = Bytes(), bool ownedData = false);
 	bool init(const Material *, Rc<ImageObject> &&, Rc<ImageAtlas> &&, Bytes && = Bytes());
 	bool init(const Material *, Vector<MaterialImage> &&);
 
@@ -142,6 +145,7 @@ public:
 
 protected:
 	friend class MaterialSet;
+	friend class MaterialAttachment; // for id replacement
 
 	bool _dirty = true;
 	MaterialId _id = 0;
@@ -179,6 +183,8 @@ public:
 	virtual void updateDynamicImage(Loop &, const DynamicImage *,
 			const Vector<Rc<renderqueue::DependencyEvent>> & = Vector<Rc<renderqueue::DependencyEvent>>()) const;
 
+	MaterialId getNextMaterialId() const;
+
 protected:
 	virtual Rc<renderqueue::AttachmentDescriptor> makeDescriptor(PassData *) override;
 
@@ -187,6 +193,7 @@ protected:
 		Map<MaterialId, uint32_t> materials;
 	};
 
+	mutable std::atomic<MaterialId> _attachmentMaterialId = 1;
 	uint32_t _materialObjectSize = 0;
 	MaterialType _type;
 	MaterialSet::EncodeCallback _encodeCallback;

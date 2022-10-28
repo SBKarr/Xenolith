@@ -699,6 +699,7 @@ bool Formatter::read(const FontParameters &f, const TextParameters &s, const cha
 			primaryStr.addChar(_fillerChar);
 		}
 		primaryStr.addChar('-');
+		primaryStr.addChar(' ');
 		primaryStr.addChar(char16_t(0xAD));
 		output->source->addString(primary, primaryStr);
 		if (secondary != FontLayoutIdInvalid) {
@@ -723,6 +724,7 @@ bool Formatter::read(const FontParameters &f, const TextParameters &s, const cha
 			primaryStr.addChar(_fillerChar);
 		}
 		primaryStr.addChar('-');
+		primaryStr.addChar(' ');
 		primaryStr.addChar(char16_t(0xAD));
 
 		output->source->addString(primary, primaryStr);

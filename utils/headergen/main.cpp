@@ -49,8 +49,6 @@ static int parseOptionString(Value &ret, const StringView &str, int argc, const 
 		ret.setBool(true, "help");
 	} else if (str == "verbose") {
 		ret.setBool(true, "verbose");
-	} else if (str == "gencbor") {
-		ret.setBool(true, "gencbor");
 	}
 	return 1;
 }

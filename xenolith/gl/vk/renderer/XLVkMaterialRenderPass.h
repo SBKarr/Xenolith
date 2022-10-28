@@ -108,10 +108,23 @@ protected:
 	Rc<gl::MaterialSet> _materialSet;
 	const MaterialVertexAttachmentHandle *_materials = nullptr;
 	mutable Rc<gl::CommandList> _commands;
+	gl::DrawStat _drawStat;
 };
 
 class MaterialPass : public QueuePass {
 public:
+	using AttachmentHandle = renderqueue::AttachmentHandle;
+
+	struct RenderQueueInfo {
+		Application *app = nullptr;
+		renderqueue::Queue::Builder *builder = nullptr;
+		Extent2 extent;
+		Function<void(FrameQueue &, const Rc<AttachmentHandle> &, Function<void(bool)> &&)> vertexInputCallback;
+		Function<void(gl::Resource::Builder &)> resourceCallback;
+	};
+
+	static bool makeDefaultRenderQueue(RenderQueueInfo &);
+
 	virtual bool init(StringView, RenderOrdering, size_t subpassCount = 1);
 
 	const VertexMaterialAttachment *getVertexes() const { return _vertexes; }

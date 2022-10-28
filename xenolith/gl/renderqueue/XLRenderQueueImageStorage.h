@@ -62,6 +62,8 @@ public:
 	void setLayout(AttachmentLayout);
 	AttachmentLayout getLayout() const;
 
+	const Map<gl::ImageViewInfo, Rc<gl::ImageView>> &getViews() const { return _views; }
+
 protected:
 	void notifyReady();
 

@@ -1712,7 +1712,7 @@ InputKeyCode WaylandSeat::translateKey(uint32_t scancode) const {
 	return InputKeyCode::Unknown;
 }
 
-xkb_keysym_t WaylandSeat::composeSymbol(xkb_keysym_t sym) const {
+xkb_keysym_t WaylandSeat::composeSymbol(xkb_keysym_t sym, InputKeyComposeState &composeState) const {
 	if (sym == XKB_KEY_NoSymbol || !compose) {
 		return sym;
 	}
@@ -1721,10 +1721,13 @@ xkb_keysym_t WaylandSeat::composeSymbol(xkb_keysym_t sym) const {
 	}
 	switch (root->xkb->xkb_compose_state_get_status(compose)) {
 	case XKB_COMPOSE_COMPOSED:
+		composeState = InputKeyComposeState::Composed;
 		return root->xkb->xkb_compose_state_get_one_sym(compose);
 	case XKB_COMPOSE_COMPOSING:
+		composeState = InputKeyComposeState::Composing;
+		return sym;
 	case XKB_COMPOSE_CANCELLED:
-		return XKB_KEY_NoSymbol;
+		return sym;
 	case XKB_COMPOSE_NOTHING:
 	default:
 		return sym;

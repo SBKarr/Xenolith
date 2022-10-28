@@ -258,6 +258,8 @@ struct MaterialInfo {
 
 	bool operator==(const MaterialInfo &info) const = default;
 	bool operator!=(const MaterialInfo &info) const = default;
+
+	bool hasImage(uint64_t id) const;
 };
 
 struct ZIndexLess {

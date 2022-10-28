@@ -41,6 +41,11 @@ public:
 		// is more preferable. If this option is set, vkAcquireNextImageKHR called with UIN64_MAX timeout
 		// be careful not to block whole view's thread operation on this
 		bool acquireImageImmediately = false;
+
+		// Компенсировать частоту кадров с учётом предыдущих таймингов кадра
+		// Wayland на nvidia странно использует vsync, что может снизить реальный FPS в два раза, если эта опция отключена
+		// В некоторых случаях может снизить плавность анимаций
+		bool flattenFrameRate = true;
 	};
 
 	virtual ~View();
@@ -58,7 +63,7 @@ public:
 	virtual void onAdded(Device &);
 	virtual void onRemoved();
 
-	void deprecateSwapchain();
+	virtual void deprecateSwapchain() override;
 
 	virtual bool present(Rc<ImageStorage> &&) override;
 	virtual bool presentImmediate(Rc<ImageStorage> &&) override;
@@ -93,7 +98,7 @@ protected:
 	virtual void presentWithQueue(DeviceQueue &, Rc<ImageStorage> &&);
 	void invalidateSwapchainImage(Rc<ImageStorage> &&);
 
-	void updateFrameInterval();
+	Pair<uint64_t, uint64_t> updateFrameInterval();
 
 	void waitForFences(uint64_t min);
 

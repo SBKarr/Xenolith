@@ -41,6 +41,7 @@ public:
 	using RenderQueue = renderqueue::Queue;
 
 	static EventHeader onScreenSize;
+	static EventHeader onFrameRate;
 
 	View();
 	virtual ~View();
@@ -66,6 +67,8 @@ public:
 
 	// invalidate swapchain image target, if drawing process was not successful
 	virtual void invalidateTarget(Rc<ImageStorage> &&) = 0;
+
+	virtual void deprecateSwapchain() = 0;
 
 	virtual Rc<Ref> getSwapchainHandle() const = 0;
 
@@ -105,6 +108,9 @@ public:
 	bool hasFocus() const { return _hasFocus; }
 	bool isInBackground() const { return _inBackground; }
 	bool isPointerWithinWindow() const { return _pointerInWindow; }
+
+	uint64_t getFrameInterval() const;
+	void setFrameInterval(uint64_t);
 
 	virtual void updateTextCursor(uint32_t pos, uint32_t len) = 0;
 	virtual void updateTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) = 0;
@@ -146,8 +152,9 @@ protected:
 	uint64_t _frameInterval = 1'000'000 / 60; // in microseconds
 	mutable Mutex _frameIntervalMutex;
 	uint64_t _lastFrameStart = 0;
-	uint64_t _lastFrameInterval = 0;
-	math::MovingAverage<15, uint64_t> _avgFrameInterval;
+	std::atomic<uint64_t> _lastFrameInterval = 0;
+	math::MovingAverage<20, uint64_t> _avgFrameInterval;
+	std::atomic<uint64_t> _avgFrameIntervalValue = 0;
 };
 
 }

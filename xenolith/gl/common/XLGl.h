@@ -349,6 +349,11 @@ struct DrawStat {
 	uint32_t triangles;
 	uint32_t zPaths;
 	uint32_t drawCalls;
+
+	uint32_t cachedImages;
+	uint32_t cachedFramebuffers;
+	uint32_t cachedImageViews;
+	uint32_t materials;
 };
 
 struct VertexSpan {
@@ -439,6 +444,8 @@ inline std::ostream & operator<<(std::ostream &stream, const Vertex_V4F_V4F_T2F2
 	stream << "Pos: " << value.pos << "; Color:" << value.color << "; Tex:" << value.tex << "; Mat:" << value.material << "," << value.object << ";";
 	return stream;
 }
+
+std::ostream & operator<<(std::ostream &stream, const ImageInfoData &value);
 
 }
 

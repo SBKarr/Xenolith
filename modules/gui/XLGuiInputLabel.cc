@@ -20,9 +20,11 @@
  THE SOFTWARE.
  **/
 
-#include "XLInputLabel.h"
+#include "XLGuiInputLabel.h"
 #include "XLVectorSprite.h"
 #include "XLDirector.h"
+#include "XLAction.h"
+#include "XLLayer.h"
 
 namespace stappler::xenolith {
 
@@ -132,9 +134,9 @@ bool InputLabel::init(font::FontController *controller, const DescriptionStyle &
 	return true;
 }
 
-void InputLabel::visit(RenderFrameInfo &info, NodeFlags parentFlags) {
+bool InputLabel::visitGeometry(RenderFrameInfo &info, NodeFlags parentFlags) {
 	if (!_visible) {
-		return;
+		return false;
 	}
 	if (_cursorDirty) {
 		_cursorDirty = false;
@@ -142,7 +144,7 @@ void InputLabel::visit(RenderFrameInfo &info, NodeFlags parentFlags) {
 			_delegate->onCursor(_cursor);
 		}
 	}
-	Label::visit(info, parentFlags);
+	return Label::visitGeometry(info, parentFlags);
 }
 
 void InputLabel::onContentSizeDirty() {
@@ -374,13 +376,13 @@ void InputLabel::eraseSelection() {
 	}
 }
 
-void InputLabel::setInputTouchFilter(const Function<bool(const Vec2 &)> &cb) {
+/*void InputLabel::setInputTouchFilter(const Function<bool(const Vec2 &)> &cb) {
 	_handler.onTouchFilter = cb;
 }
 
 const Function<bool(const Vec2 &)> &InputLabel::getInputTouchFilter() const {
 	return _handler.onTouchFilter;
-}
+}*/
 
 VectorSprite *InputLabel::getTouchedCursor(const Vec2 &vec, float padding) {
 	if (_cursorPointer->isVisible() && _cursorPointer->isTouched(vec, padding)) {
@@ -402,7 +404,7 @@ bool InputLabel::onPressBegin(const Vec2 &vec) {
 	return true;
 }
 bool InputLabel::onLongPress(const Vec2 &vec, const TimeInterval &time, int count) {
-	if (!_rangeAllowed || _inputString.empty() || _selectedCursor != nullptr || (!_inputEnabled && ime::isInputEnabled())) {
+	if (!_rangeAllowed || _inputString.empty() || _selectedCursor != nullptr || (!_inputEnabled && _director->getTextInputManager()->isInputEnabled())) {
 		return false;
 	}
 
@@ -717,7 +719,7 @@ void InputLabel::showLastChar() {
 		str += _inputString.back();
 		Label::setString(str);
 		stopActionByTag("InputLabelLastChar"_tag);
-		runAction(action::sequence(2.0f, std::bind(&InputLabel::hideLastChar, this)), "InputLabelLastChar"_tag);
+		runAction(Rc<Sequence>::create(2.0f, std::bind(&InputLabel::hideLastChar, this)), "InputLabelLastChar"_tag);
 	}
 }
 
@@ -733,7 +735,7 @@ void InputLabel::scheduleCursorPointer() {
 	setPointerEnabled(true);
 	stopAllActionsByTag("TextFieldCursorPointer"_tag);
 	if (_cursor.length == 0) {
-		runAction(action::sequence(3.5f, [this] {
+		runAction(Rc<Sequence>::create(3.5f, [this] {
 			setPointerEnabled(false);
 		}), "TextFieldCursorPointer"_tag);
 	}
@@ -786,15 +788,14 @@ TextInputType InputLabel::getInputTypeValue() const {
 }
 
 
-void InputLabelContainer::setLabel(InputLabel *l, int zIndex) {
+void InputLabelContainer::setLabel(Rc<InputLabel> &&l, int16_t zIndex) {
 	if (_label) {
 		_label->removeFromParent();
 		_label = nullptr;
 	}
 	if (l) {
 		l->setOnTransformDirtyCallback(std::bind(&InputLabelContainer::onLabelPosition, this));
-		addChild(l, zIndex);
-		_label = l;
+		_label = addChild(move(l), zIndex);
 	}
 }
 
@@ -811,22 +812,22 @@ void InputLabelContainer::update(const UpdateTime &time) {
 	auto width = _contentSize.width;
 	auto min = width - labelWidth - 2.0f;
 	auto max = 0.0f;
-	auto newpos = _label->getPositionX();
+	auto newpos = _label->getPosition().x;
 
 	auto factor = std::min(32.0f, _adjustPosition);
 
 	switch (_adjust) {
 	case Left:
-		newpos += (45.0f + progress(0.0f, 200.0f, factor / 32.0f)) * dt;
+		newpos += (45.0f + progress(0.0f, 200.0f, factor / 32.0f)) * time.dt;
 		break;
 	case Right:
-		newpos -= (45.0f + progress(0.0f, 200.0f, factor / 32.0f)) * dt;
+		newpos -= (45.0f + progress(0.0f, 200.0f, factor / 32.0f)) * time.dt;
 		break;
 	default:
 		break;
 	}
 
-	if (newpos != _label->getPositionX()) {
+	if (newpos != _label->getPosition().x) {
 		if (newpos < min) {
 			newpos = min;
 		} else if (newpos > max) {
@@ -983,7 +984,7 @@ void InputLabelContainer::runAdjust(float pos) {
 	} else {
 		t = progress(0.1f, 0.35f, (dist - 20.0f) / 200.0f);
 	}
-	auto a = cocos2d::MoveTo::create(t, Vec2(pos, _label->getPositionY()));
+	auto a = Rc<MoveTo>::create(t, Vec2(pos, _label->getPosition().y));
 	_label->stopAllActionsByTag("LineFieldAdjust"_tag);
 	_label->runAction(a, "LineFieldAdjust"_tag);
 }

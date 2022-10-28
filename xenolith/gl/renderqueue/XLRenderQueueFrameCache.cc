@@ -76,7 +76,7 @@ void FrameCache::releaseFramebuffer(Rc<gl::Framebuffer> &&fb) {
 	if (isReachable(SpanView<uint64_t>(ids))) {
 		auto it = _framebuffers.find(ids);
 		if (it == _framebuffers.end()) {
-			_framebuffers.emplace(move(ids), FrameCacheFramebuffer{ Vector<Rc<gl::Framebuffer>>{move(fb)} });
+			_framebuffers.emplace(move(ids), FrameCacheFramebuffer{ Vector<Rc<gl::Framebuffer>>{move(fb)}, e });
 		} else {
 			it->second.framebuffers.emplace_back(move(fb));
 		}
@@ -109,6 +109,7 @@ void FrameCache::releaseImage(Rc<ImageStorage> &&img) {
 
 	auto imageIt = _images.find(img->getInfo());
 	if (imageIt == _images.end()) {
+		log::vtext("FrameCache", "releaseImage: cache miss: ", img->getInfo());
 		return;
 	}
 
@@ -173,6 +174,65 @@ void FrameCache::removeRenderPass(uint64_t id) {
 			}
 		}
 	}
+}
+
+void FrameCache::removeUnreachableFramebuffers() {
+	auto fbsIt = _framebuffers.begin();
+	while (fbsIt != _framebuffers.end()) {
+		auto e = fbsIt->second.extent;
+		bool found = false;
+		for (auto &it : _images) {
+			if (it.first.extent == Extent3(e, 1)) {
+				found = true;
+			}
+		}
+		if (!found) {
+			fbsIt = _framebuffers.erase(fbsIt);
+		} else {
+			auto fbIt = fbsIt->second.framebuffers.begin();
+			while (fbIt != fbsIt->second.framebuffers.end()) {
+				auto e = (*fbIt)->getExtent();
+				Vector<uint64_t> ids; ids.reserve((*fbIt)->getViewIds().size() + 2);
+				ids.emplace_back((*fbIt)->getRenderPass()->getIndex());
+				for (auto &it : (*fbIt)->getViewIds()) {
+					ids.emplace_back(it);
+				}
+				ids.emplace_back(uint64_t(e.width) << uint64_t(32) | uint64_t(e.height));
+
+				if (isReachable(SpanView<uint64_t>(ids))) {
+					fbIt = fbsIt->second.framebuffers.erase(fbIt);
+				} else {
+					++ fbIt;
+				}
+			}
+
+			if (fbsIt->second.framebuffers.empty()) {
+				fbsIt = _framebuffers.erase(fbsIt);
+			} else {
+				++ fbsIt;
+			}
+		}
+	}
+}
+
+size_t FrameCache::getFramebuffersCount() const {
+	size_t ret = 0;
+	for (auto &it : _framebuffers) {
+		ret += it.second.framebuffers.size();
+	}
+	return ret;
+}
+
+size_t FrameCache::getImagesCount() const {
+	size_t ret = 0;
+	for (auto &it : _images) {
+		ret += it.second.images.size();
+	}
+	return ret;
+}
+
+size_t FrameCache::getImageViewsCount() const {
+	return _imageViews.size();
 }
 
 bool FrameCache::isReachable(SpanView<uint64_t> ids) const {

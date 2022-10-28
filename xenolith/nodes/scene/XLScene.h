@@ -64,7 +64,12 @@ public:
 	// this can be severe less effective then pre-initialized materials,
 	// so, it's preferred to pre-initialize all materials in release builds
 	// virtual uint64_t acquireMaterial(const MaterialInfo &, const Vector<const gl::ImageData *> &images);
-	virtual uint64_t acquireMaterial(const MaterialInfo &, Vector<gl::MaterialImage> &&images);
+	virtual uint64_t acquireMaterial(const MaterialInfo &, Vector<gl::MaterialImage> &&images, bool revokable);
+
+	virtual void setDensity(float);
+	float getDensity() const { return _density; }
+
+	void revokeImages(const Vector<uint64_t> &);
 
 protected:
 	struct SubpassData {
@@ -91,19 +96,35 @@ protected:
 	virtual bool isPipelineMatch(const PipelineInfo *, const MaterialInfo &) const;
 
 	void addPendingMaterial(const gl::MaterialAttachment *, Rc<gl::Material> &&);
-	void addMaterial(const MaterialInfo &, gl::MaterialId);
+	void addMaterial(const MaterialInfo &, gl::MaterialId, bool revokable);
 
-	void listMterials() const;
+	void listMaterials() const;
+
+	struct SceneMaterialInfo {
+		MaterialInfo info;
+		gl::MaterialId id;
+		bool revokable;
+	};
+
+	struct PendingData {
+		Vector<Rc<gl::Material>> toAdd;
+		Vector<uint32_t> toRemove;
+	};
 
 	Application *_application = nullptr;
 	Director *_director = nullptr;
 	Rc<RenderQueue> _queue;
 
 	Map<gl::MaterialType, AttachmentData> _attachmentsByType;
-	std::unordered_map<uint64_t, Vector<Pair<MaterialInfo, gl::MaterialId>>> _materials;
+	std::unordered_map<uint64_t, Vector<SceneMaterialInfo>> _materials;
 
-	Map<const gl::MaterialAttachment *, Vector<Rc<gl::Material>>> _pendingMaterials;
+	Map<const gl::MaterialAttachment *, PendingData> _pending;
 	Rc<renderqueue::DependencyEvent> _materialDependency;
+
+	// отозванные ид могут быть выданы новым отзываемым материалам, чтобы не засорять биндинги
+	Vector<gl::MaterialId> _revokedIds;
+
+	float _density = 1.0f;
 };
 
 }

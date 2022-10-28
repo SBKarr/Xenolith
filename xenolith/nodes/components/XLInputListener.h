@@ -102,13 +102,15 @@ public:
 	GestureRecognizer *addSwipeRecognizer(InputCallback<GestureSwipe> &&, float threshold = TapDistanceAllowed, bool sendThreshold = false,
 			ButtonMask && = makeButtonMask({InputMouseButton::Touch}));
 	GestureRecognizer *addScrollRecognizer(InputCallback<GestureScroll> &&);
-	GestureRecognizer *addMoveRecognizer(InputCallback<GestureData> &&);
+	GestureRecognizer *addMoveRecognizer(InputCallback<GestureData> &&, bool withinNode = true);
+	GestureRecognizer *addMouseOverRecognizer(InputCallback<GestureData> &&, float padding = 0.0f);
 
 	GestureKeyRecognizer *addKeyRecognizer(InputCallback<GestureData> &&, KeyMask && = KeyMask());
 
 	void setPointerEnterCallback(Function<bool(bool)> &&);
 	void setBackgroudCallback(Function<bool(bool)> &&);
 	void setFocusCallback(Function<bool(bool)> &&);
+	void setMouseOverCallback(Function<bool(bool)> &&);
 
 	void clear();
 
@@ -117,6 +119,8 @@ protected:
 	bool _shouldProcessEvent(const InputEvent &) const; // default realization
 
 	void addEventMask(const EventMask &);
+
+	GestureRecognizer *addRecognizer(GestureRecognizer *);
 
 	int32_t _priority = 0; // 0 - scene graph
 	bool _enabled = true;

@@ -154,6 +154,13 @@ ImageViewInfo ImageObject::getViewInfo(const ImageViewInfo &info) const {
 	return _info.getViewInfo(info);
 }
 
+ImageView::~ImageView() {
+	if (_releaseCallback) {
+		_releaseCallback();
+		_releaseCallback = nullptr;
+	}
+}
+
 bool ImageView::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr) {
 	if (Object::init(dev, cb, type, ptr)) {
 		_index = s_ImageViewCurrentIndex.fetch_add(1);

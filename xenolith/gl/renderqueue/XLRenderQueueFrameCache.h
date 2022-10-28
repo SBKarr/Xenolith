@@ -29,6 +29,7 @@ namespace stappler::xenolith::renderqueue {
 
 struct FrameCacheFramebuffer final {
 	Vector<Rc<gl::Framebuffer>> framebuffers;
+	Extent2 extent;
 };
 
 struct FrameCacheImageAttachment final {
@@ -59,6 +60,12 @@ public:
 
 	void addRenderPass(uint64_t);
 	void removeRenderPass(uint64_t);
+
+	void removeUnreachableFramebuffers();
+
+	size_t getFramebuffersCount() const;
+	size_t getImagesCount() const;
+	size_t getImageViewsCount() const;
 
 protected:
 	bool isReachable(SpanView<uint64_t> ids) const;

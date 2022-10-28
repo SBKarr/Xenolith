@@ -305,6 +305,9 @@ void LabelParameters::setFontSize(const uint16_t &value) {
 		_labelDirty = true;
 	}
 }
+void LabelParameters::setFontSize(const FontSize &size) {
+	setFontSize(size.get());
+}
 uint16_t LabelParameters::getFontSize() const {
 	return _style.font.fontSize.get();
 }

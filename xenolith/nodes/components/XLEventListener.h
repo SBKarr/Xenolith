@@ -25,20 +25,21 @@
 
 #include "XLComponent.h"
 #include "XLEventHandler.h"
+#include "XLEvent.h"
 
 namespace stappler::xenolith {
 
 class EventListener : public Component, public EventHandler {
 public:
-	using Callback = Function<void (const Event &)>;
+	using EventCallback = Function<void(const Event &)>;
 
 	virtual ~EventListener();
 	virtual bool init() override;
 
-	void onEventRecieved(const Event &ev, const Callback &);
+	void onEventRecieved(const Event &ev, const EventCallback &);
 
-	EventHandlerNode * onEvent(const EventHeader &h, Callback &&, bool destroyAfterEvent = false);
-	EventHandlerNode * onEventWithObject(const EventHeader &h, Ref *obj, Callback &&, bool destroyAfterEvent = false);
+	EventHandlerNode * onEvent(const EventHeader &h, EventCallback &&, bool destroyAfterEvent = false);
+	EventHandlerNode * onEventWithObject(const EventHeader &h, Ref *obj, EventCallback &&, bool destroyAfterEvent = false);
 
 	void clear();
 };

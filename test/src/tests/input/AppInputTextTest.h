@@ -20,29 +20,32 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_ROOT_APPAUTOFITTEST_H_
-#define TEST_SRC_ROOT_APPAUTOFITTEST_H_
+#ifndef TEST_SRC_TESTS_INPUT_APPINPUTTEXTTEST_H_
+#define TEST_SRC_TESTS_INPUT_APPINPUTTEXTTEST_H_
 
-#include "XLLayer.h"
-#include "XLLabel.h"
+#include "AppLayoutTest.h"
+#include "XLTextInputManager.h"
 
 namespace stappler::xenolith::app {
 
-class AutofitTest : public Node {
+class InputTextTest : public LayoutTest {
 public:
-	virtual ~AutofitTest() { }
+	virtual ~InputTextTest() { }
 
-	virtual bool init() override;
+	virtual bool init();
 
 	virtual void onContentSizeDirty() override;
 
 protected:
+	void handleTap(const Vec2 &pos);
+
 	Layer *_background = nullptr;
-	Layer *_layers[5] = { nullptr };
-	Sprite *_sprites[5] = { nullptr };
-	Label *_labels[5] = { nullptr };
+	Label *_label = nullptr;
+
+	bool _inputAcquired = false;
+	TextInputHandler _inputHandler;
 };
 
 }
 
-#endif /* TEST_SRC_ROOT_APPAUTOFITTEST_H_ */
+#endif /* TEST_SRC_TESTS_INPUT_APPINPUTTEXTTEST_H_ */

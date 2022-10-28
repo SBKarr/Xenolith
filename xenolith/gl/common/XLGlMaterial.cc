@@ -76,26 +76,27 @@ void MaterialSet::clear() {
 	}
 }
 
-Vector<Material *> MaterialSet::updateMaterials(const Rc<MaterialInputData> &data,
+Vector<Rc<Material>> MaterialSet::updateMaterials(const Rc<MaterialInputData> &data,
 		const Callback<Rc<ImageView>(const MaterialImage &)> &cb) {
 	return updateMaterials(data->materialsToAddOrUpdate, data->dynamicMaterialsToUpdate, data->materialsToRemove, cb);
 }
 
-Vector<Material *> MaterialSet::updateMaterials(const Vector<Rc<Material>> &materials, SpanView<MaterialId> dynamicMaterials,
+Vector<Rc<Material>> MaterialSet::updateMaterials(const Vector<Rc<Material>> &materials, SpanView<MaterialId> dynamicMaterials,
 		SpanView<MaterialId> materialsToRemove, const Callback<Rc<ImageView>(const MaterialImage &)> &cb) {
 	Vector<MaterialId> updatedIds; updatedIds.reserve(materials.size() + dynamicMaterials.size());
-	Vector<Material *> ret; ret.reserve(materials.size());
+	Vector<Rc<Material>> ret; ret.reserve(materials.size());
 
 	for (auto &it : materialsToRemove) {
 		auto mIt = _materials.find(it);
 		if (mIt != _materials.end()) {
+			ret.emplace_back(mIt->second);
 			removeMaterial(mIt->second);
-			_materials.erase(mIt);
 			for (auto &it : mIt->second->getImages()) {
 				if (it.dynamic && _owner) {
 					_owner->removeDynamicTracker(mIt->second->getId(), it.dynamic->image);
 				}
 			}
+			_materials.erase(mIt);
 		}
 	}
 
@@ -217,7 +218,7 @@ Vector<Material *> MaterialSet::updateMaterials(const Vector<Rc<Material>> &mate
 	_info.size = _objectSize * _materials.size();
 
 	if (_info.size == 0 || ret.size() == 0) {
-		return Vector<Material *>();
+		return Vector<Rc<Material>>();
 	}
 	return ret;
 }
@@ -431,8 +432,6 @@ bool MaterialImage::canAlias(const MaterialImage &other) const {
 	return other.image == image && other.info == info;
 }
 
-static std::atomic<MaterialId> s_MaterialCurrentIndex = 1;
-
 Material::~Material() {
 	if (_ownedData) {
 		_images.clear();
@@ -441,16 +440,16 @@ Material::~Material() {
 	}
 }
 
-bool Material::init(const PipelineData *pipeline, Vector<MaterialImage> &&images, Bytes &&data) {
-	_id = s_MaterialCurrentIndex.fetch_add(1);
+bool Material::init(MaterialId id, const PipelineData *pipeline, Vector<MaterialImage> &&images, Bytes &&data) {
+	_id = id;
 	_pipeline = pipeline;
 	_images = move(images);
 	_data = move(data);
 	return true;
 }
 
-bool Material::init(const PipelineData *pipeline, const Rc<DynamicImageInstance> &image, Bytes &&data) {
-	_id = s_MaterialCurrentIndex.fetch_add(1);
+bool Material::init(MaterialId id, const PipelineData *pipeline, const Rc<DynamicImageInstance> &image, Bytes &&data) {
+	_id = id;
 	_pipeline = pipeline;
 	_images = Vector<MaterialImage>({
 		MaterialImage{
@@ -463,8 +462,8 @@ bool Material::init(const PipelineData *pipeline, const Rc<DynamicImageInstance>
 	return true;
 }
 
-bool Material::init(const PipelineData *pipeline, const ImageData *image, Bytes &&data, bool ownedData) {
-	_id = s_MaterialCurrentIndex.fetch_add(1);
+bool Material::init(MaterialId id, const PipelineData *pipeline, const ImageData *image, Bytes &&data, bool ownedData) {
+	_id = id;
 	_pipeline = pipeline;
 	_images = Vector<MaterialImage>({
 		MaterialImage({
@@ -479,8 +478,8 @@ bool Material::init(const PipelineData *pipeline, const ImageData *image, Bytes 
 	return true;
 }
 
-bool Material::init(const PipelineData *pipeline, const ImageData *image, ColorMode mode, Bytes &&data, bool ownedData) {
-	_id = s_MaterialCurrentIndex.fetch_add(1);
+bool Material::init(MaterialId id, const PipelineData *pipeline, const ImageData *image, ColorMode mode, Bytes &&data, bool ownedData) {
+	_id = id;
 	_pipeline = pipeline;
 
 	MaterialImage img({
@@ -557,6 +556,10 @@ bool MaterialAttachment::init(StringView name, const BufferInfo &info, MaterialS
 		_encodeCallback = move(cb);
 		_finalizeCallback = move(fin);
 		_initialMaterials = move(initials);
+
+		for (auto &it : _initialMaterials) {
+			it->_id = _attachmentMaterialId.fetch_add(1);
+		}
 		return true;
 	}
 	return false;
@@ -638,6 +641,10 @@ void MaterialAttachment::updateDynamicImage(Loop &loop, const DynamicImage *imag
 		}
 	}
 	loop.compileMaterials(move(input), deps);
+}
+
+MaterialId MaterialAttachment::getNextMaterialId() const {
+	return _attachmentMaterialId.fetch_add(1);
 }
 
 auto MaterialAttachment::makeDescriptor(PassData *pass) -> Rc<AttachmentDescriptor> {

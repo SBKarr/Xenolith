@@ -56,7 +56,7 @@ public:
 
 	// virtual const Rc<gl::Device> &getDevice() const override;
 
-	virtual void compileResource(Rc<gl::Resource> &&req) override;
+	virtual void compileResource(Rc<gl::Resource> &&req, Function<void(bool)> && = nullptr) override;
 	virtual void compileMaterials(Rc<gl::MaterialInputData> &&req, const Vector<Rc<DependencyEvent>> & = Vector<Rc<DependencyEvent>>()) override;
 	virtual void compileRenderQueue(const Rc<RenderQueue> &req, Function<void(bool)> && = nullptr) override;
 	virtual void compileImage(const Rc<gl::DynamicImage> &, Function<void(bool)> && = nullptr) override;

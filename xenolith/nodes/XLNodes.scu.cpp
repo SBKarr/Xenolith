@@ -35,5 +35,3 @@ THE SOFTWARE.
 #include "XLLabel.cc"
 #include "XLVectorCanvas.cc"
 #include "XLVectorSprite.cc"
-
-//#include "XLInputLabel.cc"

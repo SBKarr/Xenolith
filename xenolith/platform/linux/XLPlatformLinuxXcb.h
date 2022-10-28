@@ -201,7 +201,7 @@ public:
 	XcbView(XcbLibrary *, ViewImpl *, StringView, URect);
 	virtual ~XcbView();
 
-	virtual VkSurfaceKHR createWindowSurface(vk::Instance *instance) const override;
+	virtual VkSurfaceKHR createWindowSurface(vk::Instance *instance, VkPhysicalDevice dev) const override;
 
 	bool valid() const;
 
@@ -221,6 +221,7 @@ protected:
 	void updateXkbMapping();
 	void updateKeysymMapping();
 	xcb_keysym_t getKeysym(xcb_keycode_t code, uint16_t state, bool resolveMods = true);
+	xkb_keysym_t composeSymbol(xkb_keysym_t sym, InputKeyComposeState &compose) const;
 
 	void updateXkbKey(xcb_keycode_t code);
 
@@ -257,6 +258,7 @@ protected:
 	uint8_t _xkbFirstError = 0;
 	xkb_keymap *_xkbKeymap = nullptr;
 	xkb_state *_xkbState = nullptr;
+	xkb_compose_state *_xkbCompose = nullptr;
 	InputKeyCode _keycodes[256] = { InputKeyCode::Unknown };
 };
 

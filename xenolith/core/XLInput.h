@@ -79,12 +79,14 @@ enum class InputModifier : uint32_t {
 	ValueTrue = uint32_t(1) << uint32_t(31)
 };
 
+SP_DEFINE_ENUM_AS_MASK(InputModifier)
+
 /* Based on GLFW
  *
  * Designed to fit 128-bit bitmask for pressed key tracking
  * Undefined char is 0 instead of -1
  * Codepoints for BACKSPACE, TAB, ENTER, ESCAPE, DELETE matches ASCII positions
- *  - Platform can send this with or without keychar, so it's simpler to have matched values
+ *  - Platform can send this with or without keychar
  * Printable keys (and keypad nums) within [32-96]
  * APOSTROPHE moved from 39 to 43 to fit keypad nums in single block
  *  - expressions like KP_0 + 8 is more probable then direct casting InputKeyCode -> char
@@ -92,7 +94,7 @@ enum class InputModifier : uint32_t {
  * - actual physical key name defined in XKB convention
  * - e.g. InputKeyCode::S = AC02 key = A on QWERTY = O on Dworak
  * */
-enum class InputKeyCode : uint32_t {
+enum class InputKeyCode : uint16_t {
 	Unknown = 0,
 
 	KP_DECIMAL		= 1,	// "KPDL"
@@ -231,7 +233,11 @@ enum class InputKeyCode : uint32_t {
 	Max
 };
 
-SP_DEFINE_ENUM_AS_MASK(InputModifier)
+enum class InputKeyComposeState : uint16_t {
+	Nothing = 0,
+	Composed,
+	Composing,
+};
 
 enum class InputEventName : uint32_t {
 	None,
@@ -279,6 +285,7 @@ struct InputEventData {
 		} point;
 		struct {
 			InputKeyCode keycode; // layout-independent key name
+			InputKeyComposeState compose;
 			uint32_t keysym; // OS-dependent keysym
 			char32_t keychar; // unicode char for key
 		} key;

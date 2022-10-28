@@ -39,7 +39,6 @@ protected:
 
 	Layer *_background = nullptr;
 	Function<void()> _callback;
-	bool _focus = false;
 };
 
 
@@ -63,15 +62,11 @@ bool LayoutTestBackButton::init(Function<void()> &&cb) {
 	l->setTouchFilter([] (const InputEvent &event, const InputListener::DefaultEventFilter &) {
 		return true;
 	});
-	l->addMoveRecognizer([this] (const GestureData &ev) {
-		bool touched = isTouched(ev.input->currentLocation);
-		if (touched != _focus) {
-			_focus = touched;
-			if (_focus) {
-				handleMouseEnter();
-			} else {
-				handleMouseLeave();
-			}
+	l->addMouseOverRecognizer([this] (const GestureData &ev) {
+		if (ev.event == GestureEvent::Began) {
+			handleMouseEnter();
+		} else {
+			handleMouseLeave();
 		}
 		return true;
 	});

@@ -802,7 +802,7 @@ struct WaylandSeat : Ref {
 	void update();
 
 	InputKeyCode translateKey(uint32_t scancode) const;
-	xkb_keysym_t composeSymbol(xkb_keysym_t sym) const;
+	xkb_keysym_t composeSymbol(xkb_keysym_t sym, InputKeyComposeState &compose) const;
 
 	Rc<WaylandLibrary> wayland;
 	WaylandDisplay *root;
@@ -940,7 +940,7 @@ public:
 	WaylandView(WaylandLibrary *, ViewImpl *, StringView, URect);
 	virtual ~WaylandView();
 
-	virtual VkSurfaceKHR createWindowSurface(vk::Instance *instance) const override;
+	virtual VkSurfaceKHR createWindowSurface(vk::Instance *instance, VkPhysicalDevice dev) const override;
 
 	virtual bool poll(bool frameReady) override;
 

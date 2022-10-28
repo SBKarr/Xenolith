@@ -82,10 +82,16 @@ struct ProgramPushConstantBlock {
 	uint32_t size = 0;
 };
 
+struct ProgramEntryPointBlock {
+	uint32_t id;
+	memory::string name;
+};
+
 struct ProgramInfo : NamedMem {
 	ProgramStage stage;
 	memory::vector<ProgramDescriptorBinding> bindings;
 	memory::vector<ProgramPushConstantBlock> constants;
+	memory::vector<ProgramEntryPointBlock> entryPoints;
 };
 
 struct ProgramData : ProgramInfo {

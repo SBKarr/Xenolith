@@ -218,7 +218,16 @@ bool Pipeline::init(Device &dev, const PipelineData &params, const SubpassData &
 		info.flags = 0;
 		info.stage = VkShaderStageFlagBits(shader.data->stage);
 		info.module = shader.data->program.cast<Shader>()->getModule();
-		info.pName = "main";
+
+		info.pName = shader.data->entryPoints.front().name.data();
+
+		if (!dev.getInfo().features.device10.features.shaderSampledImageArrayDynamicIndexing) {
+			for (auto &it : shader.data->entryPoints) {
+				if (StringView(it.name).ends_with("_static")) {
+					info.pName = it.name.data();
+				}
+			}
+		}
 
 		if (!shader.constants.empty()) {
 			auto &spec = specs.emplace_back();
