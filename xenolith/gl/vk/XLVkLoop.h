@@ -52,7 +52,7 @@ public:
 
 	virtual void cancel() override;
 
-	virtual bool isRunning() const { return _running.load(); }
+	virtual bool isRunning() const override { return _running.load(); }
 
 	// virtual const Rc<gl::Device> &getDevice() const override;
 
@@ -89,9 +89,9 @@ public:
 
 	virtual Rc<gl::Semaphore> makeSemaphore() override;
 
-	virtual const Vector<gl::ImageFormat> &getSupportedDepthStencilFormat() const;
+	virtual const Vector<gl::ImageFormat> &getSupportedDepthStencilFormat() const override;
 
-	virtual Rc<renderqueue::Queue> makeRenderFontQueue() const;
+	virtual Rc<renderqueue::Queue> makeRenderFontQueue() const override;
 
 	Rc<Fence> acquireFence(uint32_t, bool init = true);
 
@@ -99,6 +99,8 @@ public:
 	virtual void waitForDependencies(const Vector<Rc<DependencyEvent>> &, Function<void(bool)> &&) override;
 
 protected:
+	using gl::Loop::init;
+
 	std::thread _thread;
 	std::thread::id _threadId;
 

@@ -186,6 +186,8 @@ public:
 	MaterialId getNextMaterialId() const;
 
 protected:
+	using BufferAttachment::init;
+
 	virtual Rc<renderqueue::AttachmentDescriptor> makeDescriptor(PassData *) override;
 
 	struct DynamicImageTracker {

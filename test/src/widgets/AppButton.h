@@ -39,6 +39,8 @@ public:
 	void setCallback(Function<void()> &&);
 
 protected:
+	using Layer::init;
+
 	virtual void handleFocusEnter();
 	virtual void handleFocusLeave();
 	virtual void handleTouch();

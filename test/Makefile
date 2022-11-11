@@ -52,11 +52,13 @@ ifdef STAPPLER_TARGET
 local-shaders-clean:
 	@$(GLOBAL_RM) $(subst /glsl/,/compiled/shader_,$(LOCAL_SHADERS))
 
+$(BUILD_EXECUTABLE): xenolith-install-loader
+
 endif
 
-host-install: prepare-linux
-host-debug: prepare-linux
-host-release: prepare-linux
+host-install:
+host-debug:
+host-release:
 
 clean: local-shaders-clean
 

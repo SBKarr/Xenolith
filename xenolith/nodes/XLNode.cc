@@ -372,7 +372,7 @@ void Node::removeChildByTag(uint64_t tag, bool cleanup) {
 
 	Node *child = this->getChildByTag(tag);
 	if (child == nullptr) {
-		stappler::log::format("Node", "removeChildByTag(tag = %ld): child not found!", tag);
+		stappler::log::format("Node", "removeChildByTag(tag = %llu): child not found!", tag);
 	} else {
 		this->removeChild(child, cleanup);
 	}

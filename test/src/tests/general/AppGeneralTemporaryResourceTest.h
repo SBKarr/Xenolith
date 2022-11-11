@@ -41,6 +41,8 @@ public:
 	virtual void onExit() override;
 
 protected:
+	using LayoutTest::init;
+
 	void setResourceTimeout(float);
 	void switchVisibility(bool);
 

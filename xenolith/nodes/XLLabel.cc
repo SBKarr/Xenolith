@@ -30,6 +30,18 @@ Label::~Label() {
 	_format = nullptr;
 }
 
+bool Label::init() {
+	return init(nullptr);
+}
+
+bool Label::init(StringView str) {
+	return init(nullptr, DescriptionStyle(), str, 0.0f, Alignment::Left);
+}
+
+bool Label::init(StringView str, float w, Alignment a) {
+	return init(nullptr, DescriptionStyle(), str, w, a);
+}
+
 bool Label::init(font::FontController *source, const DescriptionStyle &style,
 		StringView str, float width, Alignment alignment) {
 	if (!Sprite::init()) {
@@ -71,10 +83,6 @@ bool Label::init(font::FontController *source, const DescriptionStyle &style,
 
 bool Label::init(const DescriptionStyle &style, StringView str, float w, Alignment a) {
 	return init(nullptr, style, str, w, a);
-}
-
-bool Label::init(StringView str, float w, Alignment a) {
-	return init(nullptr, DescriptionStyle(), str, w, a);
 }
 
 void Label::tryUpdateLabel() {

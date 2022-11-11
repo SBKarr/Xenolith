@@ -39,6 +39,8 @@ public:
 	virtual void onContentSizeDirty() override;
 
 protected:
+	using Node::init;
+
 	virtual uint32_t getCurrentValue(AppDelegate *) const = 0;
 	virtual Vector<uint32_t> getValueList(AppDelegate *) const = 0;
 	virtual String getValueLabel(uint32_t) const = 0;

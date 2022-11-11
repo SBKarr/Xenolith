@@ -45,6 +45,8 @@ public:
 	virtual Color4F getBackgroundColor() const;
 
 protected:
+	using Layer::init;
+
 	virtual void updateValue();
 
 	float _value = 0.0f;
@@ -72,6 +74,8 @@ public:
 	virtual void setFontSize(uint16_t);
 
 protected:
+	using AppSlider::init;
+
 	Label *_prefix = nullptr;
 	Label *_label = nullptr;
 };

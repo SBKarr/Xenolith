@@ -40,6 +40,8 @@ public:
 	virtual void onEnter(Scene *scene) override;
 
 protected:
+	using Node::init;
+
 	virtual void makeScrollList(ScrollController *, const Vector<MenuData> &);
 
 	Rc<Node> makeItem(const ScrollController::Item &item, const MenuData &);

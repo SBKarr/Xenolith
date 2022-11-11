@@ -108,6 +108,10 @@ bool SimpleGradient::operator!=(const SimpleGradient &other) const {
 	return memcmp(colors, other.colors, sizeof(Color4B) * 4) != 0;
 }
 
+bool Layer::init() {
+	return init(Color4F::WHITE);
+}
+
 bool Layer::init(const Color4F &c) {
 	if (!Sprite::init(SolidTextureName)) {
 		return false;

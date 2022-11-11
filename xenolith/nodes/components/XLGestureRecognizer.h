@@ -184,6 +184,8 @@ public:
 	void removeRecognizedEvent(uint32_t);
 
 protected:
+	using GestureRecognizer::init;
+
 	virtual bool addEvent(const InputEvent &, float density) override;
 	virtual bool removeEvent(const InputEvent &, bool successful, float density) override;
 	virtual bool renewEvent(const InputEvent &, float density) override;
@@ -205,6 +207,8 @@ public:
 	virtual void cancel() override;
 
 protected:
+	using GestureRecognizer::init;
+
 	virtual bool addEvent(const InputEvent &, float density) override;
 	virtual bool removeEvent(const InputEvent &, bool successful, float density) override;
 	virtual bool renewEvent(const InputEvent &, float density) override;
@@ -228,6 +232,8 @@ public:
 	virtual void cancel() override;
 
 protected:
+	using GestureRecognizer::init;
+
 	virtual bool addEvent(const InputEvent &, float density) override;
 	virtual bool removeEvent(const InputEvent &, bool successful, float density) override;
 	virtual bool renewEvent(const InputEvent &, float density) override;
@@ -253,6 +259,8 @@ public:
 	virtual void cancel() override;
 
 protected:
+	using GestureRecognizer::init;
+
 	virtual bool addEvent(const InputEvent &, float density) override;
 	virtual bool removeEvent(const InputEvent &, bool successful, float density) override;
 	virtual bool renewEvent(const InputEvent &, float density) override;
@@ -281,6 +289,8 @@ public:
 	virtual bool handleInputEvent(const InputEvent &, float density) override;
 
 protected:
+	using GestureRecognizer::init;
+
 	GestureScroll _gesture;
 	InputCallback _callback;
 };
@@ -300,6 +310,8 @@ public:
 	virtual void onExit() override;
 
 protected:
+	using GestureRecognizer::init;
+
 	GestureData _event = GestureData{GestureEvent::Cancelled, nullptr};
 	InputCallback _callback;
 	InputListener *_listener = nullptr;
@@ -320,6 +332,8 @@ public:
 	bool isKeyPressed(InputKeyCode) const;
 
 protected:
+	using GestureRecognizer::init;
+
 	virtual bool addEvent(const InputEvent &, float density) override;
 	virtual bool removeEvent(const InputEvent &, bool success, float density) override;
 	virtual bool renewEvent(const InputEvent &, float density) override;
@@ -343,6 +357,8 @@ public:
 	virtual void onExit() override;
 
 protected:
+	using GestureRecognizer::init;
+
 	void updateState(const InputEvent &);
 
 	GestureData _event = GestureData{GestureEvent::Cancelled, nullptr};

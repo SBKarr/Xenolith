@@ -52,6 +52,8 @@ public:
 			Vector<Rc<renderqueue::DependencyEvent>> &&deps);
 
 protected:
+	using renderqueue::Queue::init;
+
 	struct MaterialRequest {
 		Map<gl::MaterialId, Rc<gl::Material>> materials;
 		Set<gl::MaterialId> dynamic;

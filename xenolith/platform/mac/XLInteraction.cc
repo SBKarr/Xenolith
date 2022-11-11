@@ -1,5 +1,5 @@
 /**
-Copyright (c) 2020 Roman Katuntsev <sbkarr@stappler.org>
+Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,29 +20,37 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **/
 
-#include "XLDefine.h"
+#include "XLPlatform.h"
 
-#include "common/XLApplication.cc"
-#include "common/XLLog.cc"
+#if (MACOS)
 
-#include "linux/XLVkViewImpl.cc"
-#include "linux/XLVkViewWayland.cc"
-#include "linux/XLVkViewXcb.cc"
-#include "linux/XLVulkan.cc"
-#include "linux/XLDevice.cc"
-#include "linux/XLInteraction.cc"
-#include "linux/XLLinuxDBus.cc"
-#include "linux/XLLinuxWayland.cc"
-#include "linux/XLLinuxXcb.cc"
-#include "linux/XLLinuxXkb.cc"
-#include "linux/XLNetwork.cc"
+namespace stappler::xenolith::platform::interaction {
+	bool _goToUrl(const StringView &url, bool external) {
+		log::format("Interaction", "GoTo url: %s", url.data());
+		::system(toString("xdg-open ", url).data());
+		return true;
+	}
+	void _makePhoneCall(const StringView &str) {
+		log::format("Interaction", "phone: %s", str.data());
+		::system(toString("xdg-open ", str).data());
+	}
+	void _mailTo(const StringView &address) {
+		log::format("Interaction", "MailTo: %s", address.data());
+		::system(toString("xdg-open ", address).data());
+	}
+	void _backKey() { }
+	void _notification(const StringView &title, const StringView &text) {
 
-#include "mac/XLDevice.cc"
-#include "mac/XLInteraction.cc"
-#include "mac/XLNetwork.cc"
-#include "mac/XLVulkan.cc"
-/*#include "win32/XLDevice.cc"
-#include "win32/XLInteraction.cc"
-#include "win32/XLNetwork.cc"
+	}
+	void _rateApplication() {
+		log::text("Interaction", "Rate app");
+	}
 
-#include "desktop/XLVkViewImpl-desktop.cc"*/
+	void _openFileDialog(const String &path, const Function<void(const String &)> &func) {
+		if (func) {
+			func("");
+		}
+	}
+}
+
+#endif

@@ -38,6 +38,8 @@ public:
 	VkFramebuffer getFramebuffer() const { return _framebuffer; }
 
 protected:
+	using gl::Framebuffer::init;
+
 	VkFramebuffer _framebuffer = VK_NULL_HANDLE;
 };
 

@@ -41,7 +41,7 @@ public:
 	VkDeviceMemory getMemory() const { return _memory; }
 
 protected:
-	// virtual bool isRetainTrackerEnabled() const { return true; }
+	using gl::Object::init;
 
 	VkDeviceMemory _memory = VK_NULL_HANDLE;
 };
@@ -64,7 +64,7 @@ public:
 	void dropPendingBarrier();
 
 protected:
-	// virtual bool isRetainTrackerEnabled() const { return true; }
+	using gl::ImageObject::init;
 
 	Rc<DeviceMemory> _memory;
 	VkImage _image = VK_NULL_HANDLE;
@@ -84,6 +84,8 @@ public:
 	void dropPendingBarrier();
 
 protected:
+	using gl::BufferObject::init;
+
 	Rc<DeviceMemory> _memory;
 	VkBuffer _buffer = VK_NULL_HANDLE;
 	std::optional<VkBufferMemoryBarrier> _barrier;
@@ -100,6 +102,8 @@ public:
 	VkImageView getImageView() const { return _imageView; }
 
 protected:
+	using gl::ImageView::init;
+
 	VkImageView _imageView = VK_NULL_HANDLE;
 };
 
@@ -112,6 +116,8 @@ public:
 	VkSampler getSampler() const { return _sampler; }
 
 protected:
+	using gl::Sampler::init;
+
 	VkSampler _sampler = VK_NULL_HANDLE;
 };
 

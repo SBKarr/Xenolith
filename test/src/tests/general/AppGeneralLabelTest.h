@@ -36,6 +36,8 @@ public:
 	virtual void onContentSizeDirty() override;
 
 protected:
+	using LayoutTest::init;
+
 	Label *_label = nullptr;
 	Label *_label2 = nullptr;
 };

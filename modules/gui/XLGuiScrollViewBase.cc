@@ -157,7 +157,7 @@ void ScrollViewBase::setEnabled(bool value) {
 bool ScrollViewBase::isEnabled() const {
 	return _listener->isEnabled();
 }
-bool ScrollViewBase::isTouched() const {
+bool ScrollViewBase::isInMotion() const {
 	return _movement == Movement::Manual;
 }
 bool ScrollViewBase::isMoved() const {

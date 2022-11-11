@@ -72,6 +72,8 @@ public:
 	void revokeImages(const Vector<uint64_t> &);
 
 protected:
+	using Node::init;
+
 	struct SubpassData {
 		renderqueue::SubpassData *subpass;
 		std::unordered_map<size_t, Vector<const PipelineData *>> pipelines;

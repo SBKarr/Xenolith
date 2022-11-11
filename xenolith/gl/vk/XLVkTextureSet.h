@@ -98,6 +98,8 @@ public:
 	Device *getDevice() const;
 
 protected:
+	using gl::TextureSet::init;
+
 	bool _partiallyBound = false;
 	const TextureSetLayout *_layout = nullptr;
 	uint32_t _count = 0;

@@ -85,6 +85,8 @@ public:
 	Rc<gl::ImageView> makeView(const Rc<gl::ImageObject> &, const gl::ImageViewInfo &);
 
 protected:
+	using gl::Object::init;
+
 	gl::ImageViewInfo getSwapchainImageViewInfo(const gl::ImageInfo &image) const;
 
 	Device *_device = nullptr;
@@ -126,7 +128,7 @@ public:
 
 	virtual gl::ImageInfoData getInfo() const override;
 
-	virtual Rc<gl::ImageView> makeView(const gl::ImageViewInfo &);
+	virtual Rc<gl::ImageView> makeView(const gl::ImageViewInfo &) override;
 
 	void setImage(Rc<SwapchainHandle> &&, const SwapchainHandle::SwapchainImageData &, const Rc<Semaphore> &);
 
@@ -142,6 +144,8 @@ public:
 	void invalidateSwapchain();
 
 protected:
+	using renderqueue::ImageStorage::init;
+
 	uint64_t _order = 0;
 	uint64_t _presentWindow = 0;
 	State _state = State::Initial;

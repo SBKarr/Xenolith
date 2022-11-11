@@ -35,7 +35,7 @@ class VgIconTest : public LayoutTest {
 public:
 	virtual ~VgIconTest() { }
 
-	virtual bool init();
+	virtual bool init() override;
 
 	virtual void onContentSizeDirty() override;
 
@@ -44,6 +44,8 @@ public:
 	virtual void setDataValue(Value &&) override;
 
 protected:
+	using LayoutTest::init;
+
 	void updateIcon(IconName);
 	void updateQualityValue(float);
 	void updateScaleValue(float);

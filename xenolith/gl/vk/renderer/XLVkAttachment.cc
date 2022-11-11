@@ -64,7 +64,7 @@ void VertexBufferAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentI
 
 		handle.performInQueue([this, d = move(d)] (FrameHandle &handle) {
 			return loadVertexes(handle, d);
-		}, [this, cb = move(cb)] (FrameHandle &handle, bool success) {
+		}, [cb = move(cb)] (FrameHandle &handle, bool success) {
 			cb(success);
 		}, this, "VertexBufferAttachmentHandle::submitInput");
 	});

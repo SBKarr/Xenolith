@@ -469,9 +469,31 @@ void Instance::printDevicesInfo(std::ostream &out) const {
 }
 
 void Instance::getDeviceFeatures(const VkPhysicalDevice &device, DeviceInfo::Features &features, ExtensionFlags flags, uint32_t api) const {
-	if (api >= VK_API_VERSION_1_2) {
-		features.flags = flags;
-		features.device12.pNext = nullptr;
+	void *next = nullptr;
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+	if ((flags & ExtensionFlags::Portability) != ExtensionFlags::None) {
+		features.devicePortability.pNext = next;
+		next = &features.devicePortability;
+	}
+#endif
+	features.flags = flags;
+	if (api >= VK_API_VERSION_1_3) {
+		features.device13.pNext = next;
+		features.device12.pNext = &features.device13;
+		features.device11.pNext = &features.device12;
+		features.device10.pNext = &features.device11;
+
+		if (vkGetPhysicalDeviceFeatures2) {
+			vkGetPhysicalDeviceFeatures2(device, &features.device10);
+		} else if (vkGetPhysicalDeviceFeatures2KHR) {
+			vkGetPhysicalDeviceFeatures2KHR(device, &features.device10);
+		} else {
+			vkGetPhysicalDeviceFeatures(device, &features.device10.features);
+		}
+
+		features.updateFrom13();
+	} else if (api >= VK_API_VERSION_1_2) {
+		features.device12.pNext = next;
 		features.device11.pNext = &features.device12;
 		features.device10.pNext = &features.device11;
 
@@ -485,9 +507,6 @@ void Instance::getDeviceFeatures(const VkPhysicalDevice &device, DeviceInfo::Fea
 
 		features.updateFrom12();
 	} else {
-		features.flags = flags;
-
-		void *next = nullptr;
 		if ((flags & ExtensionFlags::Storage16Bit) != ExtensionFlags::None) {
 			features.device16bitStorage.pNext = next;
 			next = &features.device16bitStorage;
@@ -524,6 +543,12 @@ void Instance::getDeviceFeatures(const VkPhysicalDevice &device, DeviceInfo::Fea
 
 void Instance::getDeviceProperties(const VkPhysicalDevice &device, DeviceInfo::Properties &properties, ExtensionFlags flags, uint32_t api) const {
 	void *next = nullptr;
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+	if ((flags & ExtensionFlags::Portability) != ExtensionFlags::None) {
+		properties.devicePortability.pNext = next;
+		next = &properties.devicePortability;
+	}
+#endif
 	if ((flags & ExtensionFlags::Maintenance3) != ExtensionFlags::None) {
 		properties.deviceMaintenance3.pNext = next;
 		next = &properties.deviceMaintenance3;
@@ -662,9 +687,9 @@ DeviceInfo Instance::getDeviceInfo(VkPhysicalDevice device) const {
 
 	if (notFound) {
 		ret.requiredExtensionsExists = false;
+	} else {
+		ret.requiredExtensionsExists = true;
 	}
-
-	ret.requiredExtensionsExists = true;
 
 	// check for optionals
 	ExtensionFlags extensionFlags = ExtensionFlags::None;

@@ -18,8 +18,16 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-# GLSL -> SpirV compiler (default - glslangValidator from https://github.com/KhronosGroup/glslang/releases/tag/master-tot(
+# VULKAN_SDK_PREFIX ?= ~/VulkanSDK/<version>/<OS>
+
+# GLSL -> SpirV compiler (default - glslangValidator from https://github.com/KhronosGroup/glslang/releases/tag/master-tot)
+ifdef VULKAN_SDK_PREFIX
+GLSLC ?= $(VULKAN_SDK_PREFIX)/bin/glslangValidator
+SPIRV_LINK ?= $(VULKAN_SDK_PREFIX)/bin/spirv-link
+else
 GLSLC ?= glslangValidator
+SPIRV_LINK ?= spirv-link
+endif
 
 # toolkit names
 TOOLKIT_NAME := XENOLITH
@@ -70,6 +78,10 @@ XENOLITH_INCLUDES_OBJS += \
 	$(OSTYPE_INCLUDE) \
 	thirdparty
 
+ifdef VULKAN_SDK_PREFIX
+XENOLITH_INCLUDES_OBJS += $(VULKAN_SDK_PREFIX)/include
+endif
+
 # shaders
 XENOLITH_EMBEDDER_DIR = $(realpath $(XENOLITH_MAKEFILE_DIR)/../utils/embedder)
 XENOLITH_EMBEDDER = $(XENOLITH_EMBEDDER_DIR)/stappler-build/host/embedder -f
@@ -77,8 +89,6 @@ XENOLITH_SHADERS := $(wildcard $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/*/*)
 XENOLITH_SHADERS_COMPILED := $(subst /glsl/,/compiled/,$(XENOLITH_SHADERS))
 XENOLITH_SHADERS_LINKED := $(subst /glsl/,/linked/,$(wildcard $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/*))
 XENOLITH_SHADERS_EMBEDDED := $(subst /linked/,/embedded/,$(XENOLITH_SHADERS_LINKED))
-
-$(info $(XENOLITH_SHADERS_EMBEDDED))
 
 XENOLITH_FLAGS :=
 
@@ -95,6 +105,38 @@ ifeq ($(UNAME),Darwin)
 ifndef LOCAL_MAIN
 XENOLITH_SRCS_DIRS += $(XENOLITH_MAKEFILE_DIR)/platform/mac_main
 endif
+
+VULKAN_LOADER_PATH = $(realpath $(VULKAN_SDK_PREFIX)/lib/libvulkan.1.dylib)
+VULKAN_MOLTENVK_PATH = $(realpath $(VULKAN_SDK_PREFIX)/../MoltenVK/dylib/macOS/libMoltenVK.dylib)
+VULKAN_MOLTENVK_ICD_PATH = $(realpath $(VULKAN_SDK_PREFIX)/../MoltenVK/dylib/macOS/MoltenVK_icd.json)
+VULKAN_LAYERS_PATH = $(realpath $(VULKAN_SDK_PREFIX)/share/vulkan/explicit_layer.d)
+VULKAN_LIBDIR = $(dir $(BUILD_EXECUTABLE))vulkan
+
+$(VULKAN_LIBDIR)/libvulkan.dylib: $(VULKAN_LOADER_PATH)
+	@$(GLOBAL_MKDIR) $(VULKAN_LIBDIR)
+	cp $(VULKAN_LOADER_PATH) $(VULKAN_LIBDIR)/libvulkan.dylib
+
+$(VULKAN_LIBDIR)/icd.d/libMoltenVK.dylib: $(VULKAN_MOLTENVK_PATH)
+	@$(GLOBAL_MKDIR) $(VULKAN_LIBDIR)/icd.d
+	cp $(VULKAN_MOLTENVK_PATH) $(VULKAN_LIBDIR)/icd.d/libMoltenVK.dylib
+
+$(VULKAN_LIBDIR)/icd.d/MoltenVK_icd.json: $(VULKAN_MOLTENVK_ICD_PATH)
+	@$(GLOBAL_MKDIR) $(VULKAN_LIBDIR)/icd.d
+	cp $(VULKAN_MOLTENVK_ICD_PATH) $(VULKAN_LIBDIR)/icd.d/MoltenVK_icd.json
+
+$(VULKAN_LIBDIR)/explicit_layer.d/%.json: $(VULKAN_LAYERS_PATH)/%.json
+	@$(GLOBAL_MKDIR) $(VULKAN_LIBDIR)/explicit_layer.d
+	sed 's/..\/..\/..\/lib\/libVkLayer/..\/lib\/libVkLayer/g' $(VULKAN_LAYERS_PATH)/$*.json > $(VULKAN_LIBDIR)/explicit_layer.d/$*.json
+
+$(VULKAN_LIBDIR)/lib/%.dylib: $(VULKAN_SDK_PREFIX)/lib/%.dylib
+	@$(GLOBAL_MKDIR) $(VULKAN_LIBDIR)/lib
+	cp $(VULKAN_SDK_PREFIX)/lib/$*.dylib $(VULKAN_LIBDIR)/lib/$*.dylib
+
+xenolith-install-loader: $(VULKAN_LIBDIR)/libvulkan.dylib $(VULKAN_LIBDIR)/icd.d/libMoltenVK.dylib $(VULKAN_LIBDIR)/icd.d/MoltenVK_icd.json \
+	$(subst $(VULKAN_LAYERS_PATH),$(VULKAN_LIBDIR)/explicit_layer.d,$(wildcard $(VULKAN_LAYERS_PATH)/*.json)) \
+	$(subst $(VULKAN_SDK_PREFIX),$(VULKAN_LIBDIR),$(wildcard $(VULKAN_SDK_PREFIX)/lib/libVkLayer_*.dylib))
+
+.PHONY: xenolith-install-loader
 
 # Windows - Cygwin
 else ifeq ($(UNAME),Cygwin)
@@ -138,6 +180,7 @@ LOCAL_MODULES += \
 	common_vg \
 	common_zip \
 	common_brotli_lib \
+	common_filesystem \
 	common_backtrace
 
 include $(GLOBAL_ROOT)/make/utils/resolve-modules.mk
@@ -157,7 +200,7 @@ $(XENOLITH_MAKEFILE_DIR)/shaders/embedded/% : $(XENOLITH_MAKEFILE_DIR)/shaders/l
 
 $(XENOLITH_MAKEFILE_DIR)/shaders/linked/% : $(XENOLITH_SHADERS_COMPILED)
 	@$(GLOBAL_MKDIR) $(dir $@)
-	spirv-link -o $@ $(subst /glsl/,/compiled/,$(wildcard $(subst /linked/,/glsl/,$@)/*))
+	$(SPIRV_LINK) -o $@ $(subst /glsl/,/compiled/,$(wildcard $(subst /linked/,/glsl/,$@)/*))
 
 $(XENOLITH_MAKEFILE_DIR)/shaders/compiled/% : $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/%
 	@$(GLOBAL_MKDIR) $(dir $@)

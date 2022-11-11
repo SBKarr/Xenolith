@@ -67,8 +67,20 @@ void InputLabel::Selection::updateColor() {
 	Sprite::updateColor();
 }
 
-bool InputLabel::init(font::FontController *controller, const DescriptionStyle &desc, float width) {
-	if (!Label::init(controller, desc, StringView(), width, Alignment::Left)) {
+bool InputLabel::init() {
+	return init(nullptr, DescriptionStyle());
+}
+
+bool InputLabel::init(StringView str) {
+	return init(nullptr, DescriptionStyle(), str);
+}
+
+bool InputLabel::init(StringView str, float w, Alignment a) {
+	return init(nullptr, DescriptionStyle(), str, w, a);
+}
+
+bool InputLabel::init(font::FontController *controller, const DescriptionStyle &desc, StringView str, float width, Alignment a) {
+	if (!Label::init(controller, desc, str, width, a)) {
 		return false;
 	}
 
@@ -132,6 +144,10 @@ bool InputLabel::init(font::FontController *controller, const DescriptionStyle &
 	setOpacity(222);
 
 	return true;
+}
+
+bool InputLabel::init(const DescriptionStyle &style, StringView str, float w, Alignment a) {
+	return init(nullptr, style, str, w, a);
 }
 
 bool InputLabel::visitGeometry(RenderFrameInfo &info, NodeFlags parentFlags) {

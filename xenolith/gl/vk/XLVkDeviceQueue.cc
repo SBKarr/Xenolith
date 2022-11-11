@@ -141,8 +141,9 @@ bool DeviceQueue::submit(Fence &fence, SpanView<VkCommandBuffer> buffers) {
 	submitInfo.pSignalSemaphores = nullptr;
 
 #ifdef XL_VKAPI_DEBUG
-	auto t = platform::device::_clock(platform::device::Monotonic);
-	fence.addRelease([frameIdx = _frameIdx, t] (bool success) {
+	[[maybe_unused]] auto frameIdx = _frameIdx;
+	[[maybe_unused]] auto t = platform::device::_clock(platform::device::Monotonic);
+	fence.addRelease([=] (bool success) {
 		XL_VKAPI_LOG("[", frameIdx,  "] vkQueueSubmit [complete]",
 				" [", platform::device::_clock(platform::device::Monotonic) - t, "]");
 	}, nullptr, "DeviceQueue::submit");

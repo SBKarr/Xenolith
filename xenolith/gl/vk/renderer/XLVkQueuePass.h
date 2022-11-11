@@ -44,8 +44,8 @@ class QueuePass : public renderqueue::Pass {
 public:
 	virtual ~QueuePass();
 
-	virtual bool init(StringView, PassType, RenderOrdering, size_t subpassCount = 1);
-	virtual void invalidate();
+	virtual bool init(StringView, PassType, RenderOrdering, size_t subpassCount = 1) override;
+	virtual void invalidate() override;
 
 	QueueOperations getQueueOps() const { return _queueOps; }
 
@@ -107,6 +107,8 @@ public:
 	const VertexBufferAttachment *getVertexes() const { return _vertexes; }
 
 protected:
+	using QueuePass::init;
+
 	virtual void prepare(gl::Device &) override;
 
 	const VertexBufferAttachment *_vertexes = nullptr;

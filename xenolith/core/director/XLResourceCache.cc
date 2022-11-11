@@ -212,7 +212,7 @@ void TemporaryResource::onEnter(Scene *scene, Texture *tex) {
 	auto v = tex->getImageData();
 	auto it = _textures.find(v);
 	if (it == _textures.end()) {
-		_textures.emplace(v, tex).first;
+		_textures.emplace(v, tex);
 	}
 
 	++ _users;
@@ -293,7 +293,7 @@ void ResourceCache::addImage(gl::ImageData &&data) {
 }
 
 void ResourceCache::addResource(const Rc<gl::Resource> &req) {
-	_resources.emplace(req->getName(), req).first->second;
+	_resources.emplace(req->getName(), req);
 }
 
 void ResourceCache::removeResource(StringView requestName) {

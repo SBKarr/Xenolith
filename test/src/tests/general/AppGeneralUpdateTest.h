@@ -38,6 +38,8 @@ public:
 	virtual void update(const UpdateTime &) override;
 
 protected:
+	using LayoutTest::init;
+
 	Layer *_background = nullptr;
 };
 

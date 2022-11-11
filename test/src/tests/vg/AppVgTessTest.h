@@ -42,6 +42,8 @@ public:
 	virtual void onContentSizeDirty() override;
 
 protected:
+	using LayoutTest::init;
+
 	void handleContoursUpdated();
 
 	VgTessCanvas *_canvas = nullptr;

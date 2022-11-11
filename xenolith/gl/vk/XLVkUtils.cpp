@@ -397,6 +397,10 @@ static ExtensionFlags getFlagForExtension(const char *name) {
 		return ExtensionFlags::GetMemoryRequirements2;
 	} else if (strcmp(name, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME) == 0) {
 		return ExtensionFlags::DedicatedAllocation;
+#if __APPLE__
+	} else if (strcmp(name, VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME) == 0) {
+		return ExtensionFlags::Portability;
+#endif
 	}
 	return ExtensionFlags::None;
 }
@@ -409,6 +413,17 @@ bool checkIfExtensionAvailable(uint32_t apiVersion, const char *name, const Vect
 		return false;
 	}
 
+	if (apiVersion >= VK_API_VERSION_1_3) {
+		for (auto &it : s_promotedVk13Extensions) {
+			if (it) {
+				if (strcmp(name, it) == 0) {
+					flags |= flag;
+					promoted.emplace_back(StringView(name));
+					return true;
+				}
+			}
+		}
+	}
 	if (apiVersion >= VK_API_VERSION_1_2) {
 		for (auto &it : s_promotedVk12Extensions) {
 			if (it) {
@@ -714,6 +729,9 @@ size_t getFormatBlockSize(VkFormat format) {
 	case VK_FORMAT_G16_B16R16_2PLANE_444_UNORM_EXT: return 6; break;
 	case VK_FORMAT_A4R4G4B4_UNORM_PACK16_EXT: return 2; break;
 	case VK_FORMAT_A4B4G4R4_UNORM_PACK16_EXT: return 2; break;
+	default:
+		log::vtext("Vk", "Format is not supported: ", format);
+		break;
 	}
 	return 0;
 }
@@ -772,6 +790,7 @@ std::ostream &operator<< (std::ostream &stream, VkResult res) {
 	case VK_OPERATION_DEFERRED_KHR: stream << "VK_OPERATION_DEFERRED_KHR"; break;
 	case VK_OPERATION_NOT_DEFERRED_KHR: stream << "VK_OPERATION_NOT_DEFERRED_KHR"; break;
 	case VK_RESULT_MAX_ENUM: stream << "VK_RESULT_MAX_ENUM"; break;
+	default: stream << stappler::toString("Unknown: ", res); break;
 	}
 	return stream;
 }

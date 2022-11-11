@@ -48,7 +48,7 @@ bool DynamicStateNode::visitDraw(RenderFrameInfo &info, NodeFlags parentFlags) {
 		return Node::visitDraw(info, parentFlags);
 	}
 
-	auto newState = updateState(*currentState);
+	auto newState = updateDynamicState(*currentState);
 
 	if (newState.enabled == renderqueue::DynamicState::None) {
 		// no need to enable anything, drop to 0
@@ -149,7 +149,7 @@ void DynamicStateNode::disableScissor() {
 	_scissorEnabled = false;
 }
 
-gl::DrawStateValues DynamicStateNode::updateState(const gl::DrawStateValues &values) const {
+gl::DrawStateValues DynamicStateNode::updateDynamicState(const gl::DrawStateValues &values) const {
 	auto getViewRect = [&] {
 	    Vec2 bottomLeft = convertToWorldSpace(Vec2(-_scissorOutline.left, -_scissorOutline.bottom));
 		Vec2 topRight = convertToWorldSpace(Vec2(_contentSize.width + _scissorOutline.right, _contentSize.height + _scissorOutline.top));

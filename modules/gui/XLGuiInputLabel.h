@@ -118,7 +118,14 @@ public:
 		virtual void updateColor() override;
 	};
 
-	virtual bool init(font::FontController *, const DescriptionStyle & = DescriptionStyle(), float width = 0);
+	virtual bool init() override;
+	virtual bool init(StringView) override;
+	virtual bool init(StringView, float w, Alignment = Alignment::Left) override;
+	virtual bool init(font::FontController *, const DescriptionStyle & = DescriptionStyle(),
+			StringView = StringView(), float w = 0.0f, Alignment = Alignment::Left) override;
+	virtual bool init(const DescriptionStyle &, StringView = StringView(),
+			float w = 0.0f, Alignment = Alignment::Left) override;
+
 	virtual bool visitGeometry(RenderFrameInfo &info, NodeFlags parentFlags) override;
 
 	virtual void onContentSizeDirty() override;
@@ -195,6 +202,8 @@ public:
 	VectorSprite *getCursorEnd() const;
 
 protected:
+	using Label::init;
+
 	virtual void onText(const WideStringView &, const Cursor &);
 	virtual void onKeyboard(bool, const Rect &, float);
 	virtual void onInput(bool);

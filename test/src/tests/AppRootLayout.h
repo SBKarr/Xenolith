@@ -35,6 +35,8 @@ public:
 	virtual bool init() override;
 
 protected:
+	using LayoutMenu::init;
+
 	virtual void makeScrollList(ScrollController *, const Vector<MenuData> &) override;
 
 	ScrollView *_scrollView = nullptr;

@@ -31,11 +31,13 @@ class InputSwipeTest : public LayoutTest {
 public:
 	virtual ~InputSwipeTest() { }
 
-	virtual bool init();
+	virtual bool init() override;
 
 	virtual void onContentSizeDirty() override;
 
 protected:
+	using LayoutTest::init;
+
 	Vec2 getBoundedPosition(Vec2) const;
 	Rect getBoundsRect() const;
 

@@ -40,6 +40,8 @@ public:
 	void setEnabled(bool);
 
 protected:
+	using Layer::init;
+
 	bool _enabled = false;
 	Function<void()> _callback;
 	Label *_label = nullptr;
@@ -56,6 +58,8 @@ public:
 	void setValue(uint64_t);
 
 protected:
+	using Layer::init;
+
 	uint64_t _currentRate = maxOf<uint64_t>();
 	AppSliderWithLabel *_slider = nullptr;
 };

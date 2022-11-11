@@ -49,7 +49,7 @@ void DeviceBuffer::invalidate(Device &dev) {
 }
 
 bool DeviceBuffer::setData(BytesView data, VkDeviceSize offset) {
-	auto size = std::min(_info.size - offset, data.size());
+	auto size = std::min(size_t(_info.size - offset), data.size());
 
 	auto t = _pool->getAllocator()->getType(_memory.type);
 	if (!t->isHostVisible()) {

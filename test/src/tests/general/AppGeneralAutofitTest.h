@@ -33,6 +33,9 @@ public:
 	virtual ~GeneralAutofitTestResize() { }
 
 	virtual bool init() override;
+
+protected:
+	using VectorSprite::init;
 };
 
 class GeneralAutofitTest : public LayoutTest {
@@ -44,6 +47,8 @@ public:
 	virtual void onContentSizeDirty() override;
 
 protected:
+	using LayoutTest::init;
+
 	Node *_nodeAutofit = nullptr;
 	Node *_nodeResize = nullptr;
 };

@@ -38,6 +38,8 @@ public:
 	bool isEnabled() const { return _enabled; }
 
 protected:
+	using VectorSprite::init;
+
 	Function<void(bool)> _callback;
 	bool _enabled = false;
 };
@@ -56,7 +58,7 @@ public:
 
 	virtual ~InputKeyboardOnScreenKeyboard() { }
 
-	virtual bool init();
+	virtual bool init() override;
 	virtual void onContentSizeDirty() override;
 
 protected:

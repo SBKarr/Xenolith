@@ -70,7 +70,7 @@ struct Loop::Internal final : memory::AllocPool {
 		device->begin(*loop, *queue, [this] (bool success) {
 			auto resources = loop->getResourceCache();
 			auto texSet = device->getTextureSetLayout();
-			loop->getApplication()->performOnMainThread([texSet, resources, loop = loop] {
+			loop->getApplication()->performOnMainThread([texSet, resources] {
 				resources->addImage(gl::ImageData::make(texSet->getEmptyImageObject()));
 				resources->addImage(gl::ImageData::make(texSet->getSolidImageObject()));
 			}, loop);
@@ -171,7 +171,11 @@ struct Loop::Internal final : memory::AllocPool {
 
 	void addView(gl::ViewInfo &&info) {
 		auto view = platform::graphic::createView(*loop, *device, move(info));
-		views.emplace(view);
+		if (view) {
+			views.emplace(view);
+		} else {
+			log::text("vk::Loop", "Fail to create view");
+		}
 	}
 
 	void removeView(gl::View *view) {

@@ -603,7 +603,7 @@ void AttachmentHandle::submitInput(FrameQueue &q, Rc<AttachmentInputData> &&data
 	if (data->waitDependencies.empty()) {
 		cb(true);
 	} else {
-		q.getFrame()->waitForDependencies(data->waitDependencies, [this, cb = move(cb)] (FrameHandle &, bool success) {
+		q.getFrame()->waitForDependencies(data->waitDependencies, [cb = move(cb)] (FrameHandle &, bool success) {
 			cb(success);
 		});
 	}

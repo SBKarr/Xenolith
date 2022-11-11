@@ -1,5 +1,5 @@
 /**
-Copyright (c) 2020 Roman Katuntsev <sbkarr@stappler.org>
+Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,29 +20,21 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **/
 
-#include "XLDefine.h"
+#include "XLPlatform.h"
 
-#include "common/XLApplication.cc"
-#include "common/XLLog.cc"
+#if (MACOS)
 
-#include "linux/XLVkViewImpl.cc"
-#include "linux/XLVkViewWayland.cc"
-#include "linux/XLVkViewXcb.cc"
-#include "linux/XLVulkan.cc"
-#include "linux/XLDevice.cc"
-#include "linux/XLInteraction.cc"
-#include "linux/XLLinuxDBus.cc"
-#include "linux/XLLinuxWayland.cc"
-#include "linux/XLLinuxXcb.cc"
-#include "linux/XLLinuxXkb.cc"
-#include "linux/XLNetwork.cc"
+namespace stappler::xenolith::platform::network {
 
-#include "mac/XLDevice.cc"
-#include "mac/XLInteraction.cc"
-#include "mac/XLNetwork.cc"
-#include "mac/XLVulkan.cc"
-/*#include "win32/XLDevice.cc"
-#include "win32/XLInteraction.cc"
-#include "win32/XLNetwork.cc"
+static Function<void(bool isOnline)> _callback;
 
-#include "desktop/XLVkViewImpl-desktop.cc"*/
+void _setNetworkCallback(const Function<void(bool isOnline)> &callback) {
+	_callback = callback;
+}
+bool _isNetworkOnline() {
+	return true;
+}
+
+}
+
+#endif

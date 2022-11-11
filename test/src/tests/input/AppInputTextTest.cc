@@ -42,7 +42,7 @@ bool InputTextTest::init() {
 		std::cout << "onText: " << string::toUtf8<Interface>(str) << " " << cursor.start << ":" << cursor.length << "\n";
 		_label->setString(str);
 	};
-	_inputHandler.onKeyboard = [this] (bool enabled, const Rect &targetRect, float duration) {
+	_inputHandler.onKeyboard = [] (bool enabled, const Rect &targetRect, float duration) {
 		std::cout << "onKeyboard: " << enabled << " " << targetRect << " " << duration << "\n";
 	};
 	_inputHandler.onInput = [this] (bool enabled) {

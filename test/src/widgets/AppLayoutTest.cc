@@ -33,6 +33,8 @@ public:
 	virtual void onContentSizeDirty() override;
 
 protected:
+	using VectorSprite::init;
+
 	void handleMouseEnter();
 	void handleMouseLeave();
 	bool handlePress();

@@ -41,6 +41,8 @@ public:
 	virtual void onExit() override;
 
 protected:
+	using Component::init;
+
 	Rc<gl::Resource> _resource;
 };
 

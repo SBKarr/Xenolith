@@ -35,6 +35,8 @@ public:
 	virtual void onContentSizeDirty() override;
 
 protected:
+	using Node::init;
+
 	VectorSprite *_image = nullptr;
 	IconName _iconName = IconName::Empty;
 	Function<void(IconName)> _callback;

@@ -136,7 +136,7 @@ bool Device::init(const vk::Instance *inst, DeviceInfo && info, const Features &
 	_info = move(info);
 
 	if constexpr (s_printVkInfo) {
-		Application::getInstance()->perform([this, info = _info, instance = _vkInstance] (const Task &) {
+		Application::getInstance()->perform([info = _info] (const Task &) {
 			log::vtext("Vk-Info", "Device info:\n", info.description());
 			return true;
 		}, nullptr, this);

@@ -50,6 +50,8 @@ public:
 	void setActiveLayoutId(StringView, Value && = Value());
 
 protected:
+	using UtilScene::init;
+
 	Node *_layout = nullptr;
 };
 

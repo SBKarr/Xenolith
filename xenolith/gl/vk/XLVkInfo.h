@@ -32,15 +32,18 @@ struct DeviceInfo {
 		static Features getRequired();
 		static Features getOptional();
 
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+		VkPhysicalDevicePortabilitySubsetFeaturesKHR devicePortability = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_FEATURES_KHR, nullptr };
+#endif
 		VkPhysicalDevice16BitStorageFeaturesKHR device16bitStorage = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES_KHR, nullptr };
 		VkPhysicalDevice8BitStorageFeaturesKHR device8bitStorage = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR, nullptr };
 		VkPhysicalDeviceShaderFloat16Int8FeaturesKHR deviceShaderFloat16Int8 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES_KHR, nullptr };
 		VkPhysicalDeviceDescriptorIndexingFeaturesEXT deviceDescriptorIndexing = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT, nullptr };
 		VkPhysicalDeviceBufferDeviceAddressFeaturesKHR deviceBufferDeviceAddress = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR, nullptr };
-#if VK_VERSION_1_2
+
+		VkPhysicalDeviceVulkan12Features device13 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, nullptr };
 		VkPhysicalDeviceVulkan12Features device12 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, nullptr };
 		VkPhysicalDeviceVulkan11Features device11 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES, nullptr };
-#endif
 		VkPhysicalDeviceFeatures2KHR device10 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR, nullptr };
 		ExtensionFlags flags = ExtensionFlags::None;
 
@@ -52,8 +55,11 @@ struct DeviceInfo {
 		// disables all features, that disabled in f
 		void disableFromFeatures(const Features &f);
 
+		void updateFrom13();
 		void updateFrom12();
 		void updateTo12(bool updateFlags = false);
+
+		void clear();
 
 		Features();
 		Features(const Features &);
@@ -61,6 +67,9 @@ struct DeviceInfo {
 	};
 
 	struct Properties {
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+		VkPhysicalDevicePortabilitySubsetPropertiesKHR devicePortability = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_PROPERTIES_KHR, nullptr };
+#endif
 		VkPhysicalDeviceDescriptorIndexingPropertiesEXT deviceDescriptorIndexing = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES_EXT, nullptr };
 		VkPhysicalDeviceMaintenance3PropertiesKHR deviceMaintenance3 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES_KHR, nullptr };
 		VkPhysicalDeviceProperties2KHR device10 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR, nullptr };

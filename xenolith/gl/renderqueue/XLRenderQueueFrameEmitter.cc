@@ -395,8 +395,8 @@ void FrameEmitter::scheduleFrameTimeout() {
 	if (_valid && _frameInterval && _frameTimeoutPassed && !_onDemand) {
 		_frameTimeoutPassed = false;
 		++ _order;
-		auto t = platform::device::_clock(platform::device::ClockType::Monotonic);
-		_loop->schedule([this, t, guard = Rc<FrameEmitter>(this), idx = _order] (gl::Loop &ctx) {
+		[[maybe_unused]] auto t = platform::device::_clock(platform::device::ClockType::Monotonic);
+		_loop->schedule([=, guard = Rc<FrameEmitter>(this), idx = _order] (gl::Loop &ctx) {
 			XL_FRAME_EMITTER_LOG("TimeoutPassed:    ", _frame.load(), "   ", platform::device::_clock() - _frame.load(), " (",
 					platform::device::_clock(platform::device::ClockType::Monotonic) - t, ") mks");
 			guard->onFrameTimeout(idx);

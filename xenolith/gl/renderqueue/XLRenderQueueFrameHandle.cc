@@ -140,7 +140,7 @@ void FrameHandle::performInQueue(Function<void(FrameHandle &)> &&cb, Ref *ref, S
 	_loop->performInQueue(Rc<thread::Task>::create([this, cb = move(cb)] (const thread::Task &) -> bool {
 		cb(*this);
 		return true;
-	}, [this, linkId, tag] (const thread::Task &, bool) {
+	}, [=, this] (const thread::Task &, bool) {
 		XL_FRAME_LOG(XL_FRAME_LOG_INFO, "thread performed: '", tag, "'");
 		release(linkId);
 	}, ref));
@@ -151,7 +151,7 @@ void FrameHandle::performInQueue(Function<bool(FrameHandle &)> &&perform, Functi
 	auto linkId = retain();
 	_loop->performInQueue(Rc<thread::Task>::create([this, perform = move(perform)] (const thread::Task &) -> bool {
 		return perform(*this);
-	}, [this, complete = move(complete), linkId, tag] (const thread::Task &, bool success) {
+	}, [=, this, complete = move(complete)] (const thread::Task &, bool success) {
 		XL_FRAME_PROFILE(complete(*this, success), tag, 1000);
 		XL_FRAME_LOG(XL_FRAME_LOG_INFO, "thread performed: '", tag, "'");
 		release(linkId);
@@ -163,7 +163,7 @@ void FrameHandle::performOnGlThread(Function<void(FrameHandle &)> &&cb, Ref *ref
 		XL_FRAME_PROFILE(cb(*this), tag, 1000);
 	} else {
 		auto linkId = retain();
-		_loop->performOnGlThread(Rc<thread::Task>::create([this, cb = move(cb), linkId, tag] (const thread::Task &, bool success) {
+		_loop->performOnGlThread(Rc<thread::Task>::create([=, this, cb = move(cb)] (const thread::Task &, bool success) {
 			XL_FRAME_PROFILE(if (success) { cb(*this); }, tag, 1000);
 			XL_FRAME_LOG(XL_FRAME_LOG_INFO, "thread performed: '", tag, "'");
 			release(linkId);

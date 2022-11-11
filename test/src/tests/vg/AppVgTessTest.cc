@@ -96,6 +96,8 @@ public:
 	void setSelectedCallback(Function<void(uint32_t)> &&cb);
 
 protected:
+	using Node::init;
+
 	VgContourSwitcherAdd *_add = nullptr;
 	Vector<VgContourSwitcherButton *> _buttons;
 	Function<void(uint32_t)> _selectedCallback;

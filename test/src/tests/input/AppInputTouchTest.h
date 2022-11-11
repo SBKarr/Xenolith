@@ -34,6 +34,8 @@ public:
 	virtual bool init();
 
 protected:
+	using LayoutTest::init;
+
 	void handleClick(const Vec2 &);
 
 	InputListener *_input = nullptr;

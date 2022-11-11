@@ -61,7 +61,7 @@ public:
 	virtual void setEnabled(bool value);
 	virtual bool isEnabled() const;
 
-	virtual bool isTouched() const;
+	virtual bool isInMotion() const;
 	virtual bool isMoved() const;
 
 	virtual void setScrollCallback(const ScrollCallback & cb);
@@ -163,6 +163,9 @@ public:
 	virtual bool onPressCancel(const Vec2 &, const TimeInterval &);
 
 	virtual void onTap(int count, const Vec2 &loc);
+
+protected:
+	using DynamicStateNode::init;
 
 	Layout _layout = Vertical;
 

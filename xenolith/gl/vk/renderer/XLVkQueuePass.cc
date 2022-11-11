@@ -330,7 +330,7 @@ bool VertexPassHandle::prepare(FrameQueue &queue, Function<void(bool)> &&cb) {
 	if (auto vertexes = queue.getAttachment(((VertexPass *)_renderPass.get())->getVertexes())) {
 		_mainBuffer = (VertexBufferAttachmentHandle *)vertexes->handle.get();
 	}
-	return prepare(queue, move(cb));
+	return QueuePassHandle::prepare(queue, move(cb));
 }
 
 Vector<VkCommandBuffer> VertexPassHandle::doPrepareCommands(FrameHandle &) {
