@@ -1,131 +1,107 @@
+/**
+Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+**/
 
 #include "XLDefine.h"
 #include "XLPlatform.h"
 #include "XLApplication.h"
 
+#if MODULE_COMMON_BACKTRACE
+#include "backtrace.h"
+#include "signal.h"
+#include "cxxabi.h"
+#endif
+
 namespace stappler::xenolith {
 
-int parseOptionSwitch(stappler::data::Value &ret, char c, const char *str) {
-	return 1;
+#if MODULE_COMMON_BACKTRACE
+static ::backtrace_state *s_backtraceState;
+static struct sigaction s_sharedSigAction;
+static struct sigaction s_sharedSigOldAction;
+
+static void debug_backtrace_error(void *data, const char *msg, int errnum) {
+	std::cout << "Backtrace error: " << msg << "\n";
 }
 
-int parseOptionString(stappler::data::Value &ret, const stappler::StringView &str,
-					  int argc, const char * argv[]) {
-	if (str.starts_with("w=") == 0) {
-		auto s = str.sub(2).readInteger().get(0);
-		if (s > 0) {
-			ret.setInteger(s, "width");
-		}
-	} else if (str.starts_with("h=") == 0) {
-		auto s = str.sub(2).readInteger().get(0);
-		if (s > 0) {
-			ret.setInteger(s, "height");
-		}
-	} else if (str.starts_with("d=") == 0) {
-		auto s = str.sub(2).readDouble().get(0.0);
-		if (s > 0) {
-			ret.setDouble(s, "density");
-		}
-	} else if (str.starts_with("l=") == 0) {
-		ret.setString(str.sub(2), "locale");
-	} else if (str == "tablet") {
-		ret.setBool(true, "isTablet");
-	} else if (str == "phone") {
-		ret.setBool(false, "isTablet");
-	} else if (str == "package") {
-		ret.setString(argv[0], "package");
-	} else if (str == "fixed") {
-		ret.setBool(true, "fixed");
+static int debug_backtrace_full_callback(void *data, uintptr_t pc, const char *filename, int lineno, const char *function) {
+	FILE *f = (FILE *)data;
+
+	fprintf(f, "\t[%p]", (void *)pc);
+
+	if (filename) {
+		auto name = filepath::name(filename);
+		fprintf(f, " %s:%d", name.data(), lineno);
 	}
-	return 1;
-}
-
-stappler::data::Value parseOptions(int argc, const char * argv[]) {
-	if (argc == 0) {
-		return stappler::data::Value();
-	}
-
-	stappler::data::Value ret;
-	auto &args = ret.setValue(stappler::data::Value(stappler::data::Value::Type::ARRAY), "args");
-
-	int i = argc;
-	while (i > 0) {
-		const char *value = argv[argc - i];
-		if (value[0] == '-') {
-			if (value[1] == '-') {
-				i -= (parseOptionString(ret, &value[2], i - 1, &argv[argc - i + 1]) - 1);
-			} else {
-				const char *str = &value[1];
-				while (str[0] != 0) {
-					str += parseOptionSwitch(ret, str[0], &str[1]);
-				}
-			}
+	if (function) {
+		int status = 0;
+		auto ptr = abi::__cxa_demangle (function, nullptr, nullptr, &status);
+		if (ptr) {
+			fprintf(f, " - %s", ptr);
+			::free(ptr);
 		} else {
-			args.addString(value);
+			fprintf(f, " - %s", function);
 		}
-		i --;
 	}
+	fprintf(f, "\n");
+	return 0;
+}
 
-	return ret;
-};
+static void PrintBacktrace(FILE *f, int len) {
+	backtrace_full(s_backtraceState, 2, debug_backtrace_full_callback, debug_backtrace_error, f);
+}
 
-void sp_android_terminate () {
-	stappler::log::text("Application", "Crash on exceprion");
-  __gnu_cxx::__verbose_terminate_handler();
+static void s_sigAction(int sig, siginfo_t *info, void *ucontext) {
+	PrintBacktrace(stdout, 100);
+	abort();
+}
+
+#endif
+
+int parseOptionSwitch(Value &ret, char c, const char *str) {
+	return 1;
 }
 
 SP_EXTERN_C int _spMain(argc, argv) {
-	std::set_terminate(sp_android_terminate);
-	std::string packageName = "org.stappler.stappler";
-	stappler::data::Value val = stappler::data::readFile("app.json");
-	stappler::data::Value args;
-	if (val.isDictionary()) {
-		stappler::data::Value &resultObj = val.getValue("result");
-		if (resultObj.isArray()) {
-			stappler::data::Value &obj = resultObj.getValue(0);
-			if (obj.isDictionary()) {
-				std::string name = obj.getString("alias");
-				if (name.empty()) {
-					name = obj.getString("name");
-				}
-				if (!name.empty()) {
-					packageName = name;
-				}
-			}
-		}
+	memory::pool::initialize();
+
+#if MODULE_COMMON_BACKTRACE
+	if (!s_backtraceState) {
+		s_backtraceState = backtrace_create_state(nullptr, 1, debug_backtrace_error, nullptr);
 	}
 
-	args = stappler::data::parseCommandLineOptions(argc, argv, &parseOptionSwitch, &parseOptionString);
+	memset(&s_sharedSigAction, 0, sizeof(s_sharedSigAction));
+	s_sharedSigAction.sa_sigaction = &s_sigAction;
+	s_sharedSigAction.sa_flags = SA_SIGINFO;
+	sigemptyset(&s_sharedSigAction.sa_mask);
+	//sigaddset(&s_sharedSigAction.sa_mask, SIGSEGV);
 
-	if (args.getInteger("width") == 0) {
-		args.setInteger(1024, "width");
-	}
+    ::sigaction(SIGSEGV, &s_sharedSigAction, &s_sharedSigOldAction);
+#endif
 
-	if (args.getInteger("height") == 0) {
-		args.setInteger(768, "height");
-	}
-
-	if (args.getString("package").empty()) {
-		args.setString(packageName, "package");
-	}
-
-	if (args.getString("locale").empty()) {
-		args.setString("en-us", "locale");
-	}
-
-	if (args.getDouble("density") == 0.0f) {
-		args.setDouble(1.0f, "density");
-	}
-
-	platform::desktop::_screenSize = Size(args.getInteger("width"), args.getInteger("height"));
-	platform::desktop::_isTablet = args.getBool("isTablet");
-	platform::desktop::_package = args.getString("package");
-	platform::desktop::_density = args.getDouble("density");
-	platform::desktop::_isFixed = args.getBool("fixed");
-	platform::desktop::_userLanguage = args.getString("locale");
+	auto args = data::parseCommandLineOptions<Interface>(argc, argv, &parseOptionSwitch, &Application::parseOptionString);
 
     // create the application instance
-    return Application::getInstance()->run();
+    auto ret = Application::getInstance()->run(move(args));
+	memory::pool::terminate();
+	return ret;
 }
 
 }

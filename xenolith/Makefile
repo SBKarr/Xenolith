@@ -18,7 +18,29 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+ifdef OS_MAKE
+MAKE := $(OS_MAKE)
+endif
+
 .DEFAULT_GOAL := all
+
+ifndef STAPPLER_TARGET
+
+all:
+	@$(MAKE) STAPPLER_TARGET=host all
+
+clean:
+	@$(MAKE) STAPPLER_TARGET=host clean
+
+release:
+	@$(MAKE) STAPPLER_TARGET=host RELEASE=1
+
+release-clean:
+	@$(MAKE) STAPPLER_TARGET=host RELEASE=1 clean
+
+.PHONY: all clean release release-clean
+
+else
 
 THIS_FILE := $(lastword $(MAKEFILE_LIST))
 
@@ -35,3 +57,5 @@ include $(GLOBAL_ROOT)/make/build.mk
 all: libxenolith
 
 .PHONY: all
+
+endif

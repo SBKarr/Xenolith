@@ -124,6 +124,8 @@ public:
 	bool hasNonSolidFillMode() const;
 
 private:
+	using gl::Device::init;
+
 	friend class DeviceQueue;
 
 	virtual void compileSamplers(gl::TaskQueue &q, bool force);

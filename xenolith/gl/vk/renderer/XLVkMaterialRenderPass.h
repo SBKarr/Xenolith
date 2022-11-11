@@ -36,13 +36,16 @@ public:
 	virtual bool init(StringView, const gl::BufferInfo &, Vector<Rc<gl::Material>> && = Vector<Rc<gl::Material>>());
 
 	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
+
+protected:
+	using gl::MaterialAttachment::init;
 };
 
 class MaterialVertexAttachmentHandle : public BufferAttachmentHandle {
 public:
 	virtual ~MaterialVertexAttachmentHandle();
 
-	virtual bool init(const Rc<Attachment> &, const FrameQueue &);
+	virtual bool init(const Rc<Attachment> &, const FrameQueue &) override;
 
 	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
 			uint32_t, bool isExternal) const override;
@@ -69,6 +72,8 @@ public:
 	const MaterialVertexAttachment *getMaterials() const { return _materials; }
 
 protected:
+	using BufferAttachment::init;
+
 	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
 
 	const MaterialVertexAttachment *_materials = nullptr;
@@ -125,6 +130,8 @@ public:
 
 	static bool makeDefaultRenderQueue(RenderQueueInfo &);
 
+	virtual ~MaterialPass() { }
+
 	virtual bool init(StringView, RenderOrdering, size_t subpassCount = 1);
 
 	const VertexMaterialAttachment *getVertexes() const { return _vertexes; }
@@ -133,6 +140,8 @@ public:
 	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
 
 protected:
+	using QueuePass::init;
+
 	virtual void prepare(gl::Device &) override;
 
 	const VertexMaterialAttachment *_vertexes = nullptr;

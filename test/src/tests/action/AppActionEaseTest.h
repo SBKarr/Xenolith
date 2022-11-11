@@ -43,6 +43,8 @@ public:
 	void setTime(float value) { _time = value; }
 
 protected:
+	using Node::init;
+
 	float _time = 1.0f;
 	Layer *_layer = nullptr;
 	Label *_label = nullptr;
@@ -59,11 +61,13 @@ public:
 
 	virtual ~ActionEaseTest() { }
 
-	virtual bool init();
+	virtual bool init() override;
 
 	virtual void onContentSizeDirty() override;
 
 protected:
+	using LayoutTest::init;
+
 	Rc<ActionInterval> makeAction(interpolation::Type, Rc<ActionInterval> &&) const;
 	interpolation::Type getSelectedType(interpolation::Type) const;
 

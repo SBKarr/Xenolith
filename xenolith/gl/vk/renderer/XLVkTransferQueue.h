@@ -136,6 +136,8 @@ public:
 	Rc<FrameRequest> makeRequest(Rc<TransferResource> &&);
 
 protected:
+	using renderqueue::Queue::init;
+
 	TransferAttachment *_attachment = nullptr;
 };
 

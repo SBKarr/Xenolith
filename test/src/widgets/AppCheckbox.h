@@ -43,6 +43,8 @@ public:
 	virtual Color4F getBackgroundColor() const;
 
 protected:
+	using Layer::init;
+
 	virtual void updateValue();
 
 	bool _value = false;
@@ -62,6 +64,8 @@ public:
 	virtual void onContentSizeDirty() override;
 
 protected:
+	using AppCheckbox::init;
+
 	Label *_label = nullptr;
 };
 

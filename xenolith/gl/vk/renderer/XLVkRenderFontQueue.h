@@ -38,6 +38,8 @@ public:
 	RenderFontAttachment *getAttachment() const { return _attachment; }
 
 protected:
+	using renderqueue::Queue::init;
+
 	RenderFontAttachment *_attachment;
 };
 

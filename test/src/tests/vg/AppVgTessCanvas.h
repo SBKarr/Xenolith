@@ -39,12 +39,14 @@ public:
 
 	virtual ~VgTessCursor() { }
 
-	virtual bool init();
+	virtual bool init() override;
 
 	void setState(State);
 	State getState() const { return _state; }
 
 protected:
+	using VectorSprite::init;
+
 	void updateState(VectorImage &image, State);
 
 	State _state = State::Point;
@@ -63,6 +65,8 @@ public:
 	uint32_t getIndex() const { return _index; }
 
 protected:
+	using VectorSprite::init;
+
 	uint32_t _index = 0;
 	Vec2 _point;
 	Label *_label = nullptr;
@@ -92,6 +96,8 @@ public:
 	void addContour();
 
 protected:
+	using Node::init;
+
 	void onTouch(const InputEvent &);
 	void onMouseMove(const InputEvent &);
 

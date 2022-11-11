@@ -196,13 +196,15 @@ public:
 	virtual ~BufferAttachment() { }
 
 	virtual bool init(StringView, const gl::BufferInfo &);
-	virtual void clear();
+	virtual void clear() override;
 
 	const gl::BufferInfo &getInfo() const { return _info; }
 
 	virtual BufferAttachmentDescriptor *addBufferDescriptor(PassData *);
 
 protected:
+	using Attachment::init;
+
 	virtual Rc<AttachmentDescriptor> makeDescriptor(PassData *) override;
 
 	gl::BufferInfo _info;
@@ -256,6 +258,8 @@ public:
 	virtual Extent3 getSizeForFrame(const FrameQueue &) const;
 
 protected:
+	using Attachment::init;
+
 	virtual Rc<AttachmentDescriptor> makeDescriptor(PassData *) override;
 
 	gl::ImageInfo _imageInfo;
@@ -264,6 +268,8 @@ protected:
 
 class ImageAttachmentDescriptor : public AttachmentDescriptor {
 public:
+	virtual ~ImageAttachmentDescriptor() { }
+
 	virtual bool init(PassData *, ImageAttachment *);
 
 	virtual const gl::ImageInfo &getInfo() const { return ((ImageAttachment *)getAttachment())->getInfo(); }
@@ -294,6 +300,8 @@ public:
 	ImageAttachment *getImageAttachment() const;
 
 protected:
+	using AttachmentDescriptor::init;
+
 	virtual Rc<ImageAttachmentRef> makeImageRef(uint32_t idx, AttachmentUsage, AttachmentLayout, AttachmentDependencyInfo);
 
 	// calculated initial layout
@@ -316,6 +324,8 @@ protected:
 
 class ImageAttachmentRef : public AttachmentRef {
 public:
+	virtual ~ImageAttachmentRef() { }
+
 	virtual bool init(ImageAttachmentDescriptor *, uint32_t, AttachmentUsage, AttachmentLayout, AttachmentDependencyInfo);
 
 	virtual const gl::ImageInfo &getInfo() const { return ((ImageAttachmentDescriptor *)_descriptor)->getInfo(); }
@@ -326,27 +336,37 @@ public:
 	virtual void updateLayout() override;
 
 protected:
+	using AttachmentRef::init;
+
 	AttachmentLayout _layout = AttachmentLayout::Undefined;
 };
 
 class GenericAttachment : public Attachment {
 public:
+	virtual ~GenericAttachment() { }
+
 	virtual bool init(StringView);
 
 	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
 
 protected:
+	using Attachment::init;
+
 	virtual Rc<AttachmentDescriptor> makeDescriptor(PassData *) override;
 };
 
 class GenericAttachmentDescriptor : public AttachmentDescriptor {
 public:
+	virtual ~GenericAttachmentDescriptor() { }
+
 protected:
 	virtual Rc<AttachmentRef> makeRef(uint32_t idx, AttachmentUsage, AttachmentDependencyInfo) override;
 };
 
 class GenericAttachmentRef : public AttachmentRef {
 public:
+	virtual ~GenericAttachmentRef() { }
+
 protected:
 };
 

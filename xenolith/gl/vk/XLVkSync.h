@@ -52,6 +52,8 @@ public:
 	VkSemaphore getSemaphore() const { return _sem; }
 
 protected:
+	using gl::Semaphore::init;
+
 	VkSemaphore _sem = VK_NULL_HANDLE;
 };
 
@@ -108,6 +110,8 @@ public:
 	void reset(Loop &, Function<void(Rc<Fence> &&)> &&);
 
 protected:
+	using gl::Object::init;
+
 	void scheduleReset(Loop &);
 	void scheduleReleaseReset(Loop &, bool s);
 	void doRelease(bool success);

@@ -31,13 +31,15 @@ class InputTapPressTestNode : public Layer {
 public:
 	virtual ~InputTapPressTestNode() { }
 
-	virtual bool init(StringView);
+	virtual bool init(StringView) override;
 
 	virtual void onContentSizeDirty() override;
 
 	void handleTap();
 
 protected:
+	using Layer::init;
+
 	Label *_label = nullptr;
 	String _text;
 	uint32_t _index = 0;
@@ -47,11 +49,13 @@ class InputTapPressTest : public LayoutTest {
 public:
 	virtual ~InputTapPressTest() { }
 
-	virtual bool init();
+	virtual bool init() override;
 
 	virtual void onContentSizeDirty() override;
 
 protected:
+	using LayoutTest::init;
+
 	InputTapPressTestNode *_nodeTap = nullptr;
 	InputTapPressTestNode *_nodeDoubleTap = nullptr;
 	InputTapPressTestNode *_nodePress = nullptr;

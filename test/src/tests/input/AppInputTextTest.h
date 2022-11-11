@@ -32,11 +32,13 @@ class InputTextTest : public LayoutTest {
 public:
 	virtual ~InputTextTest() { }
 
-	virtual bool init();
+	virtual bool init() override;
 
 	virtual void onContentSizeDirty() override;
 
 protected:
+	using LayoutTest::init;
+
 	void handleTap(const Vec2 &pos);
 
 	Layer *_background = nullptr;

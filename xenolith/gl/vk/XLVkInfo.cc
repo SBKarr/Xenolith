@@ -27,6 +27,12 @@ namespace stappler::xenolith::vk {
 
 DeviceInfo::Features DeviceInfo::Features::getRequired() {
 	Features ret;
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+	ret.devicePortability.constantAlphaColorBlendFactors = VK_TRUE;
+	ret.devicePortability.events = VK_TRUE;
+	ret.devicePortability.imageViewFormatSwizzle = VK_TRUE;
+	ret.devicePortability.shaderSampleRateInterpolationFunctions = VK_TRUE;
+#endif
 	//ret.device10.features.shaderSampledImageArrayDynamicIndexing = VK_TRUE;
 	return ret;
 }
@@ -97,6 +103,14 @@ bool DeviceInfo::Features::canEnable(const Features &features, uint32_t version)
 #define SP_VK_BOOL_ARRAY(source, field, type) \
 		SpanView<VkBool32>(&source.field, (sizeof(type) - offsetof(type, field)) / sizeof(VkBool32))
 
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+	if (!doCheck(
+			SP_VK_BOOL_ARRAY(devicePortability, constantAlphaColorBlendFactors, VkPhysicalDevicePortabilitySubsetFeaturesKHR),
+			SP_VK_BOOL_ARRAY(features.devicePortability, constantAlphaColorBlendFactors, VkPhysicalDevicePortabilitySubsetFeaturesKHR))) {
+		return false;
+	}
+#endif
+
 #if VK_VERSION_1_2
 	if (version >= VK_API_VERSION_1_2) {
 		if (!doCheck(
@@ -162,6 +176,12 @@ void DeviceInfo::Features::enableFromFeatures(const Features &features) {
 #define SP_VK_BOOL_ARRAY(source, field, type) \
 		SpanView<VkBool32>(&source.field, (sizeof(type) - offsetof(type, field)) / sizeof(VkBool32))
 
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+	doCheck(
+			SP_VK_BOOL_ARRAY(devicePortability, constantAlphaColorBlendFactors, VkPhysicalDevicePortabilitySubsetFeaturesKHR),
+			SP_VK_BOOL_ARRAY(features.devicePortability, constantAlphaColorBlendFactors, VkPhysicalDevicePortabilitySubsetFeaturesKHR));
+#endif
+
 #if VK_VERSION_1_2
 	doCheck(
 			SP_VK_BOOL_ARRAY(device11, storageBuffer16BitAccess, VkPhysicalDeviceVulkan11Features),
@@ -210,6 +230,12 @@ void DeviceInfo::Features::disableFromFeatures(const Features &features) {
 #define SP_VK_BOOL_ARRAY(source, field, type) \
 		SpanView<VkBool32>(&source.field, (sizeof(type) - offsetof(type, field)) / sizeof(VkBool32))
 
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+	doCheck(
+			SP_VK_BOOL_ARRAY(devicePortability, constantAlphaColorBlendFactors, VkPhysicalDevicePortabilitySubsetFeaturesKHR),
+			SP_VK_BOOL_ARRAY(features.devicePortability, constantAlphaColorBlendFactors, VkPhysicalDevicePortabilitySubsetFeaturesKHR));
+#endif
+
 #if VK_VERSION_1_2
 	doCheck(
 			SP_VK_BOOL_ARRAY(device11, storageBuffer16BitAccess, VkPhysicalDeviceVulkan11Features),
@@ -240,6 +266,13 @@ void DeviceInfo::Features::disableFromFeatures(const Features &features) {
 			SP_VK_BOOL_ARRAY(deviceShaderFloat16Int8, shaderFloat16, VkPhysicalDeviceShaderFloat16Int8FeaturesKHR),
 			SP_VK_BOOL_ARRAY(features.deviceShaderFloat16Int8, shaderFloat16, VkPhysicalDeviceShaderFloat16Int8FeaturesKHR));
 #undef SP_VK_BOOL_ARRAY
+}
+
+
+void DeviceInfo::Features::updateFrom13() {
+#if VK_VERSION_1_3
+#endif
+	updateFrom12();
 }
 
 void DeviceInfo::Features::updateFrom12() {
@@ -412,7 +445,38 @@ void DeviceInfo::Features::updateTo12(bool updateFlags) {
 #endif
 }
 
-DeviceInfo::Features::Features() { }
+void DeviceInfo::Features::clear() {
+	auto doClear = [] (SpanView<VkBool32> src) {
+		for (size_t i = 0; i < src.size(); ++ i) {
+			const_cast<VkBool32 &>(src[i]) = VK_FALSE;
+		}
+	};
+
+	doClear(SpanView<VkBool32>(&device10.features.robustBufferAccess, sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32)));
+
+#define SP_VK_BOOL_ARRAY(source, field, type) \
+		SpanView<VkBool32>(&source.field, (sizeof(type) - offsetof(type, field)) / sizeof(VkBool32))
+
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+	doClear(SP_VK_BOOL_ARRAY(devicePortability, constantAlphaColorBlendFactors, VkPhysicalDevicePortabilitySubsetFeaturesKHR));
+#endif
+
+#if VK_VERSION_1_2
+	doClear(SP_VK_BOOL_ARRAY(device11, storageBuffer16BitAccess, VkPhysicalDeviceVulkan11Features));
+	doClear(SP_VK_BOOL_ARRAY(device12, samplerMirrorClampToEdge, VkPhysicalDeviceVulkan12Features));
+#endif
+
+	doClear(SP_VK_BOOL_ARRAY(device16bitStorage, storageBuffer16BitAccess, VkPhysicalDevice16BitStorageFeaturesKHR));
+	doClear(SP_VK_BOOL_ARRAY(device8bitStorage, storageBuffer8BitAccess, VkPhysicalDevice8BitStorageFeaturesKHR));
+	doClear(SP_VK_BOOL_ARRAY(deviceDescriptorIndexing, shaderInputAttachmentArrayDynamicIndexing, VkPhysicalDeviceDescriptorIndexingFeaturesEXT));
+	doClear(SP_VK_BOOL_ARRAY(deviceBufferDeviceAddress, bufferDeviceAddress, VkPhysicalDeviceBufferDeviceAddressFeaturesKHR));
+	doClear(SP_VK_BOOL_ARRAY(deviceShaderFloat16Int8, shaderFloat16, VkPhysicalDeviceShaderFloat16Int8FeaturesKHR));
+#undef SP_VK_BOOL_ARRAY
+}
+
+DeviceInfo::Features::Features() {
+	clear();
+}
 
 DeviceInfo::Features::Features(const Features &f) {
 	memcpy(this, &f, sizeof(Features));

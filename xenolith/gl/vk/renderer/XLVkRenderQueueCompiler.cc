@@ -68,6 +68,8 @@ public:
 	}
 
 protected:
+	using QueuePass::init;
+
 	virtual void prepare(gl::Device &) override;
 
 	RenderQueueAttachment *_attachment = nullptr;
@@ -162,7 +164,7 @@ void RenderQueueAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentIn
 					return true;
 				}
 				return false;
-			}, [this, cb = move(cb)] (FrameHandle &frame, bool success) {
+			}, [cb = move(cb)] (FrameHandle &frame, bool success) {
 				cb(success);
 			}, nullptr, "RenderQueueAttachmentHandle::submitInput _input->queue->getInternalResource");
 		} else {
@@ -229,7 +231,7 @@ void RenderQueueAttachmentHandle::runShaders(FrameHandle &frame) {
 }
 
 void RenderQueueAttachmentHandle::runPipelines(FrameHandle &frame) {
-	size_t tasksCount = _pipelinesInQueue.load();
+	[[maybe_unused]] size_t tasksCount = _pipelinesInQueue.load();
 	for (auto &pit : _input->queue->getPasses()) {
 		for (auto &sit : pit->subpasses) {
 			_pipelinesInQueue += sit.pipelines.size();
@@ -373,7 +375,7 @@ bool RenderQueuePassHandle::prepare(FrameQueue &frame, Function<void(bool)> &&cb
 			cb(success);
 		}, this, "RenderPass::doPrepareCommands _attachment->getTransferResource");
 	} else {
-		frame.getFrame()->performOnGlThread([this, cb = move(cb)] (FrameHandle &frame) {
+		frame.getFrame()->performOnGlThread([cb = move(cb)] (FrameHandle &frame) {
 			cb(true);
 		}, this, false, "RenderPass::doPrepareCommands");
 	}

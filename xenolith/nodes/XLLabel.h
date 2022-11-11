@@ -36,11 +36,13 @@ public:
 
 	virtual ~Label();
 
-	virtual bool init(font::FontController * = nullptr, const DescriptionStyle & = DescriptionStyle(),
+	virtual bool init() override;
+	virtual bool init(StringView) override;
+	virtual bool init(StringView, float w, Alignment = Alignment::Left);
+	virtual bool init(font::FontController *, const DescriptionStyle & = DescriptionStyle(),
 			StringView = StringView(), float w = 0.0f, Alignment = Alignment::Left);
 	virtual bool init(const DescriptionStyle &, StringView = StringView(),
 			float w = 0.0f, Alignment = Alignment::Left);
-	virtual bool init(StringView, float w = 0.0f, Alignment = Alignment::Left);
 
 	virtual void tryUpdateLabel();
 
@@ -76,6 +78,8 @@ public:
 	float getMaxLineX() const;
 
 protected:
+	using Sprite::init;
+
 	virtual void updateLabel();
 	virtual void onFontSourceUpdated();
 	virtual void onFontSourceLoaded();

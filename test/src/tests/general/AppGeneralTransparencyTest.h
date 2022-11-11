@@ -36,6 +36,8 @@ public:
 	virtual void onContentSizeDirty() override;
 
 protected:
+	using LayoutTest::init;
+
 	Layer *_layers[5] = { nullptr };
 	Label *_labels[5] = { nullptr };
 	Node *_labelTransparentCheckbox = nullptr;

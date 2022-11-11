@@ -36,8 +36,8 @@ Device::~Device() {
 
 bool Device::init(const Instance *instance) {
 	_glInstance = instance;
-	_samplersInfo.emplace_back(SamplerInfo(Filter::Nearest, Filter::Nearest));
-	_samplersInfo.emplace_back(SamplerInfo{Filter::Linear, Filter::Linear});
+	_samplersInfo.emplace_back(SamplerInfo{ .magFilter = Filter::Nearest, .minFilter = Filter::Nearest});
+	_samplersInfo.emplace_back(SamplerInfo{ .magFilter = Filter::Linear, .minFilter = Filter::Linear});
 	return true;
 }
 

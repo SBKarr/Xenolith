@@ -47,6 +47,8 @@ public:
 	void incrementMode();
 
 protected:
+	using Layer::init;
+
 	uint32_t _frames = 0;
 	Label *_label = nullptr;
 	DisplayMode _mode = Fps;

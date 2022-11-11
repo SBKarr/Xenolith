@@ -31,13 +31,15 @@ class InputKeyboardTest : public LayoutTest {
 public:
 	virtual ~InputKeyboardTest() { }
 
-	virtual bool init();
+	virtual bool init() override;
 
 	virtual void onContentSizeDirty() override;
 
 	virtual void update(const UpdateTime &) override;
 
 protected:
+	using LayoutTest::init;
+
 	bool _useUpdate = false;
 	InputListener *_input = nullptr;
 	GestureKeyRecognizer *_key = nullptr;

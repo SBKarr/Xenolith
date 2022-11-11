@@ -67,6 +67,8 @@ public:
 		void decrementProgress(float dt);
 
 	protected:
+		using VectorSprite::init;
+
 		void updateProgress(VectorImage *);
 
 		bool _progressDirty = false;

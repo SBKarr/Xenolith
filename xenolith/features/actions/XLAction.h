@@ -136,6 +136,8 @@ public:
 	virtual void update(float time) override;
 
 protected:
+	using ActionInstant::init;
+
 	bool _isNeedCleanUp;
 };
 
@@ -147,6 +149,8 @@ public:
 	virtual void update(float time) override;
 
 protected:
+	using ActionInstant::init;
+
 	Vec2 _position;
 };
 
@@ -158,6 +162,8 @@ public:
 	virtual void update(float time) override;
 
 protected:
+	using ActionInstant::init;
+
 	Function<void()> _callback;
 };
 

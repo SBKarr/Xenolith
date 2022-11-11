@@ -57,7 +57,8 @@ class Layer : public Sprite {
 public:
 	virtual ~Layer() { }
 
-	virtual bool init(const Color4F & = Color4F::WHITE);
+	virtual bool init() override;
+	virtual bool init(const Color4F &);
 	virtual bool init(const SimpleGradient &);
 
 	virtual void onContentSizeDirty() override;
@@ -66,6 +67,8 @@ public:
 	virtual const SimpleGradient &getGradient() const;
 
 protected:
+	using Sprite::init;
+
 	virtual void updateVertexes() override;
 	virtual void updateVertexesColor() override;
 

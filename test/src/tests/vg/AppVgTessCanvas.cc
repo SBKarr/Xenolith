@@ -162,7 +162,7 @@ bool VgTessCanvas::init(Function<void()> &&cb) {
 	keys.set(toInt(InputKeyCode::S));
 	keys.set(toInt(InputKeyCode::D));
 
-	inputListener->addKeyRecognizer([this] (const GestureData &ev) {
+	inputListener->addKeyRecognizer([] (const GestureData &ev) {
 		std::cout << ev.event << " " << ev.input->data.key.keycode << " (" << ev.input->data.key.keysym << ")\n";
 
 		return true;

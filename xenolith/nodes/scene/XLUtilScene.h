@@ -33,8 +33,8 @@ public:
 
 	virtual ~UtilScene() { }
 
-	virtual bool init(Application *, RenderQueue::Builder &&);
-	virtual bool init(Application *, RenderQueue::Builder &&, Size2);
+	virtual bool init(Application *, RenderQueue::Builder &&) override;
+	virtual bool init(Application *, RenderQueue::Builder &&, Size2) override;
 
 	virtual void update(const UpdateTime &time) override;
 

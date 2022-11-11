@@ -1211,7 +1211,7 @@ Rc<FontController> FontLibrary::acquireController(FontController::Builder &&b) {
 	});
 
 	_loop->compileImage(builder->dynamicImage, [this, builder] (bool success) {
-		_loop->getApplication()->performOnMainThread([this, success, builder] {
+		_loop->getApplication()->performOnMainThread([success, builder] {
 			if (success) {
 				builder->onImageLoaded(move(builder->dynamicImage));
 			} else {
@@ -1233,10 +1233,10 @@ void FontLibrary::updateImage(const Rc<gl::DynamicImage> &image, Vector<Pair<Rc<
 	auto input = Rc<gl::RenderFontInput>::alloc();
 	input->image = image;
 	input->requests = move(data);
-	/*input->output = [] (const gl::ImageInfo &info, BytesView data) {
-		Bitmap bmp(data, info.extent.width, info.extent.height, Bitmap::PixelFormat::A8);
-		bmp.save(Bitmap::FileFormat::Png, toString(Time::now().toMicros(), ".png"));
-	};*/
+	input->output = [] (const gl::ImageInfo &info, BytesView data) {
+		Bitmap bmp(data, info.extent.width, info.extent.height, bitmap::PixelFormat::A8);
+		bmp.save(bitmap::FileFormat::Png, toString(Time::now().toMicros(), ".png"));
+	};
 
 	auto req = Rc<renderqueue::FrameRequest>::create(_queue);
 	if (dep) {

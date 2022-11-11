@@ -40,7 +40,7 @@ public:
 	Sprite();
 	virtual ~Sprite() { }
 
-	virtual bool init();
+	virtual bool init() override;
 	virtual bool init(StringView);
 	virtual bool init(Rc<Texture> &&);
 
@@ -98,6 +98,8 @@ public:
 	virtual gl::CommandFlags getCommandFlags() const { return _commandFlags; }
 
 protected:
+	using DynamicStateNode::init;
+
 	virtual void pushCommands(RenderFrameInfo &, NodeFlags flags);
 
 	virtual MaterialInfo getMaterialInfo() const;

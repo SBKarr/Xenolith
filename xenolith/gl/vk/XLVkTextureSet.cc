@@ -175,7 +175,7 @@ void TextureSetLayout::initDefault(Device &dev, Loop &loop, Function<void(bool)>
 				return true;
 			}
 			return false;
-		}, [this, task] (const thread::Task &, bool success) mutable {
+		}, [task] (const thread::Task &, bool success) mutable {
 			if (task->queue) {
 				task->device->releaseQueue(move(task->queue));
 			}

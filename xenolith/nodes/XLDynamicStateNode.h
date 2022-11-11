@@ -49,7 +49,9 @@ public:
 	virtual Padding getScissorOutline() const { return _scissorOutline; }
 
 protected:
-	virtual gl::DrawStateValues updateState(const gl::DrawStateValues &) const;
+	using Node::init;
+
+	virtual gl::DrawStateValues updateDynamicState(const gl::DrawStateValues &) const;
 
 	StateApplyMode _applyMode = ApplyForAll;
 

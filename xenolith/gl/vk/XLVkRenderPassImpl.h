@@ -43,6 +43,8 @@ public:
 		bool cleanup(Device &dev);
 	};
 
+	virtual ~RenderPassImpl() { }
+
 	virtual bool init(Device &dev, PassData &);
 
 	VkRenderPass getRenderPass(bool alt = false) const;
@@ -58,6 +60,8 @@ public:
 	virtual void perform(const QueuePassHandle &, VkCommandBuffer buf, const Callback<void()> &);
 
 protected:
+	using gl::RenderPass::init;
+
 	bool initGraphicsPass(Device &dev, PassData &);
 	bool initComputePass(Device &dev, PassData &);
 	bool initTransferPass(Device &dev, PassData &);

@@ -39,6 +39,8 @@ public:
 	void setString(StringView);
 
 protected:
+	using Layer::init;
+
 	Label *_label = nullptr;
 };
 
@@ -46,11 +48,13 @@ class VgIconList : public LayoutTest {
 public:
 	virtual ~VgIconList() { }
 
-	virtual bool init();
+	virtual bool init() override;
 
 	virtual void onContentSizeDirty() override;
 
 protected:
+	using LayoutTest::init;
+
 	bool rebuildScroll(ScrollController *);
 	void updatePopupLocation(const Vec2 &);
 

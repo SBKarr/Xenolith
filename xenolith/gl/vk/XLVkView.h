@@ -80,6 +80,8 @@ public:
 	virtual void mapWindow();
 
 protected:
+	using gl::View::init;
+
 	virtual bool pollInput(bool frameReady);
 
 	virtual gl::SurfaceInfo getSurfaceOptions() const;

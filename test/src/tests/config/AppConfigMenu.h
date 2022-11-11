@@ -38,12 +38,14 @@ public:
 
 	virtual ~ConfigMenu() { }
 
-	bool init();
+	virtual bool init() override;
 
 	virtual void onEnter(Scene *) override;
 	virtual void onContentSizeDirty() override;
 
 protected:
+	using LayoutTest::init;
+
 	void makeScrollList(ScrollController *c);
 
 	void updateAppData(AppDelegate *);

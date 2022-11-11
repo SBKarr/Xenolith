@@ -45,6 +45,8 @@ public:
 	Rc<FrameRequest> makeRequest(Rc<RenderQueueInput> &&);
 
 protected:
+	using renderqueue::Queue::init;
+
 	RenderQueueAttachment *_attachment;
 };
 

@@ -294,9 +294,6 @@ struct InputEventData {
 	bool operator==(const uint32_t &i) const { return id == i; }
 	bool operator!=(const uint32_t &i) const { return id != i; }
 
-	friend bool operator==(const InputEventData &, const InputEventData &) = default;
-	friend bool operator!=(const InputEventData &, const InputEventData &) = default;
-
 	bool getValue() const { return modifiers == InputModifier::ValueTrue; }
 
 	bool hasLocation() const {
@@ -343,7 +340,33 @@ struct InputEventData {
 	}
 
 #if __cpp_impl_three_way_comparison >= 201711
-	friend auto operator<=>(const InputEventData &, const InputEventData &) = default;
+	std::partial_ordering operator<=>(const InputEventData &r) {
+		if (id < r.id) {
+			return std::partial_ordering::less;
+		} else if (id > r.id) {
+			return std::partial_ordering::greater;
+		}
+
+		if (toInt(event) < toInt(r.event)) {
+			return std::partial_ordering::less;
+		} else if (toInt(event) > toInt(r.event)) {
+			return std::partial_ordering::greater;
+		}
+
+		if (toInt(button) < toInt(r.button)) {
+			return std::partial_ordering::less;
+		} else if (toInt(button) > toInt(r.button)) {
+			return std::partial_ordering::greater;
+		}
+
+		if (toInt(modifiers) < toInt(r.modifiers)) {
+			return std::partial_ordering::less;
+		} else if (toInt(modifiers) > toInt(r.modifiers)) {
+			return std::partial_ordering::greater;
+		}
+
+		return std::partial_ordering::equivalent;
+	}
 #endif
 };
 

@@ -44,7 +44,7 @@ public:
 	virtual bool init(Size2, StringView);
 	virtual bool init(Size2, VectorPath &&);
 	virtual bool init(Size2);
-	virtual bool init(StringView);
+	virtual bool init(StringView) override;
 	virtual bool init(BytesView);
 	virtual bool init(FilePath);
 
@@ -73,13 +73,15 @@ public:
 	virtual uint32_t getVertexesCount() const;
 
 protected:
+	using Sprite::init;
+
 	virtual void pushCommands(RenderFrameInfo &, NodeFlags flags) override;
 
 	virtual void initVertexes() override;
 	virtual void updateVertexes() override;
 	virtual void updateVertexesColor() override;
 
-	virtual RenderingLevel getRealRenderingLevel() const;
+	virtual RenderingLevel getRealRenderingLevel() const override;
 
 	bool _async = false;
 	bool _imageIsSolid = false;

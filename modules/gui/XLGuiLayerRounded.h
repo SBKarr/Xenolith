@@ -42,6 +42,8 @@ public:
 	virtual const Color4B &getPathColor() const;
 
 protected:
+	using VectorSprite::init;
+
 	Color4B _pathColor = Color::White;
 	float _borderRadius = 0.0f;
 	float _realBorderRadius = 0.0f;

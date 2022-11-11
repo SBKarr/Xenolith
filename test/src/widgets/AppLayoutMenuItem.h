@@ -36,6 +36,8 @@ public:
 	virtual void onContentSizeDirty() override;
 
 protected:
+	using Layer::init;
+
 	void handleMouseEnter();
 	void handleMouseLeave();
 	bool handlePress();

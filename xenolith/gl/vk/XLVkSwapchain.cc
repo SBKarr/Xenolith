@@ -122,7 +122,7 @@ bool SwapchainHandle::init(Device &dev, const gl::SwapchainConfig &cfg, gl::Imag
 			auto image = Rc<Image>::create(dev, it, swapchainImageInfo, _images.size());
 
 			Map<gl::ImageViewInfo, Rc<ImageView>> views;
-			views.emplace(swapchainImageViewInfo, Rc<ImageView>::create(dev, image.get(), swapchainImageViewInfo)).first;
+			views.emplace(swapchainImageViewInfo, Rc<ImageView>::create(dev, image.get(), swapchainImageViewInfo));
 
 			_images.emplace_back(SwapchainImageData{move(image), move(views)});
 		}

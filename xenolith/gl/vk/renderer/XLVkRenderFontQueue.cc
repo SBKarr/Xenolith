@@ -78,6 +78,8 @@ public:
 	}
 
 protected:
+	using QueuePass::init;
+
 	virtual void prepare(gl::Device &) override;
 
 	const RenderFontAttachment *_fontAttachment;
@@ -325,7 +327,7 @@ void RenderFontAttachmentHandle::writeAtlasData(FrameHandle &handle) {
 }
 
 uint32_t RenderFontAttachmentHandle::nextBufferOffset(size_t blockSize) {
-	auto alignedSize = math::align(blockSize, _optimalTextureAlignment);
+	auto alignedSize = math::align(uint64_t(blockSize), _optimalTextureAlignment);
 	return _bufferOffset.fetch_add(alignedSize);
 }
 

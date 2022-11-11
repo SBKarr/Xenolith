@@ -61,6 +61,8 @@ public:
 	}
 
 protected:
+	using QueuePass::init;
+
 	virtual void prepare(gl::Device &) override;
 
 	const MaterialCompilationAttachment *_materialAttachment = nullptr;
