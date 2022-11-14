@@ -20,37 +20,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **/
 
-#include "XLPlatform.h"
+#include "XLDefine.h"
 
 #if MACOS
 
-namespace stappler::xenolith::platform::interaction {
-	bool _goToUrl(const StringView &url, bool external) {
-		log::format("Interaction", "GoTo url: %s", url.data());
-		::system(toString("xdg-open ", url).data());
-		return true;
-	}
-	void _makePhoneCall(const StringView &str) {
-		log::format("Interaction", "phone: %s", str.data());
-		::system(toString("xdg-open ", str).data());
-	}
-	void _mailTo(const StringView &address) {
-		log::format("Interaction", "MailTo: %s", address.data());
-		::system(toString("xdg-open ", address).data());
-	}
-	void _backKey() { }
-	void _notification(const StringView &title, const StringView &text) {
+#import <Cocoa/Cocoa.h>
 
-	}
-	void _rateApplication() {
-		log::text("Interaction", "Rate app");
-	}
-
-	void _openFileDialog(const String &path, const Function<void(const String &)> &func) {
-		if (func) {
-			func("");
-		}
-	}
+@interface XLMacAppDelegate : NSObject <NSApplicationDelegate> {
+	stappler::xenolith::Value _arguments;
+	NSWindow *_window;
+	stappler::Rc<stappler::xenolith::Ref> _mainLoop;
 }
+
+- (instancetype _Nonnull) initWithArgc:(int)argc argv:(const char *_Nonnull [_Nonnull])argv;
+
+@end
+
+@interface XLMacAppMenu : NSMenu { }
+
+@end
 
 #endif

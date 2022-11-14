@@ -22,7 +22,7 @@ THE SOFTWARE.
 
 #include "XLPlatform.h"
 
-#if (MACOS)
+#if MACOS
 
 #include "XLApplication.h"
 #include "XLVkInstance.h"
@@ -307,14 +307,6 @@ Rc<gl::Instance> createInstance(Application *app) {
 	}
 
 	return vkInstance;
-}
-
-gl::ImageFormat getCommonFormat() {
-	return gl::ImageFormat::B8G8R8A8_UNORM;
-}
-
-Rc<gl::View> createView(gl::Loop &loop, gl::Device &dev, gl::ViewInfo &&info) {
-	return nullptr;
 }
 
 }

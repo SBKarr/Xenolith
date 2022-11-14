@@ -1,0 +1,387 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		26B25E46291F165700F59B06 /* XLMain.mm in Sources */ = {isa = PBXBuildFile; fileRef = 26B25E45291F165700F59B06 /* XLMain.mm */; };
+		26B25E4A292008EC00F59B06 /* SPCore.scu.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 26B25E49292008EC00F59B06 /* SPCore.scu.cpp */; };
+		26B25E6329200BBD00F59B06 /* SPBitmap.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 26B25E6229200BBD00F59B06 /* SPBitmap.cpp */; };
+		26B25E672920158900F59B06 /* XLCore.scu.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 26B25E662920158900F59B06 /* XLCore.scu.cpp */; };
+		26B25E6929207B5600F59B06 /* XLMacAppDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = 26B25E6829207B5600F59B06 /* XLMacAppDelegate.mm */; };
+		26B25E6B29207E3000F59B06 /* XLMacViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = 26B25E6A29207E3000F59B06 /* XLMacViewController.mm */; };
+		26B25E6D292088C200F59B06 /* XLPlatform.scu.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 26B25E6C292088C200F59B06 /* XLPlatform.scu.cpp */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		26B25E3A291F15EF00F59B06 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		26B25E35291F0F1000F59B06 /* src */ = {isa = PBXFileReference; lastKnownFileType = folder; path = src; sourceTree = "<group>"; };
+		26B25E36291F0F2800F59B06 /* xenolith */ = {isa = PBXFileReference; lastKnownFileType = folder; name = xenolith; path = ../xenolith; sourceTree = "<group>"; };
+		26B25E37291F0F3900F59B06 /* libstappler */ = {isa = PBXFileReference; lastKnownFileType = folder; name = libstappler; path = ../libstappler; sourceTree = "<group>"; };
+		26B25E3C291F15EF00F59B06 /* index */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = index; sourceTree = BUILT_PRODUCTS_DIR; };
+		26B25E45291F165700F59B06 /* XLMain.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = XLMain.mm; path = ../xenolith/platform/mac_main/XLMain.mm; sourceTree = "<group>"; };
+		26B25E472920051900F59B06 /* macos.userconfig.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = macos.userconfig.xcconfig; sourceTree = SOURCE_ROOT; };
+		26B25E482920052D00F59B06 /* macos.projectconfig.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = macos.projectconfig.xcconfig; sourceTree = "<group>"; };
+		26B25E49292008EC00F59B06 /* SPCore.scu.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = SPCore.scu.cpp; path = ../libstappler/common/core/SPCore.scu.cpp; sourceTree = "<group>"; };
+		26B25E6229200BBD00F59B06 /* SPBitmap.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = SPBitmap.cpp; path = ../libstappler/modules/bitmap/SPBitmap.cpp; sourceTree = "<group>"; };
+		26B25E662920158900F59B06 /* XLCore.scu.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = XLCore.scu.cpp; path = ../xenolith/core/XLCore.scu.cpp; sourceTree = "<group>"; };
+		26B25E6829207B5600F59B06 /* XLMacAppDelegate.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = XLMacAppDelegate.mm; path = ../xenolith/platform/mac/XLMacAppDelegate.mm; sourceTree = "<group>"; };
+		26B25E6A29207E3000F59B06 /* XLMacViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = XLMacViewController.mm; path = ../xenolith/platform/mac/XLMacViewController.mm; sourceTree = "<group>"; };
+		26B25E6C292088C200F59B06 /* XLPlatform.scu.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = XLPlatform.scu.cpp; path = ../xenolith/platform/XLPlatform.scu.cpp; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		26B25E39291F15EF00F59B06 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		26B25E29291F024A00F59B06 = {
+			isa = PBXGroup;
+			children = (
+				26B25E6C292088C200F59B06 /* XLPlatform.scu.cpp */,
+				26B25E6A29207E3000F59B06 /* XLMacViewController.mm */,
+				26B25E6829207B5600F59B06 /* XLMacAppDelegate.mm */,
+				26B25E662920158900F59B06 /* XLCore.scu.cpp */,
+				26B25E6229200BBD00F59B06 /* SPBitmap.cpp */,
+				26B25E49292008EC00F59B06 /* SPCore.scu.cpp */,
+				26B25E482920052D00F59B06 /* macos.projectconfig.xcconfig */,
+				26B25E472920051900F59B06 /* macos.userconfig.xcconfig */,
+				26B25E45291F165700F59B06 /* XLMain.mm */,
+				26B25E37291F0F3900F59B06 /* libstappler */,
+				26B25E36291F0F2800F59B06 /* xenolith */,
+				26B25E35291F0F1000F59B06 /* src */,
+				26B25E3E291F15EF00F59B06 /* index */,
+				26B25E3D291F15EF00F59B06 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		26B25E3D291F15EF00F59B06 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				26B25E3C291F15EF00F59B06 /* index */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		26B25E3E291F15EF00F59B06 /* index */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = index;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXLegacyTarget section */
+		26B25E2E291F024A00F59B06 /* testapp */ = {
+			isa = PBXLegacyTarget;
+			buildArgumentsString = "$(ACTION)";
+			buildConfigurationList = 26B25E31291F024A00F59B06 /* Build configuration list for PBXLegacyTarget "testapp" */;
+			buildPhases = (
+			);
+			buildToolPath = /opt/homebrew/opt/make/libexec/gnubin/make;
+			buildWorkingDirectory = .;
+			dependencies = (
+			);
+			name = testapp;
+			passBuildSettingsInEnvironment = 1;
+			productName = testapp;
+		};
+/* End PBXLegacyTarget section */
+
+/* Begin PBXNativeTarget section */
+		26B25E3B291F15EF00F59B06 /* index */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 26B25E41291F15EF00F59B06 /* Build configuration list for PBXNativeTarget "index" */;
+			buildPhases = (
+				26B25E38291F15EF00F59B06 /* Sources */,
+				26B25E39291F15EF00F59B06 /* Frameworks */,
+				26B25E3A291F15EF00F59B06 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = index;
+			productName = index;
+			productReference = 26B25E3C291F15EF00F59B06 /* index */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		26B25E2A291F024A00F59B06 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 1410;
+				TargetAttributes = {
+					26B25E2E291F024A00F59B06 = {
+						CreatedOnToolsVersion = 14.1;
+					};
+					26B25E3B291F15EF00F59B06 = {
+						CreatedOnToolsVersion = 14.1;
+					};
+				};
+			};
+			buildConfigurationList = 26B25E2D291F024A00F59B06 /* Build configuration list for PBXProject "testapp.mac" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 26B25E29291F024A00F59B06;
+			productRefGroup = 26B25E3D291F15EF00F59B06 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				26B25E2E291F024A00F59B06 /* testapp */,
+				26B25E3B291F15EF00F59B06 /* index */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		26B25E38291F15EF00F59B06 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				26B25E6D292088C200F59B06 /* XLPlatform.scu.cpp in Sources */,
+				26B25E6B29207E3000F59B06 /* XLMacViewController.mm in Sources */,
+				26B25E6929207B5600F59B06 /* XLMacAppDelegate.mm in Sources */,
+				26B25E672920158900F59B06 /* XLCore.scu.cpp in Sources */,
+				26B25E46291F165700F59B06 /* XLMain.mm in Sources */,
+				26B25E4A292008EC00F59B06 /* SPCore.scu.cpp in Sources */,
+				26B25E6329200BBD00F59B06 /* SPBitmap.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		26B25E2F291F024A00F59B06 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 26B25E472920051900F59B06 /* macos.userconfig.xcconfig */;
+			buildSettings = {
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				LOCAL_OUTDIR = "$(TARGET_BUILD_DIR)";
+				LOCAL_TOOLKIT_OUTPUT = "$(TARGET_BUILD_DIR)";
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+			};
+			name = Debug;
+		};
+		26B25E30291F024A00F59B06 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 26B25E472920051900F59B06 /* macos.userconfig.xcconfig */;
+			buildSettings = {
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = "NDEBUG=1";
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				LOCAL_OUTDIR = "$(TARGET_BUILD_DIR)";
+				LOCAL_TOOLKIT_OUTPUT = "$(TARGET_BUILD_DIR)";
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+			};
+			name = Release;
+		};
+		26B25E32291F024A00F59B06 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 26B25E472920051900F59B06 /* macos.userconfig.xcconfig */;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		26B25E33291F024A00F59B06 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 26B25E472920051900F59B06 /* macos.userconfig.xcconfig */;
+			buildSettings = {
+			};
+			name = Release;
+		};
+		26B25E42291F15EF00F59B06 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 26B25E472920051900F59B06 /* macos.userconfig.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = BQJAZCVHES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(LIB_INCLUDES)",
+					"$(TOOLKIT_INCLUDES)",
+					"$(PROJECT_INCLUDES)",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				ONLY_ACTIVE_ARCH = YES;
+				OTHER_CFLAGS = (
+					"-DMACOS",
+					"$(MODULES_DEFS)",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		26B25E43291F15EF00F59B06 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 26B25E472920051900F59B06 /* macos.userconfig.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = BQJAZCVHES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(LIB_INCLUDES)",
+					"$(TOOLKIT_INCLUDES)",
+					"$(PROJECT_INCLUDES)",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				OTHER_CFLAGS = (
+					"-DMACOS",
+					"$(MODULES_DEFS)",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		26B25E2D291F024A00F59B06 /* Build configuration list for PBXProject "testapp.mac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				26B25E2F291F024A00F59B06 /* Debug */,
+				26B25E30291F024A00F59B06 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		26B25E31291F024A00F59B06 /* Build configuration list for PBXLegacyTarget "testapp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				26B25E32291F024A00F59B06 /* Debug */,
+				26B25E33291F024A00F59B06 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		26B25E41291F15EF00F59B06 /* Build configuration list for PBXNativeTarget "index" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				26B25E42291F15EF00F59B06 /* Debug */,
+				26B25E43291F15EF00F59B06 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 26B25E2A291F024A00F59B06 /* Project object */;
+}

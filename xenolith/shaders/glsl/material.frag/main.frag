@@ -8,8 +8,8 @@ struct Material {
 	uint padding0;
 };
 
-layout (constant_id = 0) const int SAMPLERS_ARRAY_SIZE = 1;
-layout (constant_id = 1) const int IMAGES_ARRAY_SIZE = 1024;
+layout (constant_id = 0) const int SAMPLERS_ARRAY_SIZE = 2;
+layout (constant_id = 1) const int IMAGES_ARRAY_SIZE = 128;
 
 layout (push_constant) uniform pcb {
 	uint materialIdx;

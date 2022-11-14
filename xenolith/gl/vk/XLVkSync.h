@@ -116,10 +116,6 @@ protected:
 	void scheduleReleaseReset(Loop &, bool s);
 	void doRelease(bool success);
 
-	virtual bool isRetainTrackerEnabled() const {
-		return true;
-	}
-
 	struct ReleaseHandle {
 		Function<void(bool)> callback;
 		Rc<Ref> ref;

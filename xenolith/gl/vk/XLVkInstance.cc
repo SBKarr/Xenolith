@@ -34,11 +34,11 @@ static VkResult s_createDebugUtilsMessengerEXT(VkInstance instance, const PFN_vk
 
 VKAPI_ATTR VkBool32 VKAPI_CALL s_debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 		VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
-	if (strcmp(pCallbackData->pMessageIdName, "VUID-VkSwapchainCreateInfoKHR-imageExtent-01274") == 0) {
+	if (pCallbackData->pMessageIdName && strcmp(pCallbackData->pMessageIdName, "VUID-VkSwapchainCreateInfoKHR-imageExtent-01274") == 0) {
 		// this is normal for multithreaded engine
 		messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
 	}
-	if (strcmp(pCallbackData->pMessageIdName, "Loader Message") == 0) {
+	if (pCallbackData->pMessageIdName && strcmp(pCallbackData->pMessageIdName, "Loader Message") == 0) {
 		//if (messageSeverity < XL_VK_MIN_LOADER_MESSAGE_SEVERITY) {
 		//	return VK_FALSE;
 		//}
@@ -66,13 +66,21 @@ VKAPI_ATTR VkBool32 VKAPI_CALL s_debugCallback(VkDebugUtilsMessageSeverityFlagBi
 			if (StringView(pCallbackData->pMessage).starts_with("Device Extension: ")) {
 				return VK_FALSE;
 			}
-			log::vtext("Vk-Validation-Verbose", "[", pCallbackData->pMessageIdName, "] ", pCallbackData->pMessage);
+			log::vtext("Vk-Validation-Verbose", "[",
+				pCallbackData->pMessageIdName ? pCallbackData->pMessageIdName : "(null)",
+				"] ", pCallbackData->pMessage);
 		} else if (messageSeverity <= VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
-			log::vtext("Vk-Validation-Info", "[", pCallbackData->pMessageIdName, "] ", pCallbackData->pMessage);
+			log::vtext("Vk-Validation-Info", "[",
+				pCallbackData->pMessageIdName ? pCallbackData->pMessageIdName : "(null)",
+				"] ", pCallbackData->pMessage);
 		} else if (messageSeverity <= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-			log::vtext("Vk-Validation-Warning", "[", pCallbackData->pMessageIdName, "] ", pCallbackData->pMessage);
+			log::vtext("Vk-Validation-Warning", "[",
+				pCallbackData->pMessageIdName ? pCallbackData->pMessageIdName : "(null)",
+				"] ", pCallbackData->pMessage);
 		} else if (messageSeverity <= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-			log::vtext("Vk-Validation-Error", "[", pCallbackData->pMessageIdName, "] ", pCallbackData->pMessage);
+			log::vtext("Vk-Validation-Error", "[",
+				pCallbackData->pMessageIdName ? pCallbackData->pMessageIdName : "(null)",
+				"] ", pCallbackData->pMessage);
 		}
 		return VK_FALSE;
 	}

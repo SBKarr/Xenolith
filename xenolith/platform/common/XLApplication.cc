@@ -88,9 +88,6 @@ Application::Application() : _appLog(&log::__xenolith_log) {
 
 	memory::pool::initialize();
 
-	_rootPool = memory::pool::create(memory::pool::acquire());
-	_updatePool = memory::pool::create(_rootPool);
-
 	_clockStart = platform::device::_clock(platform::device::Monotonic);
 
 	_userAgent = platform::device::_userAgent();
@@ -104,26 +101,9 @@ Application::Application() : _appLog(&log::__xenolith_log) {
 	});
 
 	s_application = this;
-
-#if MODULE_XNOLITH_STORAGE
-	db::setStorageRoot(&_storageRoot);
-
-	_networkController = Rc<network::Controller>::alloc(this, "Root");
-
-	auto libpath = filesystem::writablePath<Interface>("library");
-	filesystem::mkdir(libpath);
-
-	_assetLibrary = Rc<storage::AssetLibrary>::create(this, Value({
-		pair("driver", data::Value("sqlite")),
-		pair("dbname", data::Value(toString(libpath, "/assets.v2.db"))),
-		pair("serverName", data::Value("AssetStorage"))
-	}));
-#endif
 }
 
 Application::~Application() {
-	memory::pool::destroy(_updatePool);
-	memory::pool::destroy(_rootPool);
 	memory::pool::terminate();
 }
 
@@ -174,6 +154,7 @@ void Application::onMemoryWarning() {
 }
 
 int Application::run(Value &&data) {
+	_updatePool = memory::pool::create(memory::pool::acquire());
 	memory::pool::push(_updatePool);
 
 #if MODULE_XENOLITH_STORAGE
@@ -229,6 +210,21 @@ int Application::run(Value &&data) {
 	}
 
 	// all init parallel with gl-loop init goes here
+
+#if MODULE_XNOLITH_STORAGE
+	db::setStorageRoot(&_storageRoot);
+
+	_networkController = Rc<network::Controller>::alloc(this, "Root");
+
+	auto libpath = filesystem::writablePath<Interface>("library");
+	filesystem::mkdir(libpath);
+
+	_assetLibrary = Rc<storage::AssetLibrary>::create(this, Value({
+		pair("driver", data::Value("sqlite")),
+		pair("dbname", data::Value(toString(libpath, "/assets.v2.db"))),
+		pair("serverName", data::Value("AssetStorage"))
+	}));
+#endif
 
 #if MODULE_XENOLITH_STORAGE
 	_storageServer = Rc<storage::Server>::create(this, _dbParams, [&] (storage::Server::Builder &builder) {
@@ -308,6 +304,8 @@ int Application::run(Value &&data) {
 	}
 
 	memory::pool::pop();
+	memory::pool::destroy(_updatePool);
+	_updatePool = nullptr;
     return ret ? 0 : -1;
 }
 

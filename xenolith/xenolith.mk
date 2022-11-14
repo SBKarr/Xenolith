@@ -79,7 +79,8 @@ XENOLITH_INCLUDES_OBJS += \
 	thirdparty
 
 ifdef VULKAN_SDK_PREFIX
-XENOLITH_INCLUDES_OBJS += $(VULKAN_SDK_PREFIX)/include
+# не добавляем в INCLUDES чтобы динамический путь не остался в экспорте
+XENOLITH_FLAGS += -I$(VULKAN_SDK_PREFIX)/include
 endif
 
 # shaders
@@ -90,7 +91,6 @@ XENOLITH_SHADERS_COMPILED := $(subst /glsl/,/compiled/,$(XENOLITH_SHADERS))
 XENOLITH_SHADERS_LINKED := $(subst /glsl/,/linked/,$(wildcard $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/*))
 XENOLITH_SHADERS_EMBEDDED := $(subst /linked/,/embedded/,$(XENOLITH_SHADERS_LINKED))
 
-XENOLITH_FLAGS :=
 
 # cleanable output
 TOOLKIT_CLEARABLE_OUTPUT := $(XENOLITH_OUTPUT_DIR) $(XENOLITH_OUTPUT_STATIC) $(XENOLITH_SHADERS_COMPILED)
@@ -102,9 +102,13 @@ TOOLKIT_CLEARABLE_OUTPUT := $(XENOLITH_OUTPUT_DIR) $(XENOLITH_OUTPUT_STATIC) $(X
 # MacOS
 ifeq ($(UNAME),Darwin)
 
+XENOLITH_LDFLAGS += -framework Cocoa -framework Metal -framework Quartz
+
 ifndef LOCAL_MAIN
 XENOLITH_SRCS_DIRS += $(XENOLITH_MAKEFILE_DIR)/platform/mac_main
 endif
+
+XENOLITH_SRCS_DIRS += $(XENOLITH_MAKEFILE_DIR)/platform/mac
 
 VULKAN_LOADER_PATH = $(realpath $(VULKAN_SDK_PREFIX)/lib/libvulkan.1.dylib)
 VULKAN_MOLTENVK_PATH = $(realpath $(VULKAN_SDK_PREFIX)/../MoltenVK/dylib/macOS/libMoltenVK.dylib)

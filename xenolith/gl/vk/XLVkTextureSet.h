@@ -45,6 +45,7 @@ public:
 	bool compile(Device &dev, const Vector<VkSampler> &);
 
 	const uint32_t &getImageCount() const { return _imageCount; }
+	const uint32_t &getSamplersCount() const { return _samplersCount; }
 	VkDescriptorSetLayout getLayout() const { return _layout; }
 	const Rc<ImageView> &getEmptyImageView() const { return _emptyImageView; }
 	const Rc<ImageView> &getSolidImageView() const { return _solidImageView; }
@@ -71,6 +72,7 @@ protected:
 
 	bool _partiallyBound = false;
 	uint32_t _imageCount = 0;
+	uint32_t _samplersCount = 0;
 	VkDescriptorSetLayout _layout = VK_NULL_HANDLE;
 
 	Rc<Image> _emptyImage;

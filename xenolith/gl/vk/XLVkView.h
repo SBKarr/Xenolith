@@ -79,6 +79,8 @@ public:
 
 	virtual void mapWindow();
 
+	vk::Device *getDevice() const { return _device; }
+
 protected:
 	using gl::View::init;
 

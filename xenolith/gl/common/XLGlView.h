@@ -143,6 +143,7 @@ protected:
 	uint64_t _gen = 1;
 	gl::SwapchainConfig _config;
 
+	bool _threadStarted = false;
 	std::thread _thread;
 	std::thread::id _threadId;
 	std::atomic_flag _shouldQuit;

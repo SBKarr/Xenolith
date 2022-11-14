@@ -30,6 +30,8 @@ THE SOFTWARE.
 #include "cxxabi.h"
 #endif
 
+#include "XLMacAppDelegate.h"
+
 namespace stappler::xenolith {
 
 #if MODULE_COMMON_BACKTRACE
@@ -75,13 +77,9 @@ static void s_sigAction(int sig, siginfo_t *info, void *ucontext) {
 
 #endif
 
-int parseOptionSwitch(Value &ret, char c, const char *str) {
-	return 1;
-}
+static XLMacAppDelegate *delegate = nil;
 
 SP_EXTERN_C int _spMain(argc, argv) {
-	memory::pool::initialize();
-
 #if MODULE_COMMON_BACKTRACE
 	if (!s_backtraceState) {
 		s_backtraceState = backtrace_create_state(nullptr, 1, debug_backtrace_error, nullptr);
@@ -96,12 +94,17 @@ SP_EXTERN_C int _spMain(argc, argv) {
     ::sigaction(SIGSEGV, &s_sharedSigAction, &s_sharedSigOldAction);
 #endif
 
-	auto args = data::parseCommandLineOptions<Interface>(argc, argv, &parseOptionSwitch, &Application::parseOptionString);
+	delegate = [[XLMacAppDelegate alloc] initWithArgc: argc argv:argv];
 
-    // create the application instance
-    auto ret = Application::getInstance()->run(move(args));
-	memory::pool::terminate();
-	return ret;
+	NSApplication.sharedApplication.activationPolicy = NSApplicationActivationPolicyRegular;
+	NSApplication.sharedApplication.mainMenu = [[XLMacAppMenu alloc] init];
+	NSApplication.sharedApplication.presentationOptions = NSApplicationPresentationDefault;
+	NSApplication.sharedApplication.delegate = delegate;
+	
+	NSApplicationMain(argc, argv);
+
+	delegate = nil;
+	return 0;
 }
 
 }

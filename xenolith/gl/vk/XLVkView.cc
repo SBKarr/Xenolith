@@ -148,6 +148,10 @@ void View::threadInit() {
 
 	auto cfg = _selectConfig(info);
 
+	if (info.surfaceDensity != 1.0f) {
+		_density = _loop->getApplication()->getData().density * info.surfaceDensity;
+	}
+
 	createSwapchain(move(cfg), cfg.presentMode);
 
 	if (_initImage) {
@@ -254,6 +258,7 @@ void View::update() {
 }
 
 void View::run() {
+	_threadStarted = true;
 	_thread = std::thread(View::workerThread, this, nullptr);
 }
 
@@ -264,7 +269,7 @@ void View::runWithQueue(const Rc<RenderQueue> &queue) {
 			_initImage = move(attachment.image);
 		}
 		run();
-		// captureImage(toString(Time::now(), ".png"), attachment.image->getImage(), attachment.image->getLayout());
+		//captureImage(toString(Time::now(), ".png"), attachment.image->getImage(), attachment.image->getLayout());
 		return true;
 	});
 
@@ -282,7 +287,9 @@ void View::onRemoved() {
 	_running = false;
 	_callbacks.clear();
 	lock.unlock();
-	_thread.join();
+	if (_threadStarted) {
+		_thread.join();
+	}
 }
 
 void View::deprecateSwapchain() {

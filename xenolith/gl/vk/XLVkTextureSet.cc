@@ -73,6 +73,8 @@ bool TextureSetLayout::compile(Device &dev, const Vector<VkSampler> &samplers) {
 		},
 	};
 
+	_samplersCount = uint32_t(samplers.size());
+
 	VkDescriptorSetLayoutCreateInfo layoutInfo { };
 	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 	layoutInfo.pNext = nullptr;
@@ -320,7 +322,7 @@ void TextureSetLayout::readImage(Device &dev, Loop &loop, const Rc<Image> &image
 	task->loop->performOnGlThread([this, task] {
 		task->device->acquireQueue(getQueueOperations(task->image->getInfo().type), *task->loop, [this, task] (Loop &loop, const Rc<DeviceQueue> &queue) {
 			task->fence = loop.acquireFence(0);
-			task->pool = task->device->acquireCommandPool(QueueOperations::Transfer);
+			task->pool = task->device->acquireCommandPool(getQueueOperations(task->image->getInfo().type));
 			task->queue = move(queue);
 			task->mempool = Rc<DeviceMemoryPool>::create(task->device->getAllocator(), true);
 
@@ -569,16 +571,23 @@ void TextureSetLayout::writeImageRead(Device &dev, VkCommandBuffer buf, uint32_t
 bool TextureSet::init(Device &dev, const TextureSetLayout &layout) {
 	_count = layout.getImageCount();
 
-	VkDescriptorPoolSize poolSize;
-	poolSize.type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-	poolSize.descriptorCount = _count;
+	VkDescriptorPoolSize poolSizes[] = {
+		VkDescriptorPoolSize{
+			VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+			_count
+		},
+		VkDescriptorPoolSize{
+			VK_DESCRIPTOR_TYPE_SAMPLER,
+			layout.getSamplersCount()
+		},
+	};
 
 	VkDescriptorPoolCreateInfo poolInfo{};
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.pNext = nullptr;
 	poolInfo.flags = 0;
-	poolInfo.poolSizeCount = 1;
-	poolInfo.pPoolSizes = &poolSize;
+	poolInfo.poolSizeCount = sizeof(poolSizes) / sizeof(VkDescriptorPoolSize);
+	poolInfo.pPoolSizes = poolSizes;
 	poolInfo.maxSets = 1;
 
 	if (dev.getTable()->vkCreateDescriptorPool(dev.getDevice(), &poolInfo, nullptr, &_pool) != VK_SUCCESS) {
@@ -594,7 +603,8 @@ bool TextureSet::init(Device &dev, const TextureSetLayout &layout) {
 	allocInfo.descriptorSetCount = 1;
 	allocInfo.pSetLayouts = &descriptorSetLayout;
 
-	if (dev.getTable()->vkAllocateDescriptorSets(dev.getDevice(), &allocInfo, &_set) != VK_SUCCESS) {
+	auto err = dev.getTable()->vkAllocateDescriptorSets(dev.getDevice(), &allocInfo, &_set);
+	if (err != VK_SUCCESS) {
 		dev.getTable()->vkDestroyDescriptorPool(dev.getDevice(), _pool, nullptr);
 		return false;
 	}

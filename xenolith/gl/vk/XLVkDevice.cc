@@ -512,9 +512,11 @@ void Device::releaseCommandPoolUnsafe(Rc<CommandPool> &&pool) {
 }
 
 static BytesView Device_emplaceConstant(Bytes &data, BytesView constant) {
-	data.resize(data.size() + constant.size());
-	memcpy(data.data() + data.size() - constant.size(), constant.data(), constant.size());
-	return BytesView(data.data() + data.size() - constant.size(), constant.size());
+	auto originalSize = data.size();
+	auto constantSize = constant.size();
+	data.resize(originalSize + constantSize);
+	memcpy(data.data() + originalSize, constant.data(), constantSize);
+	return BytesView(data.data() + originalSize, constantSize);
 }
 
 BytesView Device::emplaceConstant(renderqueue::PredefinedConstant c, Bytes &data) const {
@@ -660,13 +662,25 @@ bool Device::setup(const Instance *instance, VkPhysicalDevice p, const Propertie
 
 	VkDeviceCreateInfo deviceCreateInfo = { };
 	deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	if (prop.device10.properties.apiVersion >= VK_VERSION_1_2) {
-		features.device12.pNext = nullptr;
+	void *next = nullptr;
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+	if ((features.flags & ExtensionFlags::Portability) != ExtensionFlags::None) {
+		features.devicePortability.pNext = next;
+		next = &features.devicePortability;
+	}
+#endif
+	if (prop.device10.properties.apiVersion >= VK_API_VERSION_1_3) {
+		features.device13.pNext = next;
+		features.device12.pNext = &features.device13;
+		features.device11.pNext = &features.device12;
+		features.device10.pNext = &features.device11;
+		deviceCreateInfo.pNext = &features.device11;
+	} else if (prop.device10.properties.apiVersion >= VK_API_VERSION_1_2) {
+		features.device12.pNext = next;
 		features.device11.pNext = &features.device12;
 		features.device10.pNext = &features.device11;
 		deviceCreateInfo.pNext = &features.device11;
 	} else {
-		void *next = nullptr;
 		if ((features.flags & ExtensionFlags::Storage16Bit) != ExtensionFlags::None) {
 			features.device16bitStorage.pNext = next;
 			next = &features.device16bitStorage;

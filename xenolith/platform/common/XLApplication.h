@@ -249,7 +249,6 @@ protected:
 	Rc<font::FontController> _fontController;
 	log::CustomLog _appLog;
 
-	memory::pool_t *_rootPool = nullptr;
 	memory::pool_t *_updatePool = nullptr;
 };
 

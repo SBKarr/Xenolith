@@ -22,7 +22,7 @@ THE SOFTWARE.
 
 #include "XLPlatform.h"
 
-#if (MACOS)
+#if MACOS
 
 namespace stappler::xenolith::platform::network {
 

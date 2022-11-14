@@ -35,7 +35,7 @@ class Surface : public Ref {
 public:
 	virtual ~Surface();
 
-	bool init(Instance *instance, VkSurfaceKHR surface, Ref *);
+	bool init(Instance *instance, VkSurfaceKHR surface, Ref * = nullptr);
 
 	VkSurfaceKHR getSurface() const { return _surface; }
 

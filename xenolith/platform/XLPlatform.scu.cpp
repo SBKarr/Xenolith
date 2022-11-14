@@ -41,6 +41,7 @@ THE SOFTWARE.
 #include "mac/XLInteraction.cc"
 #include "mac/XLNetwork.cc"
 #include "mac/XLVulkan.cc"
+#include "mac/XLVkViewImpl.cc"
 /*#include "win32/XLDevice.cc"
 #include "win32/XLInteraction.cc"
 #include "win32/XLNetwork.cc"

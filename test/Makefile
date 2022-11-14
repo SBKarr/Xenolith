@@ -20,7 +20,7 @@
 
 STAPPLER_ROOT ?= ../libstappler
 
-LOCAL_OUTDIR := stappler-build
+LOCAL_OUTDIR ?= stappler-build
 LOCAL_EXECUTABLE := testapp
 
 LOCAL_TOOLKIT := $(abspath ../xenolith/xenolith.mk)

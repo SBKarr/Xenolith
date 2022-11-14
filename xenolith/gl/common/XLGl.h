@@ -405,6 +405,7 @@ struct SurfaceInfo {
 	ImageUsage supportedUsageFlags;
 	Vector<Pair<ImageFormat, ColorSpace>> formats;
 	Vector<PresentMode> presentModes;
+	float surfaceDensity = 1.0f;
 
 	bool isSupported(const SwapchainConfig &) const;
 

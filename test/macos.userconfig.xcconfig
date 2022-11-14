@@ -1,0 +1,3 @@
+#include "macos.projectconfig.xcconfig"
+MAKE = /opt/homebrew/opt/make/libexec/gnubin/make
+VULKAN_SDK_PREFIX = /Users/romankatuntsev/VulkanSDK/1.3.231.1/macOS
