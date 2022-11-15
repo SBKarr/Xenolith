@@ -182,7 +182,7 @@ void ViewImpl_wakeup(const Rc<ViewImpl> &view) {
 	auto refId = v->retain();
 
 	dispatch_async(dispatch_get_main_queue(), ^{
-		v->update();
+		v->update(false);
 		v->release(refId);
 	});
 }

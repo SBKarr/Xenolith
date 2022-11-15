@@ -29,6 +29,7 @@ THE SOFTWARE.
 #import <Cocoa/Cocoa.h>
 
 @interface XLMacViewController : NSViewController <NSWindowDelegate> {
+	CVDisplayLinkRef _displayLink;
 	stappler::Rc<stappler::xenolith::platform::graphic::ViewImpl> _engineView;
 }
 

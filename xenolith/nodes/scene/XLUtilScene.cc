@@ -138,8 +138,8 @@ bool UtilScene::init(Application *app, RenderQueue::Builder &&builder) {
 	return true;
 }
 
-bool UtilScene::init(Application *app, RenderQueue::Builder &&builder, Size2 size) {
-	if (!Scene::init(app, move(builder), size)) {
+bool UtilScene::init(Application *app, RenderQueue::Builder &&builder, Size2 size, float density) {
+	if (!Scene::init(app, move(builder), size, density)) {
 		return false;
 	}
 

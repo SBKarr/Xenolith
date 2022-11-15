@@ -142,24 +142,16 @@ void Label::updateLabel() {
 }
 
 void Label::onTransformDirty(const Mat4 &parent) {
-	Vec3 scale;
-	parent.decompose(&scale, nullptr, nullptr);
-
-	if (_scale.x != 1.f) { scale.x *= _scale.x; }
-	if (_scale.y != 1.f) { scale.y *= _scale.y; }
-	if (_scale.z != 1.f) { scale.z *= _scale.z; }
-
-	auto density = std::min(std::min(scale.x, scale.y), scale.z);
-	if (density != _density) {
-		_density = density;
-		_labelDirty = true;
-	}
-
-	if (_labelDirty) {
-		updateLabel();
-	}
-
+	updateLabelScale(parent);
 	Sprite::onTransformDirty(parent);
+}
+
+void Label::onGlobalTransformDirty(const Mat4 &parent) {
+	if (!_transformDirty) {
+		updateLabelScale(parent);
+	}
+
+	Sprite::onGlobalTransformDirty(parent);
 }
 
 void Label::updateColor() {
@@ -351,6 +343,25 @@ NodeFlags Label::processParentFlags(RenderFrameInfo &info, NodeFlags parentFlags
 	}
 
 	return Sprite::processParentFlags(info, parentFlags);
+}
+
+void Label::updateLabelScale(const Mat4 &parent) {
+	Vec3 scale;
+	parent.decompose(&scale, nullptr, nullptr);
+
+	if (_scale.x != 1.f) { scale.x *= _scale.x; }
+	if (_scale.y != 1.f) { scale.y *= _scale.y; }
+	if (_scale.z != 1.f) { scale.z *= _scale.z; }
+
+	auto density = std::min(std::min(scale.x, scale.y), scale.z);
+	if (density != _density) {
+		_density = density;
+		_labelDirty = true;
+	}
+
+	if (_labelDirty) {
+		updateLabel();
+	}
 }
 
 void Label::setStandalone(bool value) {

@@ -51,7 +51,7 @@ bool Scene::init(Application *app, RenderQueue::Builder &&builder) {
 	return true;
 }
 
-bool Scene::init(Application *app, RenderQueue::Builder &&builder, Size2 size) {
+bool Scene::init(Application *app, RenderQueue::Builder &&builder, Size2 size, float density) {
 	if (!Node::init()) {
 		return false;
 	}
@@ -59,8 +59,8 @@ bool Scene::init(Application *app, RenderQueue::Builder &&builder, Size2 size) {
 	_application = app;
 	_queue = makeQueue(move(builder));
 
-	if (!isnan(app->getData().density)) {
-		setDensity(app->getData().density);
+	if (!isnan(density)) {
+		setDensity(density);
 	}
 
 	setContentSize(size / _density);
@@ -102,7 +102,7 @@ void Scene::onContentSizeDirty() {
 	setAnchorPoint(Anchor::Middle);
 	setPosition(Vec2((_contentSize * _density) / 2.0f));
 
-	log::vtext("Scene", "ContentSize: ", _contentSize);
+	log::vtext("Scene", "ContentSize: ", _contentSize, " density: ", _density);
 }
 
 void Scene::onPresented(Director *dir) {

@@ -693,7 +693,9 @@ void Node::onTransformDirty(const Mat4 &parentTransform) {
 	for (auto &it : _components) {
 		it->onTransformDirty(parentTransform);
 	}
+}
 
+void Node::onGlobalTransformDirty(const Mat4 &parentTransform) {
 	Vec3 scale;
 	parentTransform.decompose(&scale, nullptr, nullptr);
 
@@ -708,8 +710,6 @@ void Node::onTransformDirty(const Mat4 &parentTransform) {
 		}
 		_density = density;
 	}
-
-
 }
 
 void Node::onReorderChildDirty() {
@@ -1135,6 +1135,8 @@ NodeFlags Node::processParentFlags(RenderFrameInfo &info, NodeFlags parentFlags)
 
 	if ((flags & NodeFlags::DirtyMask) != NodeFlags::None || _transformDirty || _contentSizeDirty) {
 		_modelViewTransform = this->transform(info.modelTransformStack.back());
+
+		onGlobalTransformDirty(info.modelTransformStack.back());
 	}
 
 	if (_transformDirty) {

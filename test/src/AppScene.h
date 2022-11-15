@@ -34,7 +34,7 @@ class AppScene : public UtilScene {
 public:
 	virtual ~AppScene() { }
 
-	virtual bool init(Application *, Extent2 extent);
+	virtual bool init(Application *, Extent2 extent, float density);
 
 	virtual void onPresented(Director *) override;
 	virtual void onFinished(Director *) override;

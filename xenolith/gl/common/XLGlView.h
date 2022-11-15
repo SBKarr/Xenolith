@@ -52,7 +52,7 @@ public:
 	virtual void runWithQueue(const Rc<renderqueue::Queue> &) = 0;
 	virtual void end();
 
-	virtual void update();
+	virtual void update(bool displayLink);
 	virtual void close();
 
 	void performOnThread(Function<void()> &&func, Ref *target = nullptr, bool immediate = false);

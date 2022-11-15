@@ -250,6 +250,7 @@ public:
 
 	virtual void onContentSizeDirty();
 	virtual void onTransformDirty(const Mat4 &);
+	virtual void onGlobalTransformDirty(const Mat4 &);
 	virtual void onReorderChildDirty();
 
 	virtual void cleanup();

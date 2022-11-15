@@ -72,7 +72,7 @@ gl::SwapchainConfig AppDelegate::selectConfig(const gl::SurfaceInfo &info) {
 	std::unique_lock<Mutex> lock(_configMutex);
 	gl::SwapchainConfig ret;
 	ret.extent = info.currentExtent;
-	ret.imageCount = std::max(uint32_t(2), info.minImageCount);
+	ret.imageCount = std::max(uint32_t(3), info.minImageCount);
 
 	ret.presentMode = info.presentModes.front();
 	if (_preferredPresentMode != gl::PresentMode::Unsupported) {
@@ -122,7 +122,7 @@ gl::SwapchainConfig AppDelegate::selectConfig(const gl::SurfaceInfo &info) {
 }
 
 void AppDelegate::onViewCreated(const Rc<Director> &dir) {
-	auto scene = Rc<AppScene>::create(this, dir->getScreenExtent());
+	auto scene = Rc<AppScene>::create(this, dir->getScreenExtent(), dir->getDensity());
 	dir->runScene(move(scene));
 }
 

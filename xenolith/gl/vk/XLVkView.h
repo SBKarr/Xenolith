@@ -46,6 +46,12 @@ public:
 		// Wayland на nvidia странно использует vsync, что может снизить реальный FPS в два раза, если эта опция отключена
 		// В некоторых случаях может снизить плавность анимаций
 		bool flattenFrameRate = true;
+
+		// Использовать внешний сигнал вертикальной синхронизации (система должна поддерживать)
+		// В этом режиме готовые к презентации кадры ожидают сигнала, прежде, чем отправиться
+		// Также, по сигналу система запрашиваает новый буфер для отрисовки следующего кадра
+		// Если система не успела подготовить новый кадр - обновление пропускается
+		bool followDisplayLink = false;
 	};
 
 	virtual ~View();
@@ -55,7 +61,7 @@ public:
 	virtual void threadInit() override;
 	virtual void threadDispose() override;
 
-	virtual void update() override;
+	virtual void update(bool displayLink) override;
 
 	virtual void run() override;
 	virtual void runWithQueue(const Rc<RenderQueue> &) override;

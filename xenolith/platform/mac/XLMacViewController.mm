@@ -27,6 +27,15 @@ THE SOFTWARE.
 #import <QuartzCore/CAMetalLayer.h>
 
 #if MACOS
+static CVReturn DisplayLinkCallback(CVDisplayLinkRef displayLink,
+									const CVTimeStamp* now,
+									const CVTimeStamp* outputTime,
+									CVOptionFlags flagsIn,
+									CVOptionFlags* flagsOut,
+									void* target) {
+	((stappler::xenolith::platform::graphic::ViewImpl*)target)->handleDisplayLinkCallback();
+	return kCVReturnSuccess;
+}
 
 @implementation XLMacViewController
 
@@ -55,6 +64,9 @@ THE SOFTWARE.
 - (void)viewDidDisappear {
 	[super viewDidDisappear];
 	
+	CVDisplayLinkStop(_displayLink);
+	CVDisplayLinkRelease(_displayLink);
+
 	_engineView->threadDispose();
 	_engineView->setOsView(nullptr);
 	_engineView = nullptr;
@@ -68,6 +80,10 @@ THE SOFTWARE.
 	
 	_engineView->setOsView((__bridge void *)self);
 	_engineView->threadInit();
+
+	CVDisplayLinkCreateWithActiveCGDisplays(&_displayLink);
+	CVDisplayLinkSetOutputCallback(_displayLink, &DisplayLinkCallback, _engineView.get());
+	CVDisplayLinkStart(_displayLink);
 }
 
 @end

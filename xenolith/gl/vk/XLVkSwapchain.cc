@@ -316,8 +316,8 @@ VkResult SwapchainHandle::present(DeviceQueue &queue, const Rc<ImageStorage> &im
 	return result;
 }
 
-void SwapchainHandle::invalidateImage(const Rc<ImageStorage> &image) {
-	if (!((SwapchainImage *)image.get())->isPresented()) {
+void SwapchainHandle::invalidateImage(const ImageStorage *image) {
+	if (!((SwapchainImage *)image)->isPresented()) {
 		std::unique_lock<Mutex> lock(_resourceMutex);
 		-- _acquiredImages;
 	}
@@ -328,6 +328,7 @@ Rc<Semaphore> SwapchainHandle::acquireSemaphore() {
 	if (!_semaphores.empty()) {
 		auto sem = _semaphores.back();
 		_semaphores.pop_back();
+		return sem;
 	}
 	lock.unlock();
 

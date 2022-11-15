@@ -14,6 +14,9 @@
 		26B25E6929207B5600F59B06 /* XLMacAppDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = 26B25E6829207B5600F59B06 /* XLMacAppDelegate.mm */; };
 		26B25E6B29207E3000F59B06 /* XLMacViewController.mm in Sources */ = {isa = PBXBuildFile; fileRef = 26B25E6A29207E3000F59B06 /* XLMacViewController.mm */; };
 		26B25E6D292088C200F59B06 /* XLPlatform.scu.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 26B25E6C292088C200F59B06 /* XLPlatform.scu.cpp */; };
+		26B25E702922C79E00F59B06 /* XLVk.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 26B25E6E2922C79E00F59B06 /* XLVk.cpp */; };
+		26B25E712922C79E00F59B06 /* XLVkUtils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 26B25E6F2922C79E00F59B06 /* XLVkUtils.cpp */; };
+		26B25E732922D28700F59B06 /* XLNodes.scu.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 26B25E722922D28600F59B06 /* XLNodes.scu.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -42,6 +45,9 @@
 		26B25E6829207B5600F59B06 /* XLMacAppDelegate.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = XLMacAppDelegate.mm; path = ../xenolith/platform/mac/XLMacAppDelegate.mm; sourceTree = "<group>"; };
 		26B25E6A29207E3000F59B06 /* XLMacViewController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = XLMacViewController.mm; path = ../xenolith/platform/mac/XLMacViewController.mm; sourceTree = "<group>"; };
 		26B25E6C292088C200F59B06 /* XLPlatform.scu.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = XLPlatform.scu.cpp; path = ../xenolith/platform/XLPlatform.scu.cpp; sourceTree = "<group>"; };
+		26B25E6E2922C79E00F59B06 /* XLVk.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = XLVk.cpp; path = ../xenolith/gl/vk/XLVk.cpp; sourceTree = "<group>"; };
+		26B25E6F2922C79E00F59B06 /* XLVkUtils.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = XLVkUtils.cpp; path = ../xenolith/gl/vk/XLVkUtils.cpp; sourceTree = "<group>"; };
+		26B25E722922D28600F59B06 /* XLNodes.scu.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = XLNodes.scu.cpp; path = ../xenolith/nodes/XLNodes.scu.cpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -58,6 +64,9 @@
 		26B25E29291F024A00F59B06 = {
 			isa = PBXGroup;
 			children = (
+				26B25E722922D28600F59B06 /* XLNodes.scu.cpp */,
+				26B25E6E2922C79E00F59B06 /* XLVk.cpp */,
+				26B25E6F2922C79E00F59B06 /* XLVkUtils.cpp */,
 				26B25E6C292088C200F59B06 /* XLPlatform.scu.cpp */,
 				26B25E6A29207E3000F59B06 /* XLMacViewController.mm */,
 				26B25E6829207B5600F59B06 /* XLMacAppDelegate.mm */,
@@ -168,6 +177,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				26B25E732922D28700F59B06 /* XLNodes.scu.cpp in Sources */,
+				26B25E702922C79E00F59B06 /* XLVk.cpp in Sources */,
+				26B25E712922C79E00F59B06 /* XLVkUtils.cpp in Sources */,
 				26B25E6D292088C200F59B06 /* XLPlatform.scu.cpp in Sources */,
 				26B25E6B29207E3000F59B06 /* XLMacViewController.mm in Sources */,
 				26B25E6929207B5600F59B06 /* XLMacAppDelegate.mm in Sources */,

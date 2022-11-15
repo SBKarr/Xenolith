@@ -50,6 +50,7 @@ public:
 	virtual const DescriptionStyle &getStyle() const;
 
 	virtual void onTransformDirty(const Mat4 &) override;
+	virtual void onGlobalTransformDirty(const Mat4 &) override;
 
 	/** Standalone labels use its own textures and char-to-texture maps
 	 * so, they can be rendered without delays */
@@ -93,6 +94,8 @@ protected:
 	virtual bool checkVertexDirty() const override;
 
 	virtual NodeFlags processParentFlags(RenderFrameInfo &info, NodeFlags parentFlags) override;
+
+	void updateLabelScale(const Mat4 &parent);
 
 	EventListener *_listener = nullptr;
 	Time _quadRequestTime;

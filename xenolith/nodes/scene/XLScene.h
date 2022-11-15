@@ -42,7 +42,7 @@ public:
 	virtual ~Scene();
 
 	virtual bool init(Application *, RenderQueue::Builder &&);
-	virtual bool init(Application *, RenderQueue::Builder &&, Size2);
+	virtual bool init(Application *, RenderQueue::Builder &&, Size2, float density);
 
 	virtual void render(RenderFrameInfo &info);
 

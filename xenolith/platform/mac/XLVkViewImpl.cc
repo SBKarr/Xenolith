@@ -45,6 +45,8 @@ bool ViewImpl::init(gl::Loop &loop, gl::Device &dev, gl::ViewInfo &&info, float 
 	}
 
 	_screenExtent = Extent2(info.rect.width * layerDensity, info.rect.height * layerDensity);
+	_frameInterval = 0;
+	_options.followDisplayLink = true;
 
 	return true;
 }
@@ -70,7 +72,7 @@ void ViewImpl::threadInit() {
 
 	_surface = Rc<vk::Surface>::create(instance, targetSurface);
 
-	vk::View::threadDispose();
+	vk::View::threadInit();
 }
 
 void ViewImpl::threadDispose() {
@@ -79,6 +81,10 @@ void ViewImpl::threadDispose() {
 
 bool ViewImpl::worker() {
 	return false;
+}
+
+void ViewImpl::update(bool displayLink) {
+	View::update(!_displayLinkFlag.test_and_set());
 }
 
 void ViewImpl::wakeup() {
@@ -101,16 +107,21 @@ void ViewImpl::cancelTextInput() {
 
 }
 
-void ViewImpl::presentWithQueue(vk::DeviceQueue &, Rc<ImageStorage> &&) {
-
-}
-
 void ViewImpl::mapWindow() {
 
 }
 
+void ViewImpl::handleDisplayLinkCallback() {
+	if (!_followDisplayLink) {
+		return;
+	}
+
+	_displayLinkFlag.clear();
+	wakeup();
+}
+
 bool ViewImpl::pollInput(bool frameReady) {
-	return false;
+	return true; // we should return false when view should be closed
 }
 
 gl::SurfaceInfo ViewImpl::getSurfaceOptions() const {
@@ -128,7 +139,8 @@ gl::ImageFormat getCommonFormat() {
 }
 
 Rc<gl::View> createView(gl::Loop &loop, gl::Device &dev, gl::ViewInfo &&info) {
-	return Rc<ViewImpl>::create(loop, dev, move(info), ViewImpl_getScreenDensity());
+	auto screenDensity = ViewImpl_getScreenDensity();
+	return Rc<ViewImpl>::create(loop, dev, move(info), screenDensity);
 }
 
 }

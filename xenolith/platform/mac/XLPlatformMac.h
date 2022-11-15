@@ -50,6 +50,7 @@ public:
 	virtual void threadInit() override;
 	virtual void threadDispose() override;
 	virtual bool worker() override;
+	virtual void update(bool displayLink) override;
 
 	virtual void wakeup() override;
 
@@ -58,11 +59,6 @@ public:
 	virtual void runTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) override;
 	virtual void cancelTextInput() override;
 
-	virtual void presentWithQueue(vk::DeviceQueue &, Rc<ImageStorage> &&) override;
-
-	// minimal poll interval
-	virtual uint64_t getUpdateInterval() const override { return 1000; }
-
 	virtual void mapWindow() override;
 
 	void setOsView(void *v) { _osView = v; }
@@ -70,6 +66,8 @@ public:
 
 	StringView getTitle() const { return _name; }
 	URect getFrame() const { return _rect; }
+
+	void handleDisplayLinkCallback();
 
 protected:
 	using vk::View::init;
@@ -84,6 +82,8 @@ protected:
 	URect _rect;
 	String _name;
 	bool _inputEnabled = false;
+	bool _followDisplayLink = true;
+	std::atomic_flag _displayLinkFlag;
 };
 
 }

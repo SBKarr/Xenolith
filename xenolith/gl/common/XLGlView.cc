@@ -61,7 +61,7 @@ void View::end() {
 	}
 }
 
-void View::update() {
+void View::update(bool displayLink) {
 	Vector<Pair<Function<void()>, Rc<Ref>>> callback;
 
 	_mutex.lock();

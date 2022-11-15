@@ -77,7 +77,7 @@ public:
 	bool acquire(const Rc<SwapchainImage> &, const Rc<Fence> &fence, bool immediate);
 
 	VkResult present(DeviceQueue &queue, const Rc<ImageStorage> &);
-	void invalidateImage(const Rc<ImageStorage> &);
+	void invalidateImage(const ImageStorage *);
 
 	Rc<Semaphore> acquireSemaphore();
 	void releaseSemaphore(Rc<Semaphore> &&);

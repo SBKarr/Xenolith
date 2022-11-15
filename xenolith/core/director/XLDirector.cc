@@ -51,10 +51,10 @@ bool Director::init(Application *app, gl::View *view) {
 	_sizeChangedEvent = onEventWithObject(gl::View::onScreenSize, view, [&] (const Event &ev) {
 		auto s = ev.getDataValue().getValue("size");
 		_screenSize = _screenExtent = Extent2(s.getInteger(0), s.getInteger(1));
-		auto density = ev.getDataValue().getDouble("density");
+		_density = ev.getDataValue().getDouble("density");
 
 		if (_scene) {
-			_scene->setDensity(density);
+			_scene->setDensity(_density);
 			_scene->setContentSize(_screenSize / _scene->getDensity());
 
 			updateGeneralTransform();
@@ -63,6 +63,7 @@ bool Director::init(Application *app, gl::View *view) {
 
 	_screenExtent = _view->getScreenExtent();
 	_screenSize = _view->getScreenExtent();
+	_density = _view->getDensity();
 
 	updateGeneralTransform();
 

@@ -37,7 +37,7 @@
 
 namespace stappler::xenolith::app {
 
-bool AppScene::init(Application *app, Extent2 extent) {
+bool AppScene::init(Application *app, Extent2 extent, float density) {
 	// build presentation RenderQueue
 	renderqueue::Queue::Builder builder("Loader");
 
@@ -58,7 +58,7 @@ bool AppScene::init(Application *app, Extent2 extent) {
 
 	vk::MaterialPass::makeDefaultRenderQueue(info);
 
-	if (!UtilScene::init(app, move(builder))) {
+	if (!UtilScene::init(app, move(builder), extent, density)) {
 		return false;
 	}
 

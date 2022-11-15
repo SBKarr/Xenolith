@@ -67,6 +67,7 @@ public:
 
 	Extent2 getScreenExtent() const { return _screenExtent; }
 	Size2 getScreenSize() const { return _screenSize; }
+	float getDensity() const { return _density; }
 
 	void pushDrawStat(const gl::DrawStat &);
 
@@ -87,6 +88,7 @@ protected:
 
 	Extent2 _screenExtent;
 	Size2 _screenSize;
+	float _density = 1.0f;
 
 	uint64_t _startTime = 0;
 	UpdateTime _time;

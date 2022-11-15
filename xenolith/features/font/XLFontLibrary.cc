@@ -1233,10 +1233,10 @@ void FontLibrary::updateImage(const Rc<gl::DynamicImage> &image, Vector<Pair<Rc<
 	auto input = Rc<gl::RenderFontInput>::alloc();
 	input->image = image;
 	input->requests = move(data);
-	input->output = [] (const gl::ImageInfo &info, BytesView data) {
+	/*input->output = [] (const gl::ImageInfo &info, BytesView data) {
 		Bitmap bmp(data, info.extent.width, info.extent.height, bitmap::PixelFormat::A8);
 		bmp.save(bitmap::FileFormat::Png, toString(Time::now().toMicros(), ".png"));
-	};
+	};*/
 
 	auto req = Rc<renderqueue::FrameRequest>::create(_queue);
 	if (dep) {

@@ -197,8 +197,8 @@ void View::threadDispose() {
 	release(0);
 }
 
-void View::update() {
-	gl::View::update();
+void View::update(bool displayLink) {
+	gl::View::update(displayLink);
 
 	auto clock = platform::device::_clock(platform::device::ClockType::Monotonic);
 	uint64_t fenceOrder = 0;
@@ -219,6 +219,14 @@ void View::update() {
 	} while (0);
 
 	_fenceOrder = fenceOrder;
+
+	if (displayLink && _options.followDisplayLink) {
+		// ignore present windows
+		for (auto &it : _scheduledPresent) {
+			runScheduledPresent(move(it));
+		}
+		_scheduledPresent.clear();
+	}
 
 	do {
 		auto it = _fenceImages.begin();
@@ -243,18 +251,19 @@ void View::update() {
 		}
 	} while (0);
 
-	do {
-		auto it = _scheduledPresent.begin();
-		while (it != _scheduledPresent.end()) {
-			if (!(*it)->getPresentWindow() || (*it)->getPresentWindow() < clock) {
-				runScheduledPresent(move(*it));
-				it = _scheduledPresent.erase(it);
-			} else {
-				++ it;
+	if (!_options.followDisplayLink) {
+		do {
+			auto it = _scheduledPresent.begin();
+			while (it != _scheduledPresent.end()) {
+				if (!(*it)->getPresentWindow() || (*it)->getPresentWindow() < clock) {
+					runScheduledPresent(move(*it));
+					it = _scheduledPresent.erase(it);
+				} else {
+					++ it;
+				}
 			}
-		}
-	} while (0);
-
+		} while (0);
+	}
 }
 
 void View::run() {
@@ -311,6 +320,13 @@ void View::deprecateSwapchain() {
 
 bool View::present(Rc<ImageStorage> &&object) {
 	if (object->isSwapchainImage()) {
+		if (_options.followDisplayLink) {
+			performOnThread([this, object = move(object)] () mutable {
+				auto img = (SwapchainImage *)object.get();
+				_scheduledPresent.emplace_back(img);
+			}, this);
+			return false;
+		}
 		auto img = (SwapchainImage *)object.get();
 		if (!img->getPresentWindow() || img->getPresentWindow() < platform::device::_clock(platform::device::ClockType::Monotonic)) {
 			auto queue = _device->tryAcquireQueueSync(QueueOperations::Present);
@@ -556,7 +572,12 @@ bool View::acquireScheduledImage(const Rc<SwapchainImage> &image, bool immediate
 					" [", platform::device::_clock(platform::device::Monotonic) - f->getArmedTime(), "]");
 #endif
 		}, image, "View::acquireScheduledImage");
-		scheduleFence(move(fence));
+		if (_options.followDisplayLink) {
+			fence->check(*((Loop *)_loop.get()), false);
+			fence = nullptr;
+		} else {
+			scheduleFence(move(fence));
+		}
 		return true;
 	} else {
 		fence->schedule(*loop);
@@ -784,6 +805,10 @@ void View::presentWithQueue(DeviceQueue &queue, Rc<ImageStorage> &&image) {
 		// log::vtext("View", "recreateSwapchain - View::presentWithQueue (", renderqueue::FrameHandle::GetActiveFramesCount(), ")");
 		recreateSwapchain(_swapchain->getRebuildMode());
 	} else {
+		if (_options.followDisplayLink) {
+			scheduleSwapchainImage(0, true);
+			return;
+		}
 		if (_options.flattenFrameRate) {
 			const auto maxWindow = _frameInterval - getUpdateInterval() + _frameInterval / 20;
 			const auto currentWindow = std::max(dt.first, dt.second);
