@@ -141,14 +141,13 @@ void QueuePassHandle::submit(FrameQueue &q, Rc<FrameSync> &&sync, Function<void(
 
 	_fence->setTag(getName());
 
-	_fence->addRelease([dev = _device, pool = move(_pool), loop = q.getLoop()] (bool success) {
+	_fence->addRelease([dev = _device, pool = _pool, loop = q.getLoop()] (bool success) {
 		dev->releaseCommandPool(*loop, Rc<CommandPool>(pool));
 	}, nullptr, "RenderPassHandle::submit dev->releaseCommandPool");
 	_fence->addRelease([this, func = move(onComplete), q = &q] (bool success) mutable {
 		doComplete(*q, move(func), success);
 	}, this, "RenderPassHandle::submit onComplete");
 
-	_pool = nullptr;
 	_sync = move(sync);
 
 	auto ops = getQueueOps();
@@ -211,7 +210,8 @@ Vector<VkCommandBuffer> QueuePassHandle::doPrepareCommands(FrameHandle &) {
 }
 
 bool QueuePassHandle::doSubmit(FrameHandle &frame, Function<void(bool)> &&onSubmited) {
-	auto success = _queue->submit(*_sync, *_fence, _buffers);
+	auto success = _queue->submit(*_sync, *_fence, *_pool, _buffers);
+	_pool = nullptr;
 	frame.performOnGlThread([this, success, onSubmited = move(onSubmited), queue = move(_queue)] (FrameHandle &frame) mutable {
 		bool scheduleWithSwapcchain = false;
 

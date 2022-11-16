@@ -35,7 +35,7 @@ public:
 		// on some systems, we can not acquire next image until queue operations on previous image is finished
 		// on this system, we wait on last swapchain pass fence before acquire swapchain image
 		// swapchain-independent passes is not affected by this option
-		bool waitOnSwapchainPassFence = true;
+		bool waitOnSwapchainPassFence = false;
 
 		// by default, we use vkAcquireNextImageKHR in lockfree manner, but in some cases blocking variant
 		// is more preferable. If this option is set, vkAcquireNextImageKHR called with UIN64_MAX timeout
@@ -52,6 +52,13 @@ public:
 		// Также, по сигналу система запрашиваает новый буфер для отрисовки следующего кадра
 		// Если система не успела подготовить новый кадр - обновление пропускается
 		bool followDisplayLink = false;
+
+		// По умолчанию, FrameEmitter допускает только один кадр определенной RenderQueue в процессе отправки
+		// (между vkQueueSubmit и освобождением соответсвующей VkFence). Исключение составляют проходы, помеченные как асинхронные
+		// Если отключить это ограничение, единственным ограничением между vkQueueSubmit останутся внутренние примитивы синхронизации
+		// В ряде случаев, неограниченная отправка буферов может привести к некорректной работе vkQueueSubmit и блокированию треда на
+		// этой функции. Рекомендуется сохранять это ограничение. а для полной загрузки GPU использовать асинхронные пре- и пост-проходы
+		bool enableFrameEmitterBarrier = true;
 	};
 
 	virtual ~View();
@@ -69,7 +76,7 @@ public:
 	virtual void onAdded(Device &);
 	virtual void onRemoved();
 
-	virtual void deprecateSwapchain() override;
+	virtual void deprecateSwapchain(bool fast = false) override;
 
 	virtual bool present(Rc<ImageStorage> &&) override;
 	virtual bool presentImmediate(Rc<ImageStorage> &&) override;
@@ -95,17 +102,33 @@ protected:
 	virtual gl::SurfaceInfo getSurfaceOptions() const;
 
 	void invalidate();
+
+	// Начать подготовку нового изображения для презентации
+	// Создает объект кадра и начинает сбор данных для его рисования
+	// Создает объект изображения и начинает цикл его захвата
+	// Если режим acquireImageImmediately - блокирует поток до успешного захвата изображения
+	// windowOffset - интервал от текущего момента. когда предполагается презентовать изображение
+	//   Служит для ограничения частоты кадров
 	void scheduleSwapchainImage(uint64_t windowOffset, bool immediate = false);
+
+	// Попытаться захватить изображение для отрисовки кадра. Если задан флаг immediate
+	// или включен режим followDisplayLink - блокирует поток до успешного захвата
+	// В противном случае, если захват не удался - необходимо поробовать позже
 	bool acquireScheduledImage(const Rc<SwapchainImage> &, bool immediate = false);
 
-	bool recreateSwapchain(gl::PresentMode);
-	bool createSwapchain(gl::SwapchainConfig &&cfg, gl::PresentMode presentMode);
+	virtual bool recreateSwapchain(gl::PresentMode);
+	virtual bool createSwapchain(gl::SwapchainConfig &&cfg, gl::PresentMode presentMode);
 
 	bool isImagePresentable(const gl::ImageObject &image, VkFilter &filter) const;
 
-	void runWithSwapchainImage(Rc<ImageStorage> &&);
+	// Отправляет запрос на кадр для изображения (оно может быть или не быть захваченным для отрисовки)
+	// Запрос сперва собирает данные с помощью директора в основном потоке, затем начинает цикл построения кадра в графическом потоке
+	void runFrameWithSwapchainImage(Rc<ImageStorage> &&);
+
+	// Презентует отложенное подготовленное (кадр заверш]н) изображение
 	void runScheduledPresent(Rc<SwapchainImage> &&);
-	virtual void presentWithQueue(DeviceQueue &, Rc<ImageStorage> &&);
+
+	void presentWithQueue(DeviceQueue &, Rc<ImageStorage> &&);
 	void invalidateSwapchainImage(Rc<ImageStorage> &&);
 
 	Pair<uint64_t, uint64_t> updateFrameInterval();

@@ -64,9 +64,17 @@ public:
 
 	const Map<gl::ImageViewInfo, Rc<gl::ImageView>> &getViews() const { return _views; }
 
+	void setAcquisitionTime(uint64_t t) { _acquisitionTime = t; }
+	uint64_t getAcquisitionTime() const { return _acquisitionTime; }
+
+	void setFrameIndex(uint64_t idx) { _frameIndex = idx; }
+	uint64_t getFrameIndex() const { return _frameIndex; }
+
 protected:
 	void notifyReady();
 
+	uint64_t _acquisitionTime = 0;
+	uint64_t _frameIndex = 0;
 	Rc<gl::ImageObject> _image;
 	Rc<gl::Semaphore> _waitSem;
 	Rc<gl::Semaphore> _signalSem;

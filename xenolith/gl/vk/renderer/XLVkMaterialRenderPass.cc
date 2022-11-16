@@ -506,7 +506,7 @@ bool MaterialPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
 	auto materialVert = info.builder->addProgramByRef("Loader_MaterialFrag", xenolith::shaders::MaterialFrag);
 
 	// render-to-swapchain RenderPass
-	auto pass = Rc<vk::MaterialPass>::create("SwapchainPass", RenderOrderingHighest);
+	auto pass = Rc<vk::MaterialPass>::create("MaterialSwapchainPass", RenderOrderingHighest);
 	info.builder->addRenderPass(pass);
 
 	auto shaderSpecInfo = Vector<SpecializationInfo>({

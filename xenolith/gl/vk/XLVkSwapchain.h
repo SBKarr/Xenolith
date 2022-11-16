@@ -71,7 +71,7 @@ public:
 	bool isOptimal() const;
 
 	// returns true if it was first deprecation
-	bool deprecate();
+	bool deprecate(bool fast);
 
 	Rc<ImageStorage> acquire(bool lockfree, const Rc<Fence> &fence);
 	bool acquire(const Rc<SwapchainImage> &, const Rc<Fence> &fence, bool immediate);
@@ -137,6 +137,7 @@ public:
 
 	void setPresented();
 	bool isPresented() const { return _state == State::Presented; }
+	bool isSubmitted() const { return _state == State::Submitted || _state == State::Presented; }
 
 	const Rc<SwapchainHandle> &getSwapchain() const { return _swapchain; }
 

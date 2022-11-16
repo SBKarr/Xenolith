@@ -211,9 +211,8 @@ void FrameQueue::invalidate() {
 		_success = false;
 		auto f = _frame;
 		onFinalized();
-		f->onQueueInvalidated(*this);
-
-		if (_frame) {
+		if (f) {
+			f->onQueueInvalidated(*this);
 			tryReleaseFrame();
 		}
 	}

@@ -37,6 +37,7 @@ float ViewImpl_getScreenDensity();
 float ViewImpl_getSurfaceDensity(void *);
 void *ViewImpl_getLayer(void *);
 void ViewImpl_wakeup(const Rc<ViewImpl> &view);
+void ViewImpl_setVSyncEnabled(void *, bool);
 
 class ViewImpl : public vk::View {
 public:
@@ -68,11 +69,15 @@ public:
 	URect getFrame() const { return _rect; }
 
 	void handleDisplayLinkCallback();
+	void startLiveResize();
+	void stopLiveResize();
 
 protected:
 	using vk::View::init;
 
 	virtual bool pollInput(bool frameReady) override;
+
+	virtual bool createSwapchain(gl::SwapchainConfig &&cfg, gl::PresentMode presentMode) override;
 
 	virtual gl::SurfaceInfo getSurfaceOptions() const override;
 

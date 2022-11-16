@@ -49,21 +49,33 @@ static CVReturn DisplayLinkCallback(CVDisplayLinkRef displayLink,
 	[super viewDidLoad];
 }
 
+- (void)updateEngineView {
+	_engineView->update(false);
+}
+
 - (void)viewDidAppear {
 	[super viewDidAppear];
 
 	stappler::log::text("XLMacViewController", "viewDidAppear");
+
+	_updateTimer = [NSTimer scheduledTimerWithTimeInterval:(1.0 / 1000000.0) * 500.0
+		target:self
+		selector:@selector(updateEngineView)
+		userInfo:nil
+		repeats:NO];
 }
 
 - (void)viewWillDisappear {
+	[_updateTimer invalidate];
+	_updateTimer = nil;
 	stappler::log::text("XLMacViewController", "viewWillDisappear");
-	
+
 	[super viewWillDisappear];
 }
 
 - (void)viewDidDisappear {
 	[super viewDidDisappear];
-	
+
 	CVDisplayLinkStop(_displayLink);
 	CVDisplayLinkRelease(_displayLink);
 
@@ -75,15 +87,47 @@ static CVReturn DisplayLinkCallback(CVDisplayLinkRef displayLink,
 - (void)loadView {
 	auto rect = _engineView->getFrame();
 	self.view = [[XLMacView alloc] initWithFrame:NSRect{{static_cast<CGFloat>(rect.x), static_cast<CGFloat>(rect.y)}, {static_cast<CGFloat>(rect.width), static_cast<CGFloat>(rect.height)}}];
-	
+
 	self.view.wantsLayer = YES;
-	
+
 	_engineView->setOsView((__bridge void *)self);
 	_engineView->threadInit();
+
+	_currentSize = NSSizeFromCGSize(CGSizeMake(rect.width, rect.height));
 
 	CVDisplayLinkCreateWithActiveCGDisplays(&_displayLink);
 	CVDisplayLinkSetOutputCallback(_displayLink, &DisplayLinkCallback, _engineView.get());
 	CVDisplayLinkStart(_displayLink);
+}
+
+- (NSSize)windowWillResize:(NSWindow *)sender toSize:(NSSize)frameSize {
+	return frameSize;
+}
+
+- (void)windowDidResize:(NSNotification *)notification {
+	auto size = self.view.window.contentLayoutRect.size;
+	if (_currentSize.width != size.width || _currentSize.height != size.height) {
+		_engineView->deprecateSwapchain(false);
+		_currentSize = size;
+	}
+}
+
+- (nullable NSArray<NSWindow *> *)customWindowsToEnterFullScreenForWindow:(NSWindow *)window {
+	return nil;
+}
+
+- (void)window:(NSWindow *)window startCustomAnimationToEnterFullScreenWithDuration:(NSTimeInterval)duration {
+
+}
+
+- (void)windowWillStartLiveResize:(NSNotification *)notification {
+	stappler::log::text("XLMacViewController", "windowWillStartLiveResize");
+	_engineView->startLiveResize();
+}
+
+- (void)windowDidEndLiveResize:(NSNotification *)notification {
+	stappler::log::text("XLMacViewController", "windowDidEndLiveResize");
+	_engineView->stopLiveResize();
 }
 
 @end
@@ -107,7 +151,7 @@ static CVReturn DisplayLinkCallback(CVDisplayLinkRef displayLink,
 - (void) viewDidMoveToWindow {
 	auto trackingArea = [[NSTrackingArea alloc] initWithRect:[self bounds] options:NSTrackingMouseMoved | NSTrackingActiveAlways | NSTrackingInVisibleRect owner:self userInfo:nil];
 	[self addTrackingArea:trackingArea];
-	
+
 	self.window.delegate = (XLMacViewController *)self.window.contentViewController;
 }
 

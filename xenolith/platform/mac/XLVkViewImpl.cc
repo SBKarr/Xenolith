@@ -26,13 +26,9 @@ THE SOFTWARE.
 
 namespace stappler::xenolith::platform::graphic {
 
-ViewImpl::ViewImpl() {
+ViewImpl::ViewImpl() { }
 
-}
-
-ViewImpl::~ViewImpl() {
-
-}
+ViewImpl::~ViewImpl() { }
 
 bool ViewImpl::init(gl::Loop &loop, gl::Device &dev, gl::ViewInfo &&info, float layerDensity) {
 	_rect = info.rect;
@@ -46,7 +42,7 @@ bool ViewImpl::init(gl::Loop &loop, gl::Device &dev, gl::ViewInfo &&info, float 
 
 	_screenExtent = Extent2(info.rect.width * layerDensity, info.rect.height * layerDensity);
 	_frameInterval = 0;
-	_options.followDisplayLink = true;
+	//_options.followDisplayLink = true;
 
 	return true;
 }
@@ -77,6 +73,10 @@ void ViewImpl::threadInit() {
 
 void ViewImpl::threadDispose() {
 	vk::View::threadDispose();
+
+	_loop->performOnGlThread([this] {
+		end();
+	}, this);
 }
 
 bool ViewImpl::worker() {
@@ -120,8 +120,37 @@ void ViewImpl::handleDisplayLinkCallback() {
 	wakeup();
 }
 
+void ViewImpl::startLiveResize() {
+	_swapchain->deprecate(false);
+
+	auto it = _scheduledPresent.begin();
+	while (it != _scheduledPresent.end()) {
+		runScheduledPresent(move(*it));
+		it = _scheduledPresent.erase(it);
+	}
+
+	// log::vtext("View", "recreateSwapchain - View::deprecateSwapchain (", renderqueue::FrameHandle::GetActiveFramesCount(), ")");
+	recreateSwapchain(_swapchain->getRebuildMode());
+}
+
+void ViewImpl::stopLiveResize() {
+
+}
+
 bool ViewImpl::pollInput(bool frameReady) {
 	return true; // we should return false when view should be closed
+}
+
+bool ViewImpl::createSwapchain(gl::SwapchainConfig &&cfg, gl::PresentMode presentMode) {
+	if (presentMode == gl::PresentMode::Immediate) {
+		_options.followDisplayLink = false;
+		ViewImpl_setVSyncEnabled(_osView, false);
+	} else {
+		_options.followDisplayLink = true;
+		ViewImpl_setVSyncEnabled(_osView, true);
+	}
+
+	return vk::View::createSwapchain(move(cfg), presentMode);
 }
 
 gl::SurfaceInfo ViewImpl::getSurfaceOptions() const {

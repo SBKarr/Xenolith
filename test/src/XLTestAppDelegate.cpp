@@ -72,7 +72,7 @@ gl::SwapchainConfig AppDelegate::selectConfig(const gl::SurfaceInfo &info) {
 	std::unique_lock<Mutex> lock(_configMutex);
 	gl::SwapchainConfig ret;
 	ret.extent = info.currentExtent;
-	ret.imageCount = std::max(uint32_t(3), info.minImageCount);
+	ret.imageCount = std::max(uint32_t(2), info.minImageCount);
 
 	ret.presentMode = info.presentModes.front();
 	if (_preferredPresentMode != gl::PresentMode::Unsupported) {
@@ -87,6 +87,8 @@ gl::SwapchainConfig AppDelegate::selectConfig(const gl::SurfaceInfo &info) {
 	if (std::find(info.presentModes.begin(), info.presentModes.end(), gl::PresentMode::Immediate) != info.presentModes.end()) {
 		ret.presentModeFast = gl::PresentMode::Immediate;
 	}
+
+	// ret.presentMode = gl::PresentMode::Immediate;
 
 	auto it = info.formats.begin();
 	while (it != info.formats.end()) {

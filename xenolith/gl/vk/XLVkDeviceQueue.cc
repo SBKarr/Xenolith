@@ -37,7 +37,7 @@ bool DeviceQueue::init(Device &device, VkQueue queue, uint32_t index, QueueOpera
 	return true;
 }
 
-bool DeviceQueue::submit(const FrameSync &sync, Fence &fence, SpanView<VkCommandBuffer> buffers) {
+bool DeviceQueue::submit(const FrameSync &sync, Fence &fence, CommandPool &commandPool, SpanView<VkCommandBuffer> buffers) {
 	Vector<VkSemaphore> waitSem;
 	Vector<VkPipelineStageFlags> waitStages;
 	Vector<VkSemaphore> signalSem;
@@ -107,6 +107,8 @@ bool DeviceQueue::submit(const FrameSync &sync, Fence &fence, SpanView<VkCommand
 						sem->setInUse(false, t);
 					}, it.semaphore, "DeviceQueue::submit::isSemaphorePersistent");
 				}
+				fence.autorelease(it.semaphore.get());
+				commandPool.autorelease(it.semaphore.get());
 			}
 		}
 
@@ -114,6 +116,8 @@ bool DeviceQueue::submit(const FrameSync &sync, Fence &fence, SpanView<VkCommand
 			if (it.semaphore) {
 				it.semaphore->setSignaled(true);
 				it.semaphore->setInUse(true, it.semaphore->getTimeline());
+				fence.autorelease(it.semaphore.get());
+				commandPool.autorelease(it.semaphore.get());
 			}
 		}
 
@@ -275,7 +279,13 @@ void CommandPool::reset(Device &dev, bool release) {
 		poolInfo.flags = 0; // transient ? VK_COMMAND_POOL_CREATE_TRANSIENT_BIT : 0;
 
 		dev.getTable()->vkCreateCommandPool(dev.getDevice(), &poolInfo, nullptr, &_commandPool);
+
+		_autorelease.clear();
 	}
+}
+
+void CommandPool::autorelease(Rc<Ref> &&ref) {
+	_autorelease.emplace_back(move(ref));
 }
 
 }

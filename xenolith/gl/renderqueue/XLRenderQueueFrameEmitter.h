@@ -136,6 +136,8 @@ public:
 
 	bool isReadyForSubmit() const;
 
+	void setEnableBarrier(bool value);
+
 	Rc<FrameRequest> makeRequest(Rc<ImageStorage> &&, float density = 1.0f);
 	Rc<FrameHandle> submitNextFrame(Rc<FrameRequest> &&);
 
@@ -165,6 +167,7 @@ protected:
 	bool _frameTimeoutPassed = true;
 	bool _nextFrameAcquired = false;
 	bool _onDemand = true;
+	bool _enableBarrier = true;
 	Rc<FrameRequest> _nextFrameRequest;
 	std::deque<Rc<FrameHandle>> _frames;
 	std::deque<Rc<FrameHandle>> _framesPending;

@@ -301,9 +301,9 @@ void View::onRemoved() {
 	}
 }
 
-void View::deprecateSwapchain() {
-	performOnThread([this] {
-		_swapchain->deprecate();
+void View::deprecateSwapchain(bool fast) {
+	performOnThread([this, fast] {
+		_swapchain->deprecate(fast);
 
 		auto it = _scheduledPresent.begin();
 		while (it != _scheduledPresent.end()) {
@@ -332,7 +332,10 @@ bool View::present(Rc<ImageStorage> &&object) {
 			auto queue = _device->tryAcquireQueueSync(QueueOperations::Present);
 			if (queue) {
 				performOnThread([this, queue = move(queue), object = move(object)] () mutable {
-					presentWithQueue(*queue, move(object));
+					auto img = (SwapchainImage *)object.get();
+					if (img->getSwapchain() == _swapchain && img->isSubmitted()) {
+						presentWithQueue(*queue, move(object));
+					}
 					_loop->performOnGlThread([this,  queue = move(queue)] () mutable {
 						_device->releaseQueue(move(queue));
 					}, this);
@@ -341,7 +344,10 @@ bool View::present(Rc<ImageStorage> &&object) {
 				_device->acquireQueue(QueueOperations::Present, *(Loop *)_loop.get(),
 						[this, object = move(object)] (Loop &, const Rc<DeviceQueue> &queue) mutable {
 					performOnThread([this, queue, object = move(object)] () mutable {
-						presentWithQueue(*queue, move(object));
+						auto img = (SwapchainImage *)object.get();
+						if (img->getSwapchain() == _swapchain && img->isSubmitted()) {
+							presentWithQueue(*queue, move(object));
+						}
 						_loop->performOnGlThread([this,  queue = move(queue)] () mutable {
 							_device->releaseQueue(move(queue));
 						}, this);
@@ -427,7 +433,7 @@ bool View::presentImmediate(Rc<ImageStorage> &&object) {
 
 	presentFence->check(*(Loop *)_loop.get(), false);
 
-	if (!queue->submit(frameSync, *presentFence, buffers)) {
+	if (!queue->submit(frameSync, *presentFence, *pool, buffers)) {
 		return cleanup();
 	}
 
@@ -538,7 +544,7 @@ void View::scheduleSwapchainImage(uint64_t windowOffset, bool immediate) {
 		}
 
 		// make new frame request immediately
-		runWithSwapchainImage(Rc<SwapchainImage>(image));
+		runFrameWithSwapchainImage(Rc<SwapchainImage>(image));
 
 		// we should wait until all current fences become signaled
 		// then acquire image and wait for fence
@@ -572,7 +578,7 @@ bool View::acquireScheduledImage(const Rc<SwapchainImage> &image, bool immediate
 					" [", platform::device::_clock(platform::device::Monotonic) - f->getArmedTime(), "]");
 #endif
 		}, image, "View::acquireScheduledImage");
-		if (_options.followDisplayLink) {
+		if (_options.followDisplayLink || immediate) {
 			fence->check(*((Loop *)_loop.get()), false);
 			fence = nullptr;
 		} else {
@@ -591,6 +597,8 @@ bool View::recreateSwapchain(gl::PresentMode mode) {
 		Vector<Rc<SwapchainImage>> scheduledImages;
 		Rc<renderqueue::FrameEmitter> frameEmitter;
 	};
+
+	std::cout << gl::getPresentModeName(mode) << "\n";
 
 	auto data = Rc<ResetData>::alloc();
 	data->fenceImages = move(_fenceImages);
@@ -743,9 +751,10 @@ bool View::isImagePresentable(const gl::ImageObject &image, VkFilter &filter) co
 	return true;
 }
 
-void View::runWithSwapchainImage(Rc<ImageStorage> &&image) {
+void View::runFrameWithSwapchainImage(Rc<ImageStorage> &&image) {
 	image->setReady(false);
 
+	_frameEmitter->setEnableBarrier(_options.enableFrameEmitterBarrier);
 	auto req = _frameEmitter->makeRequest(move(image), _density);
 	_loop->getApplication()->performOnMainThread([this, req = move(req)] () mutable {
 		if (_director->acquireFrame(req)) {
@@ -772,7 +781,9 @@ void View::runScheduledPresent(Rc<SwapchainImage> &&object) {
 		_device->acquireQueue(QueueOperations::Present, *(Loop *)_loop.get(),
 				[this, object = move(object)] (Loop &, const Rc<DeviceQueue> &queue) mutable {
 			performOnThread([this, queue, object = move(object)] () mutable {
-				presentWithQueue(*queue, move(object));
+				if (object->getSwapchain() == _swapchain && object->isSubmitted()) {
+					presentWithQueue(*queue, move(object));
+				}
 				_loop->performOnGlThread([this,  queue = move(queue)] () mutable {
 					_device->releaseQueue(move(queue));
 				}, this);
@@ -787,7 +798,8 @@ void View::presentWithQueue(DeviceQueue &queue, Rc<ImageStorage> &&image) {
 	auto res = _swapchain->present(queue, move(image));
 	auto dt = updateFrameInterval();
 	if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR) {
-		_swapchain->deprecate();
+		_swapchain->deprecate(false);
+		std::cout << "VK_ERROR_OUT_OF_DATE_KHR\n";
 	}
 
 	_blockDeprecation = true;

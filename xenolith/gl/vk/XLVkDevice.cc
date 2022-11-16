@@ -486,13 +486,13 @@ Rc<CommandPool> Device::acquireCommandPool(uint32_t familyIndex) {
 }
 
 void Device::releaseCommandPool(gl::Loop &loop, Rc<CommandPool> &&pool) {
-	pool->reset(*this, true);
+	/*pool->reset(*this, true);
 
 	std::unique_lock<Mutex> lock(_resourceMutex);
-	_families[pool->getFamilyIdx()].pools.emplace_back(Rc<CommandPool>(pool));
+	_families[pool->getFamilyIdx()].pools.emplace_back(Rc<CommandPool>(pool));*/
 
-	/*auto refId = retain();
-	loop.getQueue()->perform(Rc<Task>::create([this, pool] (const Task &) -> bool {
+	auto refId = retain();
+	loop.performOnGlThread(Rc<Task>::create([this, pool] (const Task &) -> bool {
 		pool->reset(*this);
 		return true;
 	}, [this, pool, refId] (const Task &, bool success) {
@@ -501,7 +501,7 @@ void Device::releaseCommandPool(gl::Loop &loop, Rc<CommandPool> &&pool) {
 			_families[pool->getFamilyIdx()].pools.emplace_back(Rc<CommandPool>(pool));
 		}
 		release(refId);
-	}));*/
+	}));
 }
 
 void Device::releaseCommandPoolUnsafe(Rc<CommandPool> &&pool) {

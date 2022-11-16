@@ -107,7 +107,9 @@ public:
 	bool schedule(Loop &);
 
 	bool check(Loop &, bool lockfree = true);
-	void reset(Loop &, Function<void(Rc<Fence> &&)> &&);
+	// void reset(Loop &, Function<void(Rc<Fence> &&)> &&);
+
+	void autorelease(Rc<Ref> &&);
 
 protected:
 	using gl::Object::init;
@@ -133,6 +135,7 @@ protected:
 
 	Function<bool()> _scheduleFn;
 	Function<void()> _releaseFn;
+	Vector<Rc<Ref>> _autorelease;
 };
 
 }

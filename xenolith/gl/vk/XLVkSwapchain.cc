@@ -157,9 +157,13 @@ bool SwapchainHandle::isOptimal() const {
 	return _presentMode == _config.presentMode;
 }
 
-bool SwapchainHandle::deprecate() {
+bool SwapchainHandle::deprecate(bool fast) {
+	std::cout << "deprecate " << fast << "\n";
 	auto tmp = _deprecated;
 	_deprecated = true;
+	if (fast && _config.presentModeFast != gl::PresentMode::Unsupported) {
+		_rebuildMode = _config.presentModeFast;
+	}
 	return !tmp;
 }
 
@@ -185,6 +189,7 @@ auto SwapchainHandle::acquire(bool lockfree, const Rc<Fence> &fence) -> Rc<Image
 #endif
 	});
 
+	Rc<SwapchainImage> image;
 	switch (ret) {
 	case VK_SUCCESS:
 		if (sem) {
@@ -193,7 +198,11 @@ auto SwapchainHandle::acquire(bool lockfree, const Rc<Fence> &fence) -> Rc<Image
 		fence->setTag("SwapchainHandle::acquire");
 		fence->setArmed();
 		++ _acquiredImages;
-		return Rc<SwapchainImage>::create(this, _images.at(imageIndex), move(sem));
+		image = Rc<SwapchainImage>::create(this, _images.at(imageIndex), move(sem));
+#if XL_VKAPI_DEBUG
+		image->setAcquisitionTime(platform::device::_clock(platform::device::Monotonic));
+#endif
+		return move(image);
 		break;
 	case VK_SUBOPTIMAL_KHR:
 		if (sem) {
@@ -203,7 +212,11 @@ auto SwapchainHandle::acquire(bool lockfree, const Rc<Fence> &fence) -> Rc<Image
 		fence->setArmed();
 		_deprecated = true;
 		++ _acquiredImages;
-		return Rc<SwapchainImage>::create(this, _images.at(imageIndex), move(sem));
+		image = Rc<SwapchainImage>::create(this, _images.at(imageIndex), move(sem));
+#if XL_VKAPI_DEBUG
+		image->setAcquisitionTime(platform::device::_clock(platform::device::Monotonic));
+#endif
+		return move(image);
 		break;
 	default:
 		releaseSemaphore(move(sem));
@@ -243,6 +256,9 @@ bool SwapchainHandle::acquire(const Rc<SwapchainImage> &image, const Rc<Fence> &
 		fence->setArmed();
 		++ _acquiredImages;
 		image->setImage(this, _images.at(imageIndex), move(sem));
+#if XL_VKAPI_DEBUG
+		image->setAcquisitionTime(platform::device::_clock(platform::device::Monotonic));
+#endif
 		return true;
 		break;
 	case VK_SUBOPTIMAL_KHR:
@@ -254,6 +270,9 @@ bool SwapchainHandle::acquire(const Rc<SwapchainImage> &image, const Rc<Fence> &
 		_deprecated = true;
 		++ _acquiredImages;
 		image->setImage(this, _images.at(imageIndex), move(sem));
+#if XL_VKAPI_DEBUG
+		image->setAcquisitionTime(platform::device::_clock(platform::device::Monotonic));
+#endif
 		return true;
 		break;
 	default:
@@ -284,8 +303,9 @@ VkResult SwapchainHandle::present(DeviceQueue &queue, const Rc<ImageStorage> &im
 #if XL_VKAPI_DEBUG
 		auto t = platform::device::_clock(platform::device::Monotonic);
 		result = table.vkQueuePresentKHR(queue.getQueue(), &presentInfo);
-		XL_VKAPI_LOG("[", queue.getFrameIndex(), "] vkQueuePresentKHR: ", imageIndex, " ", result,
-				" [", platform::device::_clock(platform::device::Monotonic) - t, "] [", t - _presentTime, "]");
+		XL_VKAPI_LOG("[", image->getFrameIndex(), "] vkQueuePresentKHR: ", imageIndex, " ", result,
+				" [", platform::device::_clock(platform::device::Monotonic) - t, "] [timeout: ", t - _presentTime,
+				"] [acquisition: ", t - image->getAcquisitionTime(), "]");
 		_presentTime = t;
 #else
 		result = table.vkQueuePresentKHR(queue.getQueue(), &presentInfo);
@@ -317,6 +337,7 @@ VkResult SwapchainHandle::present(DeviceQueue &queue, const Rc<ImageStorage> &im
 }
 
 void SwapchainHandle::invalidateImage(const ImageStorage *image) {
+
 	if (!((SwapchainImage *)image)->isPresented()) {
 		std::unique_lock<Mutex> lock(_resourceMutex);
 		-- _acquiredImages;

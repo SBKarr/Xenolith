@@ -293,6 +293,10 @@ bool FrameEmitter::isReadyForSubmit() const {
 	return _frames.empty() && _framesPending.empty();
 }
 
+void FrameEmitter::setEnableBarrier(bool value) {
+	_enableBarrier = value;
+}
+
 void FrameEmitter::onFrameEmitted(FrameHandle &) { }
 
 void FrameEmitter::onFrameSubmitted(FrameHandle &) { }
@@ -415,7 +419,7 @@ Rc<FrameHandle> FrameEmitter::submitNextFrame(Rc<FrameRequest> &&req) {
 		return nullptr;
 	}
 
-	bool readyForSubmit = _frames.empty() && _framesPending.empty();
+	bool readyForSubmit = !_enableBarrier || (_frames.empty() && _framesPending.empty());
 	auto frame = makeFrame(move(req), readyForSubmit);
 	_nextFrameRequest = nullptr;
 	if (frame && frame->isValidFlag()) {

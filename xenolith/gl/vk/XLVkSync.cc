@@ -209,6 +209,10 @@ bool Fence::check(Loop &loop, bool lockfree) {
 	return false;
 }
 
+void Fence::autorelease(Rc<Ref> &&ref) {
+	_autorelease.emplace_back(move(ref));
+}
+
 void Fence::scheduleReset(Loop &loop) {
 	if (_releaseFn) {
 		loop.performInQueue(Rc<Task>::create([this] (const Task &) {
@@ -263,7 +267,7 @@ void Fence::doRelease(bool success) {
 		XL_PROFILE_END(total);
 		_release.clear();
 	}
-
+	_autorelease.clear();
 	_tag = StringView();
 }
 

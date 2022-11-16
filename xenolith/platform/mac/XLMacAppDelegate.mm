@@ -26,6 +26,8 @@ THE SOFTWARE.
 #include "XLPlatformMac.h"
 #include "SPThread.h"
 
+#import <QuartzCore/CAMetalLayer.h>
+
 #if MACOS
 
 static int parseOptionSwitch(stappler::xenolith::Value &ret, char c, const char *str) {
@@ -99,7 +101,6 @@ bool EngineMainThread::worker() {
 
 - (void)applicationWillTerminate:(NSNotification *)notification {
 	_mainLoop = nullptr;
-	stappler::log::text("SPAppDelegate", "applicationWillTerminate");
 	stappler::memory::pool::terminate();
 }
 
@@ -185,6 +186,11 @@ void ViewImpl_wakeup(const Rc<ViewImpl> &view) {
 		v->update(false);
 		v->release(refId);
 	});
+}
+
+void ViewImpl_setVSyncEnabled(void *view, bool vsyncEnabled) {
+	auto l = (CAMetalLayer *)((__bridge XLMacViewController *)view).view.layer;
+	l.displaySyncEnabled = vsyncEnabled ? YES : NO;
 }
 
 }

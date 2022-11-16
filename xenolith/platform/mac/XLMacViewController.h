@@ -31,6 +31,8 @@ THE SOFTWARE.
 @interface XLMacViewController : NSViewController <NSWindowDelegate> {
 	CVDisplayLinkRef _displayLink;
 	stappler::Rc<stappler::xenolith::platform::graphic::ViewImpl> _engineView;
+	NSSize _currentSize;
+	NSTimer *_updateTimer;
 }
 
 - (instancetype _Nonnull) initWithEngineView: (const stappler::Rc<stappler::xenolith::platform::graphic::ViewImpl> &)view;

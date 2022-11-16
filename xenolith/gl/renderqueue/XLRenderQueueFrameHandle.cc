@@ -99,6 +99,10 @@ bool FrameHandle::init(gl::Loop &loop, gl::Device &dev, Rc<FrameRequest> &&req, 
 
 	_gen = gen;
 	_order = _request->getQueue()->incrementOrder();
+	if (const auto &target = _request->getRenderTarget()) {
+		target->setFrameIndex(_order);
+	}
+
 	XL_FRAME_LOG(XL_FRAME_LOG_INFO, "Init; ready: ", _request->isReadyForSubmit());
 	_request->acquireInput(_inputData);
 	return setup();
@@ -259,7 +263,9 @@ void FrameHandle::invalidate() {
 				_complete(*this);
 			}
 
-			_request->finalize(*_loop, _valid);
+			if (_request) {
+				_request->finalize(*_loop, _valid);
+			}
 		}
 	} else {
 		_loop->performOnGlThread([this] {

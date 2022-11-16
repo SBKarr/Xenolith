@@ -79,7 +79,7 @@ public:
 
 	virtual bool init(Device &, VkQueue, uint32_t, QueueOperations);
 
-	bool submit(const FrameSync &, Fence &, SpanView<VkCommandBuffer>);
+	bool submit(const FrameSync &, Fence &, CommandPool &, SpanView<VkCommandBuffer>);
 	bool submit(Fence &, SpanView<VkCommandBuffer>);
 
 	void waitIdle();
@@ -130,12 +130,15 @@ public:
 	void freeDefaultBuffers(Device &dev, Vector<VkCommandBuffer> &);
 	void reset(Device &dev, bool release = false);
 
+	void autorelease(Rc<Ref> &&);
+
 protected:
 	uint32_t _familyIdx = 0;
 	uint32_t _currentComplexity = 0;
 	uint32_t _bestComplexity = 0;
 	QueueOperations _class = QueueOperations::Graphics;
 	VkCommandPool _commandPool = VK_NULL_HANDLE;
+	Vector<Rc<Ref>> _autorelease;
 };
 
 }
