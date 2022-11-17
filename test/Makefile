@@ -52,7 +52,9 @@ ifdef STAPPLER_TARGET
 local-shaders-clean:
 	@$(GLOBAL_RM) $(subst /glsl/,/compiled/shader_,$(LOCAL_SHADERS))
 
+ifdef MACOS_ARCH
 $(BUILD_EXECUTABLE): xenolith-install-loader
+endif
 
 endif
 

@@ -127,7 +127,7 @@ bool ViewImpl::worker() {
 	fds[1].events = POLLIN;
 	fds[1].revents = 0;
 
-	update();
+	update(false);
 
 	while (_shouldQuit.test_and_set()) {
 		bool shouldUpdate = false;
@@ -155,7 +155,7 @@ bool ViewImpl::worker() {
 		}
 
 		if (shouldUpdate) {
-			update();
+			update(false);
 		}
 	}
 
