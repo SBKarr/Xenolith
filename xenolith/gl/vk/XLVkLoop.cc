@@ -689,7 +689,9 @@ auto Loop::acquireImage(const ImageAttachment *a, Extent3 e) -> Rc<ImageStorage>
 }
 
 void Loop::releaseImage(Rc<ImageStorage> &&image) {
-	_frameCache->releaseImage(move(image));
+	performOnGlThread([this, image = move(image)] () mutable {
+		_frameCache->releaseImage(move(image));
+	}, this, true);
 }
 
 void Loop::addView(gl::ViewInfo &&info) {

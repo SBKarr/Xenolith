@@ -36,8 +36,8 @@ namespace stappler::xenolith::vk {
 
 DeviceFrameHandle::~DeviceFrameHandle() {
 	if (!_valid) {
-		auto dev = (Device *)_device;
-		dev->getTable()->vkDeviceWaitIdle(dev->getDevice());
+		//auto dev = (Device *)_device;
+		//dev->getTable()->vkDeviceWaitIdle(dev->getDevice());
 	}
 	_memPool = nullptr;
 }
@@ -311,13 +311,20 @@ const Vector<DeviceQueueFamily> &Device::getQueueFamilies() const {
 	return _families;
 }
 
-Rc<DeviceQueue> Device::tryAcquireQueueSync(QueueOperations ops) {
+Rc<DeviceQueue> Device::tryAcquireQueueSync(QueueOperations ops, bool lockThread) {
 	auto family = (DeviceQueueFamily *)getQueueFamily(ops);
 	if (!family) {
 		return nullptr;
 	}
 
 	std::unique_lock<Mutex> lock(_resourceMutex);
+	if (lockThread) {
+		++ _resourceQueueWaiters;
+		while (family->queues.empty()) {
+			_resourceQueueCond.wait(lock);
+		}
+		-- _resourceQueueWaiters;
+	}
 	if (!family->queues.empty()) {
 		XL_VKDEVICE_LOG("tryAcquireQueueSync ", family->index, " (", family->count, ") ", getQueueOperationsDesc(family->ops));
 		auto queue = move(family->queues.back());
@@ -396,6 +403,14 @@ void Device::releaseQueue(Rc<DeviceQueue> &&queue) {
 	queue->reset();
 
 	std::unique_lock<Mutex> lock(_resourceMutex);
+	// Проверяем, есть ли синхронные ожидающие
+	if (_resourceQueueWaiters > 0) {
+		family->queues.emplace_back(move(queue));
+		_resourceQueueCond.notify_one();
+		return;
+	}
+
+	// Проверяем, есть ли асинхронные ожидающие
 	if (family->waiters.empty()) {
 		XL_VKDEVICE_LOG("releaseQueue ", family->index, " (", family->count, ") ", getQueueOperationsDesc(family->ops));
 		family->queues.emplace_back(move(queue));

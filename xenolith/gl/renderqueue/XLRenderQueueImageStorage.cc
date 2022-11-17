@@ -24,7 +24,13 @@
 
 namespace stappler::xenolith::renderqueue {
 
-ImageStorage::~ImageStorage() { }
+ImageStorage::~ImageStorage() {
+	for (auto &it : _views) {
+		it.second->runReleaseCallback();
+	}
+	_views.clear();
+	_image = nullptr;
+}
 
 bool ImageStorage::init(Rc<gl::ImageObject> &&image) {
 	_image = move(image);

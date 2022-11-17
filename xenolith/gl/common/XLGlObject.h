@@ -188,6 +188,7 @@ public:
 	virtual void invalidate() override;
 
 	void setReleaseCallback(Function<void()> &&);
+	void runReleaseCallback();
 
 	const Rc<ImageObject> &getImage() const { return _image; }
 	const ImageViewInfo &getInfo() const { return _info; }

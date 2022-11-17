@@ -45,8 +45,10 @@ bool Surface::init(Instance *instance, VkSurfaceKHR surface, Ref *win) {
 SwapchainHandle::~SwapchainHandle() {
 	for (auto &it : _images) {
 		for (auto &v : it.views) {
-			v.second->invalidate();
-			v.second = nullptr;
+			if (v.second) {
+				v.second->invalidate();
+				v.second = nullptr;
+			}
 		}
 	}
 	invalidate();
@@ -185,7 +187,7 @@ auto SwapchainHandle::acquire(bool lockfree, const Rc<Fence> &fence) -> Rc<Image
 				" [", platform::device::_clock(platform::device::Monotonic) - t, "]");
 #else
 		ret = table.vkAcquireNextImageKHR(device, _swapchain, timeout,
-				sem ? sem->getSemaphore() : VK_NULL_HANDLE, fence->getFence(), &imageIndex);
+				sem ? sem->getSemaphore() : VK_NULL_HANDLE, fence ? fence->getFence() : VK_NULL_HANDLE, &imageIndex);
 #endif
 	});
 
@@ -195,8 +197,10 @@ auto SwapchainHandle::acquire(bool lockfree, const Rc<Fence> &fence) -> Rc<Image
 		if (sem) {
 			sem->setSignaled(true);
 		}
-		fence->setTag("SwapchainHandle::acquire");
-		fence->setArmed();
+		if (fence) {
+			fence->setTag("SwapchainHandle::acquire");
+			fence->setArmed();
+		}
 		++ _acquiredImages;
 		image = Rc<SwapchainImage>::create(this, _images.at(imageIndex), move(sem));
 #if XL_VKAPI_DEBUG
@@ -208,8 +212,10 @@ auto SwapchainHandle::acquire(bool lockfree, const Rc<Fence> &fence) -> Rc<Image
 		if (sem) {
 			sem->setSignaled(true);
 		}
-		fence->setTag("SwapchainHandle::acquire");
-		fence->setArmed();
+		if (fence) {
+			fence->setTag("SwapchainHandle::acquire");
+			fence->setArmed();
+		}
 		_deprecated = true;
 		++ _acquiredImages;
 		image = Rc<SwapchainImage>::create(this, _images.at(imageIndex), move(sem));

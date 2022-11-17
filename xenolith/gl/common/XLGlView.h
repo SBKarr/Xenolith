@@ -63,7 +63,7 @@ public:
 
 	// present image in place instead of scheduling presentation
 	// should be called in view's thread
-	virtual bool presentImmediate(Rc<ImageStorage> &&) = 0;
+	virtual bool presentImmediate(Rc<ImageStorage> &&, Function<void(bool)> &&) = 0;
 
 	// invalidate swapchain image target, if drawing process was not successful
 	virtual void invalidateTarget(Rc<ImageStorage> &&) = 0;

@@ -88,12 +88,16 @@ public:
 	// - false if frame is not valid or no queue family with requested capabilities exists
 	//
 	// Acquired DeviceQueue must be released with releaseQueue
-	Rc<DeviceQueue> tryAcquireQueueSync(QueueOperations);
 	bool acquireQueue(QueueOperations, FrameHandle &, Function<void(FrameHandle &, const Rc<DeviceQueue> &)> && acquire,
 			Function<void(FrameHandle &)> && invalidate, Rc<Ref> && = nullptr);
 	bool acquireQueue(QueueOperations, Loop &, Function<void(Loop &, const Rc<DeviceQueue> &)> && acquire,
 			Function<void(Loop &)> && invalidate, Rc<Ref> && = nullptr);
 	void releaseQueue(Rc<DeviceQueue> &&);
+
+	// Запросить DeviceQueue синхронно, может блокировать текущий поток до завершения захвата
+	// Преднахзначна для потоков, не относящихся к группе графических (например, для потока окна)
+	// Вызов в графическом потоке может заблокировать возврат очереди, уже принадлежащей потоку
+	Rc<DeviceQueue> tryAcquireQueueSync(QueueOperations, bool lock);
 
 	Rc<CommandPool> acquireCommandPool(QueueOperations, uint32_t = 0);
 	Rc<CommandPool> acquireCommandPool(uint32_t familyIndex);
@@ -158,6 +162,8 @@ private:
 	std::unordered_map<VkFormat, VkFormatProperties> _formats;
 
 	Mutex _resourceMutex;
+	uint32_t _resourceQueueWaiters = 0;
+	std::condition_variable _resourceQueueCond;
 	Mutex _apiMutex;
 };
 

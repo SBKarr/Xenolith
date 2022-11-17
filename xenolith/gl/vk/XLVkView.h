@@ -59,6 +59,8 @@ public:
 		// В ряде случаев, неограниченная отправка буферов может привести к некорректной работе vkQueueSubmit и блокированию треда на
 		// этой функции. Рекомендуется сохранять это ограничение. а для полной загрузки GPU использовать асинхронные пре- и пост-проходы
 		bool enableFrameEmitterBarrier = true;
+
+		bool renderImageOffscreen = false;
 	};
 
 	virtual ~View();
@@ -79,7 +81,7 @@ public:
 	virtual void deprecateSwapchain(bool fast = false) override;
 
 	virtual bool present(Rc<ImageStorage> &&) override;
-	virtual bool presentImmediate(Rc<ImageStorage> &&) override;
+	virtual bool presentImmediate(Rc<ImageStorage> &&, Function<void(bool)> &&scheduleCb) override;
 	virtual void invalidateTarget(Rc<ImageStorage> &&) override;
 
 	virtual Rc<Ref> getSwapchainHandle() const override;
@@ -97,11 +99,19 @@ public:
 protected:
 	using gl::View::init;
 
+	enum ScheduleImageMode {
+		AcquireSwapchainImageAsync,
+		AcquireSwapchainImageImmediate,
+		AcquireOffscreenImage,
+	};
+
 	virtual bool pollInput(bool frameReady);
 
 	virtual gl::SurfaceInfo getSurfaceOptions() const;
 
 	void invalidate();
+
+	void scheduleNextImage(uint64_t windowOffset, bool immediately);
 
 	// Начать подготовку нового изображения для презентации
 	// Создает объект кадра и начинает сбор данных для его рисования
@@ -109,12 +119,12 @@ protected:
 	// Если режим acquireImageImmediately - блокирует поток до успешного захвата изображения
 	// windowOffset - интервал от текущего момента. когда предполагается презентовать изображение
 	//   Служит для ограничения частоты кадров
-	void scheduleSwapchainImage(uint64_t windowOffset, bool immediate = false);
+	void scheduleSwapchainImage(uint64_t windowOffset, ScheduleImageMode);
 
 	// Попытаться захватить изображение для отрисовки кадра. Если задан флаг immediate
 	// или включен режим followDisplayLink - блокирует поток до успешного захвата
 	// В противном случае, если захват не удался - необходимо поробовать позже
-	bool acquireScheduledImage(const Rc<SwapchainImage> &, bool immediate = false);
+	bool acquireScheduledImage(const Rc<SwapchainImage> &, ScheduleImageMode);
 
 	virtual bool recreateSwapchain(gl::PresentMode);
 	virtual bool createSwapchain(gl::SwapchainConfig &&cfg, gl::PresentMode presentMode);
@@ -125,10 +135,10 @@ protected:
 	// Запрос сперва собирает данные с помощью директора в основном потоке, затем начинает цикл построения кадра в графическом потоке
 	void runFrameWithSwapchainImage(Rc<ImageStorage> &&);
 
-	// Презентует отложенное подготовленное (кадр заверш]н) изображение
+	// Презентует отложенное подготовленное (кадр завершён) изображение
 	void runScheduledPresent(Rc<SwapchainImage> &&);
 
-	void presentWithQueue(DeviceQueue &, Rc<ImageStorage> &&);
+	virtual void presentWithQueue(DeviceQueue &, Rc<ImageStorage> &&);
 	void invalidateSwapchainImage(Rc<ImageStorage> &&);
 
 	Pair<uint64_t, uint64_t> updateFrameInterval();
@@ -136,6 +146,8 @@ protected:
 	void waitForFences(uint64_t min);
 
 	virtual void finalize();
+
+	void updateFences();
 
 	EngineOptions _options;
 

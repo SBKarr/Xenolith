@@ -43,6 +43,14 @@ bool FrameRequest::init(const Rc<FrameEmitter> &emitter, Rc<ImageStorage> &&targ
 	return true;
 }
 
+bool FrameRequest::init(const Rc<FrameEmitter> &emitter, Extent2 e, float density) {
+	_emitter = emitter;
+	_extent = Extent2(e.width, e.height);
+	_readyForSubmit = false;
+	_density = density;
+	return true;
+}
+
 bool FrameRequest::init(const Rc<Queue> &q) {
 	_queue = q;
 	_queue->beginFrame(*this);
@@ -412,6 +420,11 @@ void FrameEmitter::scheduleFrameTimeout() {
 Rc<FrameRequest> FrameEmitter::makeRequest(Rc<ImageStorage> &&storage, float density) {
 	_frame = platform::device::_clock();
 	return Rc<FrameRequest>::create(this, move(storage), density);
+}
+
+Rc<FrameRequest> FrameEmitter::makeRequest(Extent2 extent, float density) {
+	_frame = platform::device::_clock();
+	return Rc<FrameRequest>::create(this, extent, density);
 }
 
 Rc<FrameHandle> FrameEmitter::submitNextFrame(Rc<FrameRequest> &&req) {

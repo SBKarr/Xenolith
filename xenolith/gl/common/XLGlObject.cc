@@ -181,6 +181,14 @@ void ImageView::setReleaseCallback(Function<void()> &&cb) {
 	_releaseCallback = move(cb);
 }
 
+void ImageView::runReleaseCallback() {
+	if (_releaseCallback) {
+		auto cb = move(_releaseCallback);
+		_releaseCallback = nullptr;
+		cb();
+	}
+}
+
 Extent3 ImageView::getExtent() const {
 	return _image->getInfo().extent;
 }

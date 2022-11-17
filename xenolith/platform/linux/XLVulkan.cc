@@ -74,7 +74,9 @@ Rc<gl::Instance> createInstance(Application *app) {
 	}
 
 	uint32_t targetVersion = VK_API_VERSION_1_0;
-	if (s_InstanceVersion >= VK_API_VERSION_1_2) {
+	if (s_InstanceVersion >= VK_API_VERSION_1_3) {
+		targetVersion = VK_API_VERSION_1_3;
+	} else if (s_InstanceVersion >= VK_API_VERSION_1_2) {
 		targetVersion = VK_API_VERSION_1_2;
 	} else if (s_InstanceVersion >= VK_API_VERSION_1_1) {
 		targetVersion = VK_API_VERSION_1_1;

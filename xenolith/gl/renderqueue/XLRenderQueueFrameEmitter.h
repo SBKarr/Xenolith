@@ -34,6 +34,7 @@ public:
 	virtual ~FrameRequest();
 
 	bool init(const Rc<FrameEmitter> &, Rc<ImageStorage> &&target, float = 1.0f);
+	bool init(const Rc<FrameEmitter> &, Extent2, float = 1.0f);
 	bool init(const Rc<Queue> &q);
 	bool init(const Rc<Queue> &q, const Rc<FrameEmitter> &, Extent2, float = 1.0f);
 
@@ -139,6 +140,7 @@ public:
 	void setEnableBarrier(bool value);
 
 	Rc<FrameRequest> makeRequest(Rc<ImageStorage> &&, float density = 1.0f);
+	Rc<FrameRequest> makeRequest(Extent2, float density = 1.0f);
 	Rc<FrameHandle> submitNextFrame(Rc<FrameRequest> &&);
 
 protected:
