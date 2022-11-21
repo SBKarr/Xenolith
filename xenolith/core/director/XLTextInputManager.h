@@ -39,7 +39,7 @@ class TextInputManager;
 // keep it small (e.g. when working with paragraphs, send only current paragraph). Large
 // strings can significantly reduce performance
 struct TextInputHandler {
-	Function<void(const WideStringView &, const TextInputCursor &)> onText;
+	Function<void(WideStringView, TextCursor, TextCursor)> onText;
 	Function<void(bool, const Rect &, float)> onKeyboard;
 	Function<void(bool)> onInput;
 	Function<void()> onEnded;
@@ -48,16 +48,18 @@ struct TextInputHandler {
 
 	~TextInputHandler();
 
-	bool run(TextInputManager *, const WideStringView &str = WideStringView(), const TextInputCursor & = TextInputCursor(),
+	bool run(TextInputManager *, WideStringView str = WideStringView(), TextCursor cursor = TextCursor(), TextCursor marked = TextCursor::InvalidCursor,
 			TextInputType = TextInputType::Empty);
 	void cancel();
 
 	// only if this handler is active
-	bool setString(const WideStringView &str, const TextInputCursor & = TextInputCursor());
-	bool setCursor(const TextInputCursor &);
+	bool setString(WideStringView str, TextCursor cursor = TextCursor(), TextCursor marked = TextCursor::InvalidCursor);
+	bool setCursor(TextCursor);
+	bool setMarked(TextCursor);
 
 	WideStringView getString() const;
-	const TextInputCursor &getCursor() const;
+	TextCursor getCursor() const;
+	TextCursor getMarked() const;
 
 	bool isInputEnabled() const;
 	bool isKeyboardVisible() const;
@@ -70,14 +72,19 @@ class TextInputManager : public Ref {
 public:
 	TextInputManager();
 
-	bool init(gl::View *);
+	bool init(TextInputViewInterface *);
 
-	bool hasText();
-    void insertText(const WideString &sInsert, bool compose = false);
-	void textChanged(const WideString &text, const TextInputCursor &);
-	void cursorChanged(const TextInputCursor &);
+	void insertText(WideStringView sInsert, bool compose = false);
+	void insertText(WideStringView sInsert, TextCursor replacement);
+	void setMarkedText(WideStringView sInsert, TextCursor replacement, TextCursor marked);
     void deleteBackward();
     void deleteForward();
+	void unmarkText();
+
+	bool hasText();
+	void textChanged(WideStringView text, TextCursor, TextCursor);
+	void cursorChanged(TextCursor);
+	void markedChanged(TextCursor);
 
     // called from device when keyboard is attached to application
     // if keyboard is screen keyboard, it's intersection rect with application window defined in rect, otherwise - Rect::ZERO
@@ -93,16 +100,18 @@ public:
 
 	// run input capture (or update it with new params)
 	// propagates all data to device input manager, enables screen keyboard if needed
-	bool run(TextInputHandler *, const WideStringView &str, const TextInputCursor &, TextInputType type);
+	bool run(TextInputHandler *, WideStringView str, TextCursor cursor, TextCursor marked, TextInputType type);
 
 	// update current buffer string (and/or internal cursor)
 	// propagates string and cursor to device input manager to enable autocorrections, suggestions, etc...
-	void setString(const WideStringView &str);
-	void setString(const WideStringView &str, const TextInputCursor &);
-	void setCursor(const TextInputCursor &);
+	void setString(WideStringView str, TextCursor cursor = TextCursor(), TextCursor marked = TextCursor::InvalidCursor);
+	void setCursor(TextCursor);
+	void setMarked(TextCursor);
 
+	WideStringView getStringByRange(TextCursor);
 	WideStringView getString() const;
-	const TextInputCursor &getCursor() const;
+	TextCursor getCursor() const;
+	TextCursor getMarked() const;
 
 	// disable text input, disables keyboard connection and keyboard input event interception
 	// default manager automatically disabled when app goes background
@@ -110,7 +119,7 @@ public:
 
 	bool isRunning() const { return _running; }
 	bool isKeyboardVisible() const { return _isKeyboardVisible; }
-	bool isInputEnabled() const { return _isKeyboardVisible; }
+	bool isInputEnabled() const { return _isInputEnabled; }
 	float getKeyboardDuration() const { return _keyboardDuration; }
 	const Rect &getKeyboardRect() const { return _keyboardRect; }
 
@@ -120,8 +129,9 @@ public:
 	bool handleInputEvent(const InputEventData &);
 
 protected:
-	gl::View *_view = nullptr;
+	bool doInsertText(WideStringView, bool compose);
 
+	TextInputViewInterface *_view = nullptr;
 	TextInputHandler *_handler = nullptr;
 	Rect _keyboardRect;
 	float _keyboardDuration = 0.0f;
@@ -131,7 +141,8 @@ protected:
 
 	TextInputType _type = TextInputType::Empty;
 	WideString _string;
-	TextInputCursor _cursor;
+	TextCursor _cursor;
+	TextCursor _marked;
 	InputKeyComposeState _compose = InputKeyComposeState::Nothing;
 };
 

@@ -67,6 +67,11 @@ public:
 	size_t getImagesCount() const;
 	size_t getImageViewsCount() const;
 
+	void clear();
+
+	void freeze();
+	void unfreeze();
+
 protected:
 	bool isReachable(SpanView<uint64_t> ids) const;
 	bool isReachable(const ImageInfoData &) const;
@@ -79,6 +84,9 @@ protected:
 	Map<Vector<uint64_t>, FrameCacheFramebuffer> _framebuffers;
 	Set<uint64_t> _imageViews;
 	Set<uint64_t> _renderPasses;
+
+	bool _freezed = false;
+	Vector<Rc<Ref>> _autorelease;
 };
 
 }

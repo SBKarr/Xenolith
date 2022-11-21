@@ -193,6 +193,26 @@ void ViewImpl_setVSyncEnabled(void *view, bool vsyncEnabled) {
 	l.displaySyncEnabled = vsyncEnabled ? YES : NO;
 }
 
+void ViewImpl_updateTextCursor(void *view, uint32_t pos, uint32_t len) {
+	auto v = (XLMacView *)((__bridge XLMacViewController *)view).view;
+	[v updateTextCursorWithPosition: pos length:len];
+}
+
+void ViewImpl_updateTextInput(void *view, WideStringView str, uint32_t pos, uint32_t len, TextInputType type) {
+	auto v = (XLMacView *)((__bridge XLMacViewController *)view).view;
+	[v updateTextInputWithText: str position:pos length:len type:type];
+}
+
+void ViewImpl_runTextInput(void *view, WideStringView str, uint32_t pos, uint32_t len, TextInputType type) {
+	auto v = (XLMacView *)((__bridge XLMacViewController *)view).view;
+	[v runTextInputWithText: str position:pos length:len type:type];
+}
+
+void ViewImpl_cancelTextInput(void *view) {
+	auto v = (XLMacView *)((__bridge XLMacViewController *)view).view;
+	[v cancelTextInput];
+}
+
 }
 
 #endif

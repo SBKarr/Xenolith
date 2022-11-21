@@ -38,7 +38,7 @@ bool InputTextTest::init() {
 	_label->setColor(Color::Grey_500);
 	_label->setString("Placeholder");
 
-	_inputHandler.onText = [this] (const WideStringView &str, const TextInputCursor &cursor) {
+	_inputHandler.onText = [this] (WideStringView str, TextCursor cursor, TextCursor marked) {
 		std::cout << "onText: " << string::toUtf8<Interface>(str) << " " << cursor.start << ":" << cursor.length << "\n";
 		_label->setString(str);
 	};

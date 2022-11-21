@@ -55,7 +55,7 @@ bool InputSwipeTest::init() {
 		case GestureEvent::Ended:
 			_node->setColor(Color::Red_500);
 			_node->runAction(ActionAcceleratedMove::createWithBounds(
-					5000, _node->getPosition().xy(), swipe.velocity, getBoundsRect()), 1);
+					5000, _node->getPosition().xy(), swipe.velocity / swipe.density, getBoundsRect()), 1);
 			break;
 		case GestureEvent::Cancelled:
 			_node->setColor(Color::Red_500);

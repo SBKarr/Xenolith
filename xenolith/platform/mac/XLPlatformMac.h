@@ -39,6 +39,11 @@ void *ViewImpl_getLayer(void *);
 void ViewImpl_wakeup(const Rc<ViewImpl> &view);
 void ViewImpl_setVSyncEnabled(void *, bool);
 
+void ViewImpl_updateTextCursor(void *, uint32_t pos, uint32_t len);
+void ViewImpl_updateTextInput(void *, WideStringView str, uint32_t pos, uint32_t len, TextInputType);
+void ViewImpl_runTextInput(void *, WideStringView str, uint32_t pos, uint32_t len, TextInputType);
+void ViewImpl_cancelTextInput(void *);
+
 class ViewImpl : public vk::View {
 public:
 	ViewImpl();
@@ -56,8 +61,8 @@ public:
 	virtual void wakeup() override;
 
 	virtual void updateTextCursor(uint32_t pos, uint32_t len) override;
-	virtual void updateTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) override;
-	virtual void runTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) override;
+	virtual void updateTextInput(WideStringView str, uint32_t pos, uint32_t len, TextInputType) override;
+	virtual void runTextInput(WideStringView str, uint32_t pos, uint32_t len, TextInputType) override;
 	virtual void cancelTextInput() override;
 
 	virtual void mapWindow() override;
@@ -71,6 +76,8 @@ public:
 	void handleDisplayLinkCallback();
 	void startLiveResize();
 	void stopLiveResize();
+
+	void submitTextData(WideStringView, TextCursor, TextCursor);
 
 protected:
 	using vk::View::init;
@@ -88,6 +95,7 @@ protected:
 	String _name;
 	bool _inputEnabled = false;
 	bool _followDisplayLink = true;
+	bool _liveResize = false;
 	std::atomic_flag _displayLinkFlag;
 };
 

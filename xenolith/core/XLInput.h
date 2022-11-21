@@ -74,6 +74,8 @@ enum class InputModifier : uint32_t {
 	Button4 = 1 << 11,
 	Button5 = 1 << 12,
 
+	Command = Mod3,
+
 	// boolean value for switch event (background/focus)
 	ValueFalse = None,
 	ValueTrue = uint32_t(1) << uint32_t(31)
@@ -237,6 +239,7 @@ enum class InputKeyComposeState : uint16_t {
 	Nothing = 0,
 	Composed,
 	Composing,
+	Disabled, // do not use this key event for text input processing
 };
 
 enum class InputEventName : uint32_t {
@@ -382,8 +385,8 @@ struct InputEvent {
 	InputModifier previousModifiers = InputModifier::None;
 };
 
-using TextInputCursorPosition = ValueWrapper<uint32_t, class CursorPositionFlag>;
-using TextInputCursorLength = ValueWrapper<uint32_t, class CursorStartFlag>;
+using TextCursorPosition = ValueWrapper<uint32_t, class TextCursorPositionFlag>;
+using TextCursorLength = ValueWrapper<uint32_t, class TextCursorStartFlag>;
 
 enum class TextInputType {
 	Empty				= 0,
@@ -430,16 +433,18 @@ enum class TextInputType {
 
 SP_DEFINE_ENUM_AS_MASK(TextInputType);
 
-struct TextInputCursor {
+struct TextCursor {
+	static const TextCursor InvalidCursor;
+
 	uint32_t start;
 	uint32_t length;
 
-	TextInputCursor() : start(maxOf<uint32_t>()), length(0) { }
-	TextInputCursor(uint32_t pos) : start(pos), length(0) { }
-	TextInputCursor(uint32_t start, uint32_t length) : start(start), length(length) { }
-	TextInputCursor(TextInputCursorPosition pos) : start(pos.get()), length(0) { }
-	TextInputCursor(TextInputCursorPosition pos, TextInputCursorLength len) : start(pos.get()), length(len.get()) { }
-	TextInputCursor(TextInputCursorPosition first, TextInputCursorPosition last)
+	constexpr TextCursor() : start(maxOf<uint32_t>()), length(0) { }
+	constexpr TextCursor(uint32_t pos) : start(pos), length(0) { }
+	constexpr TextCursor(uint32_t start, uint32_t length) : start(start), length(length) { }
+	constexpr TextCursor(TextCursorPosition pos) : start(pos.get()), length(0) { }
+	constexpr TextCursor(TextCursorPosition pos, TextCursorLength len) : start(pos.get()), length(len.get()) { }
+	constexpr TextCursor(TextCursorPosition first, TextCursorPosition last)
 	: start(std::min(first.get(), last.get()))
 	, length(((first > last)?(first - last).get():(last - first).get()) + 1) { }
 };
@@ -448,6 +453,8 @@ StringView getInputKeyCodeName(InputKeyCode);
 StringView getInputKeyCodeKeyName(InputKeyCode);
 
 std::ostream &operator<<(std::ostream &, InputKeyCode);
+
+constexpr const TextCursor TextCursor::InvalidCursor(maxOf<uint32_t>(), 0.0f);
 
 }
 

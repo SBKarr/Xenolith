@@ -24,6 +24,9 @@ THE SOFTWARE.
 
 #if MACOS
 
+#include "XLDirector.h"
+#include "XLTextInputManager.h"
+
 namespace stappler::xenolith::platform::graphic {
 
 ViewImpl::ViewImpl() { }
@@ -92,19 +95,41 @@ void ViewImpl::wakeup() {
 }
 
 void ViewImpl::updateTextCursor(uint32_t pos, uint32_t len) {
-
+	performOnThread([this, pos, len] {
+		ViewImpl_updateTextCursor(_osView, pos, len);
+		_director->getApplication()->performOnMainThread([this] () {
+			_director->getTextInputManager()->setInputEnabled(true);
+		}, this);
+	}, this);
 }
 
-void ViewImpl::updateTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) {
-
+void ViewImpl::updateTextInput(WideStringView str, uint32_t pos, uint32_t len, TextInputType type) {
+	performOnThread([this, str = str.str<Interface>(), pos, len, type] {
+		ViewImpl_updateTextInput(_osView, str, pos, len, type);
+		_director->getApplication()->performOnMainThread([this] () {
+			_director->getTextInputManager()->setInputEnabled(true);
+		}, this);
+	}, this);
 }
 
-void ViewImpl::runTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) {
-
+void ViewImpl::runTextInput(WideStringView str, uint32_t pos, uint32_t len, TextInputType type) {
+	performOnThread([this, str = str.str<Interface>(), pos, len, type] {
+		_inputEnabled = true;
+		ViewImpl_runTextInput(_osView, str, pos, len, type);
+		_director->getApplication()->performOnMainThread([this] () {
+			_director->getTextInputManager()->setInputEnabled(true);
+		}, this);
+	}, this);
 }
 
 void ViewImpl::cancelTextInput() {
-
+	performOnThread([this] {
+		_inputEnabled = false;
+		ViewImpl_cancelTextInput(_osView);
+		_director->getApplication()->performOnMainThread([&] () {
+			_director->getTextInputManager()->setInputEnabled(false);
+		}, this);
+	}, this);
 }
 
 void ViewImpl::mapWindow() {
@@ -121,7 +146,13 @@ void ViewImpl::handleDisplayLinkCallback() {
 }
 
 void ViewImpl::startLiveResize() {
-	_swapchain->deprecate(false);
+	_liveResize = true;
+	_loop->performOnGlThread([this] {
+		_loop->getFrameCache()->freeze();
+	}, this);
+	_options.renderImageOffscreen = true;
+	deprecateSwapchain(false);
+	/*_swapchain->deprecate(false);
 
 	auto it = _scheduledPresent.begin();
 	while (it != _scheduledPresent.end()) {
@@ -130,11 +161,23 @@ void ViewImpl::startLiveResize() {
 	}
 
 	// log::vtext("View", "recreateSwapchain - View::deprecateSwapchain (", renderqueue::FrameHandle::GetActiveFramesCount(), ")");
-	recreateSwapchain(_swapchain->getRebuildMode());
+	recreateSwapchain(_swapchain->getRebuildMode());*/
 }
 
 void ViewImpl::stopLiveResize() {
+	_options.renderImageOffscreen = false;
+	deprecateSwapchain(false);
 
+	_loop->performOnGlThread([this] {
+		_loop->getFrameCache()->unfreeze();
+	}, this);
+	_liveResize = false;
+}
+
+void ViewImpl::submitTextData(WideStringView str, TextCursor cursor, TextCursor marked) {
+	_director->getApplication()->performOnMainThread([this, str = str.str<Interface>(), cursor, marked] {
+		_director->getTextInputManager()->textChanged(str, cursor, marked);
+	}, this);
 }
 
 bool ViewImpl::pollInput(bool frameReady) {
@@ -142,6 +185,10 @@ bool ViewImpl::pollInput(bool frameReady) {
 }
 
 bool ViewImpl::createSwapchain(gl::SwapchainConfig &&cfg, gl::PresentMode presentMode) {
+	_loop->performOnGlThread([this] {
+		_loop->getFrameCache()->clear();
+	}, this);
+
 	if (presentMode == gl::PresentMode::Immediate) {
 		_options.followDisplayLink = false;
 		ViewImpl_setVSyncEnabled(_osView, false);

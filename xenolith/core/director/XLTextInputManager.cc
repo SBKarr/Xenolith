@@ -28,10 +28,10 @@ TextInputHandler::~TextInputHandler() {
 	cancel();
 }
 
-bool TextInputHandler::run(TextInputManager *manager, const WideStringView &str, const TextInputCursor &cursor, TextInputType type) {
+bool TextInputHandler::run(TextInputManager *manager, WideStringView str, TextCursor cursor, TextCursor marked, TextInputType type) {
 	if (!isActive()) {
 		this->manager = manager;
-		return manager->run(this, str, cursor, type);
+		return manager->run(this, str, cursor, marked, type);
 	}
 	return false;
 }
@@ -44,16 +44,25 @@ void TextInputHandler::cancel() {
 }
 
 // only if this handler is active
-bool TextInputHandler::setString(const WideStringView &str, const TextInputCursor &c) {
+bool TextInputHandler::setString(WideStringView str, TextCursor c, TextCursor m) {
 	if (isActive()) {
-		this->manager->setString(str, c);
+		this->manager->setString(str, c, m);
 		return true;
 	}
 	return false;
 }
-bool TextInputHandler::setCursor(const TextInputCursor &c) {
+
+bool TextInputHandler::setCursor(TextCursor c) {
 	if (isActive()) {
 		this->manager->setCursor(c);
+		return true;
+	}
+	return false;
+}
+
+bool TextInputHandler::setMarked(TextCursor c) {
+	if (isActive()) {
+		this->manager->setMarked(c);
 		return true;
 	}
 	return false;
@@ -62,8 +71,11 @@ bool TextInputHandler::setCursor(const TextInputCursor &c) {
 WideStringView TextInputHandler::getString() const {
 	return this->manager->getString();
 }
-const TextInputCursor &TextInputHandler::getCursor() const {
+TextCursor TextInputHandler::getCursor() const {
 	return this->manager->getCursor();
+}
+TextCursor TextInputHandler::getMarked() const {
+	return this->manager->getMarked();
 }
 
 bool TextInputHandler::isInputEnabled() const {
@@ -82,7 +94,7 @@ bool TextInputHandler::isActive() const {
 
 TextInputManager::TextInputManager() { }
 
-bool TextInputManager::init(gl::View *view) {
+bool TextInputManager::init(TextInputViewInterface *view) {
 	_view = view;
 	return true;
 }
@@ -91,48 +103,58 @@ bool TextInputManager::hasText() {
 	return _string.length() != 0;
 }
 
-void TextInputManager::insertText(const WideString &sInsert, bool compose) {
-	if (sInsert.length() > 0) {
-		if (_cursor.length > 0 && (!compose || _compose != InputKeyComposeState::Composing)) {
-			_string.erase(_string.begin() + _cursor.start, _string.begin() + _cursor.start + _cursor.length);
-			_cursor.length = 0;
-		}
-
-		WideString sText(_string.substr(0, _cursor.start).append(sInsert));
-
-		if (_cursor.start < _string.length()) {
-			sText.append(_string.substr(_cursor.start));
-		}
-
-		_string = std::move(sText);
-
-		if (compose) {
-			_cursor.length += sInsert.length();
-		} else {
-			_cursor.start += sInsert.length();
-		}
-
+void TextInputManager::insertText(WideStringView sInsert, bool compose) {
+	if (doInsertText(sInsert, compose)) {
 		onTextChanged();
 	}
 }
 
-void TextInputManager::textChanged(const WideString &text, const TextInputCursor &cursor) {
-	if (text.length() == 0) {
-		// more effective way then reset strings
+void TextInputManager::insertText(WideStringView sInsert, TextCursor replacement) {
+	if (replacement.start != maxOf<uint32_t>()) {
+		_cursor = replacement;
+	}
+
+	if (doInsertText(sInsert, false)) {
+		onTextChanged();
+	}
+}
+
+void TextInputManager::setMarkedText(WideStringView sInsert, TextCursor replacement, TextCursor marked) {
+	if (replacement.start != maxOf<uint32_t>()) {
+		_cursor = replacement;
+	}
+
+	auto start = _cursor.start;
+
+	if (doInsertText(sInsert, false)) {
+		_marked = TextCursor(start + marked.start, marked.length);
+		onTextChanged();
+	}
+}
+
+void TextInputManager::textChanged(WideStringView text, TextCursor cursor, TextCursor marked) {
+	if (text.size() == 0) {
 		_string = WideString();
 		_cursor.start = 0;
 		_cursor.length = 0;
+		_marked = TextCursor::InvalidCursor;
 		onTextChanged();
 		return;
 	}
 
-	_string = text;
+	_string = text.str<Interface>();
+	_cursor = cursor;
+	_marked = marked;
+	onTextChanged();
+}
+
+void TextInputManager::cursorChanged(TextCursor cursor) {
 	_cursor = cursor;
 	onTextChanged();
 }
 
-void TextInputManager::cursorChanged(const TextInputCursor &cursor) {
-	_cursor = cursor;
+void TextInputManager::markedChanged(TextCursor marked) {
+	_marked = marked;
 	onTextChanged();
 }
 
@@ -199,6 +221,10 @@ void TextInputManager::deleteForward() {
 	onTextChanged();
 }
 
+void TextInputManager::unmarkText() {
+	markedChanged(TextCursor::InvalidCursor);
+}
+
 void TextInputManager::onKeyboardEnabled(const Rect &rect, float duration) {
 	_keyboardRect = rect;
 	_keyboardDuration = duration;
@@ -233,11 +259,11 @@ void TextInputManager::setInputEnabled(bool enabled) {
 
 void TextInputManager::onTextChanged() {
 	if (_handler && _handler->onText) {
-		_handler->onText(_string, _cursor);
+		_handler->onText(_string, _cursor, _marked);
 	}
 }
 
-bool TextInputManager::run(TextInputHandler *h, const WideStringView &str, const TextInputCursor &cursor, TextInputType type) {
+bool TextInputManager::run(TextInputHandler *h, WideStringView str, TextCursor cursor, TextCursor marked, TextInputType type) {
 	auto oldH = _handler;
 	_handler = h;
 	if (oldH) {
@@ -247,6 +273,7 @@ bool TextInputManager::run(TextInputHandler *h, const WideStringView &str, const
 		oldH->onEnded();
 	}
 	_cursor = cursor;
+	_marked = marked;
 	_string = str.str<Interface>();
 	_type = type;
 	_handler = h;
@@ -267,8 +294,9 @@ bool TextInputManager::run(TextInputHandler *h, const WideStringView &str, const
 	return true;
 }
 
-void TextInputManager::setString(const WideStringView &str, const TextInputCursor &cursor) {
+void TextInputManager::setString(WideStringView str, TextCursor cursor, TextCursor marked) {
 	_cursor = cursor;
+	_marked = marked;
 	_string = str.str<Interface>();
 	if (cursor.start > str.size()) {
 		_cursor.start = (uint32_t)str.size();
@@ -276,22 +304,47 @@ void TextInputManager::setString(const WideStringView &str, const TextInputCurso
 
 	_view->updateTextInput(_string, cursor.start, cursor.length, _type);
 }
-void TextInputManager::setCursor(const TextInputCursor &cursor) {
+
+void TextInputManager::setCursor(TextCursor cursor) {
 	_cursor = cursor;
 	if (cursor.start > _string.length()) {
 		_cursor.start = (uint32_t)_string.length();
 	}
 
 	if (_running) {
-		_view->updateTextCursor(cursor.start, cursor.length);
+		_view->updateTextCursor(_cursor.start, _cursor.length);
+	}
+}
+
+void TextInputManager::setMarked(TextCursor marked) {
+	_marked = marked;
+	if (marked.start > _string.length()) {
+		_marked.start = (uint32_t)_string.length();
 	}
 }
 
 WideStringView TextInputManager::getString() const {
 	return _string;
 }
-const TextInputCursor &TextInputManager::getCursor() const {
+
+WideStringView TextInputManager::getStringByRange(TextCursor cursor) {
+	WideStringView str = _string;
+	if (cursor.start >= str.size()) {
+		return WideStringView();
+	}
+
+	str += cursor.start;
+	if (cursor.length >= str.size()) {
+		return str;
+	}
+
+	return str.sub(0, cursor.length);
+}
+TextCursor TextInputManager::getCursor() const {
 	return _cursor;
+}
+TextCursor TextInputManager::getMarked() const {
+	return _marked;
 }
 
 void TextInputManager::cancel() {
@@ -311,7 +364,7 @@ void TextInputManager::cancel() {
 }
 
 bool TextInputManager::canHandleInputEvent(const InputEventData &data) {
-	if (_running && _isInputEnabled) {
+	if (_running && _isInputEnabled && data.key.compose != InputKeyComposeState::Disabled) {
 		switch (data.event) {
 		case InputEventName::KeyPressed:
 		case InputEventName::KeyRepeated:
@@ -361,6 +414,8 @@ bool TextInputManager::handleInputEvent(const InputEventData &data) {
 			case InputKeyComposeState::Composing:
 				insertText(string::toUtf16<Interface>(c), true);
 				break;
+			case InputKeyComposeState::Disabled:
+				break;
 			}
 			_compose = data.key.compose;
 			return true;
@@ -371,6 +426,32 @@ bool TextInputManager::handleInputEvent(const InputEventData &data) {
 		break;
 	default:
 		break;
+	}
+	return false;
+}
+
+bool TextInputManager::doInsertText(WideStringView sInsert, bool compose) {
+	if (sInsert.size() > 0) {
+		if (_cursor.length > 0 && (!compose || _compose != InputKeyComposeState::Composing)) {
+			_string.erase(_string.begin() + _cursor.start, _string.begin() + _cursor.start + _cursor.length);
+			_cursor.length = 0;
+		}
+
+		WideString sText(_string.substr(0, _cursor.start).append(sInsert.data(), sInsert.size()));
+
+		if (_cursor.start < _string.length()) {
+			sText.append(_string.substr(_cursor.start));
+		}
+
+		_string = std::move(sText);
+
+		if (compose) {
+			_cursor.length += sInsert.size();
+		} else {
+			_cursor.start += sInsert.size();
+		}
+
+		return true;
 	}
 	return false;
 }

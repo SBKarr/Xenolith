@@ -41,7 +41,7 @@ class InputLabelDelegate {
 public:
 	using Error = InputLabelError;
 	using Handler = TextInputHandler;
-	using Cursor = TextInputCursor;
+	using Cursor = TextCursor;
 
 	virtual ~InputLabelDelegate();
 	virtual bool onInputChar(char16_t);
@@ -105,7 +105,7 @@ public:
 
 	using Error = InputLabelError;
 	using Handler = TextInputHandler;
-	using Cursor = TextInputCursor;
+	using Cursor = TextCursor;
 
 	using InputType = TextInputType;
 

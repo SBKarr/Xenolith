@@ -174,11 +174,11 @@ void ViewImpl::updateTextCursor(uint32_t pos, uint32_t len) {
 
 }
 
-void ViewImpl::updateTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) {
+void ViewImpl::updateTextInput(WideStringView str, uint32_t pos, uint32_t len, TextInputType) {
 
 }
 
-void ViewImpl::runTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) {
+void ViewImpl::runTextInput(WideStringView str, uint32_t pos, uint32_t len, TextInputType) {
 	performOnThread([this] {
 		_inputEnabled = true;
 		_director->getApplication()->performOnMainThread([&] () {

@@ -130,6 +130,9 @@ void FrameCache::removeImage(const ImageInfoData &info) {
 	auto it = _images.find(info);
 	if (it != _images.end()) {
 		if (it->second.refCount == 1) {
+			for (auto &iit : it->second.images) {
+				_autorelease.emplace_back(iit);
+			}
 			_images.erase(it);
 		} else {
 			-- it->second.refCount;
@@ -149,6 +152,9 @@ void FrameCache::removeImageView(uint64_t id) {
 		auto iit = _framebuffers.begin();
 		while (iit != _framebuffers.end()) {
 			if (!isReachable(SpanView<uint64_t>(iit->first))) {
+				for (auto &it : iit->second.framebuffers) {
+					_autorelease.emplace_back(it);
+				}
 				iit = _framebuffers.erase(iit);
 			} else {
 				++ iit;
@@ -169,6 +175,9 @@ void FrameCache::removeRenderPass(uint64_t id) {
 		auto iit = _framebuffers.begin();
 		while (iit != _framebuffers.end()) {
 			if (!isReachable(SpanView<uint64_t>(iit->first))) {
+				for (auto &it : iit->second.framebuffers) {
+					_autorelease.emplace_back(it);
+				}
 				iit = _framebuffers.erase(iit);
 			} else {
 				++ iit;
@@ -188,6 +197,9 @@ void FrameCache::removeUnreachableFramebuffers() {
 			}
 		}
 		if (!found) {
+			for (auto &it : fbsIt->second.framebuffers) {
+				_autorelease.emplace_back(it);
+			}
 			fbsIt = _framebuffers.erase(fbsIt);
 		} else {
 			auto fbIt = fbsIt->second.framebuffers.begin();
@@ -201,6 +213,7 @@ void FrameCache::removeUnreachableFramebuffers() {
 				ids.emplace_back(uint64_t(e.width) << uint64_t(32) | uint64_t(e.height));
 
 				if (isReachable(SpanView<uint64_t>(ids))) {
+					_autorelease.emplace_back(*fbIt);
 					fbIt = fbsIt->second.framebuffers.erase(fbIt);
 				} else {
 					++ fbIt;
@@ -234,6 +247,23 @@ size_t FrameCache::getImagesCount() const {
 
 size_t FrameCache::getImageViewsCount() const {
 	return _imageViews.size();
+}
+
+void FrameCache::clear() {
+	if (!_freezed) {
+		_autorelease.clear();
+	}
+}
+
+void FrameCache::freeze() {
+	_freezed = true;
+}
+
+void FrameCache::unfreeze() {
+	if (_freezed) {
+		_autorelease.clear();
+	}
+	_freezed = false;
 }
 
 bool FrameCache::isReachable(SpanView<uint64_t> ids) const {

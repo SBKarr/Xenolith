@@ -526,6 +526,8 @@ bool Loop::worker() {
 		_internal->autorelease->clear();
 		XL_PROFILE_END(autorelease)
 
+		_frameCache->clear();
+
 		XL_PROFILE_END(loop)
 		memory::pool::clear(pool);
 	}

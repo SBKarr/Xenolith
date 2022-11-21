@@ -226,7 +226,7 @@ uint64_t Scene::acquireMaterial(const MaterialInfo &info, Vector<gl::MaterialIma
 		return 0;
 	}
 
-	for (size_t idx = 0; idx < images.size(); ++ idx) {
+	for (uint32_t idx = 0; idx < uint32_t(images.size()); ++ idx) {
 		if (images[idx].image != nullptr) {
 			auto &image = images[idx];
 			image.info = getImageViewForMaterial(info, idx, images[idx].image);

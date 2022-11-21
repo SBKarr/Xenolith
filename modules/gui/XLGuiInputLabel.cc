@@ -327,7 +327,7 @@ void InputLabel::acquireInput() {
 		_cursor.start = uint32_t(getCharsCount());
 		_cursor.length = 0;
 
-		_handler.run(_director->getTextInputManager(), _inputString, _cursor, getInputTypeValue());
+		_handler.run(_director->getTextInputManager(), _inputString, _cursor, TextCursor::InvalidCursor, getInputTypeValue());
 		updateCursor();
 	}
 }
@@ -435,7 +435,7 @@ bool InputLabel::onLongPress(const Vec2 &vec, const TimeInterval &time, int coun
 		auto chIdx = _format->selectChar(pos.x * _density, _format->height - pos.y * _density, FormatSpec::Center);
 		if (chIdx != maxOf<uint32_t>()) {
 			auto word = _format->selectWord(chIdx);
-			setCursor(Cursor(Cursor(TextInputCursorPosition(word.first), TextInputCursorPosition(word.second))));
+			setCursor(Cursor(Cursor(TextCursorPosition(word.first), TextCursorPosition(word.second))));
 			scheduleCursorPointer();
 		}
 
@@ -451,7 +451,7 @@ bool InputLabel::onPressEnd(const Vec2 &vec) {
 	if (!_handler.isActive() && isTouched(vec)) {
 		if (_isLongPress) {
 			if (_director) {
-				_handler.run(_director->getTextInputManager(), _inputString, _cursor, getInputTypeValue());
+				_handler.run(_director->getTextInputManager(), _inputString, _cursor, TextCursor::InvalidCursor, getInputTypeValue());
 				updateCursor();
 			}
 		} else {
@@ -499,7 +499,7 @@ bool InputLabel::onPressEnd(const Vec2 &vec) {
 bool InputLabel::onPressCancel(const Vec2 &vec) {
 	if (!_handler.isActive() && _isLongPress) {
 		if (_director) {
-			_handler.run(_director->getTextInputManager(), _inputString, _cursor, getInputTypeValue());
+			_handler.run(_director->getTextInputManager(), _inputString, _cursor, TextCursor::InvalidCursor, getInputTypeValue());
 			updateCursor();
 		}
 	}

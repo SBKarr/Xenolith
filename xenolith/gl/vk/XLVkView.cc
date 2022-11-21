@@ -350,6 +350,9 @@ bool View::present(Rc<ImageStorage> &&object) {
 			}, this, true);
 		}
 	} else {
+		if (!_options.renderImageOffscreen) {
+			return true;
+		}
 		auto gen = _gen;
 		performOnThread([this, object = move(object), gen] () mutable {
 			presentImmediate(move(object), [this, gen] (bool success) {
@@ -404,7 +407,9 @@ bool View::presentImmediate(Rc<ImageStorage> &&object, Function<void(bool)> &&sc
 	auto t = platform::device::_clock(platform::device::ClockType::Monotonic);
 #endif
 
-	waitForFences(_frameOrder);
+	if (_options.waitOnSwapchainPassFence) {
+		waitForFences(_frameOrder);
+	}
 
 	XL_VKAPI_LOG("[PresentImmediate] [waitForFences] [", platform::device::_clock(platform::device::Monotonic) - t, "]");
 
@@ -478,11 +483,14 @@ bool View::presentImmediate(Rc<ImageStorage> &&object, Function<void(bool)> &&sc
 			queue = nullptr;
 		}
 		if (scheduleCb) {
-			presentFence->addRelease([dev, pool = move(pool), scheduleCb = move(scheduleCb), object = move(object), loop] (bool success) mutable {
-				dev->releaseCommandPoolUnsafe(move(pool));
+			pool->autorelease(object);
+			presentFence->addRelease([dev, pool = pool ? move(pool) : nullptr, scheduleCb = move(scheduleCb), object = move(object), loop] (bool success) mutable {
+				if (pool) {
+					dev->releaseCommandPoolUnsafe(move(pool));
+				}
 				loop->releaseImage(move(object));
 				scheduleCb(success);
-			}, pool, "View::presentImmediate::releaseCommandPoolUnsafe");
+			}, this, "View::presentImmediate::releaseCommandPoolUnsafe");
 			scheduleFence(move(presentFence));
 		} else {
 			presentFence->check(*((Loop *)_loop.get()), false);
@@ -697,8 +705,6 @@ bool View::recreateSwapchain(gl::PresentMode mode) {
 		Rc<renderqueue::FrameEmitter> frameEmitter;
 	};
 
-	std::cout << gl::getPresentModeName(mode) << "\n";
-
 	auto data = Rc<ResetData>::alloc();
 	data->fenceImages = move(_fenceImages);
 	data->scheduledImages = move(_scheduledImages);
@@ -898,7 +904,6 @@ void View::presentWithQueue(DeviceQueue &queue, Rc<ImageStorage> &&image) {
 	auto dt = updateFrameInterval();
 	if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR) {
 		_swapchain->deprecate(false);
-		std::cout << "VK_ERROR_OUT_OF_DATE_KHR\n";
 	}
 
 	_blockDeprecation = true;

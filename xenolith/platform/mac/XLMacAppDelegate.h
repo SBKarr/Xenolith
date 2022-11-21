@@ -26,10 +26,12 @@ THE SOFTWARE.
 
 #import <Cocoa/Cocoa.h>
 
+using namespace stappler::xenolith;
+
 @interface XLMacAppDelegate : NSObject <NSApplicationDelegate> {
-	stappler::xenolith::Value _arguments;
+	Value _arguments;
 	NSWindow *_window;
-	stappler::Rc<stappler::xenolith::Ref> _mainLoop;
+	stappler::Rc<Ref> _mainLoop;
 }
 
 - (instancetype _Nonnull) initWithArgc:(int)argc argv:(const char *_Nonnull [_Nonnull])argv;

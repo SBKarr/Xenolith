@@ -73,8 +73,8 @@ public:
 
 	bool isPersistentMapping() const { return _persistentMappings; }
 
-	void setSceneId(uint32_t val) { _sceneId = val; }
-	uint32_t getSceneId() const { return _sceneId; }
+	void setSceneId(uint64_t val) { _sceneId = val; }
+	uint64_t getSceneId() const { return _sceneId; }
 
 	const Rc<gl::View> &getSwapchain() const { return _swapchain; }
 
@@ -93,7 +93,7 @@ protected:
 	Map<const Attachment *, Rc<AttachmentInputData>> _input;
 	bool _readyForSubmit = true; // if true, do not wait synchronization with other active frames in emitter
 	bool _persistentMappings = true; // true; // try to map per-frame GPU memory persistently
-	uint32_t _sceneId = 0;
+	uint64_t _sceneId = 0;
 
 	Map<const Attachment *, Function<bool(FrameAttachmentData &, bool)>> _output;
 

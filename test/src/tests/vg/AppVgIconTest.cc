@@ -102,13 +102,13 @@ bool VgIconTest::init() {
 	auto l = _sprite->addInputListener(Rc<InputListener>::create());
 	l->addTouchRecognizer([this] (const GestureData &data) -> bool {
 		if (data.event == GestureEvent::Ended) {
-			if (data.input->data.button == InputMouseButton::Mouse8) {
+			if (data.input->data.button == InputMouseButton::Mouse8 || data.input->data.button == InputMouseButton::MouseScrollRight) {
 				if (_currentName == IconName::Action_3d_rotation_outline) {
 					updateIcon(IconName::Toggle_toggle_on_solid);
 				} else {
 					updateIcon(IconName(toInt(_currentName) - 1));
 				}
-			} else if (data.input->data.button == InputMouseButton::Mouse9) {
+			} else if (data.input->data.button == InputMouseButton::Mouse9 || data.input->data.button == InputMouseButton::MouseScrollLeft) {
 				if (_currentName == IconName::Toggle_toggle_on_solid) {
 					updateIcon(IconName::Action_3d_rotation_outline);
 				} else {

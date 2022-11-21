@@ -161,8 +161,8 @@ public:
 	virtual void wakeup() override;
 
 	virtual void updateTextCursor(uint32_t pos, uint32_t len) override;
-	virtual void updateTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) override;
-	virtual void runTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) override;
+	virtual void updateTextInput(WideStringView str, uint32_t pos, uint32_t len, TextInputType) override;
+	virtual void runTextInput(WideStringView str, uint32_t pos, uint32_t len, TextInputType) override;
 	virtual void cancelTextInput() override;
 
 	virtual void presentWithQueue(vk::DeviceQueue &, Rc<ImageStorage> &&) override;

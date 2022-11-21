@@ -26,13 +26,27 @@
 #include "XLRenderQueueFrameEmitter.h"
 #include "XLEventHeader.h"
 
+namespace stappler::xenolith {
+
+class TextInputViewInterface {
+public:
+	virtual ~TextInputViewInterface() { }
+
+	virtual void updateTextCursor(uint32_t pos, uint32_t len) = 0;
+	virtual void updateTextInput(WideStringView str, uint32_t pos, uint32_t len, TextInputType) = 0;
+	virtual void runTextInput(WideStringView str, uint32_t pos, uint32_t len, TextInputType) = 0;
+	virtual void cancelTextInput() = 0;
+};
+
+}
+
 namespace stappler::xenolith::gl {
 
 class Device;
 class Loop;
 class Instance;
 
-class View : public thread::ThreadInterface<Interface> {
+class View : public thread::ThreadInterface<Interface>, public TextInputViewInterface {
 public:
 	using AttachmentLayout = renderqueue::AttachmentLayout;
 	using ImageStorage = renderqueue::ImageStorage;
@@ -111,11 +125,6 @@ public:
 
 	uint64_t getFrameInterval() const;
 	void setFrameInterval(uint64_t);
-
-	virtual void updateTextCursor(uint32_t pos, uint32_t len) = 0;
-	virtual void updateTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) = 0;
-	virtual void runTextInput(WideString str, uint32_t pos, uint32_t len, TextInputType) = 0;
-	virtual void cancelTextInput() = 0;
 
 protected:
 	virtual void wakeup() = 0;
