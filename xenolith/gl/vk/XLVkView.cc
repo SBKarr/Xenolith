@@ -190,7 +190,7 @@ void View::threadDispose() {
 	}
 	_scheduledPresent.clear();
 
-	_swapchain->invalidate();
+	//_swapchain->invalidate();
 	_swapchain = nullptr;
 	_surface = nullptr;
 

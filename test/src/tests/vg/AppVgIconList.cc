@@ -54,7 +54,7 @@ bool VgIconListNode::init(IconName iconName, Function<void(IconName)> &&cb) {
 		path->getPath()->init(bytes);
 	});
 	path->setWindingRule(vg::Winding::EvenOdd);
-	path->setAntialiased(false);
+	path->setAntialiased(true);
 	auto t = Mat4::IDENTITY;
 	t.scale(1, -1, 1);
 	t.translate(0, -24, 0);
@@ -65,6 +65,7 @@ bool VgIconListNode::init(IconName iconName, Function<void(IconName)> &&cb) {
 	_image->setAutofit(Sprite::Autofit::Contain);
 	_image->setContentSize(Size2(64.0f, 64.0f));
 	_image->setAnchorPoint(Anchor::Middle);
+	//_image->setDeferred(true);
 	_iconName = iconName;
 
 	auto l = addInputListener(Rc<InputListener>::create());

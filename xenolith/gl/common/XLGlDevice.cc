@@ -44,6 +44,7 @@ bool Device::init(const Instance *instance) {
 void Device::end() {
 	_started = false;
 
+#if SP_REF_DEBUG
 	if (isRetainTrackerEnabled()) {
 		log::vtext("Gl-Device", "Backtrace for ", (void *)this);
 		foreachBacktrace([] (uint64_t id, Time time, const std::vector<std::string> &vec) {
@@ -55,6 +56,7 @@ void Device::end() {
 			log::text("Gl-Device-Backtrace", stream.str());
 		});
 	}
+#endif
 }
 
 Rc<Shader> Device::getProgram(StringView name) {
@@ -147,6 +149,7 @@ void Device::invalidateObjects() {
 			log::vtext("Gl-Device", "Object ", (void *)it, " (", typeid(*it).name(),
 					") was not destroyed before device destruction");
 		}
+#if SP_REF_DEBUG
 		if (auto ref = dynamic_cast<const Ref *>(it)) {
 			log::vtext("Gl-Device", "Backtrace for ", (void *)it);
 			ref->foreachBacktrace([] (uint64_t id, Time time, const std::vector<std::string> &vec) {
@@ -158,6 +161,7 @@ void Device::invalidateObjects() {
 				log::text("Gl-Device-Backtrace", stream.str());
 			});
 		}
+#endif
 		it->invalidate();
 	}
 }

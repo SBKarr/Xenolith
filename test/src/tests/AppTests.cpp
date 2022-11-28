@@ -41,6 +41,7 @@
 #include "vg/AppVgTessTest.cc"
 #include "vg/AppVgIconTest.cc"
 #include "vg/AppVgIconList.cc"
+#include "utils/AppUtilsStorageTest.cc"
 #include "config/AppConfigMenu.cc"
 #include "config/AppConfigPresentModeSwitcher.cc"
 
@@ -51,7 +52,7 @@ Vector<MenuData> s_rootMenu({
 	MenuData{LayoutName::InputTests, "Input tests"},
 	MenuData{LayoutName::ActionTests, "Action tests"},
 	MenuData{LayoutName::VgTests, "VG tests"},
-	MenuData{LayoutName::GuiTests, "Gui tests"},
+	MenuData{LayoutName::UtilsTests, "Utils tests"},
 	MenuData{LayoutName::Config, "Config"},
 });
 
@@ -84,8 +85,8 @@ Vector<MenuData> s_vgTestsMenu({
 
 });
 
-Vector<MenuData> s_guiTestsMenu({
-	MenuData{LayoutName::GuiScrollTest, "Scroll test"},
+Vector<MenuData> s_utilsTestsMenu({
+	MenuData{LayoutName::UtilsStorageTest, "Storage test"},
 });
 
 LayoutName getRootLayoutForLayout(LayoutName name) {
@@ -95,7 +96,7 @@ LayoutName getRootLayoutForLayout(LayoutName name) {
 	case LayoutName::InputTests:
 	case LayoutName::ActionTests:
 	case LayoutName::VgTests:
-	case LayoutName::GuiTests:
+	case LayoutName::UtilsTests:
 	case LayoutName::Config:
 		return LayoutName::Root;
 		break;
@@ -128,8 +129,8 @@ LayoutName getRootLayoutForLayout(LayoutName name) {
 		return LayoutName::VgTests;
 		break;
 
-	case LayoutName::GuiScrollTest:
-		return LayoutName::GuiTests;
+	case LayoutName::UtilsStorageTest:
+		return LayoutName::UtilsTests;
 		break;
 	}
 	return LayoutName::Root;
@@ -142,7 +143,7 @@ StringView getLayoutNameId(LayoutName name) {
 	case LayoutName::InputTests: return "org.stappler.xenolith.test.InputTests"; break;
 	case LayoutName::ActionTests: return "org.stappler.xenolith.test.ActionTests"; break;
 	case LayoutName::VgTests: return "org.stappler.xenolith.test.VgTests"; break;
-	case LayoutName::GuiTests: return "org.stappler.xenolith.test.GuiTests"; break;
+	case LayoutName::UtilsTests: return "org.stappler.xenolith.test.UtilsTests"; break;
 	case LayoutName::Config: return "org.stappler.xenolith.test.Config"; break;
 
 	case LayoutName::GeneralUpdateTest: return "org.stappler.xenolith.test.GeneralUpdateTest"; break;
@@ -165,7 +166,7 @@ StringView getLayoutNameId(LayoutName name) {
 	case LayoutName::VgIconTest: return "org.stappler.xenolith.test.VgIconTest"; break;
 	case LayoutName::VgIconList: return "org.stappler.xenolith.test.VgIconList"; break;
 
-	case LayoutName::GuiScrollTest: return "org.stappler.xenolith.test.GuiScrollTest"; break;
+	case LayoutName::UtilsStorageTest: return "org.stappler.xenolith.test.UtilsStorageTest"; break;
 	}
 	return StringView();
 }
@@ -176,7 +177,7 @@ LayoutName getLayoutNameById(StringView name) {
 	else if (name == "org.stappler.xenolith.test.InputTests") { return LayoutName::InputTests; }
 	else if (name == "org.stappler.xenolith.test.ActionTests") { return LayoutName::ActionTests; }
 	else if (name == "org.stappler.xenolith.test.VgTests") { return LayoutName::VgTests; }
-	else if (name == "org.stappler.xenolith.test.GuiTests") { return LayoutName::GuiTests; }
+	else if (name == "org.stappler.xenolith.test.UtilsTests") { return LayoutName::UtilsTests; }
 	else if (name == "org.stappler.xenolith.test.Config") { return LayoutName::Config; }
 
 	else if (name == "org.stappler.xenolith.test.GeneralUpdateTest") { return LayoutName::GeneralUpdateTest; }
@@ -199,7 +200,7 @@ LayoutName getLayoutNameById(StringView name) {
 	else if (name == "org.stappler.xenolith.test.VgIconTest") { return LayoutName::VgIconTest; }
 	else if (name == "org.stappler.xenolith.test.VgIconList") { return LayoutName::VgIconList; }
 
-	else if (name == "org.stappler.xenolith.test.GuiScrollTest") { return LayoutName::GuiScrollTest; }
+	else if (name == "org.stappler.xenolith.test.UtilsStorageTest") { return LayoutName::UtilsStorageTest; }
 
 	return LayoutName::Root;
 }
@@ -211,7 +212,7 @@ Rc<Node> makeLayoutNode(LayoutName name) {
 	case LayoutName::InputTests: return Rc<LayoutMenu>::create(name, s_inputTestsMenu); break;
 	case LayoutName::ActionTests: return Rc<LayoutMenu>::create(name, s_actionTestsMenu); break;
 	case LayoutName::VgTests: return Rc<LayoutMenu>::create(name, s_vgTestsMenu); break;
-	case LayoutName::GuiTests: return Rc<LayoutMenu>::create(name, s_guiTestsMenu); break;
+	case LayoutName::UtilsTests: return Rc<LayoutMenu>::create(name, s_utilsTestsMenu); break;
 	case LayoutName::Config: return Rc<ConfigMenu>::create(); break;
 
 	case LayoutName::GeneralUpdateTest: return Rc<GeneralUpdateTest>::create(); break;
@@ -234,7 +235,7 @@ Rc<Node> makeLayoutNode(LayoutName name) {
 	case LayoutName::VgIconTest: return Rc<VgIconTest>::create(); break;
 	case LayoutName::VgIconList: return Rc<VgIconList>::create(); break;
 
-	case LayoutName::GuiScrollTest: return Rc<RootLayout>::create(); break;
+	case LayoutName::UtilsStorageTest: return Rc<UtilsStorageTest>::create(); break;
 	}
 	return nullptr;
 }

@@ -20,38 +20,49 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_NODES_VG_XLVECTORCANVAS_H_
-#define XENOLITH_NODES_VG_XLVECTORCANVAS_H_
+#ifndef XENOLITH_NODES_VG_XLVECTORRESULT_H_
+#define XENOLITH_NODES_VG_XLVECTORRESULT_H_
 
-#include "XLDefine.h"
-#include "XLVectorResult.h"
+#include "XLGl.h"
+#include "SPVectorImage.h"
+#include <future>
 
 namespace stappler::xenolith {
 
-using VectorPath = stappler::vg::VectorPath;
+using VectorImageData = vg::VectorImageData;
+using VectorImage = vg::VectorImage;
+using VectorPathRef = vg::VectorPathRef;
 
-class VectorCanvas : public Ref {
+struct VectorCanvasResult : public Ref {
+	Vector<gl::TransformedVertexData> data;
+	Vector<gl::TransformedVertexData> mut;
+	Color4F targetColor;
+	Size2 targetSize;
+	Mat4 targetTransform;
+
+	void updateColor(const Color4F &);
+};
+
+class VectorCanvasDeferredResult : public gl::DeferredVertexResult {
 public:
-	static Rc<VectorCanvas> getInstance(bool deferred = false);
+	virtual ~VectorCanvasDeferredResult();
 
-	virtual ~VectorCanvas();
+	bool init(std::future<Rc<VectorCanvasResult>> &&);
 
-	bool init(bool deferred, float quality = 0.75f, Color4F color = Color4F::WHITE);
+	virtual const Vector<gl::TransformedVertexData> &getData() override;
 
-	void setColor(Color4F);
-	Color4F getColor() const;
+	virtual void handleReady(Rc<VectorCanvasResult> &&);
 
-	void setQuality(float);
-	float getQuality() const;
+	void updateColor(const Color4F &);
 
-	Rc<VectorCanvasResult> draw(Rc<VectorImageData> &&, Size2 targetSize);
+	Rc<VectorCanvasResult> getResult() const;
 
 protected:
-	struct Data;
-
-	Data *_data;
+	mutable Mutex _mutex;
+	Rc<VectorCanvasResult> _result;
+	std::future<Rc<VectorCanvasResult>> *_future = nullptr;
 };
 
 }
 
-#endif /* XENOLITH_NODES_VG_XLVECTORCANVAS_H_ */
+#endif /* XENOLITH_NODES_VG_XLVECTORRESULT_H_ */

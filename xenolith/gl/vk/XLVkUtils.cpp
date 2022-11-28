@@ -790,7 +790,7 @@ std::ostream &operator<< (std::ostream &stream, VkResult res) {
 	case VK_OPERATION_DEFERRED_KHR: stream << "VK_OPERATION_DEFERRED_KHR"; break;
 	case VK_OPERATION_NOT_DEFERRED_KHR: stream << "VK_OPERATION_NOT_DEFERRED_KHR"; break;
 	case VK_RESULT_MAX_ENUM: stream << "VK_RESULT_MAX_ENUM"; break;
-	default: stream << stappler::toString("Unknown: ", res); break;
+	default: stream << stappler::xenolith::toString("Unknown: ", res); break;
 	}
 	return stream;
 }

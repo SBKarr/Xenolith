@@ -38,13 +38,59 @@ void VectorCanvasResult::updateColor(const Color4F &color) {
 	mut.clear();
 	mut.reserve(data.size());
 	for (auto &it : data) {
-		auto &iit = mut.emplace_back(it.first, copyData(it.second));
-		for (auto &vertex : iit.second->data) {
+		auto &iit = mut.emplace_back(it.mat, copyData(it.data));
+		for (auto &vertex : iit.data->data) {
 			vertex.color = vertex.color * color;
 		}
 	}
 
 	targetColor = color;
+}
+
+VectorCanvasDeferredResult::~VectorCanvasDeferredResult() {
+	if (_future) {
+		delete _future;
+		_future = nullptr;
+	}
+}
+
+bool VectorCanvasDeferredResult::init(std::future<Rc<VectorCanvasResult>> &&future) {
+	_future = new std::future<Rc<VectorCanvasResult>>(move(future));
+	return true;
+}
+
+const Vector<gl::TransformedVertexData> &VectorCanvasDeferredResult::getData() {
+	std::unique_lock<Mutex> lock(_mutex);
+	if (_future) {
+		_result = _future->get();
+		delete _future;
+		_future = nullptr;
+		DeferredVertexResult::handleReady();
+	}
+	return _result->mut;
+}
+
+void VectorCanvasDeferredResult::handleReady(Rc<VectorCanvasResult> &&res) {
+	std::unique_lock<Mutex> lock(_mutex);
+	if (_future) {
+		delete _future;
+		_future = nullptr;
+	}
+	_result = move(res);
+	DeferredVertexResult::handleReady();
+}
+
+Rc<VectorCanvasResult> VectorCanvasDeferredResult::getResult() const {
+	std::unique_lock<Mutex> lock(_mutex);
+	return _result;
+}
+
+void VectorCanvasDeferredResult::updateColor(const Color4F &color) {
+	std::unique_lock<Mutex> lock(_mutex);
+	if (_result) {
+		lock.unlock();
+		_result->updateColor(color);
+	}
 }
 
 struct VectorCanvasPathOutput {
@@ -83,10 +129,31 @@ struct VectorCanvasCacheData {
 	}
 };
 
+struct VectorCanvasCache {
+	static Mutex s_cacheMutex;
+	static VectorCanvasCache *s_instance;
+
+	static void retain();
+	static void release();
+
+	static const VectorCanvasCacheData *getCacheData(const VectorCanvasCacheData &);
+	static const VectorCanvasCacheData *setCacheData(VectorCanvasCacheData &&);
+
+	VectorCanvasCache();
+	~VectorCanvasCache();
+
+	uint32_t refCount = 0;
+	Set<VectorCanvasCacheData> cacheData;
+};
+
+VectorCanvasCache *VectorCanvasCache::s_instance = nullptr;
+Mutex VectorCanvasCache::s_cacheMutex;
+
 struct VectorCanvas::Data : memory::AllocPool {
 	memory::pool_t *pool = nullptr;
 	memory::pool_t *transactionPool = nullptr;
 	bool isOwned = true;
+	bool deferred = false;
 
 	VectorCanvasPathDrawer pathDrawer;
 
@@ -98,33 +165,15 @@ struct VectorCanvas::Data : memory::AllocPool {
 	Rc<VectorImageData> image;
 	Size2 targetSize;
 
-	Vector<Pair<Mat4, Rc<gl::VertexData>>> *out = nullptr;
-	Set<VectorCanvasCacheData> cacheData;
+	Vector<gl::TransformedVertexData> *out = nullptr;
 
-	Data(memory::pool_t *p) : pool(p) {
-		transactionPool = memory::pool::create(pool);
+	Data(memory::pool_t *p, bool deferred);
+	~Data();
 
-		loadCache();
-	}
+	void save();
+	void restore();
 
-	~Data() {
-		saveCache();
-	}
-
-	void save() {
-		states.push_back(transform);
-	}
-
-	void restore() {
-		if (!states.empty()) {
-			transform = states.back();
-			states.pop_back();
-		}
-	}
-
-	void applyTransform(const Mat4 &t) {
-		transform *= t;
-	}
+	void applyTransform(const Mat4 &t);
 
 	void draw(const VectorPath &, StringView cache);
 	void draw(const VectorPath &, StringView cache, const Mat4 &);
@@ -132,9 +181,6 @@ struct VectorCanvas::Data : memory::AllocPool {
 	void doDraw(const VectorPath &, StringView cache);
 
 	void writeCacheData(const VectorPath &p, gl::VertexData *out, const gl::VertexData &source);
-
-	void loadCache();
-	void saveCache();
 };
 
 static void VectorCanvasPathDrawer_pushVertex(void *ptr, uint32_t idx, const Vec2 &pt, float vertexValue) {
@@ -166,10 +212,10 @@ static void VectorCanvasPathDrawer_pushTriangle(void *ptr, uint32_t pt[3]) {
 	}*/
 }
 
-Rc<VectorCanvas> VectorCanvas::getInstance() {
+Rc<VectorCanvas> VectorCanvas::getInstance(bool deferred) {
 	static thread_local Rc<VectorCanvas> tl_instance = nullptr;
 	if (!tl_instance) {
-		tl_instance = Rc<VectorCanvas>::create();
+		tl_instance = Rc<VectorCanvas>::create(deferred);
 	}
 	return tl_instance;
 }
@@ -183,9 +229,10 @@ VectorCanvas::~VectorCanvas() {
 	}
 }
 
-bool VectorCanvas::init(float quality, Color4F color) {
+bool VectorCanvas::init(bool deferred, float quality, Color4F color) {
 	auto p = memory::pool::createTagged("xenolith::VectorCanvas");
-	_data = new (p) Data(p);
+	memory::pool::context ctx(p);
+	_data = new (p) Data(p, deferred);
 	if (_data) {
 		_data->pathDrawer.quality = quality;
 		_data->pathDrawer.originalColor = color;
@@ -248,7 +295,7 @@ Rc<VectorCanvasResult> VectorCanvas::draw(Rc<VectorImageData> &&image, Size2 tar
 		_data->restore();
 	}
 
-	if (!_data->out->empty() && _data->out->back().second->data.empty()) {
+	if (!_data->out->empty() && _data->out->back().data->data.empty()) {
 		_data->out->pop_back();
 	}
 
@@ -256,6 +303,33 @@ Rc<VectorCanvasResult> VectorCanvas::draw(Rc<VectorImageData> &&image, Size2 tar
 	_data->image = nullptr;
 	ret->updateColor(ret->targetColor);
 	return ret;
+}
+
+VectorCanvas::Data::Data(memory::pool_t *p, bool deferred) : pool(p), deferred(deferred) {
+	transactionPool = memory::pool::create(pool);
+
+	VectorCanvasCache::retain();
+}
+
+VectorCanvas::Data::~Data() {
+	VectorCanvasCache::release();
+
+	memory::pool::destroy(transactionPool);
+}
+
+void VectorCanvas::Data::save() {
+	states.push_back(transform);
+}
+
+void VectorCanvas::Data::restore() {
+	if (!states.empty()) {
+		transform = states.back();
+		states.pop_back();
+	}
+}
+
+void VectorCanvas::Data::applyTransform(const Mat4 &t) {
+	transform *= t;
 }
 
 void VectorCanvas::Data::draw(const VectorPath &path, StringView cache) {
@@ -290,15 +364,15 @@ void VectorCanvas::Data::draw(const VectorPath &path, StringView cache, const Ma
 
 void VectorCanvas::Data::doDraw(const VectorPath &path, StringView cache) {
 	gl::VertexData *outData = nullptr;
-	if (out->empty() || !out->back().second->data.empty()) {
+	if (out->empty() || !out->back().data->data.empty()) {
 		out->emplace_back(transform, Rc<gl::VertexData>::alloc());
 	}
 
-	outData = out->back().second.get();
+	outData = out->back().data.get();
 	memory::pool::push(transactionPool);
 
 	do {
-		if (!cache.empty()) {
+		if (!deferred && !cache.empty()) {
 			auto style = path.getStyle();
 			float quality = pathDrawer.quality;
 
@@ -307,8 +381,7 @@ void VectorCanvas::Data::doDraw(const VectorPath &path, StringView cache) {
 
 			VectorCanvasCacheData data{nullptr, cache.str<Interface>(), quality, scale, style};
 
-			auto it = cacheData.find(data);
-			if (it != cacheData.end()) {
+			if (auto it = VectorCanvasCache::getCacheData(data)) {
 				if (!it->data->indexes.empty()) {
 					writeCacheData(path, outData, *it->data);
 				}
@@ -319,19 +392,20 @@ void VectorCanvas::Data::doDraw(const VectorPath &path, StringView cache) {
 
 			auto ret = pathDrawer.draw(transactionPool, path, transform, data.data, true);
 			if (ret != 0) {
-				auto it = cacheData.emplace(move(data)).first;
-				writeCacheData(path, outData, *it->data);
+				if (auto it = VectorCanvasCache::setCacheData(move(data))) {
+					writeCacheData(path, outData, *it->data);
+				}
 			} else {
 				outData->data.clear();
 				outData->indexes.clear();
-				out->back().first = transform;
+				out->back().mat = transform;
 			}
 		} else {
 			auto ret = pathDrawer.draw(transactionPool, path, transform, outData, false);
 			if (ret == 0) {
 				outData->data.clear();
 				outData->indexes.clear();
-				out->back().first = transform;
+				out->back().mat = transform;
 			}
 		}
 	} while (0);
@@ -355,58 +429,6 @@ void VectorCanvas::Data::writeCacheData(const VectorPath &p, gl::VertexData *out
 		} else if (it.material == 1) {
 			it.color = it.color * strokeVec;
 		}
-	}
-}
-
-void VectorCanvas::Data::loadCache() {
-	auto path = filesystem::writablePath<Interface>("vector_cache.cbor");
-
-	if (filesystem::exists(path)) {
-		auto val = data::readFile<Interface>(path);
-		for (auto &it : val.asArray()) {
-			VectorCanvasCacheData data;
-			data.name = it.getString("name");
-			data.quality = it.getDouble("quality");
-			data.scale = it.getDouble("scale");
-
-			auto &vertexes = it.getBytes("vertexes");
-			auto &indexes = it.getBytes("indexes");
-
-			data.data = Rc<gl::VertexData>::alloc();
-			data.data->data.assign((gl::Vertex_V4F_V4F_T2F2U *)vertexes.data(),
-					(gl::Vertex_V4F_V4F_T2F2U *)(vertexes.data() + vertexes.size()));
-			data.data->indexes.assign((uint32_t *)indexes.data(),
-					(uint32_t *)(indexes.data() + indexes.size()));
-
-			cacheData.emplace(move(data));
-		}
-	}
-}
-
-void VectorCanvas::Data::saveCache() {
-	Value val;
-	for (auto &it : cacheData) {
-		if (!it.data) {
-			continue;
-		}
-
-		Value data;
-		data.setString(it.name, "name");
-		data.setDouble(it.quality, "quality");
-		data.setDouble(it.scale, "scale");
-
-		data.setBytes(BytesView((uint8_t *)it.data->data.data(), it.data->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U)), "vertexes");
-		data.setBytes(BytesView((uint8_t *)it.data->indexes.data(), it.data->indexes.size() * sizeof(uint32_t)), "indexes");
-
-		val.addValue(move(data));
-	}
-
-	if (!val.empty()) {
-		auto path = filesystem::writablePath<Interface>("vector_cache.cbor");
-		filesystem::mkdir(filepath::root(path));
-
-		filesystem::remove(path);
-		data::save(val, path, data::EncodeFormat::Cbor);
 	}
 }
 
@@ -499,6 +521,108 @@ uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const VectorPath &p,
 	}
 
 	return target.objects;
+}
+
+
+void VectorCanvasCache::retain() {
+	std::unique_lock<Mutex> lock(s_cacheMutex);
+
+	if (!s_instance) {
+		s_instance = new VectorCanvasCache();
+	}
+	++ s_instance->refCount;
+}
+
+void VectorCanvasCache::release() {
+	std::unique_lock<Mutex> lock(s_cacheMutex);
+
+	if (s_instance) {
+		if (s_instance->refCount == 1) {
+			delete s_instance;
+			s_instance = nullptr;
+		} else {
+			-- s_instance->refCount;
+		}
+	}
+}
+
+const VectorCanvasCacheData *VectorCanvasCache::getCacheData(const VectorCanvasCacheData &data) {
+	std::unique_lock<Mutex> lock(s_cacheMutex);
+	if (!s_instance) {
+		return nullptr;
+	}
+
+	auto it = s_instance->cacheData.find(data);
+	if (it != s_instance->cacheData.end()) {
+		return &*it;
+	}
+
+	return nullptr;
+}
+
+const VectorCanvasCacheData *VectorCanvasCache::setCacheData(VectorCanvasCacheData &&data) {
+	std::unique_lock<Mutex> lock(s_cacheMutex);
+	if (!s_instance) {
+		return nullptr;
+	}
+
+	auto it = s_instance->cacheData.find(data);
+	if (it == s_instance->cacheData.end()) {
+		it = s_instance->cacheData.emplace(move(data)).first;
+	}
+	return &*it;
+}
+
+VectorCanvasCache::VectorCanvasCache() {
+	auto path = filesystem::writablePath<Interface>("vector_cache.cbor");
+
+	if (filesystem::exists(path)) {
+		auto val = data::readFile<Interface>(path);
+		for (auto &it : val.asArray()) {
+			VectorCanvasCacheData data;
+			data.name = it.getString("name");
+			data.quality = it.getDouble("quality");
+			data.scale = it.getDouble("scale");
+
+			auto &vertexes = it.getBytes("vertexes");
+			auto &indexes = it.getBytes("indexes");
+
+			data.data = Rc<gl::VertexData>::alloc();
+			data.data->data.assign((gl::Vertex_V4F_V4F_T2F2U *)vertexes.data(),
+					(gl::Vertex_V4F_V4F_T2F2U *)(vertexes.data() + vertexes.size()));
+			data.data->indexes.assign((uint32_t *)indexes.data(),
+					(uint32_t *)(indexes.data() + indexes.size()));
+
+			cacheData.emplace(move(data));
+		}
+	}
+}
+
+VectorCanvasCache::~VectorCanvasCache() {
+	Value val;
+	for (auto &it : cacheData) {
+		if (!it.data) {
+			continue;
+		}
+
+		Value data;
+		data.setString(it.name, "name");
+		data.setDouble(it.quality, "quality");
+		data.setDouble(it.scale, "scale");
+
+		data.setBytes(BytesView((uint8_t *)it.data->data.data(), it.data->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U)), "vertexes");
+		data.setBytes(BytesView((uint8_t *)it.data->indexes.data(), it.data->indexes.size() * sizeof(uint32_t)), "indexes");
+
+		val.addValue(move(data));
+	}
+
+	if (!val.empty()) {
+		auto path = filesystem::writablePath<Interface>("vector_cache.cbor");
+		filesystem::mkdir(filepath::root(path));
+
+		filesystem::remove(path);
+		data::save(val, path, data::EncodeFormat::Cbor);
+	}
 }
 
 SP_EXTERN_C void tessLog(const char *msg) {

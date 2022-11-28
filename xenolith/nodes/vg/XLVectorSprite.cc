@@ -22,6 +22,8 @@
 
 #include "XLVectorSprite.h"
 #include "XLVectorCanvas.h"
+#include "XLApplication.h"
+#include "XLDeferredManager.h"
 
 namespace stappler::xenolith {
 
@@ -161,9 +163,15 @@ bool VectorSprite::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 
 uint32_t VectorSprite::getTrianglesCount() const {
 	uint32_t ret = 0;
-	if (_result) {
+	if (_deferredResult) {
+		if (_deferredResult->isReady()) {
+			for (auto &it : _deferredResult->getResult()->data) {
+				ret += it.data->indexes.size() / 3;
+			}
+		}
+	} else if (_result) {
 		for (auto &it : _result->data) {
-			ret += it.second->indexes.size() / 3;
+			ret += it.data->indexes.size() / 3;
 		}
 	}
 	return ret;
@@ -171,51 +179,75 @@ uint32_t VectorSprite::getTrianglesCount() const {
 
 uint32_t VectorSprite::getVertexesCount() const {
 	uint32_t ret = 0;
-	if (_result) {
+	if (_deferredResult) {
+		if (_deferredResult->isReady()) {
+			for (auto &it : _deferredResult->getResult()->data) {
+				ret += it.data->data.size();
+			}
+		}
+	} else if (_result) {
 		for (auto &it : _result->data) {
-			ret += it.second->data.size();
+			ret += it.data->data.size();
 		}
 	}
 	return ret;
 }
 
+void VectorSprite::setDeferred(bool val) {
+	if (val != _deferred) {
+		_deferred = val;
+		_vertexesDirty = true;
+	}
+}
+
 void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
-	if (!_result || _result->data.empty()) {
+	if (!_deferredResult && (!_result || _result->data.empty())) {
 		return;
 	}
 
-	auto &targetData = _result->mut;
-	auto reqMemSize = sizeof(Pair<Mat4, Rc<gl::VertexData>>) * targetData.size();
+	if (_result) {
+		auto &targetData = _result->mut;
+		auto reqMemSize = sizeof(gl::TransformedVertexData) * targetData.size();
 
-	// pool memory is 16-bytes aligned, no problems with Mat4
-	auto tmpData = new (memory::pool::palloc(frame.pool, reqMemSize)) Pair<Mat4, Rc<gl::VertexData>>[targetData.size()];
-	auto target = tmpData;
-	if (_normalized) {
-		auto transform = frame.modelTransformStack.back() * _targetTransform;
-		for (auto &it : targetData) {
-			auto modelTransform = transform * it.first;
+		// pool memory is 16-bytes aligned, no problems with Mat4
+		auto tmpData = new (memory::pool::palloc(frame.pool, reqMemSize)) gl::TransformedVertexData[targetData.size()];
+		auto target = tmpData;
+		if (_normalized) {
+			auto transform = frame.viewProjectionStack.back() * frame.modelTransformStack.back() * _targetTransform;
+			for (auto &it : targetData) {
+				auto modelTransform = transform * it.mat;
 
-			Mat4 newMV;
-			newMV.m[12] = floorf(modelTransform.m[12]);
-			newMV.m[13] = floorf(modelTransform.m[13]);
-			newMV.m[14] = floorf(modelTransform.m[14]);
+				Mat4 newMV;
+				newMV.m[12] = floorf(modelTransform.m[12]);
+				newMV.m[13] = floorf(modelTransform.m[13]);
+				newMV.m[14] = floorf(modelTransform.m[14]);
 
-			target->first = newMV;
-			target->second = it.second;
-			++ target;
+				target->mat = newMV;
+				target->data = it.data;
+				++ target;
+			}
+		} else {
+			auto transform = frame.viewProjectionStack.back() * frame.modelTransformStack.back() * _targetTransform;
+			for (auto &it : targetData) {
+				auto modelTransform = transform * it.mat;
+				target->mat = modelTransform;
+				target->data = it.data;
+				++ target;
+			}
 		}
-	} else {
+
+		frame.commands->pushVertexArray(makeSpanView(tmpData, targetData.size()), frame.zPath,
+				_materialId, _realRenderingLevel, _commandFlags);
+	} else if (_deferredResult) {
+		if (_deferredResult->isReady() && _deferredResult->getResult()->data.empty()) {
+			return;
+		}
+
 		auto transform = frame.viewProjectionStack.back() * frame.modelTransformStack.back() * _targetTransform;
-		for (auto &it : targetData) {
-			auto pathTransform = transform * it.first;
-			target->first = pathTransform;
-			target->second = it.second;
-			++ target;
-		}
-	}
 
-	frame.commands->pushVertexArray(makeSpanView(tmpData, targetData.size()), frame.zPath,
-			_materialId, _realRenderingLevel, _commandFlags);
+		frame.commands->pushDeferredVertexResult(_deferredResult, transform, _normalized, frame.zPath,
+						_materialId, _realRenderingLevel, _commandFlags);
+	}
 }
 
 void VectorSprite::initVertexes() {
@@ -275,13 +307,20 @@ void VectorSprite::updateVertexes() {
 	_targetTransform = targetTransform;
 	if (isDirty || _image->isDirty()) {
 		_image->clearDirty();
-		auto canvas = VectorCanvas::getInstance();
-		canvas->setColor(_displayedColor);
-		canvas->setQuality(_quality);
 
-		// std::cout << targetTransform << " " << targetViewSpaceSize << "\n";
+		auto imageData = _image->popData();
 
-		_result = canvas->draw(_image->popData(), targetViewSpaceSize);
+		if (_deferred) {
+			auto &manager = _director->getApplication()->getDeferredManager();
+			_deferredResult = manager->runVectorCavas(move(imageData), targetViewSpaceSize, _displayedColor, _quality);
+			_result = nullptr;
+		} else {
+			auto canvas = VectorCanvas::getInstance();
+			canvas->setColor(_displayedColor);
+			canvas->setQuality(_quality);
+			_result = canvas->draw(move(imageData), targetViewSpaceSize);
+			_deferredResult = nullptr;
+		}
 		_vertexColorDirty = false; // color will be already applied
 	}
 
@@ -332,7 +371,15 @@ void VectorSprite::updateVertexes() {
 }
 
 void VectorSprite::updateVertexesColor() {
-	_result->updateColor(_displayedColor);
+	if (_deferred) {
+		if (_deferredResult) {
+			_deferredResult->updateColor(_displayedColor);
+		}
+	} else {
+		if (_result) {
+			_result->updateColor(_displayedColor);
+		}
+	}
 }
 
 RenderingLevel VectorSprite::getRealRenderingLevel() const {

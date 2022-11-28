@@ -39,6 +39,9 @@ Command *Command::create(memory::pool_t *p, CommandType t, CommandFlags flags) {
 	case CommandType::VertexArray:
 		c->data = new ( memory::pool::palloc(p, sizeof(CmdVertexArray)) ) CmdVertexArray;
 		break;
+	case CommandType::Deferred:
+		c->data = new ( memory::pool::palloc(p, sizeof(CmdDeferred)) ) CmdDeferred;
+		break;
 	}
 	return c;
 }
@@ -50,8 +53,13 @@ void Command::release() {
 	case CommandType::VertexArray:
 		if (CmdVertexArray *d = (CmdVertexArray *)data) {
 			for (auto &it : d->vertexes) {
-				const_cast<Pair<Mat4, Rc<VertexData>> &>(it).second = nullptr;
+				const_cast<TransformedVertexData &>(it).data = nullptr;
 			}
+		}
+		break;
+	case CommandType::Deferred:
+		if (CmdDeferred *d = (CmdDeferred *)data) {
+			d->deferred = nullptr;
 		}
 		break;
 	}
@@ -92,10 +100,10 @@ void CommandList::pushVertexArray(Rc<VertexData> &&vert, const Mat4 &t, SpanView
 		auto cmdData = (CmdVertexArray *)cmd->data;
 
 		// pool memory is 16-bytes aligned, no problems with Mat4
-		auto p = new (memory::pool::palloc(_pool->getPool(), sizeof(Pair<Mat4, Rc<VertexData>>))) Pair<Mat4, Rc<VertexData>>();
+		auto p = new (memory::pool::palloc(_pool->getPool(), sizeof(TransformedVertexData))) TransformedVertexData();
 
-		p->first = t;
-		p->second = move(vert);
+		p->mat = t;
+		p->data = move(vert);
 
 		cmdData->vertexes = makeSpanView(p, 1);
 
@@ -112,13 +120,36 @@ void CommandList::pushVertexArray(Rc<VertexData> &&vert, const Mat4 &t, SpanView
 	});
 }
 
-void CommandList::pushVertexArray(SpanView<Pair<Mat4, Rc<VertexData>>> data, SpanView<int16_t> zPath,
+void CommandList::pushVertexArray(SpanView<TransformedVertexData> data, SpanView<int16_t> zPath,
 		gl::MaterialId material, RenderingLevel level, CommandFlags flags) {
 	_pool->perform([&] {
 		auto cmd = Command::create(_pool->getPool(), CommandType::VertexArray, flags);
 		auto cmdData = (CmdVertexArray *)cmd->data;
 
 		cmdData->vertexes = data;
+
+		while (!zPath.empty() && zPath.back() == 0) {
+			zPath.pop_back();
+		}
+
+		cmdData->zPath = zPath.pdup(_pool->getPool());
+		cmdData->material = material;
+		cmdData->state = _currentState;
+		cmdData->renderingLevel = level;
+
+		addCommand(cmd);
+	});
+}
+
+void CommandList::pushDeferredVertexResult(const Rc<DeferredVertexResult> &res, const Mat4 &t, bool normalized,
+		SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel level, CommandFlags flags) {
+	_pool->perform([&] {
+		auto cmd = Command::create(_pool->getPool(), CommandType::Deferred, flags);
+		auto cmdData = (CmdDeferred *)cmd->data;
+
+		cmdData->deferred = res;
+		cmdData->transform = t;
+		cmdData->normalized = normalized;
 
 		while (!zPath.empty() && zPath.back() == 0) {
 			zPath.pop_back();

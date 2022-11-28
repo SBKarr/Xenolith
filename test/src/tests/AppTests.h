@@ -33,7 +33,7 @@ enum class LayoutName {
 	InputTests,
 	ActionTests,
 	VgTests,
-	GuiTests,
+	UtilsTests,
 	Config,
 
 	GeneralUpdateTest = 256 * 1,
@@ -56,7 +56,7 @@ enum class LayoutName {
 	VgIconTest,
 	VgIconList,
 
-	GuiScrollTest = 256 * 5,
+	UtilsStorageTest = 256 * 5,
 };
 
 struct MenuData {
@@ -69,7 +69,7 @@ extern Vector<MenuData> s_generalTestsMenu;
 extern Vector<MenuData> s_inputTestsMenu;
 extern Vector<MenuData> s_actionTestsMenu;
 extern Vector<MenuData> s_vgTestsMenu;
-extern Vector<MenuData> s_guiTestsMenu;
+extern Vector<MenuData> s_utilsTestsMenu;
 
 LayoutName getRootLayoutForLayout(LayoutName);
 StringView getLayoutNameId(LayoutName);

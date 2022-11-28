@@ -72,6 +72,9 @@ public:
 	virtual uint32_t getTrianglesCount() const;
 	virtual uint32_t getVertexesCount() const;
 
+	virtual void setDeferred(bool);
+	virtual bool isDeferred() const { return _deferred; }
+
 protected:
 	using Sprite::init;
 
@@ -83,7 +86,7 @@ protected:
 
 	virtual RenderingLevel getRealRenderingLevel() const override;
 
-	bool _async = false;
+	bool _deferred = true;
 	bool _imageIsSolid = false;
 	uint64_t _asyncJobId = 0;
 	Size2 _targetSize;
@@ -91,6 +94,7 @@ protected:
 	Rc<VectorImage> _image;
 	float _quality = QualityNormal;
 	Rc<VectorCanvasResult> _result;
+	Rc<VectorCanvasDeferredResult> _deferredResult;
 };
 
 }

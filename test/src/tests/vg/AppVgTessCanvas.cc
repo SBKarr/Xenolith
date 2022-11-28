@@ -312,6 +312,8 @@ void VgTessCanvas::onTouch(const InputEvent &ev) {
 				&& (ev.currentTime - ev.originalTime) < TapIntervalAllowed.toMicros()) {
 			onActionTouch(ev);
 		} else {
+			 std::cout << "Distance: " << ev.currentLocation.distance(ev.originalLocation)
+					 << " Time: " << ev.currentTime - ev.originalTime << "\n";
 		}
 		_capturedPoint = nullptr;
 		break;

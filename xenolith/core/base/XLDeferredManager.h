@@ -20,38 +20,37 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_NODES_VG_XLVECTORCANVAS_H_
-#define XENOLITH_NODES_VG_XLVECTORCANVAS_H_
+#ifndef XENOLITH_CORE_BASE_XLDEFERREDMANAGER_H_
+#define XENOLITH_CORE_BASE_XLDEFERREDMANAGER_H_
 
-#include "XLDefine.h"
+#include "SPThreadTaskQueue.h"
 #include "XLVectorResult.h"
 
 namespace stappler::xenolith {
 
-using VectorPath = stappler::vg::VectorPath;
-
-class VectorCanvas : public Ref {
+class DeferredManager : protected thread::TaskQueue {
 public:
-	static Rc<VectorCanvas> getInstance(bool deferred = false);
+	virtual ~DeferredManager();
 
-	virtual ~VectorCanvas();
+	DeferredManager(Application *, StringView);
 
-	bool init(bool deferred, float quality = 0.75f, Color4F color = Color4F::WHITE);
+	bool init(uint32_t threadCount);
+	void cancel();
 
-	void setColor(Color4F);
-	Color4F getColor() const;
+	void update();
 
-	void setQuality(float);
-	float getQuality() const;
+	Rc<VectorCanvasDeferredResult> runVectorCavas(Rc<VectorImageData> &&image, Size2 targetSize, Color4F color, float quality);
 
-	Rc<VectorCanvasResult> draw(Rc<VectorImageData> &&, Size2 targetSize);
+	using mem_std::AllocBase::operator new;
+	using mem_std::AllocBase::operator delete;
+
+	using Ref::release;
+	using Ref::retain;
 
 protected:
-	struct Data;
-
-	Data *_data;
+	Application *_application = nullptr;
 };
 
 }
 
-#endif /* XENOLITH_NODES_VG_XLVECTORCANVAS_H_ */
+#endif /* XENOLITH_CORE_BASE_XLDEFERREDMANAGER_H_ */

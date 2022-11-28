@@ -52,17 +52,14 @@ THE SOFTWARE.
 #include "SPPadding.h"
 #include "SPColor.h"
 
-// GL thread loop debug (uncomment to enable)
-// #define XL_LOOP_DEBUG 1
 
-// RenderGraph/Frame debug (uncomment to enable)
-// #define XL_FRAME_DEBUG 1
+#if __CDT_PARSER__
+// IDE-specific definition
 
-// General Vulkan debug (uncomment to enable)
-// #define XL_VK_DEBUG 1
+#define MODULE_XENOLITH_STORAGE 1
 
-// Enable Vulkan function call hooks (uncomment to enable)
-// #define XL_VK_HOOK_DEBUG 1
+#endif
+
 
 // based on VK_MAKE_API_VERSION
 #define XL_MAKE_API_VERSION(variant, major, minor, patch) \

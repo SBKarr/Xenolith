@@ -20,8 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **/
 
-#ifndef COMPONENTS_XENOLITH_PLATFORM_COMMON_XLAPPLICATION_H_
-#define COMPONENTS_XENOLITH_PLATFORM_COMMON_XLAPPLICATION_H_
+#ifndef XENOLITH_CORE_BASE_XLAPPLICATION_H_
+#define XENOLITH_CORE_BASE_XLAPPLICATION_H_
 
 #include "XLDefine.h"
 #include "XLEventHeader.h"
@@ -29,9 +29,14 @@ THE SOFTWARE.
 #include "SPThreadTaskQueue.h"
 #include "XLGl.h"
 
+#if MODULE_XENOLITH_STORAGE
+#include "XLStorageServer.h"
+#endif
+
 namespace stappler::xenolith {
 
 class ResourceCache;
+class DeferredManager;
 
 class Application : public Ref {
 public:
@@ -45,6 +50,7 @@ public:
 	using CompleteCallback = Function<void(const Task &, bool)>;
 
 	static constexpr uint32_t ApplicationThreadId = 1;
+	static constexpr uint32_t DeferredThreadId = 2;
 
 	struct Data {
 		String bundleName = "org.stappler.xenolith";
@@ -191,6 +197,7 @@ public:
 	const Data &getData() const { return _data; }
 
 	const Rc<thread::TaskQueue> &getQueue() const { return _queue; }
+	const Rc<DeferredManager> &getDeferredManager() const { return _deferred; }
 	const gl::Instance *getGlInstance() const { return _instance; }
 	const Rc<ResourceCache> &getResourceCache() const;
 
@@ -198,28 +205,6 @@ public:
 
 	const Rc<font::FontLibrary> &getFontLibrary() const { return _fontLibrary; }
 	const Rc<font::FontController> &getFontController() const { return _fontController; }
-
-#if MODULE_XENOLITH_STORAGE
-public:
-	// initialize components, that use persistent data storage
-	virtual bool onBuildStorage(storage::Server::Builder &);
-
-	const Rc<storage::Server> &getStorageServer() const { return _storageServer; }
-
-protected:
-	Value _dbParams;
-	storage::StorageRoot _storageRoot;
-	Rc<storage::AssetLibrary> _assetLibrary;
-	Rc<storage::Server> _storageServer;
-#endif
-
-#if MODULE_XENOLITH_NETWORK
-public:
-	const Rc<network::Controller> &getNetworkController() const { return _networkController; }
-
-protected:
-	Rc<network::Controller> _networkController;
-#endif
 
 protected:
 	virtual void updateDefaultFontController(font::FontController::Builder &);
@@ -239,6 +224,7 @@ protected:
 	bool _immediateUpdate = false;
 
 	Rc<thread::TaskQueue> _queue;
+	Rc<DeferredManager> _deferred;
 	std::thread::id _threadId;
 
 	std::unordered_map<EventHeader::EventID, std::unordered_set<const EventHandlerNode *>> _eventListeners;
@@ -250,8 +236,31 @@ protected:
 	log::CustomLog _appLog;
 
 	memory::pool_t *_updatePool = nullptr;
+
+#if MODULE_XENOLITH_STORAGE
+public:
+	const Rc<storage::Server> &getStorageServer() const { return _storageServer; }
+
+protected:
+	Value _dbParams;
+	storage::StorageRoot _storageRoot;
+	Rc<storage::Server> _storageServer;
+#endif
+
+#if MODULE_XENOLITH_NETWORK
+public:
+	const Rc<network::Controller> &getNetworkController() const { return _networkController; }
+
+protected:
+	Rc<network::Controller> _networkController;
+#endif
+
+#if MODULE_XENOLITH_ASSET
+protected:
+	Rc<storage::AssetLibrary> _assetLibrary;
+#endif
 };
 
 }
 
-#endif /* COMPONENTS_XENOLITH_PLATFORM_COMMON_XLAPPLICATION_H_ */
+#endif /* XENOLITH_CORE_BASE_XLAPPLICATION_H_ */

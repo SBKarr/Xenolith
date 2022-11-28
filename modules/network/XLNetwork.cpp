@@ -20,38 +20,6 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_NODES_VG_XLVECTORCANVAS_H_
-#define XENOLITH_NODES_VG_XLVECTORCANVAS_H_
 
-#include "XLDefine.h"
-#include "XLVectorResult.h"
 
-namespace stappler::xenolith {
 
-using VectorPath = stappler::vg::VectorPath;
-
-class VectorCanvas : public Ref {
-public:
-	static Rc<VectorCanvas> getInstance(bool deferred = false);
-
-	virtual ~VectorCanvas();
-
-	bool init(bool deferred, float quality = 0.75f, Color4F color = Color4F::WHITE);
-
-	void setColor(Color4F);
-	Color4F getColor() const;
-
-	void setQuality(float);
-	float getQuality() const;
-
-	Rc<VectorCanvasResult> draw(Rc<VectorImageData> &&, Size2 targetSize);
-
-protected:
-	struct Data;
-
-	Data *_data;
-};
-
-}
-
-#endif /* XENOLITH_NODES_VG_XLVECTORCANVAS_H_ */

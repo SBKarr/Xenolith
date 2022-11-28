@@ -20,38 +20,32 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_NODES_VG_XLVECTORCANVAS_H_
-#define XENOLITH_NODES_VG_XLVECTORCANVAS_H_
+#ifndef TEST_SRC_TESTS_UTILS_APPUTILSSTORAGETEST_H_
+#define TEST_SRC_TESTS_UTILS_APPUTILSSTORAGETEST_H_
 
-#include "XLDefine.h"
-#include "XLVectorResult.h"
+#include "AppLayoutTest.h"
 
-namespace stappler::xenolith {
+namespace stappler::xenolith::app {
 
-using VectorPath = stappler::vg::VectorPath;
+class UtilsStorageTestComponentContainer;
 
-class VectorCanvas : public Ref {
+class UtilsStorageTest : public LayoutTest {
 public:
-	static Rc<VectorCanvas> getInstance(bool deferred = false);
+	virtual ~UtilsStorageTest() { }
 
-	virtual ~VectorCanvas();
+	virtual bool init();
 
-	bool init(bool deferred, float quality = 0.75f, Color4F color = Color4F::WHITE);
-
-	void setColor(Color4F);
-	Color4F getColor() const;
-
-	void setQuality(float);
-	float getQuality() const;
-
-	Rc<VectorCanvasResult> draw(Rc<VectorImageData> &&, Size2 targetSize);
+	virtual void onEnter(Scene *) override;
+	virtual void onExit() override;
 
 protected:
-	struct Data;
+	using LayoutTest::init;
 
-	Data *_data;
+
+
+	Rc<UtilsStorageTestComponentContainer> _container;
 };
 
 }
 
-#endif /* XENOLITH_NODES_VG_XLVECTORCANVAS_H_ */
+#endif /* TEST_SRC_TESTS_UTILS_APPUTILSSTORAGETEST_H_ */

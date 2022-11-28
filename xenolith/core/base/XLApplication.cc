@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include "XLEventHandler.h"
 #include "XLGlInstance.h"
 #include "XLGlLoop.h"
+#include "XLDeferredManager.h"
 
 namespace stappler::log {
 
@@ -139,12 +140,6 @@ bool Application::onFinishLaunching() {
 	return _glLoop != nullptr;
 }
 
-#if MODULE_XENOLITH_STORAGE
-bool Application::onBuildStorage(storage::Server::Builder &builder) {
-	return true;
-}
-#endif
-
 bool Application::onMainLoop() {
 	return false;
 }
@@ -158,10 +153,10 @@ int Application::run(Value &&data) {
 	memory::pool::push(_updatePool);
 
 #if MODULE_XENOLITH_STORAGE
-	_dbParams = data::Value({
-		pair("driver", data::Value("sqlite")),
-		pair("dbname", data::Value(filesystem::cachesPath("root.sqlite"))),
-		pair("serverName", data::Value("RootStorage"))
+	_dbParams = Value({
+		pair("driver", Value("sqlite")),
+		pair("dbname", Value(filesystem::cachesPath<Interface>("root.sqlite"))),
+		pair("serverName", Value("RootStorage"))
 	});
 #endif
 
@@ -211,11 +206,26 @@ int Application::run(Value &&data) {
 
 	// all init parallel with gl-loop init goes here
 
-#if MODULE_XNOLITH_STORAGE
+	_deferred = Rc<DeferredManager>::alloc(this, "AppDeferred");
+	_deferred->init(std::thread::hardware_concurrency());
+
+#if MODULE_XENOLITH_STORAGE
 	db::setStorageRoot(&_storageRoot);
 
-	_networkController = Rc<network::Controller>::alloc(this, "Root");
+	_storageServer = Rc<storage::Server>::create(this, _dbParams);
 
+	if (!_storageServer) {
+		log::text("Application", "Fail to launch application: onBuildStorage failed");
+		memory::pool::pop();
+		return 1;
+	}
+#endif
+
+#if MODULE_XENOLITH_NETWORK
+	_networkController = Rc<network::Controller>::alloc(this, "Root");
+#endif
+
+#if MODULE_XENOLITH_ASSET
 	auto libpath = filesystem::writablePath<Interface>("library");
 	filesystem::mkdir(libpath);
 
@@ -224,18 +234,6 @@ int Application::run(Value &&data) {
 		pair("dbname", data::Value(toString(libpath, "/assets.v2.db"))),
 		pair("serverName", data::Value("AssetStorage"))
 	}));
-#endif
-
-#if MODULE_XENOLITH_STORAGE
-	_storageServer = Rc<storage::Server>::create(this, _dbParams, [&] (storage::Server::Builder &builder) {
-		return onBuildStorage(builder);
-	});
-
-	if (!_storageServer) {
-		log::text("Application", "Fail to launch application: onBuildStorage failed");
-		memory::pool::pop();
-		return 1;
-	}
 #endif
 
 	bool ret = false;
@@ -262,6 +260,7 @@ int Application::run(Value &&data) {
 		platform::device::_sleep(100'000);
 
 		if (_glLoop->getReferenceCount() > 1) {
+#if SP_REF_DEBUG
 			auto loop = _glLoop.get();
 			_glLoop = nullptr;
 
@@ -274,6 +273,9 @@ int Application::run(Value &&data) {
 				}
 				log::text("gl::Loop", stream.str());
 			});
+#else
+			_glLoop = nullptr;
+#endif
 		}
 		_glLoop = nullptr;
 	} else {
@@ -285,8 +287,14 @@ int Application::run(Value &&data) {
 		_queue = nullptr;
 	}
 
+	if (_deferred) {
+		_deferred->cancel();
+		_deferred = nullptr;
+	}
+
 	if (_instance) {
 		if (_instance->getReferenceCount() > 1) {
+#if SP_REF_DEBUG
 			auto instance = _instance.get();
 			_instance = nullptr;
 
@@ -299,6 +307,9 @@ int Application::run(Value &&data) {
 				}
 				log::text("gl::Instance", stream.str());
 			});
+#else
+			_instance = nullptr;
+#endif
 		}
 		_instance = nullptr;
 	}
@@ -329,6 +340,7 @@ void Application::runLoop(TimeInterval iv) {
 		if (count > 0) {
 			memory::pool::push(_updatePool);
 			_queue->update();
+			_deferred->update();
 			memory::pool::pop();
 			memory::pool::clear(_updatePool);
 		}

@@ -26,12 +26,13 @@
 #include "XLDefine.h"
 #include "SPNetworkHandle.h"
 #include "SPThreadTaskQueue.h"
+#include "SPThread.h"
 
 namespace stappler::xenolith::network {
 
 class Handle;
 
-class Controller final : public thread::ThreadHandlerInterface {
+class Controller final : public thread::ThreadInterface {
 public:
 	Controller(Application *, StringView);
 	virtual ~Controller();
@@ -54,7 +55,7 @@ protected:
 
 	virtual void *getSharegroup(StringView);
 
-	void sign(Handle &, NetworkHandle::Context &) const;
+	void sign(Handle &, NetworkHandle &) const;
 
 	Application *_application = nullptr;
 	String _name;

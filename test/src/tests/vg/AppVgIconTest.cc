@@ -187,10 +187,12 @@ void VgIconTest::updateIcon(IconName name) {
 	_label->setString(toString(getIconName(_currentName), " ", toInt(_currentName), "/", toInt(IconName::Toggle_toggle_on_solid)));
 
 	[[maybe_unused]] StringView pathData(
-			"M13 13v8h8v-8h-8z"
-			"M3 21h8v-8H3v8z"
-			"M3 3v8h8V3H3z"
-			"M16.6599998 1.69000006 L11 7.34 16.66 13l5.66-5.66-5.66-5.65z"
+			//"M 10,8 L 21,8 L 21,5 C 21,3.9000000953674316 20.100000381469727,3 19,3 L 10,3 L 10,8 Z "
+//"M 3,8 L 8,8 L 8,3 L 5,3 C 3.9000000953674316,3 3,3.9000000953674316 3,5 L 3,8 Z "
+//"M 5,21 L 8,21 L 8,10 L 3,10 L 3,19 C 3,20.100000381469727 3.9000000953674316,21 5,21 Z "
+//"M 13,22 L 9,18 L 13,14 Z "
+"M 14,13 L 18,9 L 22,13 Z "
+"M 14.579999923706055,19 L 17,13 L 19,13 Z"
 	);
 
 	do {

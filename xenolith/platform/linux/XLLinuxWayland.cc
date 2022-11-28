@@ -810,10 +810,11 @@ static int createAnonymousFile(off_t size) {
 		::strcat(tmpname, tpl);
 
 		fd = ::mkostemp(tmpname, O_CLOEXEC);
-		::free(tmpname);
 		if (fd >= 0) {
 			::unlink(tmpname);
+			::free(tmpname);
 		} else {
+			::free(tmpname);
 			return -1;
 		}
 	}

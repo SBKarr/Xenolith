@@ -22,9 +22,6 @@ THE SOFTWARE.
 
 #include "XLDefine.h"
 
-#include "common/XLApplication.cc"
-#include "common/XLLog.cc"
-
 #include "linux/XLVkViewImpl.cc"
 #include "linux/XLVkViewWayland.cc"
 #include "linux/XLVkViewXcb.cc"

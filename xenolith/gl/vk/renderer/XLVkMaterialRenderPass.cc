@@ -178,18 +178,24 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 		return false;
 	}
 
+	struct PlanCommandInfo {
+		const gl::CmdGeneral *cmd;
+		SpanView<gl::TransformedVertexData> vertexes;
+	};
+
 	struct MaterialWritePlan {
 		const gl::Material *material = nullptr;
 		Rc<gl::ImageAtlas> atlas;
 		uint32_t vertexes = 0;
 		uint32_t indexes = 0;
-		Map<gl::StateId, std::forward_list<const gl::CmdVertexArray *>> states;
+		Map<gl::StateId, std::forward_list<PlanCommandInfo>> states;
 	};
 
 	uint32_t excludeVertexes = 0;
 	uint32_t excludeIndexes = 0;
 
 	Map<SpanView<int16_t>, float, ZIndexLess> paths;
+	std::forward_list<Vector<gl::TransformedVertexData>> deferredResults;
 
 	// fill write plan
 	MaterialWritePlan globalWritePlan;
@@ -204,7 +210,7 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 	Map<SpanView<int16_t>, std::unordered_map<gl::MaterialId, MaterialWritePlan>, ZIndexLess> transparentWritePlan;
 
 	auto emplaceWritePlan = [&] (std::unordered_map<gl::MaterialId, MaterialWritePlan> &writePlan,
-			const gl::Command *c, const gl::CmdVertexArray *cmd) {
+			const gl::Command *c, const gl::CmdGeneral *cmd, SpanView<gl::TransformedVertexData> vertexes) {
 		auto it = writePlan.find(cmd->material);
 		if (it == writePlan.end()) {
 			auto material = _materialSet->getMaterialById(cmd->material);
@@ -218,25 +224,25 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 		}
 
 		if (it != writePlan.end() && it->second.material) {
-			for (auto &iit : cmd->vertexes) {
-				globalWritePlan.vertexes += iit.second->data.size();
-				globalWritePlan.indexes += iit.second->indexes.size();
+			for (auto &iit : vertexes) {
+				globalWritePlan.vertexes += iit.data->data.size();
+				globalWritePlan.indexes += iit.data->indexes.size();
 
-				it->second.vertexes += iit.second->data.size();
-				it->second.indexes += iit.second->indexes.size();
+				it->second.vertexes += iit.data->data.size();
+				it->second.indexes += iit.data->indexes.size();
 
 				if ((c->flags & gl::CommandFlags::DoNotCount) != gl::CommandFlags::None) {
-					excludeVertexes = iit.second->data.size();
-					excludeIndexes = iit.second->indexes.size();
+					excludeVertexes = iit.data->data.size();
+					excludeIndexes = iit.data->indexes.size();
 				}
 			}
 
 			auto iit = it->second.states.find(cmd->state);
 			if (iit == it->second.states.end()) {
-				iit = it->second.states.emplace(cmd->state, std::forward_list<const gl::CmdVertexArray *>()).first;
+				iit = it->second.states.emplace(cmd->state, std::forward_list<PlanCommandInfo>()).first;
 			}
 
-			iit->second.emplace_front(cmd);
+			iit->second.emplace_front(PlanCommandInfo{cmd, vertexes});
 		}
 
 		auto pathsIt = paths.find(cmd->zPath);
@@ -251,25 +257,67 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 			return;
 		}
 		if (material->getPipeline()->isSolid()) {
-			emplaceWritePlan(solidWritePlan, c, cmd);
+			emplaceWritePlan(solidWritePlan, c, cmd, cmd->vertexes);
 		} else if (cmd->renderingLevel == RenderingLevel::Surface) {
-			emplaceWritePlan(surfaceWritePlan, c, cmd);
+			emplaceWritePlan(surfaceWritePlan, c, cmd, cmd->vertexes);
 		} else {
 			auto v = transparentWritePlan.find(cmd->zPath);
 			if (v == transparentWritePlan.end()) {
 				v = transparentWritePlan.emplace(cmd->zPath, std::unordered_map<gl::MaterialId, MaterialWritePlan>()).first;
 			}
-			emplaceWritePlan(v->second, c, cmd);
+			emplaceWritePlan(v->second, c, cmd, cmd->vertexes);
+		}
+	};
+
+	auto pushDeferred = [&] (const gl::Command *c, const gl::CmdDeferred *cmd) {
+		auto material = _materialSet->getMaterialById(cmd->material);
+		if (!material) {
+			return;
+		}
+
+		auto &vertexes = deferredResults.emplace_front(cmd->deferred->getData());
+
+		// apply transforms;
+		if (cmd->normalized) {
+			for (auto &it : vertexes) {
+				auto modelTransform = cmd->transform * it.mat;
+
+				Mat4 newMV;
+				newMV.m[12] = floorf(modelTransform.m[12]);
+				newMV.m[13] = floorf(modelTransform.m[13]);
+				newMV.m[14] = floorf(modelTransform.m[14]);
+
+				it.mat = newMV;
+			}
+		} else {
+			for (auto &it : vertexes) {
+				it.mat = cmd->transform * it.mat;
+			}
+		}
+
+		if (cmd->renderingLevel == RenderingLevel::Solid) {
+			emplaceWritePlan(solidWritePlan, c, cmd, vertexes);
+		} else if (cmd->renderingLevel == RenderingLevel::Surface) {
+			emplaceWritePlan(surfaceWritePlan, c, cmd, vertexes);
+		} else {
+			auto v = transparentWritePlan.find(cmd->zPath);
+			if (v == transparentWritePlan.end()) {
+				v = transparentWritePlan.emplace(cmd->zPath, std::unordered_map<gl::MaterialId, MaterialWritePlan>()).first;
+			}
+			emplaceWritePlan(v->second, c, cmd, vertexes);
 		}
 	};
 
 	auto cmd = commands->getFirst();
 	while (cmd) {
 		switch (cmd->type) {
+		case gl::CommandType::CommandGroup:
+			break;
 		case gl::CommandType::VertexArray:
 			pushVertexData(cmd, (const gl::CmdVertexArray *)cmd->data);
 			break;
-		case gl::CommandType::CommandGroup:
+		case gl::CommandType::Deferred:
+			pushDeferred(cmd, (const gl::CmdDeferred *)cmd->data);
 			break;
 		}
 		cmd = cmd->next;
@@ -329,7 +377,7 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 	uint32_t materialIndexes = 0;
 
 	auto pushVertexes = [&] (const gl::MaterialId &materialId, const MaterialWritePlan &plan,
-			const gl::CmdVertexArray *cmd, const Mat4 &transform, gl::VertexData *vertexes) {
+			const gl::CmdGeneral *cmd, const Mat4 &transform, gl::VertexData *vertexes) {
 
 		auto target = (gl::Vertex_V4F_V4F_T2F2U *)vertexesMap.ptr + vertexOffset;
 		memcpy(target, (uint8_t *)vertexes->data.data(),
@@ -431,8 +479,8 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 				materialIndexes = 0;
 
 				for (auto &cmd : state.second) {
-					for (auto &iit : cmd->vertexes) {
-						pushVertexes(it->first, it->second, cmd, iit.first, iit.second.get());
+					for (auto &iit : cmd.vertexes) {
+						pushVertexes(it->first, it->second, cmd.cmd, iit.mat, iit.data.get());
 					}
 				}
 

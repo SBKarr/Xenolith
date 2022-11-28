@@ -30,7 +30,7 @@ namespace stappler::xenolith {
 class InputField : public Node, protected InputLabelDelegate {
 public:
 	using Handler = TextInputHandler;
-	using Cursor = TextInputCursor;
+	using Cursor = TextCursor;
 	using PasswordMode = InputLabel::PasswordMode;
 	using Error = InputLabel::Error;
 	using Callback = Function<void()>;
@@ -48,8 +48,8 @@ public:
 	virtual void setMaxChars(size_t);
 	virtual size_t getMaxChars() const;
 
-	virtual void setInputType(InputType);
-	virtual InputType getInputType() const;
+	virtual void setInputType(TextInputType);
+	virtual TextInputType getInputType() const;
 
 	virtual void setPasswordMode(PasswordMode);
 	virtual PasswordMode getPasswordMode();

@@ -45,6 +45,7 @@ uint32_t FrameHandle::GetActiveFramesCount() {
 
 void FrameHandle::DescribeActiveFrames() {
 	s_frameMutex.lock();
+#if SP_REF_DEBUG
 	auto hasFailed = false;
 	for (auto &it : s_activeFrames) {
 		if (!it->isValidFlag()) {
@@ -67,6 +68,7 @@ void FrameHandle::DescribeActiveFrames() {
 		}
 		stappler::log::text("FrameHandle", stream.str());
 	}
+#endif
 
 	s_frameMutex.unlock();
 }

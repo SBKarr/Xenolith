@@ -24,6 +24,8 @@ THE SOFTWARE.
 
 #if LINUX
 
+#include "XLApplication.h"
+#include "XLDirector.h"
 #include "XLPlatformLinuxWayland.h"
 #include "XLPlatformLinuxXcb.h"
 #include "XLTextInputManager.h"

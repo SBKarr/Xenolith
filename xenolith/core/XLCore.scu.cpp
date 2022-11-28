@@ -32,6 +32,10 @@ THE SOFTWARE.
 #include "XLScheduler.cc"
 #include "XLTextInputManager.cc"
 
+#include "base/XLApplication.cc"
+#include "base/XLDeferredManager.cc"
+#include "base/XLLog.cc"
+
 namespace stappler::xenolith {
 
 const ColorMode ColorMode::SolidColor = ColorMode();

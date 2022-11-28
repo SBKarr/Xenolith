@@ -30,6 +30,7 @@ namespace stappler::xenolith::gl {
 enum class CommandType : uint16_t {
 	CommandGroup,
 	VertexArray,
+	Deferred
 };
 
 enum class CommandFlags : uint16_t {
@@ -50,12 +51,21 @@ struct DrawStateValues {
 	bool isViewportEnabled() const { return (enabled & renderqueue::DynamicState::Viewport) != renderqueue::DynamicState::None; }
 };
 
-struct CmdVertexArray {
+struct CmdGeneral {
+	SpanView<int16_t> zPath;
 	gl::MaterialId material = 0;
 	gl::StateId state = 0;
-	SpanView<Pair<Mat4, Rc<VertexData>>> vertexes;
-	SpanView<int16_t> zPath;
 	RenderingLevel renderingLevel = RenderingLevel::Solid;
+};
+
+struct CmdVertexArray : CmdGeneral {
+	SpanView<TransformedVertexData> vertexes;
+};
+
+struct CmdDeferred : CmdGeneral {
+	Rc<DeferredVertexResult> deferred;
+	Mat4 transform;
+	bool normalized = false;
 };
 
 struct Command {
@@ -79,12 +89,15 @@ public:
 		*_statCallback = std::forward<Callback>(cb);
 	}
 
-	void pushVertexArray(Rc<VertexData> &&, const Mat4 &, SpanView<int16_t> zPath, gl::MaterialId material,
-			RenderingLevel, CommandFlags = CommandFlags::None);
+	void pushVertexArray(Rc<VertexData> &&, const Mat4 &,
+			SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel, CommandFlags = CommandFlags::None);
 
 	// data should be preallocated from frame's pool
-	void pushVertexArray(SpanView<Pair<Mat4, Rc<VertexData>>>, SpanView<int16_t> zPath, gl::MaterialId material,
-			RenderingLevel, CommandFlags = CommandFlags::None);
+	void pushVertexArray(SpanView<TransformedVertexData>,
+			SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel, CommandFlags = CommandFlags::None);
+
+	void pushDeferredVertexResult(const Rc<DeferredVertexResult> &, const Mat4 &, bool normalized,
+			SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel, CommandFlags = CommandFlags::None);
 
 	gl::StateId addState(DrawStateValues);
 	const DrawStateValues *getState(gl::StateId) const;

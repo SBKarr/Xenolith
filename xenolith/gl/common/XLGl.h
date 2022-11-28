@@ -369,6 +369,25 @@ struct VertexData : public AttachmentInputData {
 	Vector<uint32_t> indexes;
 };
 
+struct alignas(16) TransformedVertexData {
+	Mat4 mat;
+	Rc<VertexData> data;
+};
+
+class DeferredVertexResult : public Ref {
+public:
+	virtual ~DeferredVertexResult() { }
+
+	virtual const Vector<TransformedVertexData> &getData() = 0;
+
+	bool isReady() const { return _isReady.load(); }
+
+	virtual void handleReady() { _isReady.store(true); }
+
+protected:
+	std::atomic<bool> _isReady;
+};
+
 struct RenderFontInput : public AttachmentInputData {
 	using FontRequest = Pair<Rc<font::FontFaceObject>, Vector<char16_t>>;
 
