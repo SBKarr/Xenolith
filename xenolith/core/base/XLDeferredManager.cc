@@ -70,4 +70,19 @@ Rc<VectorCanvasDeferredResult> DeferredManager::runVectorCavas(Rc<VectorImageDat
 	return ret;
 }
 
+Rc<LabelDeferredResult> DeferredManager::runLabel(Label::FormatSpec *format, const Color4F &color) {
+	auto result = new std::promise<Rc<LabelResult>>;
+	Rc<LabelDeferredResult> ret = Rc<LabelDeferredResult>::create(result->get_future());
+	perform([this, format = Rc<Label::FormatSpec>(format), color, ret, result] () mutable {
+		auto res = Label::writeResult(format, color);
+		result->set_value(res);
+
+		_application->performOnMainThread([ret = move(ret), res = move(res), result] () mutable {
+			ret->handleReady(move(res));
+			delete result;
+		});
+	}, ret);
+	return ret;
+}
+
 }

@@ -223,6 +223,12 @@ bool VertexArray::init(uint32_t bufferCapacity, uint32_t indexCapacity) {
 	return true;
 }
 
+bool VertexArray::init(const Rc<gl::VertexData> &data) {
+	_data = data;
+	_copyOnWrite = true;
+	return true;
+}
+
 void VertexArray::reserve(uint32_t bufferCapacity, uint32_t indexCapacity) {
 	if (_copyOnWrite) {
 		copy();

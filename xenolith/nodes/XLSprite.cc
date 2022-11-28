@@ -258,8 +258,8 @@ void Sprite::setSamplerIndex(uint16_t idx) {
 }
 
 void Sprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
-	auto &modelTransform = frame.modelTransformStack.back();
 	if (_normalized) {
+		auto &modelTransform = frame.modelTransformStack.back();
 		Mat4 newMV;
 		newMV.m[12] = floorf(modelTransform.m[12]);
 		newMV.m[13] = floorf(modelTransform.m[13]);
@@ -268,8 +268,8 @@ void Sprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 		frame.commands->pushVertexArray(_vertexes.dup(),
 				frame.viewProjectionStack.back() * newMV, frame.zPath, _materialId, _realRenderingLevel, _commandFlags);
 	} else {
-		frame.commands->pushVertexArray(_vertexes.dup(),
-				frame.viewProjectionStack.back() * modelTransform, frame.zPath, _materialId, _realRenderingLevel, _commandFlags);
+		frame.commands->pushVertexArray(_vertexes.dup(), frame.viewProjectionStack.back() * frame.modelTransformStack.back(),
+				frame.zPath, _materialId, _realRenderingLevel, _commandFlags);
 	}
 }
 

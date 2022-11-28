@@ -25,14 +25,43 @@
 
 #include "XLSprite.h"
 #include "XLLabelParameters.h"
+#include <future>
 
 namespace stappler::xenolith {
 
 class EventListener;
 
+struct LabelResult : Ref {
+	gl::TransformedVertexData data;
+	Vector<ColorMask> colorMap;
+};
+
+class LabelDeferredResult : public gl::DeferredVertexResult {
+public:
+	virtual ~LabelDeferredResult();
+
+	bool init(std::future<Rc<LabelResult>> &&);
+
+	virtual SpanView<gl::TransformedVertexData> getData() override;
+
+	virtual void handleReady(Rc<LabelResult> &&);
+
+	void updateColor(const Color4F &);
+
+	Rc<gl::VertexData> getResult() const;
+
+protected:
+	mutable Mutex _mutex;
+	Rc<LabelResult> _result;
+	std::future<Rc<LabelResult>> *_future = nullptr;
+};
+
 class Label : public Sprite, public LabelParameters {
 public:
 	using ColorMapVec = Vector<Vector<bool>>;
+
+	static void writeQuads(VertexArray &vertexes, FormatSpec *format, Vector<ColorMask> &colorMap);
+	static Rc<LabelResult> writeResult(FormatSpec *format, const Color4F &);
 
 	virtual ~Label();
 
@@ -78,6 +107,9 @@ public:
 
 	float getMaxLineX() const;
 
+	virtual void setDeferred(bool);
+	virtual bool isDeferred() const { return _deferred; }
+
 protected:
 	using Sprite::init;
 
@@ -95,6 +127,8 @@ protected:
 
 	virtual NodeFlags processParentFlags(RenderFrameInfo &info, NodeFlags parentFlags) override;
 
+	virtual void pushCommands(RenderFrameInfo &, NodeFlags flags);
+
 	void updateLabelScale(const Mat4 &parent);
 
 	EventListener *_listener = nullptr;
@@ -104,11 +138,14 @@ protected:
 	Vector<ColorMask> _colorMap;
 
 	bool _standalone = false;
+	bool _deferred = true;
 
 	float _density = 1.0f;
 
 	uint8_t _adjustValue = 0;
 	size_t _updateCount = 0;
+
+	Rc<LabelDeferredResult> _deferredResult;
 
 	/*Map<String, Vector<char16_t>> _standaloneChars;
 	Vector<Rc<cocos2d::Texture2D>> _standaloneTextures;

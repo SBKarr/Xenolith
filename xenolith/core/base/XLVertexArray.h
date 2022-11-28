@@ -57,6 +57,7 @@ public:
 	virtual ~VertexArray();
 
 	bool init(uint32_t bufferCapacity, uint32_t indexCapacity);
+	bool init(const Rc<gl::VertexData> &);
 
 	void reserve(uint32_t bufferCapacity, uint32_t indexCapacity);
 

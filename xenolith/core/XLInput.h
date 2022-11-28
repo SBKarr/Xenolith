@@ -74,6 +74,9 @@ enum class InputModifier : uint32_t {
 	Button4 = 1 << 11,
 	Button5 = 1 << 12,
 
+	// Linux-only, experimental
+	LayoutAlternative = 1 << 13,
+
 	Command = Mod3,
 
 	// boolean value for switch event (background/focus)

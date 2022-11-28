@@ -49,39 +49,6 @@ struct FontController::Builder::Data {
 	Map<String, String> aliases;
 };
 
-class FontController::FontSizedLayout : public Ref {
-public:
-	virtual ~FontSizedLayout() { }
-	FontSizedLayout() { }
-
-	bool init(FontSize, String &&, FontLayoutId, FontLayout *, Rc<FontFaceObject> &&);
-
-	FontSize getSize() const { return _size; }
-	StringView getName() const { return _name; }
-	FontLayoutId getId() const { return _id; }
-
-	bool addString(const FontCharString &);
-	uint16_t getFontHeight();
-	int16_t getKerningAmount(char16_t first, char16_t second, uint16_t face) const;
-	Metrics getMetrics();
-	CharLayout getChar(char16_t, uint16_t &face);
-	StringView getFontName();
-
-	bool addTextureChars(SpanView<CharSpec>);
-
-	const Vector<Rc<FontFaceObject>> &getFaces() const { return _faces; }
-
-	void prefixFonts(size_t count);
-
-protected:
-	FontSize _size;
-	String _name;
-	FontLayoutId _id;
-	FontLayout *_layout = nullptr;
-	Metrics _metrics;
-	Vector<Rc<FontFaceObject>> _faces;
-};
-
 class FontController::FontLayout : public Ref {
 public:
 	static String constructName(StringView, FontStyle, FontWeight, FontStretch);
@@ -103,16 +70,18 @@ public:
 
 	size_t getFaceCount() const;
 
-	void addData(Rc<FontFaceData> &&, bool front = false);
-	void addData(Vector<Rc<FontFaceData>> &&, bool front = false);
+	void addData(Rc<FontFaceData> &&, bool front, Vector<FontSizedLayout *> &sizes);
+	void addData(Vector<Rc<FontFaceData>> &&, bool front, Vector<FontSizedLayout *> &sizes);
 
 	Rc<FontSizedLayout> getSizedFace(FontSize, std::atomic<uint16_t> &);
+
+	FontSizedLayout *openExtraSources(FontSizedLayout *, Vector<char16_t> &);
 
 	Rc<FontFaceData> getSource(size_t) const;
 	FontLibrary *getLibrary() const { return _library; }
 
 protected:
-	void updateSizedFaces(size_t prefix);
+	void updateSizedFaces(size_t prefix, Vector<FontSizedLayout *> &sizes);
 
 	String _name;
 	String _family;
@@ -332,7 +301,7 @@ void FontController::Builder::addChars(FamilyQuery *query, Vector<Pair<FontSize,
 	}
 }
 
-bool FontController::FontSizedLayout::init(FontSize size, String &&name, FontLayoutId id, FontLayout *l, Rc<FontFaceObject> &&root) {
+bool FontSizedLayout::init(FontSize size, String &&name, FontLayoutId id, FontController::FontLayout *l, Rc<FontFaceObject> &&root) {
 	_size = size;
 	_name = move(name);
 	_id = id;
@@ -342,14 +311,46 @@ bool FontController::FontSizedLayout::init(FontSize size, String &&name, FontLay
 	return true;
 }
 
-bool FontController::FontSizedLayout::addString(const FontCharString &str) {
+bool FontSizedLayout::init(FontSize size, String &&name, FontLayoutId id, FontController::FontLayout *l, Vector<Rc<FontFaceObject>> &&faces) {
+	_size = size;
+	_name = move(name);
+	_id = id;
+	_layout = l;
+	_faces = move(faces);
+	_metrics = _faces.front()->getMetrics();
+	return true;
+}
+
+bool FontSizedLayout::isComplete() const {
+	return _faces.size() == _layout->getFaceCount();
+}
+
+bool FontSizedLayout::addString(const FontCharString &str, Vector<char16_t> &failed) const {
 	bool updated = false;
 	size_t i = 0;
-	size_t count = _layout->getFaceCount();
 
-	Vector<char16_t> failed;
+	for (auto &it : _faces) {
+		if (i == 0) {
+			if (it->addChars(str.chars, i == 0, &failed)) {
+				updated = true;
+			}
+		} else {
+			auto tmp = move(failed);
+			failed.clear();
 
-	while (i < count) {
+			if (it->addChars(tmp, i == 0, &failed)) {
+				updated = true;
+			}
+		}
+
+		if (failed.empty()) {
+			break;
+		}
+
+		++ i;
+	}
+
+	/*while (i < count) {
 		if (!_faces[i]) {
 			_faces[i] = _layout->getLibrary()->openFontFace(_layout->getSource(i), _size);
 		}
@@ -372,15 +373,15 @@ bool FontController::FontSizedLayout::addString(const FontCharString &str) {
 		}
 
 		++ i;
-	}
+	}*/
 	return updated;
 }
 
-uint16_t FontController::FontSizedLayout::getFontHeight() {
+uint16_t FontSizedLayout::getFontHeight() const {
 	return _metrics.height;
 }
 
-int16_t FontController::FontSizedLayout::getKerningAmount(char16_t first, char16_t second, uint16_t face) const {
+int16_t FontSizedLayout::getKerningAmount(char16_t first, char16_t second, uint16_t face) const {
 	for (auto &it : _faces) {
 		if (it->getId() == face) {
 			return it->getKerningAmount(first, second);
@@ -389,11 +390,11 @@ int16_t FontController::FontSizedLayout::getKerningAmount(char16_t first, char16
 	return 0;
 }
 
-Metrics FontController::FontSizedLayout::getMetrics() {
+Metrics FontSizedLayout::getMetrics() const {
 	return _metrics;
 }
 
-CharLayout FontController::FontSizedLayout::getChar(char16_t ch, uint16_t &face) {
+CharLayout FontSizedLayout::getChar(char16_t ch, uint16_t &face) const {
 	for (auto &it : _faces) {
 		auto l = it->getChar(ch);
 		if (l.charID != 0) {
@@ -404,11 +405,11 @@ CharLayout FontController::FontSizedLayout::getChar(char16_t ch, uint16_t &face)
 	return CharLayout();
 }
 
-StringView FontController::FontSizedLayout::getFontName() {
+StringView FontSizedLayout::getFontName() const {
 	return _name;
 }
 
-bool FontController::FontSizedLayout::addTextureChars(SpanView<CharSpec> chars) {
+bool FontSizedLayout::addTextureChars(SpanView<CharSpec> chars) const {
 	bool ret = false;
 	for (auto &it : chars) {
 		if (chars::isspace(it.charID) || it.charID == char16_t(0x0A) || it.charID == char16_t(0x00AD)) {
@@ -424,13 +425,6 @@ bool FontController::FontSizedLayout::addTextureChars(SpanView<CharSpec> chars) 
 		}
 	}
 	return ret;
-}
-
-void FontController::FontSizedLayout::prefixFonts(size_t count) {
-	for (size_t i = 0; i < count; ++ i) {
-		auto face = _layout->getLibrary()->openFontFace(_layout->getSource(i), _size);
-		_faces.emplace(_faces.begin(), face);
-	}
 }
 
 String FontController::FontLayout::constructName(StringView family, FontStyle style, FontWeight weight, FontStretch stretch) {
@@ -465,16 +459,16 @@ size_t FontController::FontLayout::getFaceCount() const {
 	return _sources.size();
 }
 
-void FontController::FontLayout::addData(Rc<FontFaceData> &&data, bool front) {
+void FontController::FontLayout::addData(Rc<FontFaceData> &&data, bool front, Vector<FontSizedLayout *> &sizes) {
 	if (front) {
 		_sources.emplace(_sources.begin(), move(data));
-		updateSizedFaces(1);
+		updateSizedFaces(1, sizes);
 	} else {
 		_sources.emplace_back(move(data));
 	}
 }
 
-void FontController::FontLayout::addData(Vector<Rc<FontFaceData>> &&data, bool front) {
+void FontController::FontLayout::addData(Vector<Rc<FontFaceData>> &&data, bool front, Vector<FontSizedLayout *> &sizes) {
 	if (_sources.empty()) {
 		_sources = move(data);
 	} else {
@@ -487,7 +481,7 @@ void FontController::FontLayout::addData(Vector<Rc<FontFaceData>> &&data, bool f
 				target = _sources.emplace(target, move(*it));
 				++ count;
 			}
-			updateSizedFaces(count);
+			updateSizedFaces(count, sizes);
 		} else {
 			for (auto &it : data) {
 				_sources.emplace_back(move(it));
@@ -503,13 +497,24 @@ Rc<FontFaceData> FontController::FontLayout::getSource(size_t idx) const {
 	return nullptr;
 }
 
-void FontController::FontLayout::updateSizedFaces(size_t prefix) {
+void FontController::FontLayout::updateSizedFaces(size_t prefix, Vector<FontSizedLayout *> &sizes) {
 	for (auto &it : _faces) {
-		it.second->prefixFonts(prefix);
+		auto faces = it.second->getFaces();
+		auto id = it.second->getId();
+
+		for (size_t i = 0; i < prefix; ++ i) {
+			auto face = _library->openFontFace(getSource(i), it.second->getSize());
+			faces.emplace(faces.begin(), face);
+		}
+
+		auto newLayout = Rc<FontSizedLayout>::create(it.second->getSize(), it.second->getName().str<Interface>(), id, this, move(faces));
+
+		sizes[id.get()] = newLayout.get();
+		it.second = newLayout;
 	}
 }
 
-Rc<FontController::FontSizedLayout> FontController::FontLayout::getSizedFace(FontSize size, std::atomic<uint16_t> &nextId) {
+Rc<FontSizedLayout> FontController::FontLayout::getSizedFace(FontSize size, std::atomic<uint16_t> &nextId) {
 	Rc<FontSizedLayout> ret;
 	auto it = _faces.find(size);
 	if (it != _faces.end()) {
@@ -523,6 +528,40 @@ Rc<FontController::FontSizedLayout> FontController::FontLayout::getSizedFace(Fon
 	}
 
 	return ret;
+}
+
+FontSizedLayout *FontController::FontLayout::openExtraSources(FontSizedLayout *l, Vector<char16_t> &failed) {
+	auto tmp = Rc<FontSizedLayout>(l);
+	auto faces = tmp->getFaces();
+
+	auto sourcesOffset = faces.size();
+	auto count = _sources.size();
+	if (sourcesOffset >= count) {
+		return nullptr;
+	}
+
+	auto it = _faces.find(tmp->getSize());
+	if (it == _faces.end()) {
+		return nullptr;
+	}
+
+	while (sourcesOffset < count) {
+		faces.emplace_back(_library->openFontFace(getSource(sourcesOffset), tmp->getSize()));
+
+		auto tmp = move(failed);
+		failed.clear();
+
+		faces[sourcesOffset]->addChars(tmp, false, &failed);
+
+		if (failed.empty()) {
+			break;
+		}
+
+		++ sourcesOffset;
+	}
+
+	it->second = Rc<FontSizedLayout>::create(tmp->getSize(), tmp->getName().str<Interface>(), tmp->getId(), this, move(faces));
+	return it->second.get();
 }
 
 FontController::~FontController() {
@@ -552,7 +591,13 @@ void FontController::addFont(StringView family, FontStyle style, FontWeight weig
 		}
 		_layouts.emplace(l->getName(), move(l));
 	} else {
-		it->second->addData(move(data), front);
+		if (front) {
+			std::unique_lock<Mutex> lock(_sizesMutex);
+			it->second->addData(move(data), front, _sizes);
+		} else {
+			Vector<FontSizedLayout *> sizes;
+			it->second->addData(move(data), front, sizes);
+		}
 	}
 
 	_dirty = true;
@@ -575,7 +620,14 @@ void FontController::addFont(StringView family, FontStyle style, FontWeight weig
 		}
 		_layouts.emplace(l->getName(), move(l));
 	} else {
-		it->second->addData(move(data), front);
+		if (front) {
+			// front addition can change sizes configuration
+			std::unique_lock<Mutex> lock(_sizesMutex);
+			it->second->addData(move(data), front, _sizes);
+		} else {
+			Vector<FontSizedLayout *> sizes;
+			it->second->addData(move(data), front, sizes);
+		}
 	}
 
 	_dirty = true;
@@ -616,6 +668,7 @@ FontLayoutId FontController::getLayout(const FontParameters &style, float scale)
 		auto l = face->getSizedFace(dsize, _nextId);
 
 		ret = l->getId();
+		std::unique_lock<Mutex> lock(_sizesMutex);
 		if (ret.get() >= _sizes.size()) {
 			_sizes.emplace_back(l.get());
 		}
@@ -626,15 +679,23 @@ FontLayoutId FontController::getLayout(const FontParameters &style, float scale)
 }
 
 void FontController::addString(FontLayoutId id, const FontCharString &str) {
+	std::unique_lock<Mutex> lock(_sizesMutex);
 	if (id.get() < _sizes.size()) {
 		auto l = _sizes.at(id.get());
 		if (l) {
-			l->addString(str);
+			Vector<char16_t> failed;
+			l->addString(str, failed);
+			if (!failed.empty() && !l->isComplete()) {
+				if (auto newLayout = l->getLayout()->openExtraSources(l, failed)) {
+					_sizes[id.get()] = newLayout;
+				}
+			}
 		}
 	}
 }
 
-uint16_t FontController::getFontHeight(FontLayoutId id) {
+uint16_t FontController::getFontHeight(FontLayoutId id) const {
+	std::unique_lock<Mutex> lock(_sizesMutex);
 	if (id.get() < _sizes.size()) {
 		auto l = _sizes.at(id.get());
 		if (l) {
@@ -645,6 +706,7 @@ uint16_t FontController::getFontHeight(FontLayoutId id) {
 }
 
 int16_t FontController::getKerningAmount(FontLayoutId id, char16_t first, char16_t second, uint16_t face) const {
+	std::unique_lock<Mutex> lock(_sizesMutex);
 	if (id.get() < _sizes.size()) {
 		auto l = _sizes.at(id.get());
 		if (l) {
@@ -654,7 +716,8 @@ int16_t FontController::getKerningAmount(FontLayoutId id, char16_t first, char16
 	return 0;
 }
 
-Metrics FontController::getMetrics(FontLayoutId id) {
+Metrics FontController::getMetrics(FontLayoutId id) const {
+	std::unique_lock<Mutex> lock(_sizesMutex);
 	if (id.get() < _sizes.size()) {
 		auto l = _sizes.at(id.get());
 		if (l) {
@@ -664,7 +727,8 @@ Metrics FontController::getMetrics(FontLayoutId id) {
 	return Metrics();
 }
 
-CharLayout FontController::getChar(FontLayoutId id, char16_t ch, uint16_t &face) {
+CharLayout FontController::getChar(FontLayoutId id, char16_t ch, uint16_t &face) const {
+	std::unique_lock<Mutex> lock(_sizesMutex);
 	if (id.get() < _sizes.size()) {
 		auto l = _sizes.at(id.get());
 		if (l) {
@@ -674,7 +738,8 @@ CharLayout FontController::getChar(FontLayoutId id, char16_t ch, uint16_t &face)
 	return CharLayout();
 }
 
-StringView FontController::getFontName(FontLayoutId id) {
+StringView FontController::getFontName(FontLayoutId id) const {
+	std::unique_lock<Mutex> lock(_sizesMutex);
 	if (id.get() < _sizes.size()) {
 		auto l = _sizes.at(id.get());
 		if (l) {
@@ -684,7 +749,16 @@ StringView FontController::getFontName(FontLayoutId id) {
 	return StringView();
 }
 
+Rc<FontSizedLayout> FontController::getSizedLayout(FontLayoutId id) const {
+	std::unique_lock<Mutex> lock(_sizesMutex);
+	if (id.get() < _sizes.size()) {
+		return Rc<FontSizedLayout>(_sizes.at(id.get()));
+	}
+	return nullptr;
+}
+
 Rc<renderqueue::DependencyEvent> FontController::addTextureChars(FontLayoutId id, SpanView<CharSpec> chars) {
+	std::unique_lock<Mutex> lock(_sizesMutex);
 	if (id.get() < _sizes.size()) {
 		auto l = _sizes.at(id.get());
 		if (l) {
@@ -720,6 +794,7 @@ StringView FontController::getFamilyName(uint32_t idx) const {
 void FontController::update() {
 	if (_dirty && _loaded) {
 		Vector<Pair<Rc<FontFaceObject>, Vector<char16_t>>> objects;
+		std::unique_lock<Mutex> lock(_sizesMutex);
 		for (auto &it : _sizes) {
 			if (!it) {
 				continue;

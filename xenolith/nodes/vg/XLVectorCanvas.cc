@@ -59,7 +59,7 @@ bool VectorCanvasDeferredResult::init(std::future<Rc<VectorCanvasResult>> &&futu
 	return true;
 }
 
-const Vector<gl::TransformedVertexData> &VectorCanvasDeferredResult::getData() {
+SpanView<gl::TransformedVertexData> VectorCanvasDeferredResult::getData() {
 	std::unique_lock<Mutex> lock(_mutex);
 	if (_future) {
 		_result = _future->get();
@@ -86,6 +86,8 @@ Rc<VectorCanvasResult> VectorCanvasDeferredResult::getResult() const {
 }
 
 void VectorCanvasDeferredResult::updateColor(const Color4F &color) {
+	getResult(); // ensure rendering was complete
+
 	std::unique_lock<Mutex> lock(_mutex);
 	if (_result) {
 		lock.unlock();

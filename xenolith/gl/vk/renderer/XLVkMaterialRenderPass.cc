@@ -275,23 +275,23 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 			return;
 		}
 
-		auto &vertexes = deferredResults.emplace_front(cmd->deferred->getData());
+		auto &vertexes = deferredResults.emplace_front(cmd->deferred->getData().vec<Interface>());
 
 		// apply transforms;
 		if (cmd->normalized) {
 			for (auto &it : vertexes) {
-				auto modelTransform = cmd->transform * it.mat;
+				auto modelTransform = cmd->modelTransform * it.mat;
 
 				Mat4 newMV;
 				newMV.m[12] = floorf(modelTransform.m[12]);
 				newMV.m[13] = floorf(modelTransform.m[13]);
 				newMV.m[14] = floorf(modelTransform.m[14]);
 
-				it.mat = newMV;
+				it.mat = cmd->viewTransform * newMV;
 			}
 		} else {
 			for (auto &it : vertexes) {
-				it.mat = cmd->transform * it.mat;
+				it.mat = cmd->viewTransform * cmd->modelTransform * it.mat;
 			}
 		}
 

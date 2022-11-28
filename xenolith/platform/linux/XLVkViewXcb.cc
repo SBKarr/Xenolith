@@ -230,7 +230,8 @@ static InputModifier getModifiers(uint32_t mask) {
 	InputModifier ret = InputModifier::None;
 	InputModifier *mod, mods[] = { InputModifier::Shift, InputModifier::CapsLock, InputModifier::Ctrl, InputModifier::Alt,
 			InputModifier::NumLock, InputModifier::Mod3, InputModifier::Mod4, InputModifier::Mod5,
-			InputModifier::Button1, InputModifier::Button2, InputModifier::Button3, InputModifier::Button4, InputModifier::Button5 };
+			InputModifier::Button1, InputModifier::Button2, InputModifier::Button3, InputModifier::Button4, InputModifier::Button5,
+			InputModifier::LayoutAlternative };
 	for (mod = mods; mask; mask >>= 1, mod++) {
 		if (mask & 1) {
 			ret |= *mod;

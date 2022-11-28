@@ -64,7 +64,8 @@ struct CmdVertexArray : CmdGeneral {
 
 struct CmdDeferred : CmdGeneral {
 	Rc<DeferredVertexResult> deferred;
-	Mat4 transform;
+	Mat4 viewTransform;
+	Mat4 modelTransform;
 	bool normalized = false;
 };
 
@@ -96,7 +97,7 @@ public:
 	void pushVertexArray(SpanView<TransformedVertexData>,
 			SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel, CommandFlags = CommandFlags::None);
 
-	void pushDeferredVertexResult(const Rc<DeferredVertexResult> &, const Mat4 &, bool normalized,
+	void pushDeferredVertexResult(const Rc<DeferredVertexResult> &, const Mat4 &view, const Mat4 &model, bool normalized,
 			SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel, CommandFlags = CommandFlags::None);
 
 	gl::StateId addState(DrawStateValues);

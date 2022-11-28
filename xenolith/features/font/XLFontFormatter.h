@@ -31,6 +31,7 @@ typedef struct _HyphenDict HyphenDict;
 namespace stappler::xenolith::font {
 
 class FontController;
+class FontSizedLayout;
 
 struct LineSpec { // 12 bytes
 	uint32_t start = 0;
@@ -52,7 +53,7 @@ struct RangeSpec {
 	uint16_t height = 0;
 
 	Metrics metrics;
-	FontLayoutId layout;
+	Rc<FontSizedLayout> layout;
 };
 
 class FormatSpec : public Ref {
@@ -218,7 +219,7 @@ protected:
 	void parseFontLineHeight(uint16_t);
 	bool updatePosition(uint16_t &linePos, uint16_t &lineHeight);
 
-	FontLayoutId getLayout(uint16_t pos) const;
+	//FontLayoutId getLayout(uint16_t pos) const;
 
 	uint16_t getAdvance(const CharSpec &c) const;
 	uint16_t getAdvance(uint16_t pos) const;
@@ -254,7 +255,7 @@ protected:
 	float density = 1.0f;
 	float fontScale = nan();
 
-	FontLayoutId primaryFontId;
+	Rc<FontSizedLayout> primaryFontId;
 
 	TextParameters textStyle;
 

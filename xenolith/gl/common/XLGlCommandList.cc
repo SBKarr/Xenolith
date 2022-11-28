@@ -141,14 +141,15 @@ void CommandList::pushVertexArray(SpanView<TransformedVertexData> data, SpanView
 	});
 }
 
-void CommandList::pushDeferredVertexResult(const Rc<DeferredVertexResult> &res, const Mat4 &t, bool normalized,
+void CommandList::pushDeferredVertexResult(const Rc<DeferredVertexResult> &res, const Mat4 &viewT, const Mat4 &modelT, bool normalized,
 		SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel level, CommandFlags flags) {
 	_pool->perform([&] {
 		auto cmd = Command::create(_pool->getPool(), CommandType::Deferred, flags);
 		auto cmdData = (CmdDeferred *)cmd->data;
 
 		cmdData->deferred = res;
-		cmdData->transform = t;
+		cmdData->viewTransform = viewT;
+		cmdData->modelTransform = modelT;
 		cmdData->normalized = normalized;
 
 		while (!zPath.empty() && zPath.back() == 0) {

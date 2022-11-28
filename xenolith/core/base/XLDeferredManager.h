@@ -25,6 +25,7 @@
 
 #include "SPThreadTaskQueue.h"
 #include "XLVectorResult.h"
+#include "XLLabel.h"
 
 namespace stappler::xenolith {
 
@@ -40,6 +41,7 @@ public:
 	void update();
 
 	Rc<VectorCanvasDeferredResult> runVectorCavas(Rc<VectorImageData> &&image, Size2 targetSize, Color4F color, float quality);
+	Rc<LabelDeferredResult> runLabel(Label::FormatSpec *format, const Color4F &);
 
 	using mem_std::AllocBase::operator new;
 	using mem_std::AllocBase::operator delete;

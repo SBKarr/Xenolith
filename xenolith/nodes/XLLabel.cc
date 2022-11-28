@@ -23,8 +23,176 @@
 #include "XLLabel.h"
 #include "XLEventListener.h"
 #include "XLApplication.h"
+#include "XLDeferredManager.h"
 
 namespace stappler::xenolith {
+
+static size_t Label_getQuadsCount(const font::FormatSpec *format) {
+	size_t ret = 0;
+
+	const font::RangeSpec *targetRange = nullptr;
+
+	for (auto it = format->begin(); it != format->end(); ++ it) {
+		if (&(*it.range) != targetRange) {
+			targetRange = &(*it.range);
+		}
+
+		const auto start = it.start();
+		auto end = start + it.count();
+		if (it.line->start + it.line->count == end) {
+			const font::CharSpec &c = format->chars[end - 1];
+			if (!string::isspace(c.charID) && c.charID != char16_t(0x0A)) {
+				++ ret;
+			}
+			end -= 1;
+		}
+
+		for (auto charIdx = start; charIdx < end; ++ charIdx) {
+			const font::CharSpec &c = format->chars[charIdx];
+			if (!string::isspace(c.charID) && c.charID != char16_t(0x0A) && c.charID != char16_t(0x00AD)) {
+				++ ret;
+			}
+		}
+	}
+
+	return ret;
+}
+
+static void Label_pushColorMap(const font::RangeSpec &range, Vector<ColorMask> &cMap) {
+	ColorMask mask = ColorMask::None;
+	if (!range.colorDirty) {
+		mask |= ColorMask::Color;
+	}
+	if (!range.opacityDirty) {
+		mask |= ColorMask::A;
+	}
+	cMap.push_back(mask);
+}
+
+static void Label_writeTextureQuad(const font::FormatSpec *format, const font::Metrics &m, const font::CharSpec &c,
+		const font::CharLayout &l, const font::RangeSpec &range, const font::LineSpec &line, VertexArray::Quad &quad) {
+	switch (range.align) {
+	case font::VerticalAlign::Sub:
+		quad.drawChar(m, l, c.pos, format->height - line.pos + m.descender / 2, range.color, range.decoration, c.face);
+		break;
+	case font::VerticalAlign::Super:
+		quad.drawChar(m, l, c.pos, format->height - line.pos + m.ascender / 2, range.color, range.decoration, c.face);
+		break;
+	default:
+		quad.drawChar(m, l, c.pos, format->height - line.pos, range.color, range.decoration, c.face);
+		break;
+	}
+}
+
+void Label::writeQuads(VertexArray &vertexes, FormatSpec *format, Vector<ColorMask> &colorMap) {
+	auto quadsCount = Label_getQuadsCount(format);
+	colorMap.clear();
+	colorMap.reserve(quadsCount);
+
+	const font::RangeSpec *targetRange = nullptr;
+	font::Metrics metrics;
+
+	vertexes.clear();
+
+	for (auto it = format->begin(); it != format->end(); ++ it) {
+		if (it.count() == 0) {
+			continue;
+		}
+
+		if (&(*it.range) != targetRange) {
+			targetRange = &(*it.range);
+			metrics = targetRange->layout->getMetrics();
+		}
+
+		const auto start = it.start();
+		auto end = start + it.count();
+
+		for (auto charIdx = start; charIdx < end; ++ charIdx) {
+			const font::CharSpec &c = format->chars[charIdx];
+			if (!string::isspace(c.charID) && c.charID != char16_t(0x0A) && c.charID != char16_t(0x00AD)) {
+
+				uint16_t face = 0;
+				auto ch = targetRange->layout->getChar(c.charID, face);
+
+				if (ch.charID == c.charID) {
+					auto quad = vertexes.addQuad();
+					Label_pushColorMap(*it.range, colorMap);
+					Label_writeTextureQuad(format, metrics, c, ch, *it.range, *it.line, quad);
+				}
+			}
+		}
+
+		if (it.line->start + it.line->count == end) {
+			const font::CharSpec &c = format->chars[end - 1];
+			if (c.charID == char16_t(0x00AD)) {
+				uint16_t face = 0;
+				auto ch = targetRange->layout->getChar(c.charID, face);
+
+				if (ch.charID == c.charID) {
+					auto quad = vertexes.addQuad();
+					Label_pushColorMap(*it.range, colorMap);
+					Label_writeTextureQuad(format, metrics, c, ch, *it.range, *it.line, quad);
+				}
+			}
+			end -= 1;
+		}
+
+		if (it.count() > 0 && it.range->decoration != font::TextDecoration::None) {
+			const font::CharSpec &firstChar = format->chars[it.start()];
+			const font::CharSpec &lastChar = format->chars[it.start() + it.count() - 1];
+
+			auto color = it.range->color;
+			color.a = uint8_t(0.75f * color.a);
+			auto metrics = it.range->layout->getMetrics();
+
+			float offset = 0.0f;
+			switch (it.range->decoration) {
+			case font::TextDecoration::None: break;
+			case font::TextDecoration::Overline:
+				offset = metrics.height;
+				break;
+			case font::TextDecoration::LineThrough:
+				offset = (metrics.height * 11.0f) / 24.0f;
+				break;
+			case font::TextDecoration::Underline:
+				offset = metrics.height / 8.0f;
+				break;
+			}
+
+			const float width = metrics.height / 16.0f;
+			const float base = floorf(width);
+			const float frac = width - base;
+
+			const auto underlineBase = uint16_t(base);
+			const auto underlineX = firstChar.pos;
+			const auto underlineWidth = lastChar.pos + lastChar.advance - firstChar.pos;
+			const auto underlineY = format->height - it.line->pos + offset - underlineBase / 2;
+			const auto underlineHeight = underlineBase;
+
+			auto quad = vertexes.addQuad();
+			Label_pushColorMap(*it.range, colorMap);
+			quad.drawUnderlineRect(underlineX, underlineY, underlineWidth, underlineHeight, color);
+			if (frac > 0.1) {
+				color.a *= frac;
+
+				auto quad = vertexes.addQuad();
+				Label_pushColorMap(*it.range, colorMap);
+				quad.drawUnderlineRect(underlineX, underlineY - 1, underlineWidth, 1, color);
+			}
+		}
+	}
+}
+
+Rc<LabelResult> Label::writeResult(FormatSpec *format, const Color4F &color) {
+	auto result = Rc<LabelResult>::alloc();
+	VertexArray array;
+	array.init(format->chars.size() * 4, format->chars.size() * 6);
+
+	writeQuads(array, format, result->colorMap);
+	result->data.mat = Mat4::IDENTITY;
+	result->data.data = array.pop();
+	return result;
+}
 
 Label::~Label() {
 	_format = nullptr;
@@ -171,166 +339,17 @@ void Label::updateColor() {
 }
 
 void Label::updateVertexesColor() {
-	if (!_colorMap.empty()) {
-		_vertexes.updateColorQuads(_displayedColor, _colorMap);
-	}
-}
-
-static size_t Label_getQuadsCount(const font::FormatSpec *format) {
-	size_t ret = 0;
-
-	const font::RangeSpec *targetRange = nullptr;
-
-	for (auto it = format->begin(); it != format->end(); ++ it) {
-		if (&(*it.range) != targetRange) {
-			targetRange = &(*it.range);
+	if (_deferredResult) {
+		_deferredResult->updateColor(_displayedColor);
+	} else {
+		if (!_colorMap.empty()) {
+			_vertexes.updateColorQuads(_displayedColor, _colorMap);
 		}
-
-		const auto start = it.start();
-		auto end = start + it.count();
-		if (it.line->start + it.line->count == end) {
-			const font::CharSpec &c = format->chars[end - 1];
-			if (!string::isspace(c.charID) && c.charID != char16_t(0x0A)) {
-				++ ret;
-			}
-			end -= 1;
-		}
-
-		for (auto charIdx = start; charIdx < end; ++ charIdx) {
-			const font::CharSpec &c = format->chars[charIdx];
-			if (!string::isspace(c.charID) && c.charID != char16_t(0x0A) && c.charID != char16_t(0x00AD)) {
-				++ ret;
-			}
-		}
-	}
-
-	return ret;
-}
-
-static void Label_pushColorMap(const font::RangeSpec &range, Vector<ColorMask> &cMap) {
-	ColorMask mask = ColorMask::None;
-	if (!range.colorDirty) {
-		mask |= ColorMask::Color;
-	}
-	if (!range.opacityDirty) {
-		mask |= ColorMask::A;
-	}
-	cMap.push_back(mask);
-}
-
-static void Label_writeTextureQuad(const font::FormatSpec *format, const font::Metrics &m, const font::CharSpec &c,
-		const font::CharLayout &l, const font::RangeSpec &range, const font::LineSpec &line,
-		uint16_t face, VertexArray::Quad &quad) {
-	switch (range.align) {
-	case font::VerticalAlign::Sub:
-		quad.drawChar(m, l, c.pos, format->height - line.pos + m.descender / 2, range.color, range.decoration, face);
-		break;
-	case font::VerticalAlign::Super:
-		quad.drawChar(m, l, c.pos, format->height - line.pos + m.ascender / 2, range.color, range.decoration, face);
-		break;
-	default:
-		quad.drawChar(m, l, c.pos, format->height - line.pos, range.color, range.decoration, face);
-		break;
 	}
 }
 
 void Label::updateQuadsForeground(font::FontController *controller, FormatSpec *format, Vector<ColorMask> &colorMap) {
-	auto quadsCount = Label_getQuadsCount(format);
-	colorMap.clear();
-	colorMap.reserve(quadsCount);
-
-	const font::RangeSpec *targetRange = nullptr;
-	font::Metrics metrics;
-
-	_vertexes.clear();
-
-	for (auto it = format->begin(); it != format->end(); ++ it) {
-		if (it.count() == 0) {
-			continue;
-		}
-
-		if (&(*it.range) != targetRange) {
-			targetRange = &(*it.range);
-			metrics = format->source->getMetrics(targetRange->layout);
-		}
-
-		const auto start = it.start();
-		auto end = start + it.count();
-
-		for (auto charIdx = start; charIdx < end; ++ charIdx) {
-			const font::CharSpec &c = format->chars[charIdx];
-			if (!string::isspace(c.charID) && c.charID != char16_t(0x0A) && c.charID != char16_t(0x00AD)) {
-
-				uint16_t face = 0;
-				auto ch = controller->getChar(targetRange->layout, c.charID, face);
-
-				if (ch.charID == c.charID) {
-					auto quad = _vertexes.addQuad();
-					Label_pushColorMap(*it.range, colorMap);
-					Label_writeTextureQuad(format, metrics, c, ch, *it.range, *it.line, face, quad);
-				}
-			}
-		}
-
-		if (it.line->start + it.line->count == end) {
-			const font::CharSpec &c = format->chars[end - 1];
-			if (c.charID == char16_t(0x00AD)) {
-				uint16_t face = 0;
-				auto ch = controller->getChar(targetRange->layout, c.charID, face);
-
-				if (ch.charID == c.charID) {
-					auto quad = _vertexes.addQuad();
-					Label_pushColorMap(*it.range, colorMap);
-					Label_writeTextureQuad(format, metrics, c, ch, *it.range, *it.line, face, quad);
-				}
-			}
-			end -= 1;
-		}
-
-		if (it.count() > 0 && it.range->decoration != font::TextDecoration::None) {
-			const font::CharSpec &firstChar = format->chars[it.start()];
-			const font::CharSpec &lastChar = format->chars[it.start() + it.count() - 1];
-
-			auto color = it.range->color;
-			color.a = uint8_t(0.75f * color.a);
-			auto metrics = format->source->getMetrics(it.range->layout);
-
-			float offset = 0.0f;
-			switch (it.range->decoration) {
-			case font::TextDecoration::None: break;
-			case font::TextDecoration::Overline:
-				offset = metrics.height;
-				break;
-			case font::TextDecoration::LineThrough:
-				offset = (metrics.height * 11.0f) / 24.0f;
-				break;
-			case font::TextDecoration::Underline:
-				offset = metrics.height / 8.0f;
-				break;
-			}
-
-			const float width = metrics.height / 16.0f;
-			const float base = floorf(width);
-			const float frac = width - base;
-
-			const auto underlineBase = uint16_t(base);
-			const auto underlineX = firstChar.pos;
-			const auto underlineWidth = lastChar.pos + lastChar.advance - firstChar.pos;
-			const auto underlineY = format->height - it.line->pos + offset - underlineBase / 2;
-			const auto underlineHeight = underlineBase;
-
-			auto quad = _vertexes.addQuad();
-			Label_pushColorMap(*it.range, colorMap);
-			quad.drawUnderlineRect(underlineX, underlineY, underlineWidth, underlineHeight, color);
-			if (frac > 0.1) {
-				color.a *= frac;
-
-				auto quad = _vertexes.addQuad();
-				Label_pushColorMap(*it.range, colorMap);
-				quad.drawUnderlineRect(underlineX, underlineY - 1, underlineWidth, 1, color);
-			}
-		}
-	}
+	writeQuads(_vertexes, format, colorMap);
 }
 
 bool Label::checkVertexDirty() const {
@@ -343,6 +362,19 @@ NodeFlags Label::processParentFlags(RenderFrameInfo &info, NodeFlags parentFlags
 	}
 
 	return Sprite::processParentFlags(info, parentFlags);
+}
+
+void Label::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
+	if (_deferred) {
+		if (_deferredResult->isReady() && _deferredResult->getResult()->data.empty()) {
+			return;
+		}
+
+		frame.commands->pushDeferredVertexResult(_deferredResult, frame.viewProjectionStack.back(), frame.modelTransformStack.back(),
+				_normalized, frame.zPath, _materialId, _realRenderingLevel, _commandFlags);
+	} else {
+		Sprite::pushCommands(frame, flags);
+	}
 }
 
 void Label::updateLabelScale(const Mat4 &parent) {
@@ -433,13 +465,22 @@ void Label::updateVertexes() {
 
 	if (!_standalone) {
 		for (auto &it : _format->ranges) {
-			auto dep = _source->addTextureChars(it.layout, SpanView<font::CharSpec>(_format->chars, it.start, it.count));
+			auto dep = _source->addTextureChars(it.layout->getId(), SpanView<font::CharSpec>(_format->chars, it.start, it.count));
 			if (dep) {
 				emplace_ordered(_pendingDependencies, move(dep));
 			}
 		}
 
-		updateQuadsForeground(_source, _format, _colorMap);
+		if (_deferred) {
+			auto &manager = _director->getApplication()->getDeferredManager();
+			_deferredResult = manager->runLabel(_format, _displayedColor);
+			_vertexes.clear();
+			_vertexColorDirty = false;
+		} else {
+			_deferredResult = nullptr;
+			updateQuadsForeground(_source, _format, _colorMap);
+			_vertexColorDirty = true;
+		}
 	}/* else {
 		bool sourceDirty = false;
 		for (auto &it : _format->ranges) {
@@ -468,8 +509,6 @@ void Label::updateVertexes() {
 			updateQuadsStandalone(_source, _format);
 		}
 	}*/
-
-	_vertexColorDirty = true;
 }
 
 void Label::onFontSourceUpdated() {
@@ -544,6 +583,63 @@ float Label::getMaxLineX() const {
 		return _format->maxLineX / _density;
 	}
 	return 0.0f;
+}
+
+void Label::setDeferred(bool val) {
+	if (val != _deferred) {
+		_deferred = val;
+		_vertexesDirty = true;
+	}
+}
+
+LabelDeferredResult::~LabelDeferredResult() {
+	if (_future) {
+		delete _future;
+		_future = nullptr;
+	}
+}
+
+bool LabelDeferredResult::init(std::future<Rc<LabelResult>> &&future) {
+	_future = new std::future<Rc<LabelResult>>(move(future));
+	return true;
+}
+
+SpanView<gl::TransformedVertexData> LabelDeferredResult::getData() {
+	std::unique_lock<Mutex> lock(_mutex);
+	if (_future) {
+		_result = _future->get();
+		delete _future;
+		_future = nullptr;
+		DeferredVertexResult::handleReady();
+	}
+	return makeSpanView(&_result->data, 1);
+}
+
+void LabelDeferredResult::handleReady(Rc<LabelResult> &&res) {
+	std::unique_lock<Mutex> lock(_mutex);
+	if (_future) {
+		delete _future;
+		_future = nullptr;
+	}
+	_result = move(res);
+	DeferredVertexResult::handleReady();
+}
+
+void LabelDeferredResult::updateColor(const Color4F &color) {
+	getResult(); // ensure rendering was complete
+
+	std::unique_lock<Mutex> lock(_mutex);
+	if (_result) {
+		VertexArray arr;
+		arr.init(_result->data.data);
+		arr.updateColorQuads(color, _result->colorMap);
+		_result->data.data = arr.pop();
+	}
+}
+
+Rc<gl::VertexData> LabelDeferredResult::getResult() const {
+	std::unique_lock<Mutex> lock(_mutex);
+	return _result->data.data;
 }
 
 }

@@ -49,7 +49,7 @@ public:
 
 	bool init(std::future<Rc<VectorCanvasResult>> &&);
 
-	virtual const Vector<gl::TransformedVertexData> &getData() override;
+	virtual SpanView<gl::TransformedVertexData> getData() override;
 
 	virtual void handleReady(Rc<VectorCanvasResult> &&);
 

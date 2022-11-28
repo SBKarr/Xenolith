@@ -213,7 +213,7 @@ void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 		auto tmpData = new (memory::pool::palloc(frame.pool, reqMemSize)) gl::TransformedVertexData[targetData.size()];
 		auto target = tmpData;
 		if (_normalized) {
-			auto transform = frame.viewProjectionStack.back() * frame.modelTransformStack.back() * _targetTransform;
+			auto transform = frame.modelTransformStack.back() * _targetTransform;
 			for (auto &it : targetData) {
 				auto modelTransform = transform * it.mat;
 
@@ -222,7 +222,7 @@ void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 				newMV.m[13] = floorf(modelTransform.m[13]);
 				newMV.m[14] = floorf(modelTransform.m[14]);
 
-				target->mat = newMV;
+				target->mat = frame.viewProjectionStack.back() * newMV;
 				target->data = it.data;
 				++ target;
 			}
@@ -243,9 +243,9 @@ void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 			return;
 		}
 
-		auto transform = frame.viewProjectionStack.back() * frame.modelTransformStack.back() * _targetTransform;
+		auto transform =  frame.modelTransformStack.back() * _targetTransform;
 
-		frame.commands->pushDeferredVertexResult(_deferredResult, transform, _normalized, frame.zPath,
+		frame.commands->pushDeferredVertexResult(_deferredResult, frame.viewProjectionStack.back(), transform, _normalized, frame.zPath,
 						_materialId, _realRenderingLevel, _commandFlags);
 	}
 }

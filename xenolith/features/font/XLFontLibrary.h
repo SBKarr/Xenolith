@@ -31,11 +31,14 @@ namespace stappler::xenolith::font {
 class FontFaceObject;
 class FontFaceData;
 class FontLibrary;
+class FontSizedLayout;
 
 class FontController : public Ref {
 public:
 	static EventHeader onLoaded;
 	static EventHeader onFontSourceUpdated;
+
+	class FontLayout;
 
 	struct FontSource {
 		String fontFilePath;
@@ -113,11 +116,13 @@ public:
 
 	FontLayoutId getLayout(const FontParameters &f, float scale);
 	void addString(FontLayoutId, const FontCharString &);
-	uint16_t getFontHeight(FontLayoutId);
+	uint16_t getFontHeight(FontLayoutId)  const;
 	int16_t getKerningAmount(FontLayoutId, char16_t first, char16_t second, uint16_t face) const;
-	Metrics getMetrics(FontLayoutId);
-	CharLayout getChar(FontLayoutId, char16_t, uint16_t &face);
-	StringView getFontName(FontLayoutId);
+	Metrics getMetrics(FontLayoutId)  const;
+	CharLayout getChar(FontLayoutId, char16_t, uint16_t &face) const;
+	StringView getFontName(FontLayoutId) const;
+
+	Rc<FontSizedLayout> getSizedLayout(FontLayoutId) const;
 
 	Rc<renderqueue::DependencyEvent> addTextureChars(FontLayoutId, SpanView<CharSpec>);
 
@@ -131,9 +136,6 @@ protected:
 
 	void setImage(Rc<gl::DynamicImage> &&);
 	void setLoaded(bool);
-
-	class FontSizedLayout;
-	class FontLayout;
 
 	FontLayout * getFontLayout(const FontParameters &style);
 
@@ -155,6 +157,44 @@ protected:
 	std::atomic<uint16_t> _nextId = 1;
 	bool _dirty = false;
 	mutable Mutex _mutex;
+	mutable Mutex _sizesMutex;
+};
+
+// TODO: should be immutable object
+class FontSizedLayout : public Ref {
+public:
+	virtual ~FontSizedLayout() { }
+	FontSizedLayout() { }
+
+	bool init(FontSize, String &&, FontLayoutId, FontController::FontLayout *, Rc<FontFaceObject> &&);
+	bool init(FontSize, String &&, FontLayoutId, FontController::FontLayout *, Vector<Rc<FontFaceObject>> &&);
+
+	FontSize getSize() const { return _size; }
+	StringView getName() const { return _name; }
+	FontLayoutId getId() const { return _id; }
+	FontController::FontLayout *getLayout() const { return _layout; }
+	const Vector<Rc<FontFaceObject>> &getFaces() const { return _faces; }
+
+	bool isComplete() const;
+
+	bool addString(const FontCharString &, Vector<char16_t> &failed) const;
+	uint16_t getFontHeight() const;
+	int16_t getKerningAmount(char16_t first, char16_t second, uint16_t face) const;
+	Metrics getMetrics() const;
+	CharLayout getChar(char16_t, uint16_t &face) const;
+	StringView getFontName() const;
+
+	bool addTextureChars(SpanView<CharSpec>) const;
+
+	// void prefixFonts(size_t count);
+
+protected:
+	FontSize _size;
+	String _name;
+	FontLayoutId _id;
+	FontController::FontLayout *_layout = nullptr;
+	Metrics _metrics;
+	Vector<Rc<FontFaceObject>> _faces;
 };
 
 class FontLibrary : public Ref {

@@ -378,7 +378,7 @@ class DeferredVertexResult : public Ref {
 public:
 	virtual ~DeferredVertexResult() { }
 
-	virtual const Vector<TransformedVertexData> &getData() = 0;
+	virtual SpanView<TransformedVertexData> getData() = 0;
 
 	bool isReady() const { return _isReady.load(); }
 
