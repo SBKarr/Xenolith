@@ -50,7 +50,8 @@ struct QueueData : NamedMem {
 	HashTable<Rc<Attachment>> attachments;
 	HashTable<PassData *> passes;
 	HashTable<ProgramData *> programs;
-	HashTable<PipelineData *> pipelines;
+	HashTable<GraphicPipelineData *> graphicPipelines;
+	HashTable<ComputePipelineData *> computePipelines;
 	HashTable<Rc<Resource>> linked;
 	Function<void(FrameRequest &)> beginCallback;
 	Function<void(FrameRequest &)> endCallback;
@@ -85,7 +86,8 @@ public:
 
 	const HashTable<ProgramData *> &getPrograms() const;
 	const HashTable<PassData *> &getPasses() const;
-	const HashTable<PipelineData *> &getPipelines() const;
+	const HashTable<GraphicPipelineData *> &getGraphicPipelines() const;
+	const HashTable<ComputePipelineData *> &getComputePipelines() const;
 	const HashTable<Rc<Attachment>> &getAttachments() const;
 	const HashTable<Rc<Resource>> &getLinkedResources() const;
 	Rc<Resource> getInternalResource() const;
@@ -95,7 +97,8 @@ public:
 
 	const PassData *getPass(StringView) const;
 	const ProgramData *getProgram(StringView) const;
-	const PipelineData *getPipeline(StringView) const;
+	const GraphicPipelineData *getGraphicPipeline(StringView) const;
+	const ComputePipelineData *getComputePipeline(StringView) const;
 	const Attachment *getAttachment(StringView) const;
 
 	Vector<Rc<Attachment>> getOutput() const;
@@ -134,9 +137,9 @@ public:
 			const Rc<GenericAttachment> &, AttachmentDependencyInfo);
 
 	ImageAttachmentRef *addPassInput(const Rc<Pass> &, uint32_t subpassIdx,
-			const Rc<ImageAttachment> &, AttachmentDependencyInfo);
+			const Rc<ImageAttachment> &, AttachmentDependencyInfo, DescriptorType = DescriptorType::Unknown);
 	ImageAttachmentRef *addPassOutput(const Rc<Pass> &, uint32_t subpassIdx,
-			const Rc<ImageAttachment> &, AttachmentDependencyInfo);
+			const Rc<ImageAttachment> &, AttachmentDependencyInfo, DescriptorType = DescriptorType::Unknown);
 
 	Pair<ImageAttachmentRef *, ImageAttachmentRef *> addPassResolve(const Rc<Pass> &, uint32_t subpassIdx,
 			const Rc<ImageAttachment> &color, const Rc<ImageAttachment> &resolve,
@@ -162,7 +165,7 @@ public:
 			const ProgramInfo * = nullptr);
 
 	template <typename ... Args>
-	const PipelineData * addPipeline(const Rc<Pass> &pass, uint32_t subpass, StringView key, Args && ...args) {
+	const GraphicPipelineData * addGraphicPipeline(const Rc<Pass> &pass, uint32_t subpass, StringView key, Args && ...args) {
 		if (auto p = emplacePipeline(pass, subpass, key)) {
 			if (setPipelineOptions(*p, std::forward<Args>(args)...)) {
 				return p;
@@ -171,6 +174,8 @@ public:
 		}
 		return nullptr;
 	}
+
+	const ComputePipelineData *addComputePipeline(const Rc<Pass> &pass, StringView key, SpecializationInfo &&);
 
 	// resources, that will be compiled with RenderQueue
 	void setInternalResource(Rc<Resource> &&);
@@ -182,20 +187,20 @@ public:
 	void setEndCallback(Function<void(FrameRequest &)> &&);
 
 protected:
-	PipelineData *emplacePipeline(const Rc<Pass> &, uint32_t, StringView key);
-	void erasePipeline(const Rc<Pass> &, uint32_t, PipelineData *);
+	GraphicPipelineData *emplacePipeline(const Rc<Pass> &, uint32_t, StringView key);
+	void erasePipeline(const Rc<Pass> &, uint32_t, GraphicPipelineData *);
 
-	bool setPipelineOption(PipelineData &f, DynamicState);
-	bool setPipelineOption(PipelineData &f, const Vector<SpecializationInfo> &);
-	bool setPipelineOption(PipelineData &f, const PipelineMaterialInfo &);
+	bool setPipelineOption(GraphicPipelineData &f, DynamicState);
+	bool setPipelineOption(GraphicPipelineData &f, const Vector<SpecializationInfo> &);
+	bool setPipelineOption(GraphicPipelineData &f, const PipelineMaterialInfo &);
 
 	template <typename T>
-	bool setPipelineOptions(PipelineData &f, T && t) {
+	bool setPipelineOptions(GraphicPipelineData &f, T && t) {
 		return setPipelineOption(f, std::forward<T>(t));
 	}
 
 	template <typename T, typename ... Args>
-	bool setPipelineOptions(PipelineData &f, T && t, Args && ... args) {
+	bool setPipelineOptions(GraphicPipelineData &f, T && t, Args && ... args) {
 		if (!setPipelineOption(f, std::forward<T>(t))) {
 			return false;
 		}

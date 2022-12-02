@@ -49,7 +49,8 @@ void Attachment::acquireInput(FrameQueue &frame, const Rc<AttachmentHandle> &a, 
 	if (_inputCallback) {
 		_inputCallback(frame, a, move(cb));
 	} else {
-		log::vtext("Attachment", "Input callback for attachment is not defined: ", getName());
+		// wait for input on handle
+		frame.getFrame()->waitForInput(frame, a, move(cb));
 	}
 }
 
@@ -165,23 +166,45 @@ void AttachmentDescriptor::reset() {
 void AttachmentDescriptor::setIndex(uint32_t idx) {
 	_index = idx;
 
-	if (_descriptor.type == DescriptorType::Unknown) {
-		return;
-	}
-
 	for (auto &subpass : _renderPass->subpasses) {
-		for (auto &pipeline : subpass.pipelines) {
+		for (auto &pipeline : subpass.graphicPipelines) {
 			for (auto &it : pipeline->shaders) {
 				for (auto &binding : it.data->bindings) {
 					if (binding.set == 0 && binding.descriptor == _index) {
+						if (_descriptor.type == DescriptorType::Unknown) {
+							_descriptor.type = binding.type;
+						} else if (_descriptor.type != binding.type) {
+							std::cout << "[" << getName() << ":" << _index << "] descriptor type conflict: (code)"
+									<<  getDescriptorTypeName(_descriptor.type)  << " vs. (shader)" << getDescriptorTypeName(binding.type) << "\n";
+						}
 						_descriptor.stages |= it.data->stage;
+						_descriptor.count = binding.count;
 					}
+				}
+			}
+		}
+		for (auto &pipeline : subpass.computePipelines) {
+			for (auto &binding : pipeline->shader.data->bindings) {
+				if (binding.set == 0 && binding.descriptor == _index) {
+					if (_descriptor.type == DescriptorType::Unknown) {
+						_descriptor.type = binding.type;
+					} else if (_descriptor.type != binding.type) {
+						std::cout << "[" << getName() << ":" << _index << "] descriptor type conflict: (code)"
+								<<  getDescriptorTypeName(_descriptor.type)  << " vs. (shader)" << getDescriptorTypeName(binding.type) << "\n";
+					}
+					_descriptor.stages |= ProgramStage::Compute;
+					_descriptor.count = binding.count;
 				}
 			}
 		}
 	}
 
-	std::cout << "[" << getName() << ":" << _index << "] usage:" << getProgramStageDescription(_descriptor.stages) << "\n";
+	if (_descriptor.type == DescriptorType::Unknown) {
+		std::cout << "[" << getName() << ":" << _index << "] type is not defined\n";
+		return;
+	}
+
+	std::cout << "[" << getName() << ":" << _index << "] " << getDescriptorTypeName(_descriptor.type) << ": usage:" << getProgramStageDescription(_descriptor.stages) << "\n";
 }
 
 AttachmentRef *AttachmentDescriptor::addRef(uint32_t idx, AttachmentUsage usage, AttachmentDependencyInfo info) {
@@ -346,8 +369,12 @@ void ImageAttachment::addImageUsage(gl::ImageUsage usage) {
 	_imageInfo.usage |= usage;
 }
 
-ImageAttachmentDescriptor *ImageAttachment::addImageDescriptor(PassData *data) {
-	return (ImageAttachmentDescriptor *)addDescriptor(data);
+ImageAttachmentDescriptor *ImageAttachment::addImageDescriptor(PassData *data, DescriptorType type) {
+	auto ret = (ImageAttachmentDescriptor *)addDescriptor(data);
+	if (type != DescriptorType::Unknown) {
+		ret->setDescriptorType(type);
+	}
+	return ret;
 }
 
 bool ImageAttachment::isCompatible(const gl::ImageInfo &image) const {

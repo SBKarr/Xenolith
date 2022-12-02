@@ -59,6 +59,8 @@ class ImageAttachmentHandle : public renderqueue::AttachmentHandle {
 public:
 	virtual ~ImageAttachmentHandle() { }
 
+	const Rc<renderqueue::ImageStorage> &getImage() const { return _queueData->image; }
+
 	virtual bool writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
 			uint32_t, bool, VkDescriptorImageInfo &) { return false; }
 };

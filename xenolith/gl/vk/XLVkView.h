@@ -45,7 +45,7 @@ public:
 		// Компенсировать частоту кадров с учётом предыдущих таймингов кадра
 		// Wayland на nvidia странно использует vsync, что может снизить реальный FPS в два раза, если эта опция отключена
 		// В некоторых случаях может снизить плавность анимаций
-		bool flattenFrameRate = true;
+		bool flattenFrameRate = false;
 
 		// Использовать внешний сигнал вертикальной синхронизации (система должна поддерживать)
 		// В этом режиме готовые к презентации кадры ожидают сигнала, прежде, чем отправиться
@@ -88,7 +88,9 @@ public:
 
 	virtual Rc<Ref> getSwapchainHandle() const override;
 
-	void captureImage(StringView, const Rc<gl::ImageObject> &image, AttachmentLayout l) const;
+	virtual void captureImage(StringView, const Rc<gl::ImageObject> &image, AttachmentLayout l) const override;
+	virtual void captureImage(Function<void(const gl::ImageInfo &info, BytesView view)> &&,
+			const Rc<gl::ImageObject> &image, AttachmentLayout l) const override;
 
 	void scheduleFence(Rc<Fence> &&);
 

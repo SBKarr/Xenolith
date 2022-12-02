@@ -203,6 +203,10 @@ uint64_t View::getAvgFrameTime() const {
 	return _frameEmitter->getAvgFrameTime();
 }
 
+uint64_t View::getAvgFenceTime() const {
+	return _avgFenceIntervalValue.load();
+}
+
 uint64_t View::getFrameInterval() const {
 	std::unique_lock<Mutex> lock(_frameIntervalMutex);
 	return _frameInterval;
@@ -214,6 +218,13 @@ void View::setFrameInterval(uint64_t value) {
 		_frameInterval = value;
 		onFrameRate(this, int64_t(_frameInterval));
 	}, this, true);
+}
+
+void View::pushFrameTime(uint64_t frame, uint64_t time) {
+	auto dt = platform::device::_clock(platform::device::ClockType::Monotonic) - time;
+
+	_avgFenceInterval.addValue(dt);
+	_avgFenceIntervalValue = _avgFenceInterval.getAverage(true);
 }
 
 }

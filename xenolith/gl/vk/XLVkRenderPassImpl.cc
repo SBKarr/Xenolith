@@ -547,8 +547,20 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, PassData &data) {
 	return pass.cleanup(dev);
 }
 
-bool RenderPassImpl::initComputePass(Device &dev, PassData &) {
-	return false; // TODO - deal with Compute passes
+bool RenderPassImpl::initComputePass(Device &dev, PassData &data) {
+	Data pass;
+	if (initDescriptors(dev, data, pass)) {
+		auto l = new Data(move(pass));
+		_data = l;
+		return gl::RenderPass::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+			auto d = ((Device *)dev);
+			auto l = (Data *)ptr;
+			l->cleanup(*d);
+			delete l;
+		}, gl::ObjectType::RenderPass, l);
+	}
+
+	return pass.cleanup(dev);
 }
 
 bool RenderPassImpl::initTransferPass(Device &dev, PassData &) {
@@ -750,12 +762,22 @@ bool RenderPassImpl::initDescriptors(Device &dev, PassData &data, Data &pass) {
 		return pass.cleanup(dev);
 	}
 
-	// allow 12 bytes for Vertex and fragment shaders
-	VkPushConstantRange range = {
-		VkShaderStageFlagBits::VK_SHADER_STAGE_VERTEX_BIT | VkShaderStageFlagBits::VK_SHADER_STAGE_FRAGMENT_BIT,
+	VkPushConstantRange range{
+		0,
 		0,
 		12
 	};
+
+	switch (data.renderPass->getType()) {
+	case renderqueue::PassType::Graphics:
+		range.stageFlags = VkShaderStageFlagBits::VK_SHADER_STAGE_VERTEX_BIT | VkShaderStageFlagBits::VK_SHADER_STAGE_FRAGMENT_BIT;
+		break;
+	case renderqueue::PassType::Compute:
+		range.stageFlags = VkShaderStageFlagBits::VK_SHADER_STAGE_COMPUTE_BIT;
+		break;
+	case renderqueue::PassType::Transfer: break;
+	case renderqueue::PassType::Generic: break;
+	}
 
 	auto textureSetLayout = dev.getTextureSetLayout();
 	Vector<VkDescriptorSetLayout> layouts(pass.layouts);

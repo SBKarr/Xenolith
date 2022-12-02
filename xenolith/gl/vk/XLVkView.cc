@@ -270,6 +270,9 @@ void View::runWithQueue(const Rc<RenderQueue> &queue) {
 		return true;
 	});
 
+	_director->getApplication()->performOnMainThread([this, req] {
+		_director->acquireFrame(req);
+	}, this);
 	_frameEmitter->submitNextFrame(move(req));
 }
 
@@ -559,16 +562,24 @@ void View::captureImage(StringView name, const Rc<gl::ImageObject> &image, Attac
 		});
 }
 
+void View::captureImage(Function<void(const gl::ImageInfo &info, BytesView view)> &&cb, const Rc<gl::ImageObject> &image, AttachmentLayout l) const {
+	_device->getTextureSetLayout()->readImage(*_device, *(Loop *)_loop.get(), (Image *)image.get(), l, move(cb));
+}
+
 void View::scheduleFence(Rc<Fence> &&fence) {
 	if (_running.load()) {
 		performOnThread([this, fence = move(fence)] () mutable {
 			auto loop = (Loop *)_loop.get();
+			auto frame = fence->getFrame();
+			auto t = fence->getArmedTime();
 			if (!fence->check(*loop, true)) {
 				auto frame = fence->getFrame();
 				if (frame != 0 && (_fenceOrder == 0 || _fenceOrder > frame)) {
 					_fenceOrder = frame;
 				}
 				_fences.emplace(move(fence));
+			} else if (frame) {
+				pushFrameTime(frame, t);
 			}
 		}, this, true);
 	} else {
@@ -970,7 +981,12 @@ void View::waitForFences(uint64_t min) {
 	while (it != _fences.end()) {
 		if ((*it)->getFrame() <= min) {
 			// log::vtext("View", "waitForFences: ", (*it)->getTag());
+			auto frame = (*it)->getFrame();
+			auto t = (*it)->getArmedTime();
 			if ((*it)->check(*loop, false)) {
+				if (frame) {
+					pushFrameTime(frame, t);
+				}
 				it = _fences.erase(it);
 			} else {
 				++ it;
@@ -993,7 +1009,12 @@ void View::updateFences() {
 		auto loop = (Loop *)_loop.get();
 		auto it = _fences.begin();
 		while (it != _fences.end()) {
+			auto frame = (*it)->getFrame();
+			auto t = (*it)->getArmedTime();
 			if ((*it)->check(*loop, true)) {
+				if (frame) {
+					pushFrameTime(frame, t);
+				}
 				it = _fences.erase(it);
 			} else {
 				auto frame = (*it)->getFrame();

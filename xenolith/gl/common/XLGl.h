@@ -48,7 +48,8 @@ class Instance;
 class Loop;
 class Device;
 class Shader;
-class Pipeline;
+class GraphicPipeline;
+class ComputePipeline;
 class Framebuffer;
 class ImageObject;
 class ImageAtlas;
@@ -148,6 +149,7 @@ struct BufferInfo : NamedMem {
 		define(std::forward<Args>(args)...);
 	}
 
+	void setup(const BufferInfo &value) { *this = value; }
 	void setup(BufferFlags value) { flags |= value; }
 	void setup(ForceBufferFlags value) { flags = value.get(); }
 	void setup(BufferUsage value) { usage |= value; }
@@ -299,7 +301,7 @@ struct ImageViewInfo {
 	void setup(ComponentMappingG value) { g = value.get(); }
 	void setup(ComponentMappingB value) { b = value.get(); }
 	void setup(ComponentMappingA value) { a = value.get(); }
-	void setup(ColorMode value);
+	void setup(ColorMode value, bool allowSwizzle = true);
 
 	ColorMode getColorMode() const;
 
@@ -372,6 +374,12 @@ struct VertexData : public AttachmentInputData {
 struct alignas(16) TransformedVertexData {
 	Mat4 mat;
 	Rc<VertexData> data;
+};
+
+struct TransformObject {
+	Mat4 transform = Mat4::IDENTITY;
+	Vec4 mask = Vec4(1.0f, 1.0f, 0.0f, 0.0f);
+	Vec4 offset = Vec4(0.0f, 0.0f, 0.0f, 1.0f);
 };
 
 class DeferredVertexResult : public Ref {

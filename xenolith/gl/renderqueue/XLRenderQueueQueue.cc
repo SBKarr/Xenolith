@@ -460,8 +460,12 @@ const HashTable<PassData *> &Queue::getPasses() const {
 	return _data->passes;
 }
 
-const HashTable<PipelineData *> &Queue::getPipelines() const {
-	return _data->pipelines;
+const HashTable<GraphicPipelineData *> &Queue::getGraphicPipelines() const {
+	return _data->graphicPipelines;
+}
+
+const HashTable<ComputePipelineData *> &Queue::getComputePipelines() const {
+	return _data->computePipelines;
 }
 
 const HashTable<Rc<Attachment>> &Queue::getAttachments() const {
@@ -492,8 +496,12 @@ const ProgramData *Queue::getProgram(StringView key) const {
 	return _data->programs.get(key);
 }
 
-const PipelineData *Queue::getPipeline(StringView key) const {
-	return _data->pipelines.get(key);
+const GraphicPipelineData *Queue::getGraphicPipeline(StringView key) const {
+	return _data->graphicPipelines.get(key);
+}
+
+const ComputePipelineData *Queue::getComputePipeline(StringView key) const {
+	return _data->computePipelines.get(key);
 }
 
 const Attachment *Queue::getAttachment(StringView key) const {
@@ -756,7 +764,7 @@ AttachmentRef *Queue::Builder::addPassOutput(const Rc<Pass> &p, uint32_t subpass
 }
 
 ImageAttachmentRef *Queue::Builder::addPassInput(const Rc<Pass> &p, uint32_t subpassIdx,
-		const Rc<ImageAttachment> &attachment, AttachmentDependencyInfo info) {
+		const Rc<ImageAttachment> &attachment, AttachmentDependencyInfo info, DescriptorType descriptorType) {
 	auto pass = getPassData(p);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
@@ -773,7 +781,7 @@ ImageAttachmentRef *Queue::Builder::addPassInput(const Rc<Pass> &p, uint32_t sub
 	if (emplaced) {
 		attachment->setIndex(_data->attachments.size() - 1);
 	}
-	auto desc = emplaceAttachment(pass, attachment->addImageDescriptor(pass));
+	auto desc = emplaceAttachment(pass, attachment->addImageDescriptor(pass, descriptorType));
 	if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::Input, AttachmentLayout::Ignored, info)) {
 		pass->subpasses[subpassIdx].inputImages.emplace_back(ref);
 		return ref;
@@ -784,7 +792,7 @@ ImageAttachmentRef *Queue::Builder::addPassInput(const Rc<Pass> &p, uint32_t sub
 }
 
 ImageAttachmentRef *Queue::Builder::addPassOutput(const Rc<Pass> &p, uint32_t subpassIdx,
-		const Rc<ImageAttachment> &attachment, AttachmentDependencyInfo info) {
+		const Rc<ImageAttachment> &attachment, AttachmentDependencyInfo info, DescriptorType descriptorType) {
 	auto pass = getPassData(p);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
@@ -801,7 +809,7 @@ ImageAttachmentRef *Queue::Builder::addPassOutput(const Rc<Pass> &p, uint32_t su
 	if (emplaced) {
 		attachment->setIndex(_data->attachments.size() - 1);
 	}
-	auto desc = emplaceAttachment(pass, attachment->addImageDescriptor(pass));
+	auto desc = emplaceAttachment(pass, attachment->addImageDescriptor(pass, descriptorType));
 	if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::Output, AttachmentLayout::Ignored, info)) {
 		pass->subpasses[subpassIdx].outputImages.emplace_back(ref);
 		return ref;
@@ -1059,6 +1067,36 @@ const ProgramData * Queue::Builder::addProgram(StringView key, const memory::fun
 	return nullptr;
 }
 
+const ComputePipelineData *Queue::Builder::addComputePipeline(const Rc<Pass> &d, StringView key, SpecializationInfo &&info) {
+	auto pass = getSubpassData(d, 0);
+	if (!_data) {
+		log::vtext("Resource", "Fail to add shader: ", key, ", not initialized");
+		return nullptr;
+	}
+
+	auto it = _data->computePipelines.find(key);
+	if (it != _data->computePipelines.end()) {
+		log::vtext("Resource", _data->key, ": Pipeline '", key, "' already added");
+		return nullptr;
+	}
+
+	auto p = Resource_conditionalInsert<ComputePipelineData>(pass->computePipelines, key, [&] () -> ComputePipelineData * {
+		auto pipeline = new (_data->pool) ComputePipelineData;
+		pipeline->key = key.pdup(_data->pool);
+		pipeline->renderPass = d.get();
+		pipeline->shader = move(info);
+		return pipeline;
+	}, _data->pool);
+	if (!p) {
+		log::vtext("Resource", _data->key, ": Pipeline '", key, "' already added to pass '", d->getName(), "'");
+		return nullptr;
+	}
+	if (p) {
+		_data->computePipelines.emplace(p);
+	}
+	return p;
+}
+
 void Queue::Builder::setInternalResource(Rc<Resource> &&res) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to set internal resource: ", res->getName(), ", not initialized");
@@ -1099,7 +1137,7 @@ void Queue::Builder::setEndCallback(Function<void(FrameRequest &)> &&cb) {
 	_data->endCallback = move(cb);
 }
 
-PipelineData *Queue::Builder::emplacePipeline(const Rc<Pass> &d, uint32_t subpass, StringView key) {
+GraphicPipelineData *Queue::Builder::emplacePipeline(const Rc<Pass> &d, uint32_t subpass, StringView key) {
 	auto pass = getSubpassData(d, subpass);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", d->getName(),"' was not added to render queue '", _data->key, "'");
@@ -1111,14 +1149,14 @@ PipelineData *Queue::Builder::emplacePipeline(const Rc<Pass> &d, uint32_t subpas
 		return nullptr;
 	}
 
-	auto it = _data->pipelines.find(key);
-	if (it != _data->pipelines.end()) {
+	auto it = _data->graphicPipelines.find(key);
+	if (it != _data->graphicPipelines.end()) {
 		log::vtext("Resource", _data->key, ": Pipeline '", key, "' already added");
 		return nullptr;
 	}
 
-	auto p = Resource_conditionalInsert<PipelineData>(pass->pipelines, key, [&] () -> PipelineData * {
-		auto pipeline = new (_data->pool) PipelineData;
+	auto p = Resource_conditionalInsert<GraphicPipelineData>(pass->graphicPipelines, key, [&] () -> GraphicPipelineData * {
+		auto pipeline = new (_data->pool) GraphicPipelineData;
 		pipeline->key = key.pdup(_data->pool);
 		pipeline->renderPass = d.get();
 		pipeline->subpass = subpass;
@@ -1129,28 +1167,28 @@ PipelineData *Queue::Builder::emplacePipeline(const Rc<Pass> &d, uint32_t subpas
 		return nullptr;
 	}
 	if (p) {
-		_data->pipelines.emplace(p);
+		_data->graphicPipelines.emplace(p);
 	}
 	return p;
 }
 
-void Queue::Builder::erasePipeline(const Rc<Pass> &p, uint32_t subpass, PipelineData *data) {
+void Queue::Builder::erasePipeline(const Rc<Pass> &p, uint32_t subpass, GraphicPipelineData *data) {
 	auto pass = getSubpassData(p, subpass);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
 		return;
 	}
 
-	_data->pipelines.erase(data->key);
-	pass->pipelines.erase(data->key);
+	_data->graphicPipelines.erase(data->key);
+	pass->graphicPipelines.erase(data->key);
 }
 
-bool Queue::Builder::setPipelineOption(PipelineData &f, DynamicState state) {
+bool Queue::Builder::setPipelineOption(GraphicPipelineData &f, DynamicState state) {
 	f.dynamicState = state;
 	return true;
 }
 
-bool Queue::Builder::setPipelineOption(PipelineData &f, const Vector<SpecializationInfo> &programs) {
+bool Queue::Builder::setPipelineOption(GraphicPipelineData &f, const Vector<SpecializationInfo> &programs) {
 	for (auto &it : programs) {
 		auto p = _data->programs.get(it.data->key);
 		if (!p) {
@@ -1166,7 +1204,7 @@ bool Queue::Builder::setPipelineOption(PipelineData &f, const Vector<Specializat
 	return true;
 }
 
-bool Queue::Builder::setPipelineOption(PipelineData &f, const PipelineMaterialInfo &info) {
+bool Queue::Builder::setPipelineOption(GraphicPipelineData &f, const PipelineMaterialInfo &info) {
 	f.material = info;
 	return true;
 }

@@ -120,7 +120,7 @@ public:
 	// Использовать только для определения встроенных в аттачмент материалов
 	static constexpr auto MaterialIdInitial = maxOf<uint32_t>();
 
-	using PipelineData = renderqueue::PipelineData;
+	using PipelineData = renderqueue::GraphicPipelineData;
 
 	virtual ~Material();
 

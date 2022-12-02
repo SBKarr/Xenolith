@@ -43,6 +43,8 @@ public:
 
 	void setPreferredPresentMode(gl::PresentMode);
 
+	Rc<renderqueue::Queue> getShadowQueue() const { return _shadowQueueLoaded ? _shadowQueue : nullptr; }
+
 protected:
 	gl::SwapchainConfig selectConfig(const gl::SurfaceInfo &info);
 	void onViewCreated(const Rc<Director> &);
@@ -52,6 +54,9 @@ protected:
 
 	gl::SurfaceInfo _surfaceInfo;
 	gl::SwapchainConfig _swapchainConfig;
+
+	bool _shadowQueueLoaded = false;
+	Rc<renderqueue::Queue> _shadowQueue;
 };
 
 }

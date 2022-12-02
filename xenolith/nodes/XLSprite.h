@@ -82,6 +82,9 @@ public:
 	virtual void setAutofitPosition(const Vec2 &);
 	virtual const Vec2 &getAutofitPosition() const { return _autofitPos; }
 
+	virtual void setShadowIndex(float value) { _shadowIndex = value; }
+	virtual float getShadowIndex() const { return _shadowIndex; }
+
 	/** Семплеры определяются во время старта цикла графики (gl::Loop) и неизменны в последствии
 	 * По умолчанию, семплер с индексом 0 использует фильтр nearest, 1 - linear.
 	 * Разработчики приложений могут определять свою схему для семплеров,
@@ -123,10 +126,19 @@ protected:
 	Rc<Texture> _texture;
 	VertexArray _vertexes;
 
+	float _shadowIndex = 0.0f;
+
 	uint16_t _samplerIdx = 0;
+
+	bool _materialDirty = true;
+	bool _normalized = false;
+	bool _vertexesDirty = true;
+	bool _vertexColorDirty = true;
+
 	bool _flippedX = false;
 	bool _flippedY = false;
 	bool _rotated = false;
+
 	Rect _textureRect = Rect(0.0f, 0.0f, 1.0f, 1.0f); // normalized
 
 	Autofit _autofit = Autofit::None;
@@ -141,18 +153,12 @@ protected:
 	uint64_t _materialId = 0;
 	gl::CommandFlags _commandFlags = gl::CommandFlags::None;
 
-	bool _materialDirty = true;
-	bool _normalized = false;
-	bool _vertexesDirty = true;
-	bool _vertexColorDirty = true;
-
 	Color4F _tmpColor;
 	ColorMode _colorMode;
 	BlendInfo _blendInfo;
 	PipelineMaterialInfo _materialInfo;
 
 	Vector<Rc<renderqueue::DependencyEvent>> _pendingDependencies;
-
 };
 
 }

@@ -27,12 +27,10 @@ THE SOFTWARE.
 
 namespace stappler::xenolith::shaders {
 
-extern SpanView<uint32_t> DefaultFrag;
-extern SpanView<uint32_t> DefaultVert;
-extern SpanView<uint32_t> VertexFrag;
-extern SpanView<uint32_t> VertexVert;
 extern SpanView<uint32_t> MaterialFrag;
 extern SpanView<uint32_t> MaterialVert;
+extern SpanView<uint32_t> SdfTrianglesComp;
+extern SpanView<uint32_t> SdfImageComp;
 
 }
 

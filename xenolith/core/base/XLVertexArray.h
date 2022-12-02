@@ -61,7 +61,11 @@ public:
 
 	void reserve(uint32_t bufferCapacity, uint32_t indexCapacity);
 
+	// pop data, mark array for copy on write
+	// user should not modify data
 	Rc<gl::VertexData> pop();
+
+	// duplicate data, user can modify new data
 	Rc<gl::VertexData> dup();
 
 	bool empty() const;

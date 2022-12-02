@@ -592,11 +592,13 @@ void FrameQueue::onRenderPassOwned(FramePassData &data) {
 
 	if (attachmentsAcquired) {
 		if (!imageViews.empty()) {
-			data.framebuffer = _loop->acquireFramebuffer(data.handle->getData(), imageViews, data.extent);
-			if (!data.framebuffer) {
-				invalidate();
+			if (data.handle->isFramebufferRequired()) {
+				data.framebuffer = _loop->acquireFramebuffer(data.handle->getData(), imageViews, data.extent);
+				if (!data.framebuffer) {
+					invalidate();
+				}
+				_autorelease.emplace_front(data.framebuffer);
 			}
-			_autorelease.emplace_front(data.framebuffer);
 			if (isResourcePending(data)) {
 				waitForResource(data, [this, data = &data] {
 					data->waitForResult = false;
@@ -633,7 +635,12 @@ void FrameQueue::onRenderPassResourcesAcquired(FramePassData &data) {
 	data.handle->autorelease(_frame->getDevice());
 
 	for (auto &it : data.handle->getData()->subpasses) {
-		for (auto &p : it.pipelines) {
+		for (auto &p : it.graphicPipelines) {
+			if (p->pipeline) {
+				data.handle->autorelease(p->pipeline);
+			}
+		}
+		for (auto &p : it.computePipelines) {
 			if (p->pipeline) {
 				data.handle->autorelease(p->pipeline);
 			}

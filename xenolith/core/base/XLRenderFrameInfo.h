@@ -43,6 +43,7 @@ struct RenderFrameInfo {
 	Rc<Scene> scene;
 
 	Rc<gl::CommandList> commands;
+	Rc<gl::CommandList> shadows;
 
 	Rc<InputListenerStorage> input;
 };

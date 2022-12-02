@@ -1,0 +1,67 @@
+#version 450
+
+layout (local_size_x = 64) in;
+
+struct IndexData {
+	uint a;
+	uint b;
+	uint c;
+	uint transform;
+	float value;
+	float opacity;
+};
+
+struct TriangleData {
+	vec4 bb;
+	vec2 a;
+	vec2 b;
+	vec2 c;
+	float value;
+	float opacity;
+};
+
+layout (push_constant) uniform pcb {
+	uint trianglesCount;
+	float bbOffset;
+	uint padding1;
+} pushConstants;
+
+layout (set = 0, binding = 0) readonly buffer Indexes {
+	IndexData indexes[];
+} indexBuffer[3];
+
+layout (set = 0, binding = 0) readonly buffer Vertices {
+	vec4 vertices[];
+} vertexBuffer[3];
+
+layout (set = 0, binding = 0) readonly buffer TransformObjects {
+	mat4 transforms[];
+} transformObjectBuffer[3];
+
+layout(set = 0, binding = 1) buffer TrianglesBuffer {
+	TriangleData triangles[];
+} trianglesBuffer;
+
+void main() {
+	uint gID = gl_GlobalInvocationID.x;
+
+    if (gID < pushConstants.trianglesCount) {
+		IndexData idx = indexBuffer[0].indexes[gID];
+
+		trianglesBuffer.triangles[gID].a = (transformObjectBuffer[2].transforms[idx.transform] * vertexBuffer[1].vertices[idx.a]).xy;
+		trianglesBuffer.triangles[gID].b = (transformObjectBuffer[2].transforms[idx.transform] * vertexBuffer[1].vertices[idx.b]).xy;
+		trianglesBuffer.triangles[gID].c = (transformObjectBuffer[2].transforms[idx.transform] * vertexBuffer[1].vertices[idx.c]).xy;
+		trianglesBuffer.triangles[gID].value = idx.value;
+		trianglesBuffer.triangles[gID].opacity = idx.opacity;
+		
+		vec2 minV = min(min(trianglesBuffer.triangles[gID].a, trianglesBuffer.triangles[gID].b), trianglesBuffer.triangles[gID].c);
+		vec2 maxV = max(max(trianglesBuffer.triangles[gID].a, trianglesBuffer.triangles[gID].b), trianglesBuffer.triangles[gID].c);
+		
+		trianglesBuffer.triangles[gID].bb = vec4(
+			minV.x - pushConstants.bbOffset,
+			minV.y - pushConstants.bbOffset,
+			maxV.x - minV.x + pushConstants.bbOffset * 2.0,
+			maxV.y - minV.y + pushConstants.bbOffset * 2.0
+		);
+    }
+}

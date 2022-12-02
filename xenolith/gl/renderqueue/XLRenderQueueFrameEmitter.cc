@@ -31,10 +31,12 @@ FrameRequest::~FrameRequest() {
 	if (_queue) {
 		_queue->endFrame(*this);
 	}
+	_pool = nullptr;
 }
 
 bool FrameRequest::init(const Rc<FrameEmitter> &emitter, Rc<ImageStorage> &&target, float density) {
 	auto e = target->getInfo().extent;
+	_pool = Rc<PoolRef>::alloc();
 	_emitter = emitter;
 	_extent = Extent2(e.width, e.height);
 	_readyForSubmit = false;
@@ -44,6 +46,7 @@ bool FrameRequest::init(const Rc<FrameEmitter> &emitter, Rc<ImageStorage> &&targ
 }
 
 bool FrameRequest::init(const Rc<FrameEmitter> &emitter, Extent2 e, float density) {
+	_pool = Rc<PoolRef>::alloc();
 	_emitter = emitter;
 	_extent = Extent2(e.width, e.height);
 	_readyForSubmit = false;
@@ -52,8 +55,18 @@ bool FrameRequest::init(const Rc<FrameEmitter> &emitter, Extent2 e, float densit
 }
 
 bool FrameRequest::init(const Rc<Queue> &q) {
+	_pool = Rc<PoolRef>::alloc();
 	_queue = q;
 	_queue->beginFrame(*this);
+	return true;
+}
+
+bool FrameRequest::init(const Rc<Queue> &q, Extent2 extent, float density) {
+	_pool = Rc<PoolRef>::alloc();
+	_queue = q;
+	_queue->beginFrame(*this);
+	_extent = extent;
+	_density = density;
 	return true;
 }
 
@@ -93,14 +106,12 @@ void FrameRequest::addSignalDependencies(Vector<Rc<DependencyEvent>> &&deps) {
 }
 
 void FrameRequest::addInput(const Attachment *a, Rc<AttachmentInputData> &&data) {
-	_input.emplace(a, move(data));
-}
-
-void FrameRequest::acquireInput(Map<const Attachment *, Rc<AttachmentInputData>> &target) {
-	if (!_input.empty()) {
-		target = move(_input);
+	auto wIt = _waitForInputs.find(a);
+	if (wIt != _waitForInputs.end()) {
+		wIt->second.handle->submitInput(*wIt->second.queue, move(data), move(wIt->second.callback));
+	} else {
+		_input.emplace(a, move(data));
 	}
-	_input.clear();
 }
 
 void FrameRequest::setQueue(const Rc<Queue> &q) {
@@ -151,6 +162,8 @@ void FrameRequest::onOutputInvalidated(gl::Loop &loop, FrameAttachmentData &data
 }
 
 void FrameRequest::finalize(gl::Loop &loop, bool success) {
+	_waitForInputs.clear();
+
 	if (!success) {
 		if (_swapchain && _renderTarget) {
 			_swapchain->invalidateTarget(move(_renderTarget));
@@ -202,8 +215,28 @@ bool FrameRequest::isSwapchainAttachment(const Attachment *a) const {
 	return _swapchainAttachment == a;
 }
 
+Rc<AttachmentInputData> FrameRequest::getInputData(const Attachment *attachment) {
+	auto it = _input.find(attachment);
+	if (it != _input.end()) {
+		auto ret = it->second;
+		_input.erase(it);
+		return ret;
+	}
+	return nullptr;
+}
+
 Set<Rc<Queue>> FrameRequest::getQueueList() const {
 	return Set<Rc<Queue>>{_queue};
+}
+
+void FrameRequest::waitForInput(FrameQueue &queue, const Rc<AttachmentHandle> &a, Function<void(bool)> &&cb) {
+	auto it = _waitForInputs.find(a->getAttachment());
+	if (it != _waitForInputs.end()) {
+		it->second.callback(false);
+		it->second.callback = move(cb);
+	} else {
+		_waitForInputs.emplace(a->getAttachment(), WaitInputData{&queue, a, move(cb)});
+	}
 }
 
 FrameEmitter::~FrameEmitter() { }

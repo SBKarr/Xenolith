@@ -42,6 +42,12 @@ Command *Command::create(memory::pool_t *p, CommandType t, CommandFlags flags) {
 	case CommandType::Deferred:
 		c->data = new ( memory::pool::palloc(p, sizeof(CmdDeferred)) ) CmdDeferred;
 		break;
+	case CommandType::ShadowArray:
+		c->data = new ( memory::pool::palloc(p, sizeof(CmdShadowArray)) ) CmdShadowArray;
+		break;
+	case CommandType::ShadowDeferred:
+		c->data = new ( memory::pool::palloc(p, sizeof(CmdShadowDeferred)) ) CmdShadowDeferred;
+		break;
 	}
 	return c;
 }
@@ -59,6 +65,18 @@ void Command::release() {
 		break;
 	case CommandType::Deferred:
 		if (CmdDeferred *d = (CmdDeferred *)data) {
+			d->deferred = nullptr;
+		}
+		break;
+	case CommandType::ShadowArray:
+		if (CmdShadowArray *d = (CmdShadowArray *)data) {
+			for (auto &it : d->vertexes) {
+				const_cast<TransformedVertexData &>(it).data = nullptr;
+			}
+		}
+		break;
+	case CommandType::ShadowDeferred:
+		if (CmdShadowDeferred *d = (CmdShadowDeferred *)data) {
 			d->deferred = nullptr;
 		}
 		break;
@@ -160,6 +178,54 @@ void CommandList::pushDeferredVertexResult(const Rc<DeferredVertexResult> &res, 
 		cmdData->material = material;
 		cmdData->state = _currentState;
 		cmdData->renderingLevel = level;
+
+		addCommand(cmd);
+	});
+}
+
+void CommandList::pushShadowArray(Rc<VertexData> &&vert, const Mat4 &t, float value) {
+	_pool->perform([&] {
+		auto cmd = Command::create(_pool->getPool(), CommandType::ShadowArray, CommandFlags::None);
+		auto cmdData = (CmdShadowArray *)cmd->data;
+
+		// pool memory is 16-bytes aligned, no problems with Mat4
+		auto p = new (memory::pool::palloc(_pool->getPool(), sizeof(TransformedVertexData))) TransformedVertexData();
+
+		p->mat = t;
+		p->data = move(vert);
+
+		cmdData->value = value;
+		cmdData->vertexes = makeSpanView(p, 1);
+		cmdData->state = _currentState;
+
+		addCommand(cmd);
+	});
+}
+
+void CommandList::pushShadowArray(SpanView<TransformedVertexData> data, float value) {
+	_pool->perform([&] {
+		auto cmd = Command::create(_pool->getPool(), CommandType::ShadowArray, CommandFlags::None);
+		auto cmdData = (CmdShadowArray *)cmd->data;
+
+		cmdData->vertexes = data;
+		cmdData->value = value;
+		cmdData->state = _currentState;
+
+		addCommand(cmd);
+	});
+}
+
+void CommandList::pushDeferredShadow(const Rc<DeferredVertexResult> &res, const Mat4 &viewT, const Mat4 &modelT, bool normalized, float value) {
+	_pool->perform([&] {
+		auto cmd = Command::create(_pool->getPool(), CommandType::ShadowDeferred, CommandFlags::None);
+		auto cmdData = (CmdShadowDeferred *)cmd->data;
+
+		cmdData->deferred = res;
+		cmdData->viewTransform = viewT;
+		cmdData->modelTransform = modelT;
+		cmdData->normalized = normalized;
+		cmdData->value = value;
+		cmdData->state = _currentState;
 
 		addCommand(cmd);
 	});

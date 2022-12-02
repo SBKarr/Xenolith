@@ -199,12 +199,14 @@ void RenderQueueAttachmentHandle::runShaders(FrameHandle &frame) {
 			auto ret = Rc<Shader>::create(*_device, *req);
 			if (!ret) {
 				log::vtext("Gl-Device", "Fail to compile shader program ", req->key);
+				return false;
 			} else {
 				req->program = _device->addProgram(ret);
 				if (_programsInQueue.fetch_sub(1) == 1) {
 					runPipelines(frame);
 				}
 			}
+			return true;
 		}, this, "RenderQueueAttachmentHandle::runShaders - programs");
 	}
 
@@ -215,6 +217,7 @@ void RenderQueueAttachmentHandle::runShaders(FrameHandle &frame) {
 			auto ret = Rc<RenderPassImpl>::create(*_device, *req);
 			if (!ret) {
 				log::vtext("Gl-Device", "Fail to compile render pass ", req->key);
+				return false;
 			} else {
 				req->impl = ret.get();
 				if (_programsInQueue.fetch_sub(1) == 1) {
@@ -234,16 +237,28 @@ void RenderQueueAttachmentHandle::runPipelines(FrameHandle &frame) {
 	[[maybe_unused]] size_t tasksCount = _pipelinesInQueue.load();
 	for (auto &pit : _input->queue->getPasses()) {
 		for (auto &sit : pit->subpasses) {
-			_pipelinesInQueue += sit.pipelines.size();
-			tasksCount += sit.pipelines.size();
+			_pipelinesInQueue += sit.graphicPipelines.size() + sit.computePipelines.size();
+			tasksCount += sit.graphicPipelines.size() + sit.computePipelines.size();
 		}
 	}
 
 	for (auto &pit : _input->queue->getPasses()) {
 		for (auto &sit : pit->subpasses) {
-			for (auto &it : sit.pipelines) {
+			for (auto &it : sit.graphicPipelines) {
 				frame.performRequiredTask([this, pass = &sit, pipeline = it] (FrameHandle &frame) -> bool {
-					auto ret = Rc<Pipeline>::create(*_device, *pipeline, *pass, *_input->queue);
+					auto ret = Rc<GraphicPipeline>::create(*_device, *pipeline, *pass, *_input->queue);
+					if (!ret) {
+						log::vtext("Gl-Device", "Fail to compile pipeline ", pipeline->key);
+						return false;
+					} else {
+						pipeline->pipeline = ret.get();
+					}
+					return true;
+				}, this, "RenderQueueAttachmentHandle::runPipelines");
+			}
+			for (auto &it : sit.computePipelines) {
+				frame.performRequiredTask([this, pass = &sit, pipeline = it] (FrameHandle &frame) -> bool {
+					auto ret = Rc<ComputePipeline>::create(*_device, *pipeline, *pass, *_input->queue);
 					if (!ret) {
 						log::vtext("Gl-Device", "Fail to compile pipeline ", pipeline->key);
 						return false;

@@ -63,3 +63,4 @@ THE SOFTWARE.
 #include "renderer/XLVkMaterialRenderPass.cc"
 #include "renderer/XLVkRenderQueueCompiler.cc"
 #include "renderer/XLVkRenderFontQueue.cc"
+#include "renderer/XLVkShadowRenderPass.cc"

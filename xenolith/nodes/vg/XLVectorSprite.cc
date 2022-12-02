@@ -236,6 +236,10 @@ void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 			}
 		}
 
+		if (_shadowIndex > 0.0f) {
+			frame.shadows->pushShadowArray(makeSpanView(tmpData, targetData.size()), _shadowIndex);
+		}
+
 		frame.commands->pushVertexArray(makeSpanView(tmpData, targetData.size()), frame.zPath,
 				_materialId, _realRenderingLevel, _commandFlags);
 	} else if (_deferredResult) {
@@ -244,6 +248,10 @@ void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 		}
 
 		auto transform =  frame.modelTransformStack.back() * _targetTransform;
+
+		if (_shadowIndex > 0.0f) {
+			frame.shadows->pushDeferredShadow(_deferredResult, frame.viewProjectionStack.back(), transform, _normalized, _shadowIndex);
+		}
 
 		frame.commands->pushDeferredVertexResult(_deferredResult, frame.viewProjectionStack.back(), transform, _normalized, frame.zPath,
 						_materialId, _realRenderingLevel, _commandFlags);

@@ -34,6 +34,7 @@
 #include "XLFontLibrary.h"
 
 #include "AppRootLayout.h"
+#include "AppDelegate.h"
 
 namespace stappler::xenolith::app {
 
@@ -43,9 +44,6 @@ bool AppScene::init(Application *app, Extent2 extent, float density) {
 
 	vk::MaterialPass::RenderQueueInfo info{
 		app, &builder, extent,
-		[this] (renderqueue::FrameQueue &frame, const Rc<renderqueue::AttachmentHandle> &a,	Function<void(bool)> &&cb) {
-			on2dVertexInput(frame, a, move(cb));
-		},
 		[&] (renderqueue::Resource::Builder &resourceBuilder) {
 			resourceBuilder.addImage("xenolith-1-480.png",
 					gl::ImageInfo(gl::ImageFormat::R8G8B8A8_UNORM, gl::ImageUsage::Sampled, gl::ImageHints::Opaque),
@@ -112,6 +110,46 @@ void AppScene::onContentSizeDirty() {
 		_layout->setAnchorPoint(Anchor::Middle);
 		_layout->setPosition(_contentSize / 2.0f);
 		_layout->setContentSize(_contentSize);
+	}
+}
+
+void AppScene::render(RenderFrameInfo &info) {
+	UtilScene::render(info);
+
+	if (info.shadows && !info.shadows->empty()) {
+		auto app = (AppDelegate *)info.director->getApplication();
+		auto queue = app->getShadowQueue();
+		if (!queue) {
+			return;
+		}
+		auto req = Rc<renderqueue::FrameRequest>::create(queue, info.director->getScreenExtent(), info.director->getDensity());
+		req->addInput(queue->getInputAttachments().front(), move(info.shadows));
+		req->bindSwapchainCallback([this] (renderqueue::FrameAttachmentData &attachment, bool success) {
+			if (success) {
+				_director->getView()->captureImage([] (const gl::ImageInfo &info, BytesView view) {
+					auto viewSize = view.size();
+					Bytes outbytes; outbytes.resize(viewSize / 2);
+					for (size_t i = 0; i < viewSize / 2; ++ i) {
+						auto value = view.readFloat16();
+						if (value > 0.0f) {
+							outbytes[i] = uint8_t((1.0f - value) * 255.0f);
+						} else {
+							outbytes[i] = uint8_t((1.0f + value) * 255.0f);
+						}
+					}
+
+					Bitmap bmp(move(outbytes), info.extent.width, info.extent.height, bitmap::PixelFormat::A8);
+					bmp.save(toString(Time::now().toMicros(), ".png"));
+
+					std::cout << "Shadows attachment ready\n";
+				}, attachment.image->getImage(), attachment.image->getLayout());
+			}
+			return true;
+		});
+
+		info.director->getView()->getLoop()->runRenderQueue(move(req), 0, [] (bool success) {
+			std::cout << "Shadows performed: " << success << "\n";
+		});
 	}
 }
 

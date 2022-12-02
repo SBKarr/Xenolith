@@ -81,7 +81,10 @@ void QueueData::clear() {
 		}
 
 		for (auto &subpass : it->subpasses) {
-			for (auto &pipeline : subpass.pipelines) {
+			for (auto &pipeline : subpass.graphicPipelines) {
+				pipeline->pipeline = nullptr;
+			}
+			for (auto &pipeline : subpass.computePipelines) {
 				pipeline->pipeline = nullptr;
 			}
 		}
@@ -172,7 +175,7 @@ void ProgramData::inspect(SpanView<uint32_t> data) {
 
 	bindings.reserve(shader.descriptor_binding_count);
 	for (auto &it : makeSpanView(shader.descriptor_bindings, shader.descriptor_binding_count)) {
-		bindings.emplace_back(ProgramDescriptorBinding({it.set, it.binding, DescriptorType(it.descriptor_type)}));
+		bindings.emplace_back(ProgramDescriptorBinding({it.set, it.binding, DescriptorType(it.descriptor_type), it.count}));
 	}
 
 	constants.reserve(shader.push_constant_block_count);
@@ -182,7 +185,7 @@ void ProgramData::inspect(SpanView<uint32_t> data) {
 
 	entryPoints.reserve(shader.entry_point_count);
 	for (auto &it : makeSpanView(shader.entry_points, shader.entry_point_count)) {
-		entryPoints.emplace_back(ProgramEntryPointBlock({it.id, memory::string(it.name)}));
+		entryPoints.emplace_back(ProgramEntryPointBlock({it.id, memory::string(it.name), it.local_size.x, it.local_size.y, it.local_size.z}));
 	}
 
 	spvReflectDestroyShaderModule(&shader);
@@ -193,7 +196,7 @@ SpecializationInfo::SpecializationInfo(const ProgramData *data) : data(data) { }
 SpecializationInfo::SpecializationInfo(const ProgramData *data, SpanView<PredefinedConstant> c)
 : data(data), constants(c.vec<memory::PoolInterface>()) { }
 
-bool PipelineInfo::isSolid() const {
+bool GraphicPipelineInfo::isSolid() const {
 	if (material.getDepthInfo().writeEnabled || !material.getBlendInfo().enabled) {
 		return true;
 	}

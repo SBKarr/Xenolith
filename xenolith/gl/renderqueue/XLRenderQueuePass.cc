@@ -129,6 +129,10 @@ bool PassHandle::isCompleted() const {
 	return toInt(_queueData->state) >= toInt(FrameRenderPassState::Complete);
 }
 
+bool PassHandle::isFramebufferRequired() const {
+	return _renderPass->getType() == PassType::Graphics;
+}
+
 bool PassHandle::prepare(FrameQueue &, Function<void(bool)> &&) {
 	return true;
 }

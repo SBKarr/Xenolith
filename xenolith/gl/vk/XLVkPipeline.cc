@@ -58,7 +58,7 @@ bool Shader::setup(Device &dev, const ProgramData &programData, SpanView<uint32_
 	return false;
 }
 
-bool Pipeline::comparePipelineOrdering(const PipelineInfo &l, const PipelineInfo &r) {
+bool GraphicPipeline::comparePipelineOrdering(const PipelineInfo &l, const PipelineInfo &r) {
 	if (l.material.getDepthInfo().writeEnabled != r.material.getDepthInfo().writeEnabled) {
 		if (l.material.getDepthInfo().writeEnabled) {
 			return true; // pipelines with depth write comes first
@@ -74,7 +74,7 @@ bool Pipeline::comparePipelineOrdering(const PipelineInfo &l, const PipelineInfo
 	}
 }
 
-bool Pipeline::init(Device &dev, const PipelineData &params, const SubpassData &pass, const RenderQueue &queue) {
+bool GraphicPipeline::init(Device &dev, const PipelineData &params, const SubpassData &pass, const RenderQueue &queue) {
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo{}; sanitizeVkStruct(vertexInputInfo);
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	vertexInputInfo.pNext = nullptr;
@@ -343,7 +343,80 @@ bool Pipeline::init(Device &dev, const PipelineData &params, const SubpassData &
 
 	if (dev.getTable()->vkCreateGraphicsPipelines(dev.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_pipeline) == VK_SUCCESS) {
 		_name = params.key.str<Interface>();
-		return gl::Pipeline::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+		return gl::GraphicPipeline::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+			auto d = ((Device *)dev);
+			d->getTable()->vkDestroyPipeline(d->getDevice(), (VkPipeline)ptr, nullptr);
+		}, gl::ObjectType::Pipeline, _pipeline);
+	}
+	return false;
+}
+
+bool ComputePipeline::init(Device &dev, const PipelineData &params, const SubpassData &pass, const RenderQueue &) {
+	VkComputePipelineCreateInfo pipelineInfo{}; sanitizeVkStruct(pipelineInfo);
+	pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	pipelineInfo.pNext = nullptr;
+	pipelineInfo.flags = 0;
+	pipelineInfo.stage = VkPipelineShaderStageCreateInfo{
+		VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0
+	};
+	pipelineInfo.layout = pass.renderPass->impl.cast<RenderPassImpl>()->getPipelineLayout();
+	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+	pipelineInfo.basePipelineIndex = 0;
+
+	struct SpecInfo {
+		VkSpecializationInfo specInfo;
+		Vector<VkSpecializationMapEntry> entries;
+		Bytes data;
+	};
+
+	Vector<SpecInfo> specs;
+	pipelineInfo.stage.stage = VkShaderStageFlagBits(params.shader.data->stage);
+	pipelineInfo.stage.module = params.shader.data->program.cast<Shader>()->getModule();
+
+	pipelineInfo.stage.pName = params.shader.data->entryPoints.front().name.data();
+
+	if (!dev.getInfo().features.device10.features.shaderSampledImageArrayDynamicIndexing) {
+		for (auto &it : params.shader.data->entryPoints) {
+			if (StringView(it.name).ends_with("_static")) {
+				pipelineInfo.stage.pName = it.name.data();
+			}
+		}
+	}
+
+	for (auto &it : params.shader.data->entryPoints) {
+		if (it.name == pipelineInfo.stage.pName) {
+			_localX = it.localX;
+			_localY = it.localY;
+			_localZ = it.localZ;
+		}
+	}
+
+	if (!params.shader.constants.empty()) {
+		auto &spec = specs.emplace_back();
+		spec.entries.reserve(params.shader.constants.size());
+		spec.data.reserve(sizeof(uint32_t) * params.shader.constants.size());
+		uint32_t idx = 0;
+		for (auto &it : params.shader.constants) {
+			VkSpecializationMapEntry &entry = spec.entries.emplace_back();
+			entry.constantID = idx;
+			entry.offset = spec.data.size();
+			auto data = dev.emplaceConstant(it, spec.data);
+			entry.size = data.size();
+			++ idx;
+		}
+
+		spec.specInfo.mapEntryCount = spec.entries.size();
+		spec.specInfo.pMapEntries = spec.entries.data();
+		spec.specInfo.dataSize = spec.data.size();
+		spec.specInfo.pData = spec.data.data();
+		pipelineInfo.stage.pSpecializationInfo = &spec.specInfo;
+	} else {
+		pipelineInfo.stage.pSpecializationInfo = nullptr;
+	}
+
+	if (dev.getTable()->vkCreateComputePipelines(dev.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_pipeline) == VK_SUCCESS) {
+		_name = params.key.str<Interface>();
+		return gl::ComputePipeline::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
 			auto d = ((Device *)dev);
 			d->getTable()->vkDestroyPipeline(d->getDevice(), (VkPipeline)ptr, nullptr);
 		}, gl::ObjectType::Pipeline, _pipeline);

@@ -108,6 +108,7 @@ protected:
 
 	Rc<DeviceBuffer> _indexes;
 	Rc<DeviceBuffer> _vertexes;
+	Rc<DeviceBuffer> _transforms;
 	Vector<gl::VertexSpan> _spans;
 
 	Rc<gl::MaterialSet> _materialSet;
@@ -124,7 +125,6 @@ public:
 		Application *app = nullptr;
 		renderqueue::Queue::Builder *builder = nullptr;
 		Extent2 extent;
-		Function<void(FrameQueue &, const Rc<AttachmentHandle> &, Function<void(bool)> &&)> vertexInputCallback;
 		Function<void(gl::Resource::Builder &)> resourceCallback;
 	};
 

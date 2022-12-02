@@ -73,6 +73,8 @@ bool LayoutMenuItem::init(StringView str, Function<void()> &&cb) {
 
 	_callback = move(cb);
 
+	setShadowIndex(1.0f);
+
 	return true;
 }
 

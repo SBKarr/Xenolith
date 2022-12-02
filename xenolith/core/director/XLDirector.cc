@@ -97,6 +97,11 @@ bool Director::acquireFrame(const Rc<FrameRequest> &req) {
 	if (_scene) {
 		req->setQueue(_scene->getRenderQueue());
 	}
+
+	_application->performOnMainThread([this, req] {
+		_scene->renderRequest(req);
+	}, this, true);
+
 	return true;
 }
 
@@ -172,7 +177,6 @@ void Director::runScene(Rc<Scene> &&scene) {
 					_view->getLoop()->performOnGlThread([view = _view, scene = _scene] {
 						view->runWithQueue(scene->getRenderQueue());
 					}, this);
-					update();
 				}
 			}, this);
 		}
@@ -193,11 +197,11 @@ float Director::getAvgFps() const {
 }
 
 float Director::getSpf() const {
-	return _view->getLastFrameInterval() / 1000.0f;
+	return _view->getLastFrameTime() / 1000.0f;
 }
 
 float Director::getLocalFrameTime() const {
-	return _view->getLastFrameTime() / 1000.0f;
+	return _view->getAvgFenceTime() / 1000.0f;
 }
 
 void Director::autorelease(Ref *ref) {
@@ -206,14 +210,6 @@ void Director::autorelease(Ref *ref) {
 
 void Director::invalidate() {
 
-}
-
-static inline int32_t sp_gcd (int16_t a, int16_t b) {
-	int32_t c;
-	while ( a != 0 ) {
-		c = a; a = b%a;  b = c;
-	}
-	return b;
 }
 
 void Director::updateGeneralTransform() {

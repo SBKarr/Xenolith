@@ -5,8 +5,8 @@ struct Vertex {
 	vec4 pos;
 	vec4 color;
 	vec2 tex;
-	uint object;
 	uint material;
+	uint object;
 };
 
 struct Material {
@@ -14,6 +14,12 @@ struct Material {
 	uint textureIdx;
 	uint setIdx;
 	uint padding0;
+};
+
+struct TransformObject {
+	mat4 transform;
+	vec4 mask;
+	vec4 offset;
 };
 
 layout (push_constant) uniform pcb {
@@ -24,7 +30,11 @@ layout (push_constant) uniform pcb {
 
 layout (set = 0, binding = 0) readonly buffer Vertices {
 	Vertex vertices[];
-};
+} vertexBuffer[2];
+
+layout (set = 0, binding = 0) readonly buffer TransformObjects {
+	TransformObject objects[];
+} transformObjectBuffer[2];
 
 layout (set = 0, binding = 1) readonly buffer Materials {
 	Material materials[];
@@ -34,7 +44,11 @@ layout (location = 0) out vec4 fragColor;
 layout (location = 1) out vec2 fragTexCoord;
 
 void main() {
-	gl_Position = vec4(vertices[gl_VertexIndex].pos.xyz, 1.0);
-	fragColor = vertices[gl_VertexIndex].color;
-	fragTexCoord = vertices[gl_VertexIndex].tex;
+	uint transformIdx = vertexBuffer[0].vertices[gl_VertexIndex].material >> 16;
+
+	gl_Position = transformObjectBuffer[1].objects[transformIdx].transform * vertexBuffer[0].vertices[gl_VertexIndex].pos
+		* transformObjectBuffer[1].objects[transformIdx].mask + transformObjectBuffer[1].objects[transformIdx].offset;
+
+	fragColor = vertexBuffer[0].vertices[gl_VertexIndex].color;
+	fragTexCoord = vertexBuffer[0].vertices[gl_VertexIndex].tex;
 }

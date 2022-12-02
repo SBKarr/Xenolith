@@ -648,11 +648,14 @@ ImageData ImageData::make(Rc<ImageObject> &&obj) {
 }
 
 void ImageViewInfo::setup(const renderqueue::ImageAttachmentDescriptor &desc) {
-	bool usedAsInput = false;
-	for (auto &it : desc.getRefs()) {
-		if ((it->getUsage() & renderqueue::AttachmentUsage::Input) != renderqueue::AttachmentUsage::None) {
-			usedAsInput = true;
-			break;
+	bool allowSwizzle = (desc.getDescriptorType() != renderqueue::DescriptorType::InputAttachment
+			&& desc.getDescriptorType() != renderqueue::DescriptorType::StorageImage);
+	if (allowSwizzle) {
+		for (auto &it : desc.getRefs()) {
+			if ((it->getUsage() & renderqueue::AttachmentUsage::Input) != renderqueue::AttachmentUsage::None) {
+				allowSwizzle = false;
+				break;
+			}
 		}
 	}
 
@@ -673,9 +676,9 @@ void ImageViewInfo::setup(const renderqueue::ImageAttachmentDescriptor &desc) {
 		break;
 	}
 
-	setup(desc.getColorMode());
+	setup(desc.getColorMode(), allowSwizzle);
 
-	if (usedAsInput) {
+	if (!allowSwizzle) {
 		// input attachment cannot have swizzle mask
 
 		if (r != gl::ComponentMapping::Identity) {
@@ -726,9 +729,16 @@ void ImageViewInfo::setup(const ImageInfo &value) {
 	}
 }
 
-void ImageViewInfo::setup(ColorMode value) {
+void ImageViewInfo::setup(ColorMode value, bool allowSwizzle) {
 	switch (value.getMode()) {
 	case ColorMode::Solid: {
+		if (!allowSwizzle) {
+			r = gl::ComponentMapping::Identity;
+			g = gl::ComponentMapping::Identity;
+			b = gl::ComponentMapping::Identity;
+			a = gl::ComponentMapping::Identity;
+			return;
+		}
 		auto f = gl::getImagePixelFormat(format);
 		switch (f) {
 		case gl::PixelFormat::Unknown: break;

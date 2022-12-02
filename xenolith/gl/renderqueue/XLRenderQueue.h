@@ -30,7 +30,8 @@ namespace stappler::xenolith::gl {
 
 class RenderPass;
 class Shader;
-class Pipeline;
+class GraphicPipeline;
+class ComputePipeline;
 
 class Loop;
 class View;
@@ -75,6 +76,7 @@ struct ProgramDescriptorBinding {
 	uint32_t set = 0;
 	uint32_t descriptor = 0;
 	DescriptorType type = DescriptorType::Unknown;
+	uint32_t count = 0;
 };
 
 struct ProgramPushConstantBlock {
@@ -85,6 +87,9 @@ struct ProgramPushConstantBlock {
 struct ProgramEntryPointBlock {
 	uint32_t id;
 	memory::string name;
+	uint32_t localX;
+	uint32_t localY;
+	uint32_t localZ;
 };
 
 struct ProgramInfo : NamedMem {
@@ -108,11 +113,12 @@ struct SpecializationInfo {
 	const ProgramData *data = nullptr;
 	memory::vector<PredefinedConstant> constants;
 
+	SpecializationInfo() = default;
 	SpecializationInfo(const ProgramData *);
 	SpecializationInfo(const ProgramData *, SpanView<PredefinedConstant>);
 };
 
-struct PipelineInfo : NamedMem {
+struct GraphicPipelineInfo : NamedMem {
 	memory::vector<SpecializationInfo> shaders;
 	DynamicState dynamicState = DynamicState::Default;
 	PipelineMaterialInfo material;
@@ -120,10 +126,19 @@ struct PipelineInfo : NamedMem {
 	bool isSolid() const;
 };
 
-struct PipelineData : PipelineInfo {
+struct GraphicPipelineData : GraphicPipelineInfo {
 	const Pass *renderPass = nullptr;
-	Rc<gl::Pipeline> pipeline; // GL implementation-dependent object
+	Rc<gl::GraphicPipeline> pipeline; // GL implementation-dependent object
 	uint32_t subpass = 0;
+};
+
+struct ComputePipelineInfo : NamedMem {
+	SpecializationInfo shader;
+};
+
+struct ComputePipelineData : ComputePipelineInfo {
+	const Pass *renderPass = nullptr;
+	Rc<gl::ComputePipeline> pipeline; // GL implementation-dependent object
 };
 
 struct PipelineDescriptor {
@@ -168,7 +183,8 @@ struct SubpassData {
 	uint32_t index = 0;
 	PassData *renderPass = nullptr;
 
-	HashTable<PipelineData *> pipelines;
+	HashTable<GraphicPipelineData *> graphicPipelines;
+	HashTable<ComputePipelineData *> computePipelines;
 	memory::vector<BufferAttachmentRef *> inputBuffers;
 	memory::vector<BufferAttachmentRef *> outputBuffers;
 

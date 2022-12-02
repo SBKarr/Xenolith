@@ -407,7 +407,7 @@ Allocator::MemNode Allocator::alloc(MemType *type, uint64_t in_size, bool persis
 		return MemNode();
 	}
 
-	if (persistent) {
+	if (persistent && (type->type.propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0) {
 		if (_device->getTable()->vkMapMemory(_device->getDevice(), ret.mem, 0, size, 0, &ret.ptr) != VK_SUCCESS) {
 			_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
 				table.vkFreeMemory(device, ret.mem, nullptr);
@@ -743,7 +743,7 @@ Rc<DeviceBuffer> DeviceMemoryPool::spawn(AllocationUsage type, const gl::BufferI
 	VkBuffer target = VK_NULL_HANDLE;
 	auto dev = _allocator->getDevice();
 	if (dev->getTable()->vkCreateBuffer(dev->getDevice(), &bufferInfo, nullptr, &target) != VK_SUCCESS) {
-		log::text("DeviceMemoryPool", "Fail tocreate buffer");
+		log::text("DeviceMemoryPool", "Fail to create buffer");
 		return nullptr;
 	}
 
@@ -768,7 +768,7 @@ Rc<DeviceBuffer> DeviceMemoryPool::spawn(AllocationUsage type, const gl::BufferI
 		}
 
 		if (auto mem = alloc(pool, requirements.requirements.size,
-				requirements.requirements.alignment, AllocationType::Linear)) {
+				requirements.requirements.alignment, AllocationType::Linear, type)) {
 			if (dev->getTable()->vkBindBufferMemory(dev->getDevice(), target, mem.mem, mem.offset) == VK_SUCCESS) {
 				auto ret = Rc<DeviceBuffer>::create(this, target, move(mem), type, info);
 				_buffers.emplace_back(ret);
@@ -794,7 +794,8 @@ Device *DeviceMemoryPool::getDevice() const {
 	return _allocator->getDevice();
 }
 
-Allocator::MemBlock DeviceMemoryPool::alloc(MemData *mem, VkDeviceSize in_size, VkDeviceSize alignment, AllocationType allocType) {
+Allocator::MemBlock DeviceMemoryPool::alloc(MemData *mem, VkDeviceSize in_size, VkDeviceSize alignment,
+		AllocationType allocType, AllocationUsage type) {
 	if (allocType == AllocationType::Unknown) {
 		return Allocator::MemBlock();
 	}
@@ -823,7 +824,7 @@ Allocator::MemBlock DeviceMemoryPool::alloc(MemData *mem, VkDeviceSize in_size, 
 
 	if (!node) {
 		size_t reqSize = size;
-		auto b = _allocator->alloc(mem->type, reqSize, _persistentMapping);
+		auto b = _allocator->alloc(mem->type, reqSize, (type == AllocationUsage::DeviceLocal) ? false : _persistentMapping);
 		mem->mem.emplace_back(b);
 		node = &mem->mem.back();
 		alignedOffset = 0;

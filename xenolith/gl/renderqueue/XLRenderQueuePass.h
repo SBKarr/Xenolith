@@ -105,6 +105,8 @@ public:
 	virtual bool isSubmitted() const;
 	virtual bool isCompleted() const;
 
+	virtual bool isFramebufferRequired() const;
+
 	// Run data preparation process, that do not require queuing
 	// returns true if 'prepare' completes immediately (either successful or not)
 	// returns false if 'prepare' run some subroutines, and we should wait for them

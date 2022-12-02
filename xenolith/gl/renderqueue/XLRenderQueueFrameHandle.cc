@@ -94,6 +94,7 @@ bool FrameHandle::init(gl::Loop &loop, gl::Device &dev, Rc<FrameRequest> &&req, 
 	_loop = &loop;
 	_device = &dev;
 	_request = move(req);
+	_pool = _request->getPool();
 	_timeStart = platform::device::_clock(FrameClockType);
 	if (!_request || !_request->getQueue()) {
 		return false;
@@ -106,7 +107,6 @@ bool FrameHandle::init(gl::Loop &loop, gl::Device &dev, Rc<FrameRequest> &&req, 
 	}
 
 	XL_FRAME_LOG(XL_FRAME_LOG_INFO, "Init; ready: ", _request->isReadyForSubmit());
-	_request->acquireInput(_inputData);
 	return setup();
 }
 
@@ -177,15 +177,18 @@ void FrameHandle::performOnGlThread(Function<void(FrameHandle &)> &&cb, Ref *ref
 	}
 }
 
-void FrameHandle::performRequiredTask(Function<void(FrameHandle &)> &&cb, Ref *ref, StringView tag) {
+void FrameHandle::performRequiredTask(Function<bool(FrameHandle &)> &&cb, Ref *ref, StringView tag) {
 	++ _tasksRequired;
 	auto linkId = retain();
 	_loop->performInQueue(Rc<thread::Task>::create([this, cb = move(cb)] (const thread::Task &) -> bool {
-		cb(*this);
-		return true;
-	}, [this, linkId, tag] (const thread::Task &, bool) {
+		return cb(*this);
+	}, [this, linkId, tag] (const thread::Task &, bool success) {
 		XL_FRAME_LOG(XL_FRAME_LOG_INFO, "thread performed: '", tag, "'");
-		onRequiredTaskCompleted(tag);
+		if (success) {
+			onRequiredTaskCompleted(tag);
+		} else {
+			invalidate();
+		}
 		release(linkId);
 	}, ref));
 }
@@ -199,7 +202,11 @@ void FrameHandle::performRequiredTask(Function<bool(FrameHandle &)> &&perform, F
 	}, [this, complete = move(complete), linkId, tag] (const thread::Task &, bool success) {
 		XL_FRAME_PROFILE(complete(*this, success), tag, 1000);
 		XL_FRAME_LOG(XL_FRAME_LOG_INFO, "thread performed: '", tag, "'");
-		onRequiredTaskCompleted(tag);
+		if (success) {
+			onRequiredTaskCompleted(tag);
+		} else {
+			invalidate();
+		}
 		release(linkId);
 	}, ref));
 }
@@ -213,13 +220,7 @@ bool FrameHandle::isPersistentMapping() const {
 }
 
 Rc<AttachmentInputData> FrameHandle::getInputData(const Attachment *attachment) {
-	auto it = _inputData.find(attachment);
-	if (it != _inputData.end()) {
-		auto ret = it->second;
-		_inputData.erase(it);
-		return ret;
-	}
-	return nullptr;
+	return _request->getInputData(attachment);
 }
 
 void FrameHandle::setReadyForSubmit(bool value) {
@@ -281,7 +282,6 @@ void FrameHandle::setCompleteCallback(Function<void(FrameHandle &)> &&cb) {
 }
 
 bool FrameHandle::setup() {
-	_pool = Rc<PoolRef>::alloc();
 
 	_pool->perform([&] {
 		auto q = Rc<FrameQueue>::create(_pool, _request->getQueue(), *this, _request->getExtent());
@@ -336,6 +336,10 @@ void FrameHandle::waitForDependencies(const Vector<Rc<DependencyEvent>> &events,
 		cb(*this, success);
 		release(linkId);
 	});
+}
+
+void FrameHandle::waitForInput(FrameQueue &queue, const Rc<AttachmentHandle> &a, Function<void(bool)> &&cb) {
+	_request->waitForInput(queue, a, move(cb));
 }
 
 void FrameHandle::onQueueInvalidated(FrameQueue &) {

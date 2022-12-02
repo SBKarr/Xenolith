@@ -45,6 +45,8 @@ public:
 	virtual void onExit() override;
 	virtual void onContentSizeDirty() override;
 
+	virtual void render(RenderFrameInfo &info) override;
+
 	void runLayout(LayoutName l, Rc<Node> &&);
 
 	void setActiveLayoutId(StringView, Value && = Value());

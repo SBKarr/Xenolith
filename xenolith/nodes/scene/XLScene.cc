@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include "XLApplication.h"
 #include "XLGlLoop.h"
 #include "XLRenderQueueFrameHandle.h"
+#include "XLVkMaterialRenderPass.h"
 
 namespace stappler::xenolith {
 
@@ -68,9 +69,54 @@ bool Scene::init(Application *app, RenderQueue::Builder &&builder, Size2 size, f
 	return true;
 }
 
-void Scene::render(RenderFrameInfo &info) {
-	//auto t = getTransf
+void Scene::renderRequest(const Rc<FrameRequest> &req) {
+	if (!_director) {
+		return;
+	}
 
+	RenderFrameInfo info;
+	info.pool = req->getPool()->getPool();
+	info.shadows = Rc<gl::CommandList>::create(req->getPool());
+	info.commands = Rc<gl::CommandList>::create(req->getPool());
+	info.commands->setStatCallback([dir = Rc<Director>(_director)] (gl::DrawStat stat) {
+		dir->getApplication()->performOnMainThread([dir = move(dir), stat] {
+			dir->pushDrawStat(stat);
+		});
+	});
+
+	render(info);
+
+	_director->getView()->getLoop()->performOnGlThread([req, a = _bufferAttachment, commands = move(info.commands)] () mutable {
+		req->addInput(a, move(commands));
+	}, req);
+
+	// submit material updates
+	if (!_pending.empty()) {
+		for (auto &it : _pending) {
+			Vector<Rc<renderqueue::DependencyEvent>> events;
+			if (_materialDependency) {
+				events.emplace_back(_materialDependency);
+			}
+
+			if (!it.second.toAdd.empty() || !it.second.toRemove.empty()) {
+				auto req = Rc<gl::MaterialInputData>::alloc();
+				req->attachment = it.first;
+				req->materialsToAddOrUpdate = move(it.second.toAdd);
+				req->materialsToRemove = move(it.second.toRemove);
+
+				for (auto &it : req->materialsToRemove) {
+					emplace_ordered(_revokedIds, it);
+				}
+
+				_director->getView()->getLoop()->compileMaterials(move(req), events);
+			}
+		}
+		_pending.clear();
+		_materialDependency = nullptr;
+	}
+}
+
+void Scene::render(RenderFrameInfo &info) {
 	info.director = _director;
 	info.scene = this;
 	info.zPath.reserve(8);
@@ -115,7 +161,14 @@ void Scene::onPresented(Director *dir) {
 		dir->getResourceCache()->addResource(res);
 	}
 	if (_materials.empty()) {
-		readInitialMaterials();
+		for (auto &it : _queue->getAttachments()) {
+			if (auto a = dynamic_cast<gl::MaterialAttachment *>(it.get())) {
+				readInitialMaterials(a);
+			}
+			if (auto a = dynamic_cast<vk::VertexMaterialAttachment *>(it.get())) {
+				_bufferAttachment = a;
+			}
+		}
 	}
 
 	onEnter(this);
@@ -336,48 +389,44 @@ auto Scene::makeQueue(RenderQueue::Builder &&builder) -> Rc<RenderQueue> {
 	return Rc<RenderQueue>::create(move(builder));
 }
 
-void Scene::readInitialMaterials() {
-	for (auto &it : _queue->getAttachments()) {
-		if (auto a = dynamic_cast<gl::MaterialAttachment *>(it.get())) {
-			auto &v = _attachmentsByType.emplace(a->getType(), AttachmentData({a})).first->second;
+void Scene::readInitialMaterials(gl::MaterialAttachment *a) {
+	auto &v = _attachmentsByType.emplace(a->getType(), AttachmentData({a})).first->second;
 
-			auto renderPass = a->getLastRenderPass();
-			while (renderPass) {
-				auto &subpasses = renderPass->subpasses;
+	auto renderPass = a->getLastRenderPass();
+	while (renderPass) {
+		auto &subpasses = renderPass->subpasses;
 
-				for (auto it = subpasses.rbegin(); it != subpasses.rend(); ++ it) {
-					// check if subpass has material attachment
-					bool isUsable = false;
-					for (auto &attachment : it->inputBuffers) {
-						if (attachment->getAttachment() == a) {
-							isUsable = true;
-							break;
-						}
-					}
-
-					if (!isUsable) {
-						break;
-					}
-
-					auto &sp = v.subasses.emplace_back(SubpassData({&(*it)}));
-
-					for (auto &pipeline : it->pipelines) {
-						auto hash = pipeline->material.hash();
-						auto it = sp.pipelines.find(hash);
-						if (it == sp.pipelines.end()) {
-							it = sp.pipelines.emplace(hash, Vector<const PipelineData *>()).first;
-						}
-						it->second.emplace_back(pipeline);
-						log::vtext("Scene", "Pipeline ", pipeline->material.description(), " : ", pipeline->material.data());
-					}
+		for (auto it = subpasses.rbegin(); it != subpasses.rend(); ++ it) {
+			// check if subpass has material attachment
+			bool isUsable = false;
+			for (auto &attachment : it->inputBuffers) {
+				if (attachment->getAttachment() == a) {
+					isUsable = true;
+					break;
 				}
-
-				renderPass = a->getPrevRenderPass(renderPass);
 			}
-			for (auto &m : a->getInitialMaterials()) {
-				addMaterial(getMaterialInfo(a->getType(), m), m->getId(), false);
+
+			if (!isUsable) {
+				break;
+			}
+
+			auto &sp = v.subasses.emplace_back(SubpassData({&(*it)}));
+
+			for (auto &pipeline : it->graphicPipelines) {
+				auto hash = pipeline->material.hash();
+				auto it = sp.pipelines.find(hash);
+				if (it == sp.pipelines.end()) {
+					it = sp.pipelines.emplace(hash, Vector<const PipelineData *>()).first;
+				}
+				it->second.emplace_back(pipeline);
+				log::vtext("Scene", "Pipeline ", pipeline->material.description(), " : ", pipeline->material.data());
 			}
 		}
+
+		renderPass = a->getPrevRenderPass(renderPass);
+	}
+	for (auto &m : a->getInitialMaterials()) {
+		addMaterial(getMaterialInfo(a->getType(), m), m->getId(), false);
 	}
 }
 

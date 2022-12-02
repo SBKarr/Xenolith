@@ -21,9 +21,10 @@
  **/
 
 #include "AppConfigMenu.h"
+
+#include "../../AppDelegate.h"
 #include "AppConfigPresentModeSwitcher.h"
 #include "AppSlider.h"
-#include "XLTestAppDelegate.h"
 #include "XLEventListener.h"
 #include "XLGlView.h"
 

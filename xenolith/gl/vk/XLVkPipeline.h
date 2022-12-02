@@ -44,19 +44,40 @@ protected:
 	VkShaderModule _shaderModule = VK_NULL_HANDLE;
 };
 
-class Pipeline : public gl::Pipeline {
+class GraphicPipeline : public gl::GraphicPipeline {
 public:
 	static bool comparePipelineOrdering(const PipelineInfo &l, const PipelineInfo &r);
 
-	virtual ~Pipeline() { }
+	virtual ~GraphicPipeline() { }
 
 	bool init(Device &dev, const PipelineData &params, const SubpassData &, const RenderQueue &);
 
 	VkPipeline getPipeline() const { return _pipeline; }
 
 protected:
-	using gl::Pipeline::init;
+	using gl::GraphicPipeline::init;
 
+	VkPipeline _pipeline = VK_NULL_HANDLE;
+};
+
+class ComputePipeline : public gl::ComputePipeline {
+public:
+	virtual ~ComputePipeline() { }
+
+	bool init(Device &dev, const PipelineData &params, const SubpassData &, const RenderQueue &);
+
+	VkPipeline getPipeline() const { return _pipeline; }
+
+	uint32_t getLocalX() const { return _localX; }
+	uint32_t getLocalY() const { return _localY; }
+	uint32_t getLocalZ() const { return _localZ; }
+
+protected:
+	using gl::ComputePipeline::init;
+
+	uint32_t _localX = 0;
+	uint32_t _localY = 0;
+	uint32_t _localZ = 0;
 	VkPipeline _pipeline = VK_NULL_HANDLE;
 };
 

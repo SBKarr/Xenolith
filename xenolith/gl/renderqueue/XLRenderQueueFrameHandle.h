@@ -71,7 +71,7 @@ public:
 	virtual void performOnGlThread(Function<void(FrameHandle &)> &&, Ref *, bool immediate, StringView tag);
 
 	// required tasks should be completed before onComplete call
-	virtual void performRequiredTask(Function<void(FrameHandle &)> &&, Ref *, StringView tag);
+	virtual void performRequiredTask(Function<bool(FrameHandle &)> &&, Ref *, StringView tag);
 	virtual void performRequiredTask(Function<bool(FrameHandle &)> &&, Function<void(FrameHandle &, bool)> &&, Ref *, StringView tag);
 
 	virtual bool isSubmitted() const { return _submitted; }
@@ -96,6 +96,8 @@ public:
 	virtual void onOutputAttachmentInvalidated(FrameAttachmentData &);
 
 	virtual void waitForDependencies(const Vector<Rc<DependencyEvent>> &, Function<void(FrameHandle &, bool)> &&);
+
+	virtual void waitForInput(FrameQueue &queue, const Rc<AttachmentHandle> &a, Function<void(bool)> &&cb);
 
 protected:
 	virtual bool setup();
@@ -122,8 +124,6 @@ protected:
 	bool _submitted = false;
 	bool _completed = false;
 	bool _valid = true;
-
-	Map<const Attachment *, Rc<AttachmentInputData>> _inputData;
 
 	Vector<Rc<FrameQueue>> _queues;
 	Function<void(FrameHandle &)> _complete;

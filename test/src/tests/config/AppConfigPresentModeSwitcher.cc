@@ -21,7 +21,8 @@
  **/
 
 #include "AppConfigPresentModeSwitcher.h"
-#include "XLTestAppDelegate.h"
+
+#include "../../AppDelegate.h"
 #include "XLLabel.h"
 #include "XLEventListener.h"
 #include "XLInputListener.h"

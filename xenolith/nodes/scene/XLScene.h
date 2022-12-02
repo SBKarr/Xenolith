@@ -36,14 +36,15 @@ public:
 	using FrameRequest = renderqueue::FrameRequest;
 	using FrameQueue = renderqueue::FrameQueue;
 	using FrameHandle = renderqueue::FrameHandle;
-	using PipelineData = renderqueue::PipelineData;
-	using PipelineInfo = renderqueue::PipelineInfo;
+	using PipelineData = renderqueue::GraphicPipelineData;
+	using PipelineInfo = renderqueue::GraphicPipelineInfo;
 
 	virtual ~Scene();
 
 	virtual bool init(Application *, RenderQueue::Builder &&);
 	virtual bool init(Application *, RenderQueue::Builder &&, Size2, float density);
 
+	virtual void renderRequest(const Rc<FrameRequest> &);
 	virtual void render(RenderFrameInfo &info);
 
 	virtual void onContentSizeDirty() override;
@@ -85,7 +86,7 @@ protected:
 	};
 
 	virtual Rc<RenderQueue> makeQueue(RenderQueue::Builder &&);
-	virtual void readInitialMaterials();
+	virtual void readInitialMaterials(gl::MaterialAttachment *);
 	virtual MaterialInfo getMaterialInfo(gl::MaterialType, const Rc<gl::Material> &) const;
 
 	virtual gl::ImageViewInfo getImageViewForMaterial(const MaterialInfo &, uint32_t idx, const gl::ImageData *) const;
@@ -122,6 +123,8 @@ protected:
 
 	Map<const gl::MaterialAttachment *, PendingData> _pending;
 	Rc<renderqueue::DependencyEvent> _materialDependency;
+
+	renderqueue::Attachment *_bufferAttachment = nullptr;
 
 	// отозванные ид могут быть выданы новым отзываемым материалам, чтобы не засорять биндинги
 	Vector<gl::MaterialId> _revokedIds;

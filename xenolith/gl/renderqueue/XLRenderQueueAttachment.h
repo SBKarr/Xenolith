@@ -146,6 +146,9 @@ public:
 
 	const PipelineDescriptor &getDescriptor() const { return _descriptor; }
 
+	DescriptorType getDescriptorType() const { return _descriptor.type; }
+	void setDescriptorType(DescriptorType type) { _descriptor.type = type; }
+
 protected:
 	virtual Rc<AttachmentRef> makeRef(uint32_t idx, AttachmentUsage, AttachmentDependencyInfo) {
 		return nullptr;
@@ -251,7 +254,7 @@ public:
 
 	virtual void addImageUsage(gl::ImageUsage);
 
-	virtual ImageAttachmentDescriptor *addImageDescriptor(PassData *);
+	virtual ImageAttachmentDescriptor *addImageDescriptor(PassData *, DescriptorType = DescriptorType::Unknown);
 
 	virtual bool isCompatible(const gl::ImageInfo &) const override;
 

@@ -86,6 +86,10 @@ public:
 
 	virtual Rc<Ref> getSwapchainHandle() const = 0;
 
+	virtual void captureImage(StringView, const Rc<gl::ImageObject> &image, AttachmentLayout l) const = 0;
+	virtual void captureImage(Function<void(const gl::ImageInfo &info, BytesView view)> &&,
+			const Rc<gl::ImageObject> &image, AttachmentLayout l) const = 0;
+
 	const Rc<Director> &getDirector() const { return _director; }
 	const Rc<Loop> &getLoop() const { return _loop; }
 
@@ -115,6 +119,8 @@ public:
 	uint64_t getLastFrameTime() const;
 	uint64_t getAvgFrameTime() const;
 
+	uint64_t getAvgFenceTime() const;
+
 	float getDensity() const { return _density; }
 	ScreenOrientation getScreenOrientation() const { return _orientation; }
 
@@ -128,6 +134,8 @@ public:
 
 protected:
 	virtual void wakeup() = 0;
+
+	void pushFrameTime(uint64_t frame, uint64_t time);
 
 	Extent2 _screenExtent;
 
@@ -165,6 +173,9 @@ protected:
 	std::atomic<uint64_t> _lastFrameInterval = 0;
 	math::MovingAverage<20, uint64_t> _avgFrameInterval;
 	std::atomic<uint64_t> _avgFrameIntervalValue = 0;
+
+	math::MovingAverage<20, uint64_t> _avgFenceInterval;
+	std::atomic<uint64_t> _avgFenceIntervalValue = 0;
 };
 
 }

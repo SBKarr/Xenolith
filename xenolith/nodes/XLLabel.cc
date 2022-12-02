@@ -366,7 +366,7 @@ NodeFlags Label::processParentFlags(RenderFrameInfo &info, NodeFlags parentFlags
 
 void Label::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 	if (_deferred) {
-		if (_deferredResult->isReady() && _deferredResult->getResult()->data.empty()) {
+		if (!_deferredResult || (_deferredResult->isReady() && _deferredResult->getResult()->data.empty())) {
 			return;
 		}
 

@@ -36,13 +36,13 @@ public:
 	bool init(const Rc<FrameEmitter> &, Rc<ImageStorage> &&target, float = 1.0f);
 	bool init(const Rc<FrameEmitter> &, Extent2, float = 1.0f);
 	bool init(const Rc<Queue> &q);
+	bool init(const Rc<Queue> &q, Extent2, float = 1.0f);
 	bool init(const Rc<Queue> &q, const Rc<FrameEmitter> &, Extent2, float = 1.0f);
 
 	void addSignalDependency(Rc<DependencyEvent> &&);
 	void addSignalDependencies(Vector<Rc<DependencyEvent>> &&);
 
 	void addInput(const Attachment *, Rc<AttachmentInputData> &&);
-	void acquireInput(Map<const Attachment *, Rc<AttachmentInputData>> &target);
 
 	void setQueue(const Rc<Queue> &q);
 	void setOutput(const Attachment *, Function<bool(const FrameAttachmentData &, bool)> &&);
@@ -58,7 +58,10 @@ public:
 
 	bool isSwapchainAttachment(const Attachment *) const;
 
-	const Rc<ImageStorage> & getRenderTarget() const { return _renderTarget; }
+	Rc<AttachmentInputData> getInputData(const Attachment *attachment);
+
+	const Rc<PoolRef> &getPool() const { return _pool; }
+	const Rc<ImageStorage> &getRenderTarget() const { return _renderTarget; }
 
 	const Rc<FrameEmitter> &getEmitter() const { return _emitter; }
 	const Rc<Queue> &getQueue() const { return _queue; }
@@ -82,10 +85,13 @@ public:
 
 	FrameRequest() = default;
 
+	void waitForInput(FrameQueue &, const Rc<AttachmentHandle> &a, Function<void(bool)> &&cb);
+
 protected:
 	FrameRequest(const FrameRequest &) = delete;
 	FrameRequest &operator=(const FrameRequest &) = delete;
 
+	Rc<PoolRef> _pool;
 	Rc<FrameEmitter> _emitter;
 	Rc<Queue> _queue;
 	Extent2 _extent;
@@ -103,6 +109,14 @@ protected:
 	Rc<Ref> _swapchainHandle;
 
 	Vector<Rc<DependencyEvent>> _signalDependencies;
+
+	struct WaitInputData {
+		Rc<FrameQueue> queue;
+		AttachmentHandle *handle;
+		Function<void(bool)> callback;
+	};
+
+	Map<const Attachment *, WaitInputData> _waitForInputs;
 };
 
 // Frame emitter is an interface, that continuously spawns frames, and can control validity of a frame

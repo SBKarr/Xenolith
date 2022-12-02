@@ -258,19 +258,23 @@ void Sprite::setSamplerIndex(uint16_t idx) {
 }
 
 void Sprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
+	auto data = _vertexes.pop();
+	Mat4 newMV;
 	if (_normalized) {
 		auto &modelTransform = frame.modelTransformStack.back();
-		Mat4 newMV;
 		newMV.m[12] = floorf(modelTransform.m[12]);
 		newMV.m[13] = floorf(modelTransform.m[13]);
 		newMV.m[14] = floorf(modelTransform.m[14]);
 
-		frame.commands->pushVertexArray(_vertexes.dup(),
-				frame.viewProjectionStack.back() * newMV, frame.zPath, _materialId, _realRenderingLevel, _commandFlags);
+		newMV = frame.viewProjectionStack.back() * newMV;
 	} else {
-		frame.commands->pushVertexArray(_vertexes.dup(), frame.viewProjectionStack.back() * frame.modelTransformStack.back(),
-				frame.zPath, _materialId, _realRenderingLevel, _commandFlags);
+		newMV = frame.viewProjectionStack.back() * frame.modelTransformStack.back();
 	}
+
+	if (_shadowIndex > 0.0f) {
+		frame.shadows->pushShadowArray(Rc<gl::VertexData>(data), newMV, _shadowIndex);
+	}
+	frame.commands->pushVertexArray(move(data), newMV, frame.zPath, _materialId, _realRenderingLevel, _commandFlags);
 }
 
 MaterialInfo Sprite::getMaterialInfo() const {

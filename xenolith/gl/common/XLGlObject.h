@@ -61,14 +61,30 @@ public:
 };
 
 
-class Pipeline : public NamedObject {
+class GraphicPipeline : public NamedObject {
 public:
-	using PipelineInfo = renderqueue::PipelineInfo;
-	using PipelineData = renderqueue::PipelineData;
+	using PipelineInfo = renderqueue::GraphicPipelineInfo;
+	using PipelineData = renderqueue::GraphicPipelineData;
 	using SubpassData = renderqueue::SubpassData;
 	using RenderQueue = renderqueue::Queue;
 
-	virtual ~Pipeline() { }
+	virtual ~GraphicPipeline() { }
+
+	virtual StringView getName() const override { return _name; }
+
+protected:
+	String _name;
+};
+
+
+class ComputePipeline : public NamedObject {
+public:
+	using PipelineInfo = renderqueue::ComputePipelineInfo;
+	using PipelineData = renderqueue::ComputePipelineData;
+	using SubpassData = renderqueue::SubpassData;
+	using RenderQueue = renderqueue::Queue;
+
+	virtual ~ComputePipeline() { }
 
 	virtual StringView getName() const override { return _name; }
 

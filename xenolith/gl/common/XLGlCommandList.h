@@ -30,7 +30,10 @@ namespace stappler::xenolith::gl {
 enum class CommandType : uint16_t {
 	CommandGroup,
 	VertexArray,
-	Deferred
+	Deferred,
+
+	ShadowArray,
+	ShadowDeferred,
 };
 
 enum class CommandFlags : uint16_t {
@@ -69,6 +72,22 @@ struct CmdDeferred : CmdGeneral {
 	bool normalized = false;
 };
 
+struct CmdShadow {
+	gl::StateId state = 0;
+	float value = 0.0f;
+};
+
+struct CmdShadowArray : CmdShadow {
+	SpanView<TransformedVertexData> vertexes;
+};
+
+struct CmdShadowDeferred : CmdShadow {
+	Rc<DeferredVertexResult> deferred;
+	Mat4 viewTransform;
+	Mat4 modelTransform;
+	bool normalized = false;
+};
+
 struct Command {
 	static Command *create(memory::pool_t *, CommandType t, CommandFlags = CommandFlags::None);
 
@@ -100,6 +119,10 @@ public:
 	void pushDeferredVertexResult(const Rc<DeferredVertexResult> &, const Mat4 &view, const Mat4 &model, bool normalized,
 			SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel, CommandFlags = CommandFlags::None);
 
+	void pushShadowArray(Rc<VertexData> &&, const Mat4 &, float value);
+	void pushShadowArray(SpanView<TransformedVertexData>, float value);
+	void pushDeferredShadow(const Rc<DeferredVertexResult> &, const Mat4 &view, const Mat4 &model, bool normalized, float value);
+
 	gl::StateId addState(DrawStateValues);
 	const DrawStateValues *getState(gl::StateId) const;
 
@@ -110,6 +133,8 @@ public:
 	const Command *getLast() const { return _last; }
 
 	void sendStat(const DrawStat &) const;
+
+	bool empty() const { return _first == nullptr; }
 
 protected:
 	void addCommand(Command *);

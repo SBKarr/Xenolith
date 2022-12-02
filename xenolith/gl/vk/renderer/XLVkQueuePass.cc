@@ -197,9 +197,9 @@ Vector<VkCommandBuffer> QueuePassHandle::doPrepareCommands(FrameHandle &) {
 		VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
 		table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
 
-		auto pipeline = _data->subpasses[0].pipelines.get(StringView("Default"));
+		auto pipeline = _data->subpasses[0].graphicPipelines.get(StringView("Default"));
 
-		table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, ((Pipeline *)pipeline->pipeline.get())->getPipeline());
+		table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, ((GraphicPipeline *)pipeline->pipeline.get())->getPipeline());
 		table->vkCmdDraw(buf, 3, 1, 0, 0);
 	});
 
@@ -276,6 +276,7 @@ auto QueuePassHandle::updateMaterials(FrameHandle &frame, const Rc<gl::MaterialS
 
 			target->set = Rc<gl::TextureSet>(layout->acquireSet(*dev));
 			target->set->write(*target);
+			return true;
 		}, this, "RenderPassHandle::updateMaterials");
 	}
 
@@ -367,8 +368,8 @@ Vector<VkCommandBuffer> VertexPassHandle::doPrepareCommands(FrameHandle &) {
 	VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
 	table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
 
-	auto pipeline = _data->subpasses[0].pipelines.get(StringView("Vertexes"));
-	table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, ((Pipeline *)pipeline->pipeline.get())->getPipeline());
+	auto pipeline = _data->subpasses[0].graphicPipelines.get(StringView("Vertexes"));
+	table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, ((GraphicPipeline *)pipeline->pipeline.get())->getPipeline());
 
 	auto idx = _mainBuffer->getIndexes()->getBuffer();
 

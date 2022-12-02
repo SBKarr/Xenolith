@@ -150,20 +150,43 @@ void VertexMaterialAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::Attachmen
 }
 
 bool VertexMaterialAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
-		uint32_t, bool isExternal) const {
-	return _vertexes;
+		uint32_t idx, bool isExternal) const {
+	switch (idx) {
+	case 0:
+		return _vertexes;
+		break;
+	case 1:
+		return _transforms;
+		break;
+	default:
+		break;
+	}
+	return false;
 }
 
 bool VertexMaterialAttachmentHandle::writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
-		uint32_t, bool, VkDescriptorBufferInfo &info) {
-	info.buffer = _vertexes->getBuffer();
-	info.offset = 0;
-	info.range = _vertexes->getSize();
-	return true;
+		uint32_t idx, bool, VkDescriptorBufferInfo &info) {
+	switch (idx) {
+	case 0:
+		info.buffer = _vertexes->getBuffer();
+		info.offset = 0;
+		info.range = _vertexes->getSize();
+		return true;
+		break;
+	case 1:
+		info.buffer = _transforms->getBuffer();
+		info.offset = 0;
+		info.range = _transforms->getSize();
+		return true;
+		break;
+	default:
+		break;
+	}
+	return false;
 }
 
 bool VertexMaterialAttachmentHandle::empty() const {
-	return !_indexes || !_vertexes;
+	return !_indexes || !_vertexes || !_transforms;
 }
 
 Rc<gl::CommandList> VertexMaterialAttachmentHandle::popCommands() const {
@@ -188,6 +211,7 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 		Rc<gl::ImageAtlas> atlas;
 		uint32_t vertexes = 0;
 		uint32_t indexes = 0;
+		uint32_t transforms = 0;
 		Map<gl::StateId, std::forward_list<PlanCommandInfo>> states;
 	};
 
@@ -195,7 +219,6 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 	uint32_t excludeIndexes = 0;
 
 	Map<SpanView<int16_t>, float, ZIndexLess> paths;
-	std::forward_list<Vector<gl::TransformedVertexData>> deferredResults;
 
 	// fill write plan
 	MaterialWritePlan globalWritePlan;
@@ -227,9 +250,11 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 			for (auto &iit : vertexes) {
 				globalWritePlan.vertexes += iit.data->data.size();
 				globalWritePlan.indexes += iit.data->indexes.size();
+				++ globalWritePlan.transforms;
 
 				it->second.vertexes += iit.data->data.size();
 				it->second.indexes += iit.data->indexes.size();
+				++ it->second.transforms;
 
 				if ((c->flags & gl::CommandFlags::DoNotCount) != gl::CommandFlags::None) {
 					excludeVertexes = iit.data->data.size();
@@ -269,13 +294,16 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 		}
 	};
 
+	std::forward_list<Vector<gl::TransformedVertexData>> deferredTmp;
+
 	auto pushDeferred = [&] (const gl::Command *c, const gl::CmdDeferred *cmd) {
 		auto material = _materialSet->getMaterialById(cmd->material);
 		if (!material) {
 			return;
 		}
 
-		auto &vertexes = deferredResults.emplace_front(cmd->deferred->getData().vec<Interface>());
+		auto &vertexes = deferredTmp.emplace_front(cmd->deferred->getData().vec<Interface>());
+		//auto vertexes = cmd->deferred->getData().pdup(handle->getPool()->getPool());
 
 		// apply transforms;
 		if (cmd->normalized) {
@@ -287,11 +315,11 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 				newMV.m[13] = floorf(modelTransform.m[13]);
 				newMV.m[14] = floorf(modelTransform.m[14]);
 
-				it.mat = cmd->viewTransform * newMV;
+				const_cast<gl::TransformedVertexData &>(it).mat = cmd->viewTransform * newMV;
 			}
 		} else {
 			for (auto &it : vertexes) {
-				it.mat = cmd->viewTransform * cmd->modelTransform * it.mat;
+				const_cast<gl::TransformedVertexData &>(it).mat = cmd->viewTransform * cmd->modelTransform * it.mat;
 			}
 		}
 
@@ -318,6 +346,9 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 			break;
 		case gl::CommandType::Deferred:
 			pushDeferred(cmd, (const gl::CmdDeferred *)cmd->data);
+			break;
+		case gl::CommandType::ShadowArray:
+		case gl::CommandType::ShadowDeferred:
 			break;
 		}
 		cmd = cmd->next;
@@ -348,98 +379,99 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 	_vertexes = devFrame->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
 			gl::BufferInfo(gl::BufferUsage::StorageBuffer, globalWritePlan.vertexes * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
 
-	if (!_vertexes || !_indexes) {
+	_transforms = devFrame->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
+			gl::BufferInfo(gl::BufferUsage::StorageBuffer, (globalWritePlan.transforms + 1) * sizeof(gl::TransformObject)));
+
+	if (!_vertexes || !_indexes || !_transforms) {
 		return false;
 	}
 
-	DeviceBuffer::MappedRegion vertexesMap, indexesMap;
+	DeviceBuffer::MappedRegion vertexesMap, indexesMap, transformMap;
 
-	Bytes vertexData, indexData;
+	Bytes vertexData, indexData, transformData;
 
 	if (fhandle.isPersistentMapping()) {
 		vertexesMap = _vertexes->map();
 		indexesMap = _indexes->map();
+		transformMap = _transforms->map();
 
 		memset(vertexesMap.ptr, 0, sizeof(gl::Vertex_V4F_V4F_T2F2U) * 1024);
 		memset(indexesMap.ptr, 0, sizeof(uint32_t) * 1024);
 	} else {
 		vertexData.resize(globalWritePlan.vertexes * sizeof(gl::Vertex_V4F_V4F_T2F2U));
 		indexData.resize(globalWritePlan.indexes * sizeof(uint32_t));
+		transformData.resize((globalWritePlan.transforms + 1) * sizeof(gl::TransformObject));
 
 		vertexesMap.ptr = vertexData.data(); vertexesMap.size = vertexData.size();
 		indexesMap.ptr = indexData.data(); indexesMap.size = indexData.size();
+		transformMap.ptr = transformData.data(); transformMap.size = transformData.size();
 	}
+
+	gl::TransformObject val;
+	memcpy(transformMap.ptr, &val, sizeof(gl::TransformObject));
 
 	uint32_t vertexOffset = 0;
 	uint32_t indexOffset = 0;
+	uint32_t transtormOffset = sizeof(gl::TransformObject);
 
 	uint32_t materialVertexes = 0;
 	uint32_t materialIndexes = 0;
+	uint32_t transformIdx = 1;
 
 	auto pushVertexes = [&] (const gl::MaterialId &materialId, const MaterialWritePlan &plan,
-			const gl::CmdGeneral *cmd, const Mat4 &transform, gl::VertexData *vertexes) {
+			const gl::CmdGeneral *cmd, const gl::TransformObject &transform, gl::VertexData *vertexes) {
 
 		auto target = (gl::Vertex_V4F_V4F_T2F2U *)vertexesMap.ptr + vertexOffset;
 		memcpy(target, (uint8_t *)vertexes->data.data(),
 				vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U));
 
-		if (!isGpuTransform()) {
-			float depth = 0.0f;
-			auto pathIt = paths.find(cmd->zPath);
-			if (pathIt != paths.end()) {
-				depth = pathIt->second;
-			}
+		memcpy(transformMap.ptr + transtormOffset, &transform, sizeof(gl::TransformObject));
 
-			float atlasScaleX = 1.0f;
-			float atlasScaleY = 1.0f;
+		float atlasScaleX = 1.0f;
+		float atlasScaleY = 1.0f;
 
-			if (plan.atlas) {
-				auto ext = plan.atlas->getImageExtent();
-				atlasScaleX = 1.0f / ext.width;
-				atlasScaleY = 1.0f / ext.height;
-			}
+		if (plan.atlas) {
+			auto ext = plan.atlas->getImageExtent();
+			atlasScaleX = 1.0f / ext.width;
+			atlasScaleY = 1.0f / ext.height;
+		}
 
-			size_t idx = 0;
-			for (auto &v : vertexes->data) {
-				auto &t = target[idx];
-				t.pos = transform * v.pos;
-				t.pos.z = depth;
-				t.material = materialId;
+		size_t idx = 0;
+		for (; idx < vertexes->data.size(); ++ idx) {
+			auto &t = target[idx];
+			t.material = transformIdx | transformIdx << 16;
 
-				if (plan.atlas && t.object) {
-					if (!plan.atlas->getObjectByName(t.tex, t.object)) {
-						auto anchor = font::CharLayout::getAnchorForObject(t.object);
-						switch (anchor) {
-						case font::FontAnchor::BottomLeft:
-							t.tex = Vec2(1.0f - atlasScaleX, 0.0f);
-							break;
-						case font::FontAnchor::TopLeft:
-							t.tex = Vec2(1.0f - atlasScaleX, 0.0f + atlasScaleY);
-							break;
-						case font::FontAnchor::TopRight:
-							t.tex = Vec2(1.0f, 0.0f + atlasScaleY);
-							break;
-						case font::FontAnchor::BottomRight:
-							t.tex = Vec2(1.0f, 0.0f);
-							break;
-						}
+			if (plan.atlas && t.object) {
+				if (!plan.atlas->getObjectByName(t.tex, t.object)) {
+					auto anchor = font::CharLayout::getAnchorForObject(t.object);
+					switch (anchor) {
+					case font::FontAnchor::BottomLeft:
+						t.tex = Vec2(1.0f - atlasScaleX, 0.0f);
+						break;
+					case font::FontAnchor::TopLeft:
+						t.tex = Vec2(1.0f - atlasScaleX, 0.0f + atlasScaleY);
+						break;
+					case font::FontAnchor::TopRight:
+						t.tex = Vec2(1.0f, 0.0f + atlasScaleY);
+						break;
+					case font::FontAnchor::BottomRight:
+						t.tex = Vec2(1.0f, 0.0f);
+						break;
 					}
 				}
-
-				++ idx;
 			}
+		}
 
-			auto indexTarget = (uint32_t *)indexesMap.ptr + indexOffset;
+		auto indexTarget = (uint32_t *)indexesMap.ptr + indexOffset;
 
-			idx = 0;
-			for (auto &it : vertexes->indexes) {
-				indexTarget[idx] = it + vertexOffset;
-				++ idx;
-			}
+		for (auto &it : vertexes->indexes) {
+			*(indexTarget++) = it + vertexOffset;
 		}
 
 		vertexOffset += vertexes->data.size();
 		indexOffset += vertexes->indexes.size();
+		transtormOffset += sizeof(gl::TransformObject);
+		++ transformIdx;
 
 		materialVertexes += vertexes->data.size();
 		materialIndexes += vertexes->indexes.size();
@@ -456,7 +488,7 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 				auto lb = std::lower_bound(drawOrder.begin(), drawOrder.end(), &it,
 						[] (const Pair<const gl::MaterialId, MaterialWritePlan> *l, const Pair<const gl::MaterialId, MaterialWritePlan> *r) {
 					if (l->second.material->getPipeline() != l->second.material->getPipeline()) {
-						return Pipeline::comparePipelineOrdering(*l->second.material->getPipeline(), *r->second.material->getPipeline());
+						return GraphicPipeline::comparePipelineOrdering(*l->second.material->getPipeline(), *r->second.material->getPipeline());
 					} else if (l->second.material->getLayoutIndex() != r->second.material->getLayoutIndex()) {
 						return l->second.material->getLayoutIndex() < r->second.material->getLayoutIndex();
 					} else {
@@ -480,7 +512,14 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 
 				for (auto &cmd : state.second) {
 					for (auto &iit : cmd.vertexes) {
-						pushVertexes(it->first, it->second, cmd.cmd, iit.mat, iit.data.get());
+						gl::TransformObject val{iit.mat};
+
+						auto pathIt = paths.find(cmd.cmd->zPath);
+						if (pathIt != paths.end()) {
+							val.offset.z = pathIt->second;
+						}
+
+						pushVertexes(it->first, it->second, cmd.cmd, val, iit.data.get());
 					}
 				}
 
@@ -499,9 +538,11 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 	if (fhandle.isPersistentMapping()) {
 		_vertexes->unmap(vertexesMap, true);
 		_indexes->unmap(indexesMap, true);
+		_transforms->unmap(transformMap, true);
 	} else {
 		_vertexes->setData(vertexData);
 		_indexes->setData(indexData);
+		_transforms->setData(transformData);
 	}
 
 	_drawStat.vertexes = globalWritePlan.vertexes - excludeVertexes;
@@ -568,22 +609,22 @@ bool MaterialPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
 	});
 
 	// pipelines for material-besed rendering
-	auto materialPipeline = info.builder->addPipeline(pass, 0, "Solid", shaderSpecInfo, PipelineMaterialInfo({
+	auto materialPipeline = info.builder->addGraphicPipeline(pass, 0, "Solid", shaderSpecInfo, PipelineMaterialInfo({
 		BlendInfo(),
 		DepthInfo(true, true, gl::CompareOp::Less)
 	}));
-	auto transparentPipeline = info.builder->addPipeline(pass, 0, "Transparent", shaderSpecInfo, PipelineMaterialInfo({
+	auto transparentPipeline = info.builder->addGraphicPipeline(pass, 0, "Transparent", shaderSpecInfo, PipelineMaterialInfo({
 		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
 				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
 		DepthInfo(false, true, gl::CompareOp::Less)
 	}));
-	auto surfacePipeline = info.builder->addPipeline(pass, 0, "Surface", shaderSpecInfo, PipelineMaterialInfo(
+	auto surfacePipeline = info.builder->addGraphicPipeline(pass, 0, "Surface", shaderSpecInfo, PipelineMaterialInfo(
 		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
 				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
 		DepthInfo(false, true, gl::CompareOp::LessOrEqual)
 	));
 
-	info.builder->addPipeline(pass, 0, "DebugTriangles", shaderSpecInfo, PipelineMaterialInfo(
+	info.builder->addGraphicPipeline(pass, 0, "DebugTriangles", shaderSpecInfo, PipelineMaterialInfo(
 		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
 				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
 		DepthInfo(false, true, gl::CompareOp::Less),
@@ -655,7 +696,6 @@ bool MaterialPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
 	// Vertex input attachment - per-frame vertex list
 	auto vertexInput = Rc<vk::VertexMaterialAttachment>::create("VertexInput",
 			gl::BufferInfo(gl::BufferUsage::StorageBuffer), materialInput);
-	vertexInput->setInputCallback(move(info.vertexInputCallback));
 
 	// define pass input-output
 	info.builder->addPassInput(pass, 0, vertexInput, AttachmentDependencyInfo()); // 0
@@ -790,7 +830,7 @@ void MaterialPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, Vk
 	table->vkCmdBindIndexBuffer(buf, idx, 0, VK_INDEX_TYPE_UINT32);
 
 	uint32_t boundTextureSetIndex = maxOf<uint32_t>();
-	gl::Pipeline *boundPipeline = nullptr;
+	gl::GraphicPipeline *boundPipeline = nullptr;
 
 	uint32_t dynamicStateId = 0;
 	gl::DrawStateValues dynamicState;
@@ -842,7 +882,7 @@ void MaterialPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, Vk
 		auto textureSetIndex =  material->getLayoutIndex();
 
 		if (pipeline != boundPipeline) {
-			table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, ((Pipeline *)pipeline.get())->getPipeline());
+			table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, ((GraphicPipeline *)pipeline.get())->getPipeline());
 			boundPipeline = pipeline;
 		}
 

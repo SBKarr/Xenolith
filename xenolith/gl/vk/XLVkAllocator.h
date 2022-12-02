@@ -189,7 +189,7 @@ public:
 protected:
 	friend class DeviceBuffer;
 
-	Allocator::MemBlock alloc(MemData *, VkDeviceSize size, VkDeviceSize alignment, AllocationType allocType);
+	Allocator::MemBlock alloc(MemData *, VkDeviceSize size, VkDeviceSize alignment, AllocationType allocType, AllocationUsage type);
 	void free(Allocator::MemBlock &&);
 	void clear(MemData *);
 
