@@ -665,7 +665,7 @@ bool Formatter::read(const FontParameters &f, const TextParameters &s, const cha
 		return false;
 	}
 
-	FontLayoutId primary, secondary;
+	FontLayoutId primary, secondary = FontLayoutIdInvalid;
 
 	primaryFontId = nullptr;
 

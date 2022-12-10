@@ -42,7 +42,7 @@ public:
 	void addSignalDependency(Rc<DependencyEvent> &&);
 	void addSignalDependencies(Vector<Rc<DependencyEvent>> &&);
 
-	void addInput(const Attachment *, Rc<AttachmentInputData> &&);
+	bool addInput(const Attachment *, Rc<AttachmentInputData> &&);
 
 	void setQueue(const Rc<Queue> &q);
 	void setOutput(const Attachment *, Function<bool(const FrameAttachmentData &, bool)> &&);
@@ -98,7 +98,7 @@ protected:
 	float _density = 1.0f;
 	Map<const Attachment *, Rc<AttachmentInputData>> _input;
 	bool _readyForSubmit = true; // if true, do not wait synchronization with other active frames in emitter
-	bool _persistentMappings = true; // true; // try to map per-frame GPU memory persistently
+	bool _persistentMappings = true; // true; // true; // try to map per-frame GPU memory persistently
 	uint64_t _sceneId = 0;
 
 	Map<const Attachment *, Function<bool(FrameAttachmentData &, bool)>> _output;

@@ -43,6 +43,7 @@ bool VgIconTest::init() {
 		_sprite->setOpacity(0.5f);
 		_sprite->setQuality(initialQuality);
 		_sprite->setScale(initialScale);
+		_sprite->setShadowIndex(0.5f);
 	} while (0);
 
 	do {

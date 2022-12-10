@@ -168,6 +168,7 @@ bool RenderPassImpl::writeDescriptors(const QueuePassHandle &handle, bool async)
 					}
 					break;
 				case DescriptorType::Unknown:
+				case DescriptorType::Attachment:
 					break;
 				}
 				++ writeData.descriptorCount;
@@ -305,6 +306,12 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, PassData &data) {
 			continue;
 		}
 
+		if (it->getDescriptorType() == DescriptorType::SampledImage
+				|| it->getDescriptorType() == DescriptorType::StorageImage
+				|| it->getDescriptorType() == DescriptorType::CombinedImageSampler) {
+			continue; // descriptors is not attachments
+		}
+
 		VkAttachmentDescription attachment;
 		VkAttachmentDescription attachmentAlternative;
 
@@ -316,7 +323,7 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, PassData &data) {
 		}
 
 		auto imageDesc = (renderqueue::ImageAttachmentDescriptor *)it;
-		auto &info = imageDesc->getInfo();
+		auto &info = imageDesc->getImageInfo();
 
 		attachmentAlternative.flags = attachment.flags = (mayAlias ? VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT : 0);
 		attachmentAlternative.format = attachment.format = VkFormat(info.format);
@@ -334,12 +341,15 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, PassData &data) {
 			_variableAttachments.emplace(it->getAttachment());
 		}
 
+		if (it->getDescriptorType() == DescriptorType::Unknown) {
+			it->setDescriptorType(DescriptorType::Attachment);
+		}
 		it->setIndex(_attachmentDescriptions.size());
 
 		_attachmentDescriptions.emplace_back(attachment);
 		_attachmentDescriptionsAlternative.emplace_back(attachmentAlternative);
 
-		auto fmt = gl::getImagePixelFormat(imageDesc->getInfo().format);
+		auto fmt = gl::getImagePixelFormat(imageDesc->getImageInfo().format);
 		switch (fmt) {
 		case gl::PixelFormat::D:
 			if (imageDesc->getLoadOp() == renderqueue::AttachmentLoadOp::Clear) {

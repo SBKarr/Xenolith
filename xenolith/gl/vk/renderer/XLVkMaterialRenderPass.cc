@@ -372,14 +372,16 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 
 	auto devFrame = static_cast<DeviceFrameHandle *>(handle);
 
+	auto pool = devFrame->getMemPool(this);
+
 	// create buffers
-	_indexes = devFrame->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(gl::BufferUsage::IndexBuffer, globalWritePlan.indexes * sizeof(uint32_t)));
+	_indexes = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
+			gl::BufferInfo(gl::BufferUsage::IndexBuffer, (globalWritePlan.indexes + 6) * sizeof(uint32_t)));
 
-	_vertexes = devFrame->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(gl::BufferUsage::StorageBuffer, globalWritePlan.vertexes * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
+	_vertexes = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
+			gl::BufferInfo(gl::BufferUsage::StorageBuffer, (globalWritePlan.vertexes + 4) * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
 
-	_transforms = devFrame->getMemPool()->spawn(AllocationUsage::DeviceLocalHostVisible,
+	_transforms = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
 			gl::BufferInfo(gl::BufferUsage::StorageBuffer, (globalWritePlan.transforms + 1) * sizeof(gl::TransformObject)));
 
 	if (!_vertexes || !_indexes || !_transforms) {
@@ -398,25 +400,57 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 		memset(vertexesMap.ptr, 0, sizeof(gl::Vertex_V4F_V4F_T2F2U) * 1024);
 		memset(indexesMap.ptr, 0, sizeof(uint32_t) * 1024);
 	} else {
-		vertexData.resize(globalWritePlan.vertexes * sizeof(gl::Vertex_V4F_V4F_T2F2U));
-		indexData.resize(globalWritePlan.indexes * sizeof(uint32_t));
-		transformData.resize((globalWritePlan.transforms + 1) * sizeof(gl::TransformObject));
+		vertexData.resize(_vertexes->getSize());
+		indexData.resize(_indexes->getSize());
+		transformData.resize(_transforms->getSize());
 
 		vertexesMap.ptr = vertexData.data(); vertexesMap.size = vertexData.size();
 		indexesMap.ptr = indexData.data(); indexesMap.size = indexData.size();
 		transformMap.ptr = transformData.data(); transformMap.size = transformData.size();
 	}
 
-	gl::TransformObject val;
-	memcpy(transformMap.ptr, &val, sizeof(gl::TransformObject));
-
 	uint32_t vertexOffset = 0;
 	uint32_t indexOffset = 0;
-	uint32_t transtormOffset = sizeof(gl::TransformObject);
+	uint32_t transtormOffset = 0;
 
 	uint32_t materialVertexes = 0;
 	uint32_t materialIndexes = 0;
-	uint32_t transformIdx = 1;
+	uint32_t transformIdx = 0;
+
+	// write initial full screen quad
+	do {
+		gl::TransformObject val;
+		memcpy(transformMap.ptr, &val, sizeof(gl::TransformObject));
+		transtormOffset += sizeof(gl::TransformObject); ++ transformIdx;
+
+		Vector<uint32_t> indexes{ 0, 2, 1, 0, 3, 2 };
+		Vector<gl::Vertex_V4F_V4F_T2F2U> vertexes {
+			gl::Vertex_V4F_V4F_T2F2U{
+				Vec4(-1.0f, -1.0f, 0.0f, 1.0f),
+				Vec4::ONE, Vec2::ZERO, 0, 0
+			},
+			gl::Vertex_V4F_V4F_T2F2U{
+				Vec4(-1.0f, 1.0f, 0.0f, 1.0f),
+				Vec4::ONE, Vec2::UNIT_Y, 0, 0
+			},
+			gl::Vertex_V4F_V4F_T2F2U{
+				Vec4(1.0f, 1.0f, 0.0f, 1.0f),
+				Vec4::ONE, Vec2::ONE, 0, 0
+			},
+			gl::Vertex_V4F_V4F_T2F2U{
+				Vec4(1.0f, -1.0f, 0.0f, 1.0f),
+				Vec4::ONE, Vec2::UNIT_X, 0, 0
+			}
+		};
+
+		auto target = (gl::Vertex_V4F_V4F_T2F2U *)vertexesMap.ptr + vertexOffset;
+		memcpy(target, (uint8_t *)vertexes.data(), vertexes.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U));
+		memcpy(indexesMap.ptr, (uint8_t *)indexes.data(), indexes.size() * sizeof(uint32_t));
+
+		vertexOffset += vertexes.size();
+		indexOffset += indexes.size();
+	} while (0);
+
 
 	auto pushVertexes = [&] (const gl::MaterialId &materialId, const MaterialWritePlan &plan,
 			const gl::CmdGeneral *cmd, const gl::TransformObject &transform, gl::VertexData *vertexes) {
@@ -557,46 +591,96 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 	return true;
 }
 
-bool MaterialPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
-	auto selectDepthFormat = [] (SpanView<gl::ImageFormat> formats) {
-		gl::ImageFormat ret = gl::ImageFormat::Undefined;
+static gl::ImageFormat MaterialPass_selectDepthFormat(SpanView<gl::ImageFormat> formats) {
+	gl::ImageFormat ret = gl::ImageFormat::Undefined;
 
-		uint32_t score = 0;
+	uint32_t score = 0;
 
-		auto selectWithScore = [&] (gl::ImageFormat fmt, uint32_t sc) {
-			if (score < sc) {
-				ret = fmt;
-				score = sc;
-			}
-		};
-
-		for (auto &it : formats) {
-			switch (it) {
-			case gl::ImageFormat::D16_UNORM: selectWithScore(it, 12); break;
-			case gl::ImageFormat::X8_D24_UNORM_PACK32: selectWithScore(it, 7); break;
-			case gl::ImageFormat::D32_SFLOAT: selectWithScore(it, 9); break;
-			case gl::ImageFormat::S8_UINT: break;
-			case gl::ImageFormat::D16_UNORM_S8_UINT: selectWithScore(it, 11); break;
-			case gl::ImageFormat::D24_UNORM_S8_UINT: selectWithScore(it, 10); break;
-			case gl::ImageFormat::D32_SFLOAT_S8_UINT: selectWithScore(it, 8); break;
-			default: break;
-			}
+	auto selectWithScore = [&] (gl::ImageFormat fmt, uint32_t sc) {
+		if (score < sc) {
+			ret = fmt;
+			score = sc;
 		}
-
-		return ret;
 	};
 
+	for (auto &it : formats) {
+		switch (it) {
+		case gl::ImageFormat::D16_UNORM: selectWithScore(it, 12); break;
+		case gl::ImageFormat::X8_D24_UNORM_PACK32: selectWithScore(it, 7); break;
+		case gl::ImageFormat::D32_SFLOAT: selectWithScore(it, 9); break;
+		case gl::ImageFormat::S8_UINT: break;
+		case gl::ImageFormat::D16_UNORM_S8_UINT: selectWithScore(it, 11); break;
+		case gl::ImageFormat::D24_UNORM_S8_UINT: selectWithScore(it, 10); break;
+		case gl::ImageFormat::D32_SFLOAT_S8_UINT: selectWithScore(it, 8); break;
+		default: break;
+		}
+	}
+
+	return ret;
+}
+
+struct MaterialPass_Data {
+	Rc<ShadowLightDataAttachment> lightDataInput;
+	Rc<ShadowImageArrayAttachment> lightBufferArray;
+};
+
+static void MaterialPass_makeShadowPass(MaterialPass_Data &data, renderqueue::Queue::Builder &builder, Application &app, Extent2 defaultExtent) {
 	using namespace renderqueue;
 
-	auto &cache = info.app->getResourceCache();
+	auto pass = Rc<vk::ShadowPass>::create("ShadowPass", RenderOrdering(0));
+	builder.addRenderPass(pass);
 
-	// load shaders by ref - do not copy content into engine
-	auto materialFrag = info.builder->addProgramByRef("Loader_MaterialVert", xenolith::shaders::MaterialVert);
-	auto materialVert = info.builder->addProgramByRef("Loader_MaterialFrag", xenolith::shaders::MaterialFrag);
+	builder.addComputePipeline(pass, ShadowPass::SdfTrianglesComp,
+			builder.addProgramByRef("ShadowPass_SdfTrianglesComp", xenolith::shaders::SdfTrianglesComp));
+	builder.addComputePipeline(pass, ShadowPass::SdfImageComp,
+			builder.addProgramByRef("ShadowPass_SdfImageComp", xenolith::shaders::SdfImageComp));
+
+	data.lightDataInput = Rc<ShadowLightDataAttachment>::create("ShadowLightDataAttachment");
+	auto vertexInput = Rc<ShadowVertexAttachment>::create("ShadowVertexAttachment");
+	auto triangles = Rc<ShadowTrianglesAttachment>::create("ShadowTrianglesAttachment");
+
+	data.lightBufferArray = Rc<ShadowImageArrayAttachment>::create("LightArray", defaultExtent);
+
+	auto sdf = Rc<ShadowImageAttachment>::create("Sdf", defaultExtent);
+
+	builder.addPassInput(pass, 0, data.lightDataInput, AttachmentDependencyInfo());
+	builder.addPassInput(pass, 0, vertexInput, AttachmentDependencyInfo());
+	builder.addPassOutput(pass, 0, triangles, AttachmentDependencyInfo());
+
+	builder.addPassOutput(pass, 0, data.lightBufferArray, AttachmentDependencyInfo{
+		PipelineStage::ComputeShader, AccessType::ShaderWrite,
+		PipelineStage::ComputeShader, AccessType::ShaderWrite,
+
+		// can be reused after RenderPass is submitted
+		FrameRenderPassState::Submitted,
+	}, DescriptorType::StorageImage);
+
+	builder.addPassOutput(pass, 0, sdf, AttachmentDependencyInfo{
+		PipelineStage::ComputeShader, AccessType::ShaderWrite,
+		PipelineStage::ComputeShader, AccessType::ShaderWrite,
+
+		// can be reused after RenderPass is submitted
+		FrameRenderPassState::Submitted,
+	}, DescriptorType::StorageImage);
+
+	// define global input-output
+	builder.addInput(data.lightDataInput);
+	builder.addInput(vertexInput);
+
+	// requires same input as light data
+	builder.addInput(data.lightBufferArray);
+}
+
+static void MaterialPass_makePresentPass(MaterialPass_Data &data, renderqueue::Queue::Builder &builder, Application &app, Extent2 defaultExtent) {
+	using namespace renderqueue;
+
+	// load shaders by ref - do not copy data into engine
+	auto materialFrag = builder.addProgramByRef("Loader_MaterialVert", xenolith::shaders::MaterialVert);
+	auto materialVert = builder.addProgramByRef("Loader_MaterialFrag", xenolith::shaders::MaterialFrag);
 
 	// render-to-swapchain RenderPass
 	auto pass = Rc<vk::MaterialPass>::create("MaterialSwapchainPass", RenderOrderingHighest);
-	info.builder->addRenderPass(pass);
+	builder.addRenderPass(pass);
 
 	auto shaderSpecInfo = Vector<SpecializationInfo>({
 		// no specialization required for vertex shader
@@ -609,50 +693,35 @@ bool MaterialPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
 	});
 
 	// pipelines for material-besed rendering
-	auto materialPipeline = info.builder->addGraphicPipeline(pass, 0, "Solid", shaderSpecInfo, PipelineMaterialInfo({
+	auto materialPipeline = builder.addGraphicPipeline(pass, 0, "Solid", shaderSpecInfo, PipelineMaterialInfo({
 		BlendInfo(),
 		DepthInfo(true, true, gl::CompareOp::Less)
 	}));
-	auto transparentPipeline = info.builder->addGraphicPipeline(pass, 0, "Transparent", shaderSpecInfo, PipelineMaterialInfo({
+	auto transparentPipeline = builder.addGraphicPipeline(pass, 0, "Transparent", shaderSpecInfo, PipelineMaterialInfo({
 		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
 				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
 		DepthInfo(false, true, gl::CompareOp::Less)
 	}));
-	auto surfacePipeline = info.builder->addGraphicPipeline(pass, 0, "Surface", shaderSpecInfo, PipelineMaterialInfo(
+	auto surfacePipeline = builder.addGraphicPipeline(pass, 0, "Surface", shaderSpecInfo, PipelineMaterialInfo(
 		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
 				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
 		DepthInfo(false, true, gl::CompareOp::LessOrEqual)
 	));
 
-	info.builder->addGraphicPipeline(pass, 0, "DebugTriangles", shaderSpecInfo, PipelineMaterialInfo(
+	// pipeline for debugging - draw lines instead of triangles
+	builder.addGraphicPipeline(pass, 0, "DebugTriangles", shaderSpecInfo, PipelineMaterialInfo(
 		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
 				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
 		DepthInfo(false, true, gl::CompareOp::Less),
 		LineWidth(1.0f)
 	));
 
-	// define internal resources (images and buffers)
-	gl::Resource::Builder resourceBuilder("LoaderResources");
-	if (info.resourceCallback) {
-		info.resourceCallback(resourceBuilder);
-	}
-
-	info.builder->setInternalResource(Rc<gl::Resource>::create(move(resourceBuilder)));
-
-	ImageAttachment::AttachmentInfo depthAttachmentInfo;
-	depthAttachmentInfo.initialLayout = AttachmentLayout::Undefined;
-	depthAttachmentInfo.finalLayout = AttachmentLayout::DepthStencilAttachmentOptimal;
-	depthAttachmentInfo.clearOnLoad = true;
-	depthAttachmentInfo.clearColor = Color4F::WHITE;
-	depthAttachmentInfo.frameSizeCallback = [] (const FrameQueue &frame) {
-		return Extent3(frame.getExtent());
-	};
-
+	// depth buffer - temporary/transient
 	auto depth = Rc<vk::ImageAttachment>::create("CommonDepth",
 		gl::ImageInfo(
-			info.extent,
+			defaultExtent,
 			gl::ForceImageUsage(gl::ImageUsage::DepthStencilAttachment),
-			selectDepthFormat(info.app->getGlLoop()->getSupportedDepthStencilFormat())),
+			MaterialPass_selectDepthFormat(app.getGlLoop()->getSupportedDepthStencilFormat())),
 		ImageAttachment::AttachmentInfo{
 			.initialLayout = AttachmentLayout::Undefined,
 			.finalLayout = AttachmentLayout::DepthStencilAttachmentOptimal,
@@ -663,9 +732,10 @@ bool MaterialPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
 			}
 	});
 
+	// swapchain output
 	auto out = Rc<vk::ImageAttachment>::create("Output",
 		gl::ImageInfo(
-			info.extent,
+			defaultExtent,
 			gl::ForceImageUsage(gl::ImageUsage::ColorAttachment),
 			platform::graphic::getCommonFormat()),
 		ImageAttachment::AttachmentInfo{
@@ -679,6 +749,7 @@ bool MaterialPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
 	});
 
 	// Material input attachment - per-scene list of materials
+	auto &cache = app.getResourceCache();
 	auto materialInput = Rc<vk::MaterialVertexAttachment>::create("MaterialInput",
 		gl::BufferInfo(gl::BufferUsage::StorageBuffer),
 
@@ -698,9 +769,38 @@ bool MaterialPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
 			gl::BufferInfo(gl::BufferUsage::StorageBuffer), materialInput);
 
 	// define pass input-output
-	info.builder->addPassInput(pass, 0, vertexInput, AttachmentDependencyInfo()); // 0
-	info.builder->addPassInput(pass, 0, materialInput, AttachmentDependencyInfo()); // 1
-	info.builder->addPassDepthStencil(pass, 0, depth, AttachmentDependencyInfo{
+	builder.addPassInput(pass, 0, vertexInput, AttachmentDependencyInfo()); // 0
+	builder.addPassInput(pass, 0, materialInput, AttachmentDependencyInfo()); // 1
+	if (data.lightDataInput) {
+		builder.addPassInput(pass, 0, data.lightDataInput, AttachmentDependencyInfo()); // 2
+	}
+	if (data.lightBufferArray) {
+		auto shadowVert = builder.addProgramByRef("ShadowMergeVert", xenolith::shaders::ShadowMergeVert);
+		auto shadowFrag = builder.addProgramByRef("ShadowMergeFrag", xenolith::shaders::ShadowMergeFrag);
+
+		builder.addGraphicPipeline(pass, 0, MaterialPass::ShadowPipeline, Vector<SpecializationInfo>({
+			// no specialization required for vertex shader
+			shadowVert,
+			// specialization for fragment shader - use platform-dependent array sizes
+			SpecializationInfo(shadowFrag, Vector<PredefinedConstant>{
+				PredefinedConstant::SamplersArraySize,
+			})
+		}), PipelineMaterialInfo({
+			BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
+					gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
+			DepthInfo()
+		}));
+
+		builder.addPassInput(pass, 0, data.lightBufferArray, AttachmentDependencyInfo{ // 3
+			PipelineStage::FragmentShader, AccessType::ShaderRead,
+			PipelineStage::FragmentShader, AccessType::ShaderRead,
+
+			// can be reused after RenderPass is submitted
+			FrameRenderPassState::Submitted,
+		}, DescriptorType::SampledImage);
+	}
+
+	builder.addPassDepthStencil(pass, 0, depth, AttachmentDependencyInfo{
 		PipelineStage::EarlyFragmentTest,
 			AccessType::DepthStencilAttachmentRead | AccessType::DepthStencilAttachmentWrite,
 		PipelineStage::LateFragmentTest,
@@ -709,7 +809,7 @@ bool MaterialPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
 		// can be reused after RenderPass is submitted
 		FrameRenderPassState::Submitted,
 	});
-	info.builder->addPassOutput(pass, 0, out, AttachmentDependencyInfo{
+	builder.addPassOutput(pass, 0, out, AttachmentDependencyInfo{
 		// first used as color attachment to output colors
 		PipelineStage::ColorAttachmentOutput, AccessType::ColorAttachmentWrite,
 
@@ -720,10 +820,25 @@ bool MaterialPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
 		FrameRenderPassState::Submitted,
 	});
 
-	// define global input-output
-	// materialInput is persistent between frames, only vertexes should be provided before rendering started
-	info.builder->addInput(vertexInput);
-	info.builder->addOutput(out);
+	builder.addInput(vertexInput);
+	builder.addOutput(out);
+}
+
+bool MaterialPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
+	MaterialPass_Data data;
+
+	if (info.withShadows) {
+		MaterialPass_makeShadowPass(data, *info.builder, *info.app, info.extent);
+	}
+	MaterialPass_makePresentPass(data, *info.builder, *info.app, info.extent);
+
+	// define internal resources (images and buffers)
+	gl::Resource::Builder resourceBuilder("LoaderResources");
+	if (info.resourceCallback) {
+		info.resourceCallback(resourceBuilder);
+	}
+
+	info.builder->setInternalResource(Rc<gl::Resource>::create(move(resourceBuilder)));
 
 	return true;
 }
@@ -743,6 +858,10 @@ void MaterialPass::prepare(gl::Device &dev) {
 			_materials = a;
 		} else if (auto a = dynamic_cast<VertexMaterialAttachment *>(it->getAttachment())) {
 			_vertexes = a;
+		} else if (auto a = dynamic_cast<ShadowLightDataAttachment *>(it->getAttachment())) {
+			_lights = a;
+		} else if (auto a = dynamic_cast<ShadowImageArrayAttachment *>(it->getAttachment())) {
+			_array = a;
 		}
 	}
 }
@@ -758,10 +877,18 @@ bool MaterialPassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
 		_vertexBuffer = (const VertexMaterialAttachmentHandle *)vertexBuffer->handle.get();
 	}
 
+	if (auto lightsBuffer = q.getAttachment(pass->getLights())) {
+		_lightsBuffer = (const ShadowLightDataAttachmentHandle *)lightsBuffer->handle.get();
+	}
+
+	if (auto arrayImage = q.getAttachment(pass->getArray())) {
+		_arrayImage = (const ShadowImageArrayAttachmentHandle *)arrayImage->handle.get();
+	}
+
 	return QueuePassHandle::prepare(q, move(cb));
 }
 
-Vector<VkCommandBuffer> MaterialPassHandle::doPrepareCommands(FrameHandle &) {
+Vector<VkCommandBuffer> MaterialPassHandle::doPrepareCommands(FrameHandle &handle) {
 	auto table = _device->getTable();
 	auto buf = _pool->allocBuffer(*_device);
 
@@ -787,6 +914,41 @@ Vector<VkCommandBuffer> MaterialPassHandle::doPrepareCommands(FrameHandle &) {
 			0, nullptr,
 			outputBufferBarriers.size(), outputBufferBarriers.data(),
 			outputImageBarriers.size(), outputImageBarriers.data());
+	}
+
+	auto cIdx = _device->getQueueFamily(QueueOperations::Compute)->index;
+	if (cIdx != _pool->getFamilyIdx()) {
+		VkBufferMemoryBarrier transferBufferBarrier({
+			VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+			VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
+			cIdx, _pool->getFamilyIdx(),
+			_lightsBuffer->getBuffer()->getBuffer(), 0, VK_WHOLE_SIZE,
+		});
+
+		auto image = (Image *)_arrayImage->getImage()->getImage().get();
+
+		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+				0, nullptr,
+				1, &transferBufferBarrier,
+				1, image->getPendingBarrier());
+	} else {
+		// no need for buffer barrier, only switch image layout
+
+		auto image = (Image *)_arrayImage->getImage()->getImage().get();
+		VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, VK_REMAINING_ARRAY_LAYERS};
+		VkImageMemoryBarrier transferImageBarrier({
+			VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
+			VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+			VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+			image->getImage(), range
+		});
+		image->setPendingBarrier(transferImageBarrier);
+
+		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+				0, nullptr,
+				0, nullptr,
+				1, &transferImageBarrier);
 	}
 
 	_data->impl.cast<RenderPassImpl>()->perform(*this, buf, [&] {
@@ -917,6 +1079,28 @@ void MaterialPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, Vk
 			0  // uint32_t  firstInstance
 		);
 	}
+
+	auto pipeline = (GraphicPipeline *)_data->subpasses[0].graphicPipelines.get(StringView(MaterialPass::ShadowPipeline))->pipeline.get();
+
+	viewport = VkViewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
+	table->vkCmdSetViewport(buf, 0, 1, &viewport);
+
+	scissorRect = VkRect2D{ { 0, 0}, { currentExtent.width, currentExtent.height } };
+	table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
+
+	uint32_t samplerIndex = 1;
+	table->vkCmdPushConstants(buf, pass->getPipelineLayout(),
+			VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(uint32_t), &samplerIndex);
+
+	table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->getPipeline());
+
+	table->vkCmdDrawIndexed(buf,
+		6, // indexCount
+		1, // instanceCount
+		0, // firstIndex
+		0, // int32_t   vertexOffset
+		0  // uint32_t  firstInstance
+	);
 }
 
 void MaterialPassHandle::doFinalizeTransfer(gl::MaterialSet * materials, VkCommandBuffer buf,

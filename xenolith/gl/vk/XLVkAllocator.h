@@ -186,6 +186,8 @@ public:
 	Device *getDevice() const;
 	const Rc<Allocator> &getAllocator() const { return _allocator; }
 
+	Mutex &getMutex() { return _mutex; }
+
 protected:
 	friend class DeviceBuffer;
 
@@ -193,10 +195,11 @@ protected:
 	void free(Allocator::MemBlock &&);
 	void clear(MemData *);
 
+	Mutex _mutex;
 	bool _persistentMapping = false;
 	Rc<Allocator> _allocator;
 	Map<int64_t, MemData> _heaps;
-	Vector<Rc<DeviceBuffer>> _buffers;
+	std::forward_list<Rc<DeviceBuffer>> _buffers;
 };
 
 }

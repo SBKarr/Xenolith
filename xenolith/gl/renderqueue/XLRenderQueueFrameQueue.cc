@@ -121,9 +121,11 @@ bool FrameQueue::setup() {
 				auto iit = _renderPasses.find((*it)->getRenderPass());
 				if (iit != _renderPasses.end()) {
 					addRequiredPass(passIt.second, iit->second, *a.second, **it);
+					++ it;
 				} else {
 					XL_FRAME_QUEUE_LOG("RenderPass '", (*it)->getRenderPass()->key, "' is not available on frame");
 					valid = false;
+					break;
 				}
 			}
 
@@ -141,6 +143,7 @@ bool FrameQueue::setup() {
 		}
 	}
 
+	XL_FRAME_QUEUE_LOG("Setup: ", valid);
 	return valid;
 }
 
@@ -353,7 +356,7 @@ void FrameQueue::onAttachmentAcquire(FrameAttachmentData &attachment) {
 		}
 
 		if (!attachment.image) {
-			attachment.image = _loop->acquireImage(img, attachment.extent);
+			attachment.image = _loop->acquireImage(img, attachment.handle.get(), attachment.extent);
 		}
 
 		if (!attachment.image) {
@@ -537,7 +540,7 @@ void FrameQueue::onRenderPassOwned(FramePassData &data) {
 	bool _invalidate = false;
 
 	auto acquireView = [&] (ImageAttachmentDescriptor *imgDesc, const Rc<ImageStorage> &image) {
-		gl::ImageViewInfo info(*imgDesc);
+		gl::ImageViewInfo info(*imgDesc, image->getInfo());
 
 		auto view = image->getView(info);
 		if (!view) {
@@ -552,9 +555,17 @@ void FrameQueue::onRenderPassOwned(FramePassData &data) {
 				return;
 			}
 
-			imageViews.emplace_back(move(view));
+			switch (imgDesc->getDescriptorType()) {
+			case DescriptorType::Unknown:
+			case DescriptorType::InputAttachment:
+			case DescriptorType::Attachment:
+				imageViews.emplace_back(move(view));
+				break;
+			default:
+				break;
+			}
 		} else {
-			XL_FRAME_QUEUE_LOG("Fail to accquire ImageView for framebuffer");
+			XL_FRAME_QUEUE_LOG("Fail to acquire ImageView for framebuffer");
 			_invalidate = true;
 			attachmentsAcquired = false;
 		}

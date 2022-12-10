@@ -25,6 +25,7 @@
 
 #include "XLVkAttachment.h"
 #include "XLVkQueuePass.h"
+#include "XLVkShadowRenderPass.h"
 
 namespace stappler::xenolith::vk {
 
@@ -121,11 +122,14 @@ class MaterialPass : public QueuePass {
 public:
 	using AttachmentHandle = renderqueue::AttachmentHandle;
 
+	static constexpr StringView ShadowPipeline = "ShadowPipeline";
+
 	struct RenderQueueInfo {
 		Application *app = nullptr;
 		renderqueue::Queue::Builder *builder = nullptr;
 		Extent2 extent;
 		Function<void(gl::Resource::Builder &)> resourceCallback;
+		bool withShadows = false;
 	};
 
 	static bool makeDefaultRenderQueue(RenderQueueInfo &);
@@ -136,6 +140,8 @@ public:
 
 	const VertexMaterialAttachment *getVertexes() const { return _vertexes; }
 	const MaterialVertexAttachment *getMaterials() const { return _materials; }
+	const ShadowLightDataAttachment *getLights() const { return _lights; }
+	const ShadowImageArrayAttachment *getArray() const { return _array; }
 
 	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
 
@@ -146,6 +152,10 @@ protected:
 
 	const VertexMaterialAttachment *_vertexes = nullptr;
 	const MaterialVertexAttachment *_materials = nullptr;
+
+	// shadows
+	const ShadowLightDataAttachment *_lights = nullptr;
+	const ShadowImageArrayAttachment *_array = nullptr;
 };
 
 class MaterialPassHandle : public QueuePassHandle {
@@ -161,6 +171,10 @@ protected:
 
 	const VertexMaterialAttachmentHandle *_vertexBuffer = nullptr;
 	const MaterialVertexAttachmentHandle *_materialBuffer = nullptr;
+
+	// shadows
+	const ShadowLightDataAttachmentHandle *_lightsBuffer = nullptr;
+	const ShadowImageArrayAttachmentHandle *_arrayImage = nullptr;
 };
 
 }

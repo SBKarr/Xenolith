@@ -54,6 +54,10 @@ void Attachment::acquireInput(FrameQueue &frame, const Rc<AttachmentHandle> &a, 
 	}
 }
 
+bool Attachment::validateInput(const Rc<AttachmentInputData> &) const {
+	return true;
+}
+
 AttachmentDescriptor *Attachment::addDescriptor(PassData *data) {
 	for (auto &it : _descriptors) {
 		if (it->getRenderPass() == data) {
@@ -166,6 +170,10 @@ void AttachmentDescriptor::reset() {
 void AttachmentDescriptor::setIndex(uint32_t idx) {
 	_index = idx;
 
+	if (_descriptor.type == DescriptorType::Attachment) {
+		return;
+	}
+
 	for (auto &subpass : _renderPass->subpasses) {
 		for (auto &pipeline : subpass.graphicPipelines) {
 			for (auto &it : pipeline->shaders) {
@@ -174,7 +182,7 @@ void AttachmentDescriptor::setIndex(uint32_t idx) {
 						if (_descriptor.type == DescriptorType::Unknown) {
 							_descriptor.type = binding.type;
 						} else if (_descriptor.type != binding.type) {
-							std::cout << "[" << getName() << ":" << _index << "] descriptor type conflict: (code)"
+							std::cout << "[" << _renderPass->key << ":" << getName() << ":" << _index << "] descriptor type conflict: (code)"
 									<<  getDescriptorTypeName(_descriptor.type)  << " vs. (shader)" << getDescriptorTypeName(binding.type) << "\n";
 						}
 						_descriptor.stages |= it.data->stage;
@@ -200,11 +208,12 @@ void AttachmentDescriptor::setIndex(uint32_t idx) {
 	}
 
 	if (_descriptor.type == DescriptorType::Unknown) {
-		std::cout << "[" << getName() << ":" << _index << "] type is not defined\n";
+		std::cout << "[" << _renderPass->key << ":" << getName() << ":" << _index << "] type is not defined\n";
 		return;
 	}
 
-	std::cout << "[" << getName() << ":" << _index << "] " << getDescriptorTypeName(_descriptor.type) << ": usage:" << getProgramStageDescription(_descriptor.stages) << "\n";
+	std::cout << "[" << _renderPass->key << ":" << getName() << ":" << _index << "] "
+			<< getDescriptorTypeName(_descriptor.type) << ": usage:" << getProgramStageDescription(_descriptor.stages) << "\n";
 }
 
 AttachmentRef *AttachmentDescriptor::addRef(uint32_t idx, AttachmentUsage usage, AttachmentDependencyInfo info) {
@@ -455,7 +464,7 @@ void ImageAttachmentRef::setLayout(AttachmentLayout layout) {
 void ImageAttachmentRef::updateLayout() {
 	AttachmentRef::updateLayout();
 
-	auto fmt = ((ImageAttachment *)_descriptor->getAttachment())->getInfo().format;
+	auto fmt = ((ImageAttachment *)_descriptor->getAttachment())->getImageInfo().format;
 
 	bool separateDepthStencil = false;
 	bool hasColor = false;

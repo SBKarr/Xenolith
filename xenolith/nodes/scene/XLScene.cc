@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "XLGlLoop.h"
 #include "XLRenderQueueFrameHandle.h"
 #include "XLVkMaterialRenderPass.h"
+#include "XLVkShadowRenderPass.h"
 
 namespace stappler::xenolith {
 
@@ -83,11 +84,25 @@ void Scene::renderRequest(const Rc<FrameRequest> &req) {
 			dir->pushDrawStat(stat);
 		});
 	});
+	info.lights = Rc<gl::ShadowLightInput>::alloc();
+
+	auto l1 = Vec4(Vec3(_director->getGeneralProjection() * Vec2(0.0f, 0.0f), 1.0f).normalize(), 1.0 / 48.0f);
+	auto l2 = Vec4(Vec3(_director->getGeneralProjection() * Vec2(0.0f, 5.0f), 1.0f).normalize(), 1.0f / 48.0f);
+
+	info.lights->addAmbientLight(l1, Color4F::WHITE);
+	//info.lights->addAmbientLight(l2, Color4F::WHITE);
 
 	render(info);
 
-	_director->getView()->getLoop()->performOnGlThread([req, a = _bufferAttachment, commands = move(info.commands)] () mutable {
-		req->addInput(a, move(commands));
+	_director->getView()->getLoop()->performOnGlThread(
+			[req, q = _queue,
+			 commands = move(info.commands),
+			 shadows = move(info.shadows),
+			 lights = move(info.lights)] () mutable {
+		req->addInput(q->getInputAttachment<vk::VertexMaterialAttachment>(), move(commands));
+		req->addInput(q->getInputAttachment<vk::ShadowLightDataAttachment>(), Rc<gl::ShadowLightInput>(lights));
+		req->addInput(q->getInputAttachment<vk::ShadowVertexAttachment>(), move(shadows));
+		req->addInput(q->getInputAttachment<vk::ShadowImageArrayAttachment>(), Rc<gl::ShadowLightInput>(lights));
 	}, req);
 
 	// submit material updates

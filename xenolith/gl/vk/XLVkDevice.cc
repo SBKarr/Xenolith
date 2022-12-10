@@ -39,7 +39,7 @@ DeviceFrameHandle::~DeviceFrameHandle() {
 		//auto dev = (Device *)_device;
 		//dev->getTable()->vkDeviceWaitIdle(dev->getDevice());
 	}
-	_memPool = nullptr;
+	_memPools.clear();
 }
 
 bool DeviceFrameHandle::init(Loop &loop, Device &device, Rc<FrameRequest> &&req, uint64_t gen) {
@@ -47,12 +47,17 @@ bool DeviceFrameHandle::init(Loop &loop, Device &device, Rc<FrameRequest> &&req,
 		return false;
 	}
 
-	_memPool = Rc<DeviceMemoryPool>::create(device.getAllocator(), _request->isPersistentMapping());
+	_allocator = device.getAllocator();
 	return true;
 }
 
-const Rc<DeviceMemoryPool> &DeviceFrameHandle::getMemPool() const {
-	return _memPool;
+Rc<DeviceMemoryPool> DeviceFrameHandle::getMemPool(void *key) {
+	std::unique_lock<Mutex> lock(_mutex);
+	auto v = _memPools.find(key);
+	if (v == _memPools.end()) {
+		v = _memPools.emplace(key, Rc<DeviceMemoryPool>::create(_allocator, _request->isPersistentMapping())).first;
+	}
+	return v->second;
 }
 
 Device::Device() { }
@@ -578,12 +583,16 @@ bool Device::supportsUpdateAfterBind(DescriptorType type) const {
 		return _info.features.deviceDescriptorIndexing.descriptorBindingStorageTexelBufferUpdateAfterBind;
 		break;
 	case DescriptorType::UniformBuffer:
+	case DescriptorType::UniformBufferDynamic:
 		return _info.features.deviceDescriptorIndexing.descriptorBindingUniformBufferUpdateAfterBind;
 		break;
 	case DescriptorType::StorageBuffer:
+	case DescriptorType::StorageBufferDynamic:
 		return _info.features.deviceDescriptorIndexing.descriptorBindingStorageBufferUpdateAfterBind;
 		break;
-	default:
+	case DescriptorType::InputAttachment:
+	case DescriptorType::Attachment:
+	case DescriptorType::Unknown:
 		return false;
 		break;
 	}

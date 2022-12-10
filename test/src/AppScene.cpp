@@ -31,6 +31,7 @@
 
 #include "XLVkAttachment.h"
 #include "XLVkMaterialRenderPass.h"
+#include "XLVkShadowRenderPass.h"
 #include "XLFontLibrary.h"
 
 #include "AppRootLayout.h"
@@ -51,7 +52,8 @@ bool AppScene::init(Application *app, Extent2 extent, float density) {
 			resourceBuilder.addImage("xenolith-2-480.png",
 					gl::ImageInfo(gl::ImageFormat::R8G8B8A8_UNORM, gl::ImageUsage::Sampled, gl::ImageHints::Opaque),
 					FilePath("resources/xenolith-2-480.png"));
-		}
+		},
+		true
 	};
 
 	vk::MaterialPass::makeDefaultRenderQueue(info);
@@ -116,29 +118,45 @@ void AppScene::onContentSizeDirty() {
 void AppScene::render(RenderFrameInfo &info) {
 	UtilScene::render(info);
 
-	if (info.shadows && !info.shadows->empty()) {
+	/*if (info.shadows && !info.shadows->empty()) {
 		auto app = (AppDelegate *)info.director->getApplication();
 		auto queue = app->getShadowQueue();
 		if (!queue) {
 			return;
 		}
+
 		auto req = Rc<renderqueue::FrameRequest>::create(queue, info.director->getScreenExtent(), info.director->getDensity());
-		req->addInput(queue->getInputAttachments().front(), move(info.shadows));
+		req->addInput(queue->getInputAttachment<vk::ShadowLightDataAttachment>(), Rc<gl::ShadowLightInput>(info.lights));
+		req->addInput(queue->getInputAttachment<vk::ShadowVertexAttachment>(), Rc<gl::CommandList>(info.shadows));
+		req->addInput(queue->getInputAttachment<vk::ShadowImageArrayAttachment>(), Rc<gl::ShadowLightInput>(info.lights));
+
 		req->bindSwapchainCallback([this] (renderqueue::FrameAttachmentData &attachment, bool success) {
 			if (success) {
 				_director->getView()->captureImage([] (const gl::ImageInfo &info, BytesView view) {
 					auto viewSize = view.size();
-					Bytes outbytes; outbytes.resize(viewSize / 2);
-					for (size_t i = 0; i < viewSize / 2; ++ i) {
-						auto value = view.readFloat16();
-						if (value > 0.0f) {
-							outbytes[i] = uint8_t((1.0f - value) * 255.0f);
+					Bytes outbytes; outbytes.resize(viewSize);
+					for (size_t i = 0; i < viewSize / 4; ++ i) {
+						auto valueR = view.readFloat16();
+						auto valueG = view.readFloat16();
+
+						if (valueR >= 0.0f) {
+							outbytes[i * 4 + 0] = uint8_t(valueR * 255.0f);
 						} else {
-							outbytes[i] = uint8_t((1.0f + value) * 255.0f);
+							outbytes[i * 4 + 0] = 0; //uint8_t((1.0f + value) * 255.0f);
 						}
+
+						if (valueG >= 0.0f) {
+							outbytes[i * 4 + 1] = uint8_t(valueG * 255.0f);
+							//outbytes[i * 4 + 1] = uint8_t((1.0 - valueG) * 4096.0f) / 2;
+						} else {
+							outbytes[i * 4 + 1] = uint8_t((- valueG) * 255.0f);
+						}
+
+						outbytes[i * 4 + 2] = 0;
+						outbytes[i * 4 + 3] = 255;
 					}
 
-					Bitmap bmp(move(outbytes), info.extent.width, info.extent.height, bitmap::PixelFormat::A8);
+					Bitmap bmp(move(outbytes), info.extent.width, info.extent.height, bitmap::PixelFormat::RGBA8888);
 					bmp.save(toString(Time::now().toMicros(), ".png"));
 
 					std::cout << "Shadows attachment ready\n";
@@ -150,7 +168,7 @@ void AppScene::render(RenderFrameInfo &info) {
 		info.director->getView()->getLoop()->runRenderQueue(move(req), 0, [] (bool success) {
 			std::cout << "Shadows performed: " << success << "\n";
 		});
-	}
+	}*/
 }
 
 void AppScene::runLayout(LayoutName l, Rc<Node> &&node) {

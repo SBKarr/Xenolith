@@ -668,22 +668,25 @@ void Loop::releaseFramebuffer(Rc<gl::Framebuffer> &&fb) {
 	_frameCache->releaseFramebuffer(move(fb));
 }
 
-auto Loop::acquireImage(const ImageAttachment *a, Extent3 e) -> Rc<ImageStorage> {
+auto Loop::acquireImage(const ImageAttachment *a, const AttachmentHandle *h, Extent3 e) -> Rc<ImageStorage> {
 	if (!_running.load()) {
 		return nullptr;
 	}
 
-	gl::ImageInfo info = a->getInfo();
+	gl::ImageInfo info = a->getAttachmentInfo(h, e);
 	info.extent = e;
 	if (a->isTransient()) {
-		info.usage |= gl::ImageUsage::TransientAttachment;
+		if ((info.usage & (gl::ImageUsage::ColorAttachment | gl::ImageUsage::DepthStencilAttachment | gl::ImageUsage::InputAttachment))
+				!= gl::ImageUsage::None) {
+			info.usage |= gl::ImageUsage::TransientAttachment;
+		}
 	}
 
 	Vector<gl::ImageViewInfo> views;
 	for (auto &desc : a->getDescriptors()) {
 		if (desc->getAttachment()->getType() == renderqueue::AttachmentType::Image) {
 			auto imgDesc = (renderqueue::ImageAttachmentDescriptor *)desc.get();
-			views.emplace_back(gl::ImageViewInfo(*imgDesc));
+			views.emplace_back(gl::ImageViewInfo(*imgDesc, info));
 		}
 	}
 

@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,35 +20,23 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_CORE_BASE_XLRENDERFRAMEINFO_H_
-#define XENOLITH_CORE_BASE_XLRENDERFRAMEINFO_H_
-
-#include "XLGlCommandList.h"
-#include "XLDefine.h"
-
-namespace stappler::xenolith {
-
-class Scene;
-class InputListenerStorage;
-
-struct RenderFrameInfo {
-	memory::vector<int16_t> zPath;
-	memory::vector<Mat4> viewProjectionStack;
-	memory::vector<Mat4> modelTransformStack;
-	memory::pool_t *pool;
-
-	gl::StateId currentStateId;
-
-	Rc<Director> director;
-	Rc<Scene> scene;
-
-	Rc<gl::CommandList> commands;
-	Rc<gl::CommandList> shadows;
-	Rc<gl::ShadowLightInput> lights;
-
-	Rc<InputListenerStorage> input;
+struct Vertex {
+	vec4 pos;
+	vec4 color;
+	vec2 tex;
+	uint material;
+	uint object;
 };
 
-}
+struct Material {
+	uint samplerIdx;
+	uint imageIdx;
+	uint setIdx;
+	uint padding0;
+};
 
-#endif /* XENOLITH_CORE_BASE_XLRENDERFRAMEINFO_H_ */
+struct TransformObject {
+	mat4 transform;
+	vec4 mask;
+	vec4 offset;
+};

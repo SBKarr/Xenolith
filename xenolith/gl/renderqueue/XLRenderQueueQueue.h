@@ -25,6 +25,7 @@
 
 #include "XLRenderQueueAttachment.h"
 #include "XLRenderQueuePass.h"
+#include <typeindex>
 
 namespace stappler::xenolith::renderqueue {
 
@@ -60,6 +61,9 @@ struct QueueData : NamedMem {
 	bool compiled = false;
 	uint64_t order = 0;
 
+	memory::map<std::type_index, Attachment *> typedInput;
+	memory::map<std::type_index, Attachment *> typedOutput;
+
 	void clear();
 };
 
@@ -94,6 +98,15 @@ public:
 
 	const memory::vector<Attachment *> &getInputAttachments() const;
 	const memory::vector<Attachment *> &getOutputAttachments() const;
+
+	template <typename T>
+	auto getInputAttachment() const -> const T *;
+
+	template <typename T>
+	auto getOutputAttachment() const -> const T *;
+
+	const Attachment *getInputAttachment(std::type_index name) const;
+	const Attachment *getOutputAttachment(std::type_index name) const;
 
 	const PassData *getPass(StringView) const;
 	const ProgramData *getProgram(StringView) const;
@@ -216,6 +229,25 @@ protected:
 
 	QueueData *_data = nullptr;
 };
+
+
+template <typename T>
+inline auto Queue::getInputAttachment() const -> const T * {
+	if (auto c = getInputAttachment(std::type_index(typeid(T)))) {
+		return static_cast<const T *>(c);
+	}
+
+	return nullptr;
+}
+
+template <typename T>
+inline auto Queue::getOutputAttachment() const -> const T * {
+	if (auto c = getOutputAttachment(std::type_index(typeid(T)))) {
+		return static_cast<const T *>(c);
+	}
+
+	return nullptr;
+}
 
 }
 

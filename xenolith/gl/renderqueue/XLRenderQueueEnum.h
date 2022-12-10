@@ -100,7 +100,7 @@ enum class AccessType {
     UniformRead = 0x00000008,
     InputAttachmantRead = 0x00000010,
     ShaderRead = 0x00000020,
-    SharedWrite = 0x00000040,
+	ShaderWrite = 0x00000040,
     ColorAttachmentRead = 0x00000080,
     ColorAttachmentWrite = 0x00000100,
     DepthStencilAttachmentRead = 0x00000200,
@@ -176,6 +176,7 @@ enum class DescriptorType : uint32_t {
 	UniformBufferDynamic = 8,
 	StorageBufferDynamic = 9,
 	InputAttachment = 10,
+	Attachment = maxOf<uint32_t>() - 1,
 	Unknown = maxOf<uint32_t>()
 };
 

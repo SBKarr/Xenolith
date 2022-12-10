@@ -151,7 +151,7 @@ bool ImageView::init(Device &dev, const renderqueue::ImageAttachmentDescriptor &
 
 	auto ops = desc.getOps();
 
-	switch (desc.getInfo().format) {
+	switch (desc.getImageInfo().format) {
 	case gl::ImageFormat::D16_UNORM:
 	case gl::ImageFormat::X8_D24_UNORM_PACK32:
 	case gl::ImageFormat::D32_SFLOAT:
@@ -179,7 +179,7 @@ bool ImageView::init(Device &dev, const renderqueue::ImageAttachmentDescriptor &
 	}
 
 	createInfo.subresourceRange.baseMipLevel = 0;
-	createInfo.subresourceRange.levelCount = desc.getInfo().mipLevels.get();
+	createInfo.subresourceRange.levelCount = desc.getImageInfo().mipLevels.get();
 	createInfo.subresourceRange.baseArrayLayer = info.baseArrayLayer.get();
 	createInfo.subresourceRange.layerCount = info.layerCount.get();
 

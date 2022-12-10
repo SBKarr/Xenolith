@@ -56,6 +56,8 @@ bool DeviceBuffer::setData(BytesView data, VkDeviceSize offset) {
 		return false;
 	}
 
+	std::unique_lock<Mutex> lock(_pool->getMutex());
+
 	void *mapped = nullptr;
 
 	VkMappedMemoryRange range;

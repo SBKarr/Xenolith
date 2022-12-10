@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,35 +20,46 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_CORE_BASE_XLRENDERFRAMEINFO_H_
-#define XENOLITH_CORE_BASE_XLRENDERFRAMEINFO_H_
-
-#include "XLGlCommandList.h"
-#include "XLDefine.h"
-
-namespace stappler::xenolith {
-
-class Scene;
-class InputListenerStorage;
-
-struct RenderFrameInfo {
-	memory::vector<int16_t> zPath;
-	memory::vector<Mat4> viewProjectionStack;
-	memory::vector<Mat4> modelTransformStack;
-	memory::pool_t *pool;
-
-	gl::StateId currentStateId;
-
-	Rc<Director> director;
-	Rc<Scene> scene;
-
-	Rc<gl::CommandList> commands;
-	Rc<gl::CommandList> shadows;
-	Rc<gl::ShadowLightInput> lights;
-
-	Rc<InputListenerStorage> input;
+struct AmbientLightData {
+	vec4 normal;
+	vec4 color;
 };
 
-}
+struct DirectLightData {
+	vec4 position;
+	vec4 color;
+	vec4 data;
+};
 
-#endif /* XENOLITH_CORE_BASE_XLRENDERFRAMEINFO_H_ */
+struct ShadowData {
+	uint trianglesCount;
+	uint gridSize;
+	uint gridWidth;
+	uint gridHeight;
+	uint ambientLightCount;
+	uint directLightCount;
+	float bbOffset;
+	uint padding;
+	vec2 pix;
+	AmbientLightData ambientLights[16];
+	DirectLightData directLights[16];
+};
+
+struct IndexData {
+	uint a;
+	uint b;
+	uint c;
+	uint transform;
+	float value;
+	float opacity;
+};
+
+struct TriangleData {
+	vec2 bbMin;
+	vec2 bbMax;
+	vec2 a;
+	vec2 b;
+	vec2 c;
+	float value;
+	float opacity;
+};

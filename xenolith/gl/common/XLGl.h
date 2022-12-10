@@ -292,7 +292,7 @@ struct ImageViewInfo {
 
 	void setup(const renderqueue::ImageAttachmentDescriptor &);
 	void setup(const ImageViewInfo &);
-	void setup(const ImageInfo &);
+	void setup(const ImageInfoData &);
 	void setup(ImageViewType value) { type = value; }
 	void setup(ImageFormat value) { format = value; }
 	void setup(ArrayLayers value) { layerCount = value; }
@@ -302,6 +302,7 @@ struct ImageViewInfo {
 	void setup(ComponentMappingB value) { b = value.get(); }
 	void setup(ComponentMappingA value) { a = value.get(); }
 	void setup(ColorMode value, bool allowSwizzle = true);
+	void setup(ImageType, ArrayLayers);
 
 	ColorMode getColorMode() const;
 
@@ -447,6 +448,27 @@ struct ViewInfo {
 
 	Function<void(const Rc<Director> &)> onCreated;
 	Function<void()> onClosed;
+};
+
+struct AmbientLightData {
+	Vec4 normal;
+	Color4F color;
+};
+
+struct DirectLightData {
+	Vec4 position;
+	Color4F color;
+	Vec4 data;
+};
+
+struct ShadowLightInput : AttachmentInputData {
+	uint32_t ambientLightCount = 0;
+	uint32_t directLightCount = 0;
+	AmbientLightData ambientLights[config::MaxAmbientLights];
+	DirectLightData directLights[config::MaxDirectLights];
+
+	bool addAmbientLight(const Vec4 &, const Color4F &);
+	bool addDirectLight(const Vec4 &, const Color4F &, const Vec4 &);
 };
 
 String getBufferFlagsDescription(BufferFlags fmt);

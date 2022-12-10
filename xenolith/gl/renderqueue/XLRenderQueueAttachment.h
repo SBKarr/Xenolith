@@ -78,6 +78,8 @@ public:
 	// Run input callback for frame and handle
 	void acquireInput(FrameQueue &, const Rc<AttachmentHandle> &, Function<void(bool)> &&);
 
+	virtual bool validateInput(const Rc<AttachmentInputData> &) const;
+
 	virtual AttachmentDescriptor *addDescriptor(PassData *);
 
 	virtual bool isCompatible(const gl::ImageInfo &) const { return false; }
@@ -243,7 +245,8 @@ public:
 
 	virtual bool init(StringView, const gl::ImageInfo &, AttachmentInfo &&);
 
-	virtual const gl::ImageInfo &getInfo() const { return _imageInfo; }
+	virtual const gl::ImageInfo &getImageInfo() const { return _imageInfo; }
+	virtual gl::ImageInfo getAttachmentInfo(const AttachmentHandle *, Extent3 e) const { return _imageInfo; }
 	virtual bool shouldClearOnLoad() const { return _attachmentInfo.clearOnLoad; }
 	virtual bool isFrameBasedSize() const { return _attachmentInfo.frameSizeCallback != nullptr; }
 	virtual Color4F getClearColor() const { return _attachmentInfo.clearColor; }
@@ -275,7 +278,7 @@ public:
 
 	virtual bool init(PassData *, ImageAttachment *);
 
-	virtual const gl::ImageInfo &getInfo() const { return ((ImageAttachment *)getAttachment())->getInfo(); }
+	virtual const gl::ImageInfo &getImageInfo() const { return ((ImageAttachment *)getAttachment())->getImageInfo(); }
 
 	AttachmentLoadOp getLoadOp() const { return _loadOp; }
 	void setLoadOp(AttachmentLoadOp op) { _loadOp = op; }
@@ -331,7 +334,7 @@ public:
 
 	virtual bool init(ImageAttachmentDescriptor *, uint32_t, AttachmentUsage, AttachmentLayout, AttachmentDependencyInfo);
 
-	virtual const gl::ImageInfo &getInfo() const { return ((ImageAttachmentDescriptor *)_descriptor)->getInfo(); }
+	virtual const gl::ImageInfo &getImageInfo() const { return ((ImageAttachmentDescriptor *)_descriptor)->getImageInfo(); }
 
 	virtual AttachmentLayout getLayout() const { return _layout; }
 	virtual void setLayout(AttachmentLayout);

@@ -35,7 +35,7 @@ static void Queue_buildLoadStore(QueueData *data) {
 
 		bool hasColor = false;
 		bool hasStencil = false;
-		switch (img->getInfo().format) {
+		switch (img->getImageInfo().format) {
 		case gl::ImageFormat::S8_UINT:
 			hasStencil = true;
 			break;
@@ -203,7 +203,7 @@ static void Queue_buildLoadStore(QueueData *data) {
 			for (auto &desc : attachment->getDescriptors()) {
 				auto imgDesc = (ImageAttachmentDescriptor *)desc.get();
 
-				auto fmt = getImagePixelFormat(img->getInfo().format);
+				auto fmt = getImagePixelFormat(img->getImageInfo().format);
 				switch (fmt) {
 				case gl::PixelFormat::DS:
 				case gl::PixelFormat::S:
@@ -325,25 +325,27 @@ static void Queue_buildLoadStore(QueueData *data) {
 
 static void Queue_buildDescriptors(QueueData *data, gl::Device &dev) {
 	for (auto &pass : data->passes) {
-		for (auto &subpass : pass->subpasses) {
-			for (auto a : subpass.outputImages) {
-				if (a->getAttachment()->getType() == AttachmentType::Image) {
-					((ImageAttachment *)a->getAttachment())->addImageUsage(gl::ImageUsage::ColorAttachment);
+		if (pass->renderPass->getType() == PassType::Graphics) {
+			for (auto &subpass : pass->subpasses) {
+				for (auto a : subpass.outputImages) {
+					if (a->getAttachment()->getType() == AttachmentType::Image) {
+						((ImageAttachment *)a->getAttachment())->addImageUsage(gl::ImageUsage::ColorAttachment);
+					}
 				}
-			}
-			for (auto a : subpass.resolveImages) {
-				if (a->getAttachment()->getType() == AttachmentType::Image) {
-					((ImageAttachment *)a->getAttachment())->addImageUsage(gl::ImageUsage::ColorAttachment);
+				for (auto a : subpass.resolveImages) {
+					if (a->getAttachment()->getType() == AttachmentType::Image) {
+						((ImageAttachment *)a->getAttachment())->addImageUsage(gl::ImageUsage::ColorAttachment);
+					}
 				}
-			}
-			for (auto a : subpass.inputImages) {
-				if (a->getAttachment()->getType() == AttachmentType::Image) {
-					((ImageAttachment *)a->getAttachment())->addImageUsage(gl::ImageUsage::InputAttachment);
+				for (auto a : subpass.inputImages) {
+					if (a->getAttachment()->getType() == AttachmentType::Image) {
+						((ImageAttachment *)a->getAttachment())->addImageUsage(gl::ImageUsage::InputAttachment);
+					}
 				}
-			}
-			if (subpass.depthStencil) {
-				if (subpass.depthStencil->getAttachment()->getType() == AttachmentType::Image) {
-					((ImageAttachment *)subpass.depthStencil->getAttachment())->addImageUsage(gl::ImageUsage::DepthStencilAttachment);
+				if (subpass.depthStencil) {
+					if (subpass.depthStencil->getAttachment()->getType() == AttachmentType::Image) {
+						((ImageAttachment *)subpass.depthStencil->getAttachment())->addImageUsage(gl::ImageUsage::DepthStencilAttachment);
+					}
 				}
 			}
 		}
@@ -488,6 +490,22 @@ const memory::vector<Attachment *> &Queue::getOutputAttachments() const {
 	return _data->output;
 }
 
+const Attachment *Queue::getInputAttachment(std::type_index name) const {
+	auto it = _data->typedInput.find(name);
+	if (it != _data->typedInput.end()) {
+		return it->second;
+	}
+	return nullptr;
+}
+
+const Attachment *Queue::getOutputAttachment(std::type_index name) const {
+	auto it = _data->typedOutput.find(name);
+	if (it != _data->typedOutput.end()) {
+		return it->second;
+	}
+	return nullptr;
+}
+
 const PassData *Queue::getPass(StringView key) const {
 	return _data->passes.get(key);
 }
@@ -534,6 +552,14 @@ uint64_t Queue::incrementOrder() {
 
 bool Queue::prepare(gl::Device &dev) {
 	memory::pool::context ctx(_data->pool);
+
+	for (auto &it : _data->input) {
+		_data->typedInput.emplace(std::type_index(typeid(*it)), it);
+	}
+
+	for (auto &it : _data->output) {
+		_data->typedOutput.emplace(std::type_index(typeid(*it)), it);
+	}
 
 	Vector<gl::MaterialType> materialTypes;
 
@@ -783,7 +809,17 @@ ImageAttachmentRef *Queue::Builder::addPassInput(const Rc<Pass> &p, uint32_t sub
 	}
 	auto desc = emplaceAttachment(pass, attachment->addImageDescriptor(pass, descriptorType));
 	if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::Input, AttachmentLayout::Ignored, info)) {
-		pass->subpasses[subpassIdx].inputImages.emplace_back(ref);
+		switch (descriptorType) {
+		case DescriptorType::Unknown:
+		case DescriptorType::InputAttachment:
+		case DescriptorType::Attachment:
+			pass->subpasses[subpassIdx].inputImages.emplace_back(ref);
+			break;
+		default:
+			// sampled and storage image is a descriptors, not image attachments
+			pass->subpasses[subpassIdx].inputGenerics.emplace_back(ref);
+			break;
+		}
 		return ref;
 	}
 

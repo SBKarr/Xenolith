@@ -194,7 +194,7 @@ void RenderFontAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentInp
 		_input = d;
 
 		auto frame = static_cast<DeviceFrameHandle *>(&handle);
-		auto &memPool =  frame->getMemPool();
+		auto memPool =  frame->getMemPool(&handle);
 
 		_frontBuffer = memPool->spawn(AllocationUsage::HostTransitionSource, gl::BufferInfo(
 			gl::ForceBufferUsage(gl::BufferUsage::TransferSrc),
@@ -462,7 +462,7 @@ Vector<VkCommandBuffer> RenderFontRenderPassHandle::doPrepareCommands(FrameHandl
 		if (input->output) {
 			auto extent = _targetImage->getInfo().extent;
 			auto &frame = static_cast<DeviceFrameHandle &>(handle);
-			auto &memPool =  frame.getMemPool();
+			auto memPool = frame.getMemPool(&handle);
 
 			_outBuffer = memPool->spawn(AllocationUsage::HostTransitionDestination, gl::BufferInfo(
 				gl::ForceBufferUsage(gl::BufferUsage::TransferDst),

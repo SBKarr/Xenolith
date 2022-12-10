@@ -259,7 +259,7 @@ bool GraphicPipeline::init(Device &dev, const PipelineData &params, const Subpas
 	depthState.pNext = nullptr;
 	depthState.flags = 0;
 	if (pass.depthStencil) {
-		if (gl::isDepthFormat(pass.depthStencil->getInfo().format)) {
+		if (gl::isDepthFormat(pass.depthStencil->getImageInfo().format)) {
 			auto &depth = params.material.getDepthInfo();
 			auto &bounds = params.material.getDepthBounds();
 			depthState.depthTestEnable = depth.testEnabled ? VK_TRUE : VK_FALSE;
@@ -279,7 +279,7 @@ bool GraphicPipeline::init(Device &dev, const PipelineData &params, const Subpas
 			depthState.maxDepthBounds = 0.0f;
 		}
 
-		if (gl::isStencilFormat(pass.depthStencil->getInfo().format)) {
+		if (gl::isStencilFormat(pass.depthStencil->getImageInfo().format)) {
 			auto &front = params.material.getStencilInfoFront();
 			auto &back = params.material.getStencilInfoBack();
 

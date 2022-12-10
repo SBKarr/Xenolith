@@ -1,26 +1,8 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
+#extension GL_GOOGLE_include_directive : enable
 
-struct Vertex {
-	vec4 pos;
-	vec4 color;
-	vec2 tex;
-	uint material;
-	uint object;
-};
-
-struct Material {
-	uint samplerIdx;
-	uint textureIdx;
-	uint setIdx;
-	uint padding0;
-};
-
-struct TransformObject {
-	mat4 transform;
-	vec4 mask;
-	vec4 offset;
-};
+#include "../../include/vertexes.glsl"
 
 layout (push_constant) uniform pcb {
 	uint materialIdx;

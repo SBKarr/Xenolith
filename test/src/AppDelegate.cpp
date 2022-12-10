@@ -59,13 +59,13 @@ bool AppDelegate::onMainLoop() {
 		}
 	});
 
-	renderqueue::Queue::Builder builder("Shadow");
+	/*renderqueue::Queue::Builder builder("Shadow");
 	vk::ShadowPass::makeDefaultRenderQueue(builder, Extent2(1024, 768));
 	_shadowQueue = Rc<renderqueue::Queue>::create(move(builder));
 	_glLoop->compileRenderQueue(_shadowQueue, [this] (bool success) {
 		std::cout << "Shadow queue compiled: " << success << "\n";
 		_shadowQueueLoaded = true;
-	});
+	});*/
 
 	runLoop(TimeInterval::milliseconds(100));
 

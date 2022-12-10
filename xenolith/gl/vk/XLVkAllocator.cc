@@ -759,6 +759,7 @@ Rc<DeviceBuffer> DeviceMemoryPool::spawn(AllocationUsage type, const gl::BufferI
 			return nullptr;
 		}
 
+		std::unique_lock<Mutex> lock(_mutex);
 		MemData *pool = nullptr;
 		auto it = _heaps.find(memType->idx);
 		if (it == _heaps.end()) {
@@ -771,7 +772,7 @@ Rc<DeviceBuffer> DeviceMemoryPool::spawn(AllocationUsage type, const gl::BufferI
 				requirements.requirements.alignment, AllocationType::Linear, type)) {
 			if (dev->getTable()->vkBindBufferMemory(dev->getDevice(), target, mem.mem, mem.offset) == VK_SUCCESS) {
 				auto ret = Rc<DeviceBuffer>::create(this, target, move(mem), type, info);
-				_buffers.emplace_back(ret);
+				_buffers.emplace_front(ret);
 				return ret;
 			} else {
 				log::text("DeviceMemoryPool", "Fail to bind memory for buffer");

@@ -152,6 +152,24 @@ void PipelineMaterialInfo::_setup(LineWidth width) {
 
 namespace stappler::xenolith::gl {
 
+bool ShadowLightInput::addAmbientLight(const Vec4 &pos, const Color4F &color) {
+	if (ambientLightCount >= config::MaxAmbientLights) {
+		return false;
+	}
+
+	ambientLights[ambientLightCount++] = AmbientLightData{pos, color};
+	return true;
+}
+
+bool ShadowLightInput::addDirectLight(const Vec4 &pos, const Color4F &color, const Vec4 &data) {
+	if (directLightCount >= config::MaxDirectLights) {
+		return false;
+	}
+
+	directLights[directLightCount++] = DirectLightData{pos, color, data};
+	return true;
+}
+
 String getBufferFlagsDescription(BufferFlags fmt) {
 	StringStream stream;
 	if ((fmt & BufferFlags::SparceBinding) != BufferFlags::None) { stream << " SparceBinding"; }
@@ -659,23 +677,12 @@ void ImageViewInfo::setup(const renderqueue::ImageAttachmentDescriptor &desc) {
 		}
 	}
 
-	auto &info = desc.getInfo();
+	auto &info = desc.getImageInfo();
 
 	format = info.format;
 	baseArrayLayer = BaseArrayLayer(0);
 	layerCount = info.arrayLayers;
-	switch (info.imageType) {
-	case gl::ImageType::Image1D:
-		type = gl::ImageViewType::ImageView1D;
-		break;
-	case gl::ImageType::Image2D:
-		type = gl::ImageViewType::ImageView2D;
-		break;
-	case gl::ImageType::Image3D:
-		type = gl::ImageViewType::ImageView3D;
-		break;
-	}
-
+	setup(info.imageType, info.arrayLayers);
 	setup(desc.getColorMode(), allowSwizzle);
 
 	if (!allowSwizzle) {
@@ -711,21 +718,15 @@ void ImageViewInfo::setup(const ImageViewInfo &value) {
 	*this = value;
 }
 
-void ImageViewInfo::setup(const ImageInfo &value) {
+void ImageViewInfo::setup(const ImageInfoData &value) {
 	format = value.format;
 	baseArrayLayer = BaseArrayLayer(0);
-	layerCount = value.arrayLayers;
-
-	switch (value.imageType) {
-	case gl::ImageType::Image1D:
-		type = gl::ImageViewType::ImageView1D;
-		break;
-	case gl::ImageType::Image2D:
-		type = gl::ImageViewType::ImageView2D;
-		break;
-	case gl::ImageType::Image3D:
-		type = gl::ImageViewType::ImageView3D;
-		break;
+	if (layerCount.get() > 1) {
+		setup(value.imageType, value.arrayLayers);
+		layerCount = value.arrayLayers;
+	} else {
+		layerCount = value.arrayLayers;
+		setup(value.imageType, value.arrayLayers);
 	}
 }
 
@@ -778,6 +779,28 @@ void ImageViewInfo::setup(ColorMode value, bool allowSwizzle) {
 		g = value.getG();
 		b = value.getB();
 		a = value.getA();
+		break;
+	}
+}
+
+void ImageViewInfo::setup(ImageType t, ArrayLayers layers) {
+	switch (t) {
+	case gl::ImageType::Image1D:
+		if (layerCount.get() > 1) {
+			type = gl::ImageViewType::ImageView1DArray;
+		} else {
+			type = gl::ImageViewType::ImageView1D;
+		}
+		break;
+	case gl::ImageType::Image2D:
+		if (layerCount.get() > 1) {
+			type = gl::ImageViewType::ImageView2DArray;
+		} else {
+			type = gl::ImageViewType::ImageView2D;
+		}
+		break;
+	case gl::ImageType::Image3D:
+		type = gl::ImageViewType::ImageView3D;
 		break;
 	}
 }

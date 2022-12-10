@@ -42,10 +42,12 @@ public:
 
 	bool init(Loop &loop, Device &, Rc<FrameRequest> &&, uint64_t gen);
 
-	const Rc<DeviceMemoryPool> &getMemPool() const;
+	Rc<DeviceMemoryPool> getMemPool(void *key);
 
 protected:
-	Rc<DeviceMemoryPool> _memPool;
+	Rc<Allocator> _allocator;
+	Mutex _mutex;
+	Map<void *, Rc<DeviceMemoryPool>>  _memPools;
 };
 
 class Device : public gl::Device {

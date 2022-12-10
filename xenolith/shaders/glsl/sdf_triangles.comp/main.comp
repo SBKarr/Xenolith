@@ -1,67 +1,75 @@
 #version 450
+#extension GL_GOOGLE_include_directive : enable
+
+#include "../../include/struct.glsl"
 
 layout (local_size_x = 64) in;
 
-struct IndexData {
-	uint a;
-	uint b;
-	uint c;
-	uint transform;
-	float value;
-	float opacity;
+layout (set = 0, binding = 0) uniform ShadowDataBuffer {
+	ShadowData shadowData;
 };
 
-struct TriangleData {
-	vec4 bb;
-	vec2 a;
-	vec2 b;
-	vec2 c;
-	float value;
-	float opacity;
-};
-
-layout (push_constant) uniform pcb {
-	uint trianglesCount;
-	float bbOffset;
-	uint padding1;
-} pushConstants;
-
-layout (set = 0, binding = 0) readonly buffer Indexes {
+layout (set = 0, binding = 1) readonly buffer Indexes {
 	IndexData indexes[];
 } indexBuffer[3];
 
-layout (set = 0, binding = 0) readonly buffer Vertices {
+layout (set = 0, binding = 1) readonly buffer Vertices {
 	vec4 vertices[];
 } vertexBuffer[3];
 
-layout (set = 0, binding = 0) readonly buffer TransformObjects {
+layout (set = 0, binding = 1) readonly buffer TransformObjects {
 	mat4 transforms[];
 } transformObjectBuffer[3];
 
-layout(set = 0, binding = 1) buffer TrianglesBuffer {
+layout(set = 0, binding = 2) buffer TrianglesBuffer {
 	TriangleData triangles[];
-} trianglesBuffer;
+} trianglesBuffer[3];
+
+layout(set = 0, binding = 2) buffer GridSizeBuffer {
+	uint grid[];
+} gridSizeBuffer[3];
+
+layout(set = 0, binding = 2) buffer GridIndexesBuffer {
+	uint index[];
+} gridIndexBuffer[3];
+
+void emplaceIntoGrid(int i, int j, uint gID) {
+	if (i >= 0 && i < shadowData.gridWidth && j >= 0 && j < shadowData.gridHeight) {
+		uint gridId = i * shadowData.gridWidth + j;
+		uint target = atomicAdd(gridSizeBuffer[1].grid[gridId], 1);
+		gridIndexBuffer[2].index[gridId * shadowData.trianglesCount + target] = gID;
+	}
+}
 
 void main() {
 	uint gID = gl_GlobalInvocationID.x;
 
-    if (gID < pushConstants.trianglesCount) {
+    if (gID < shadowData.trianglesCount) {
 		IndexData idx = indexBuffer[0].indexes[gID];
 
-		trianglesBuffer.triangles[gID].a = (transformObjectBuffer[2].transforms[idx.transform] * vertexBuffer[1].vertices[idx.a]).xy;
-		trianglesBuffer.triangles[gID].b = (transformObjectBuffer[2].transforms[idx.transform] * vertexBuffer[1].vertices[idx.b]).xy;
-		trianglesBuffer.triangles[gID].c = (transformObjectBuffer[2].transforms[idx.transform] * vertexBuffer[1].vertices[idx.c]).xy;
-		trianglesBuffer.triangles[gID].value = idx.value;
-		trianglesBuffer.triangles[gID].opacity = idx.opacity;
-		
-		vec2 minV = min(min(trianglesBuffer.triangles[gID].a, trianglesBuffer.triangles[gID].b), trianglesBuffer.triangles[gID].c);
-		vec2 maxV = max(max(trianglesBuffer.triangles[gID].a, trianglesBuffer.triangles[gID].b), trianglesBuffer.triangles[gID].c);
-		
-		trianglesBuffer.triangles[gID].bb = vec4(
-			minV.x - pushConstants.bbOffset,
-			minV.y - pushConstants.bbOffset,
-			maxV.x - minV.x + pushConstants.bbOffset * 2.0,
-			maxV.y - minV.y + pushConstants.bbOffset * 2.0
-		);
+		trianglesBuffer[0].triangles[gID].a = (transformObjectBuffer[2].transforms[idx.transform] * vertexBuffer[1].vertices[idx.a]).xy - shadowData.pix / 2.0;
+		trianglesBuffer[0].triangles[gID].b = (transformObjectBuffer[2].transforms[idx.transform] * vertexBuffer[1].vertices[idx.b]).xy - shadowData.pix / 2.0;
+		trianglesBuffer[0].triangles[gID].c = (transformObjectBuffer[2].transforms[idx.transform] * vertexBuffer[1].vertices[idx.c]).xy - shadowData.pix / 2.0;
+		trianglesBuffer[0].triangles[gID].value = idx.value;
+		trianglesBuffer[0].triangles[gID].opacity = idx.opacity;
+
+		trianglesBuffer[0].triangles[gID].bbMin =
+			min(min(trianglesBuffer[0].triangles[gID].a, trianglesBuffer[0].triangles[gID].b), trianglesBuffer[0].triangles[gID].c)
+			 - shadowData.bbOffset.xx;
+
+		trianglesBuffer[0].triangles[gID].bbMax =
+			max(max(trianglesBuffer[0].triangles[gID].a, trianglesBuffer[0].triangles[gID].b), trianglesBuffer[0].triangles[gID].c)
+			+ shadowData.bbOffset.xx;
+
+		ivec2 minCell = ivec2(trunc((trianglesBuffer[0].triangles[gID].bbMin + 1.0) / 2.0f *
+				vec2(shadowData.gridWidth, shadowData.gridHeight)));
+		ivec2 maxCell = ivec2(floor((trianglesBuffer[0].triangles[gID].bbMax + 1.0) / 2.0f *
+				vec2(shadowData.gridWidth, shadowData.gridHeight)));
+
+		for (int i = minCell.x; i <= maxCell.x; ++ i) {
+			for (int j = minCell.y; j <= maxCell.y; ++ j) {
+				emplaceIntoGrid(i, j, gID);
+			}
+		}
     }
 }

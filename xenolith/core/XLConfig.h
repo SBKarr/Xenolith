@@ -46,6 +46,9 @@ static constexpr uint32_t MaxSuboptimalFrame = 24;
 /* Maximum images in single material */
 static constexpr size_t MaxMaterialImages = 4;
 
+static constexpr uint32_t MaxAmbientLights = 16;
+static constexpr uint32_t MaxDirectLights = 16;
+
 #if DEBUG
 static constexpr uint64_t MaxDirectorDeltaTime = 10'000'000 / 16;
 #else

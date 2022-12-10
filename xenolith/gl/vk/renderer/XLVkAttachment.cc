@@ -86,7 +86,7 @@ bool VertexBufferAttachmentHandle::writeDescriptor(const QueuePassHandle &, cons
 bool VertexBufferAttachmentHandle::loadVertexes(FrameHandle &handle, const Rc<gl::VertexData> &vertexes) {
 	_data = vertexes;
 
-	auto &memPool = static_cast<DeviceFrameHandle &>(handle).getMemPool();
+	auto memPool = static_cast<DeviceFrameHandle &>(handle).getMemPool(this);
 
 	_vertexes = memPool->spawn(AllocationUsage::DeviceLocalHostVisible,
 			gl::BufferInfo(gl::BufferUsage::StorageBuffer, vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U)));

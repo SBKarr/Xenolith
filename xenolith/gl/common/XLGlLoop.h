@@ -40,6 +40,7 @@ public:
 	using FrameHandle = renderqueue::FrameHandle;
 	using PassData = renderqueue::PassData;
 	using ImageAttachment = renderqueue::ImageAttachment;
+	using AttachmentHandle = renderqueue::AttachmentHandle;
 	using DependencyEvent = renderqueue::DependencyEvent;
 
 	static constexpr uint32_t LoopThreadId = 2;
@@ -84,7 +85,7 @@ public:
 	virtual Rc<Framebuffer> acquireFramebuffer(const PassData *, SpanView<Rc<ImageView>>, Extent2 e) = 0;
 	virtual void releaseFramebuffer(Rc<Framebuffer> &&) = 0;
 
-	virtual Rc<ImageStorage> acquireImage(const ImageAttachment *, Extent3 e) = 0;
+	virtual Rc<ImageStorage> acquireImage(const ImageAttachment *, const AttachmentHandle *, Extent3 e) = 0;
 	virtual void releaseImage(Rc<ImageStorage> &&) = 0;
 
 	virtual Rc<Semaphore> makeSemaphore() = 0;

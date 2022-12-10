@@ -282,7 +282,7 @@ auto QueuePassHandle::updateMaterials(FrameHandle &frame, const Rc<gl::MaterialS
 
 	auto &bufferInfo = data->getInfo();
 
-	auto &pool = static_cast<DeviceFrameHandle &>(frame).getMemPool();
+	auto pool = static_cast<DeviceFrameHandle &>(frame).getMemPool(&frame);
 
 	ret.stagingBuffer = pool->spawn(AllocationUsage::HostTransitionSource,
 			gl::BufferInfo(gl::ForceBufferUsage(gl::BufferUsage::TransferSrc), bufferInfo.size));

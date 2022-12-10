@@ -81,7 +81,7 @@ public:
 	virtual Rc<gl::Framebuffer> acquireFramebuffer(const PassData *, SpanView<Rc<gl::ImageView>>, Extent2 e) override;
 	virtual void releaseFramebuffer(Rc<gl::Framebuffer> &&) override;
 
-	virtual Rc<ImageStorage> acquireImage(const ImageAttachment *, Extent3 e) override;
+	virtual Rc<ImageStorage> acquireImage(const ImageAttachment *, const AttachmentHandle *, Extent3 e) override;
 	virtual void releaseImage(Rc<ImageStorage> &&) override;
 
 	virtual void addView(gl::ViewInfo &&) override;

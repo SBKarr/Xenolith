@@ -105,13 +105,20 @@ void FrameRequest::addSignalDependencies(Vector<Rc<DependencyEvent>> &&deps) {
 	}
 }
 
-void FrameRequest::addInput(const Attachment *a, Rc<AttachmentInputData> &&data) {
-	auto wIt = _waitForInputs.find(a);
-	if (wIt != _waitForInputs.end()) {
-		wIt->second.handle->submitInput(*wIt->second.queue, move(data), move(wIt->second.callback));
-	} else {
-		_input.emplace(a, move(data));
+bool FrameRequest::addInput(const Attachment *a, Rc<AttachmentInputData> &&data) {
+	if (a && a->validateInput(data)) {
+		auto wIt = _waitForInputs.find(a);
+		if (wIt != _waitForInputs.end()) {
+			wIt->second.handle->submitInput(*wIt->second.queue, move(data), move(wIt->second.callback));
+		} else {
+			_input.emplace(a, move(data));
+		}
+		return true;
 	}
+	if (a) {
+		log::vtext("FrameRequest", "Invalid input for attachment ", a->getName());
+	}
+	return false;
 }
 
 void FrameRequest::setQueue(const Rc<Queue> &q) {
@@ -510,7 +517,7 @@ void FrameEmitter::enableCacheAttachments(const Rc<FrameHandle> &req) {
 			for (auto &a : it->getRenderQueue()->getAttachments()) {
 				if (a->getType() == AttachmentType::Image) {
 					auto img = (ImageAttachment *)a.get();
-					auto data = img->getInfo();
+					auto data = img->getImageInfo();
 					data.extent = img->getSizeForFrame(*it);
 					images.emplace(data);
 

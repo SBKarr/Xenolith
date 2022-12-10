@@ -1,12 +1,8 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
+#extension GL_GOOGLE_include_directive : enable
 
-struct Material {
-	uint samplerIdx;
-	uint imageIdx;
-	uint setIdx;
-	uint padding0;
-};
+#include "../../include/vertexes.glsl"
 
 layout (constant_id = 0) const int SAMPLERS_ARRAY_SIZE = 2;
 layout (constant_id = 1) const int IMAGES_ARRAY_SIZE = 128;

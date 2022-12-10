@@ -1,60 +1,179 @@
 #version 450
+#extension GL_GOOGLE_include_directive : enable
+
+#include "../../include/struct.glsl"
 
 layout (local_size_x = 8, local_size_y = 8) in;
 
-struct TriangleData {
-	vec4 bb;
-	vec2 a;
-	vec2 b;
-	vec2 c;
-	float value;
-	float opacity;
+layout (set = 0, binding = 0) uniform ShadowDataBuffer {
+	ShadowData shadowData;
 };
 
-layout(set = 0, binding = 1) buffer TrianglesBuffer {
+layout(set = 0, binding = 2) buffer TrianglesBuffer {
 	TriangleData triangles[];
-} trianglesBuffer;
+} trianglesBuffer[3];
 
-layout(set = 0, binding = 2, r16f) uniform writeonly image2D sdfImage;
+layout(set = 0, binding = 2) buffer GridSizeBuffer {
+	uint grid[];
+} gridSizeBuffer[3];
 
-layout (push_constant) uniform pcb {
-	uint trianglesCount;
-	uint padding0;
-	uint padding1;
-} pushConstants;
+layout(set = 0, binding = 2) buffer GridIndexesBuffer {
+	uint index[];
+} gridIndexBuffer[3];
 
-float map(in vec2 p, in vec2 p0, in vec2 p1, in vec2 p2) {
-	vec2 e0 = p1 - p0;
-	vec2 e1 = p2 - p1;
-	vec2 e2 = p0 - p2;
+layout(set = 0, binding = 3, r8) uniform writeonly image2DArray arrayImage;
+layout(set = 0, binding = 4, r16f) uniform writeonly image2D sdfImage;
 
-	vec2 v0 = p - p0;
-	vec2 v1 = p - p1;
-	vec2 v2 = p - p2;
+uint s_cellIdx;
 
-	vec2 pq0 = v0 - e0*clamp( dot(v0,e0)/dot(e0,e0), 0.0, 1.0 );
-	vec2 pq1 = v1 - e1*clamp( dot(v1,e1)/dot(e1,e1), 0.0, 1.0 );
-	vec2 pq2 = v2 - e2*clamp( dot(v2,e2)/dot(e2,e2), 0.0, 1.0 );
-    
-    float s = e0.x*e2.y - e0.y*e2.x;
-    vec2 d = min( min( vec2( dot( pq0, pq0 ), s*(v0.x*e0.y-v0.y*e0.x) ),
-                       vec2( dot( pq1, pq1 ), s*(v1.x*e1.y-v1.y*e1.x) )),
-                       vec2( dot( pq2, pq2 ), s*(v2.x*e2.y-v2.y*e2.x) ));
+float dot2(in vec3 v) { return dot(v, v); }
 
-	return -sqrt(d.x)*sign(d.y);
+float triangle(in vec3 p, uint idx) {
+	TriangleData t = trianglesBuffer[0].triangles[idx];
+	vec3 v1 = vec3(t.a, t.value);
+	vec3 v2 = vec3(t.b, t.value);
+	vec3 v3 = vec3(t.c, t.value);
+
+	vec3 v21 = v2 - v1; vec3 p1 = p - v1;
+	vec3 v32 = v3 - v2; vec3 p2 = p - v2;
+	vec3 v13 = v1 - v3; vec3 p3 = p - v3;
+	vec3 nor = cross(v21, v13);
+
+	return sqrt((
+		sign(dot(cross(v21,nor),p1)) +
+		sign(dot(cross(v32,nor),p2)) +
+		sign(dot(cross(v13,nor),p3)) < 2.0 )
+	?
+		min( min(
+		dot2( v21 * clamp( dot(v21, p1) / dot2(v21), 0.0, 1.0 ) - p1), 
+		dot2( v32 * clamp( dot(v32, p2) / dot2(v32), 0.0, 1.0 ) - p2) ), 
+		dot2( v13 * clamp( dot(v13, p3) / dot2(v13), 0.0, 1.0 ) - p3) )
+	:
+		dot(nor, p1) * dot(nor, p1) / dot2(nor)
+	);
+}
+
+float map(in vec3 p) {
+	float value = 100.0;
+	uint targetOffset = s_cellIdx * shadowData.trianglesCount;
+	for (uint i = 0; i < gridSizeBuffer[1].grid[s_cellIdx]; ++ i) {
+		value = min(value, triangle(p, gridIndexBuffer[2].index[targetOffset + i]));
+	}
+	return value;
+}
+
+uint hit(in vec2 p, float h) {
+	uint idx;
+	uint targetOffset = s_cellIdx * shadowData.trianglesCount;
+	for (uint i = 0; i < gridSizeBuffer[1].grid[s_cellIdx]; ++ i) {
+		idx = gridIndexBuffer[2].index[targetOffset + i];
+		if (trianglesBuffer[0].triangles[idx].value > h) {
+			if (all(greaterThan(p, trianglesBuffer[0].triangles[idx].bbMin)) && all(lessThan(p, trianglesBuffer[0].triangles[idx].bbMax))) {
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
+
+float intersectTriangle(in vec2 p, uint idx) {
+	TriangleData t = trianglesBuffer[0].triangles[idx];
+
+	vec2 v0 = t.c - t.a;
+	vec2 v1 = t.b - t.a;
+	vec2 v2 = p - t.a;
+
+	float dot00 = dot(v0, v0);
+	float dot01 = dot(v0, v1);
+	float dot02 = dot(v0, v2);
+	float dot11 = dot(v1, v1);
+	float dot12 = dot(v1, v2);
+
+	float invDenom = 1 / (dot00 * dot11 - dot01 * dot01);
+	float u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+	float v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+	
+	return float((u >= 0) && (v >= 0) && (u + v <= 1)) * t.value;
+}
+
+float intersect(in vec2 coord) {
+	float value = 0.0;
+	uint targetOffset = s_cellIdx * shadowData.trianglesCount;
+	for (uint i = 0; i < gridSizeBuffer[1].grid[s_cellIdx]; ++ i) {
+		//value += 0.025;
+		value = max(value, intersectTriangle(coord, gridIndexBuffer[2].index[targetOffset + i]));
+	}
+	return value;
+}
+
+float softshadow(in vec3 ro, in vec3 rd, in float k) {
+	float res = 1.0;
+	float t = 0.002;
+	float h = 1.0;
+	for (int i = 0; i < 1000; i++) {
+		h = map(ro + rd * t);
+		if (h < 0.0001) {
+			return 0.0;
+		}
+		res = min(res, h / (t * (k + k)));
+		t += h;
+		if (t > 1.0) {
+			break;
+		}
+	}
+	return clamp(res, 0.0, 1.0);
+}
+
+float softshadow2(in vec3 ro, in vec3 rd, in float k) {
+	float res = 1.0;
+	float t = 0.002;
+	float h = 1.0;
+	for (int i = 0; i < 1000; i++) {
+		h = map(ro + rd * t) + t * k;
+		if (h < 0.0001) {
+			return 0.0;
+		}
+		res = min(res, h / (t * (k + k)));
+		t += h * inversesqrt(t + 1.0);
+		if (t > 1.0) {
+			break;
+		}
+	}
+	return clamp(res, 0.0, 1.0);
 }
 
 void main() {
 	uint xID = gl_GlobalInvocationID.x;
 	uint yID = gl_GlobalInvocationID.y;
-	
+
 	ivec2 imgSize = imageSize(sdfImage);
-
 	vec2 coord = vec2((float(xID) / float(imgSize.x)) * 2.0 - 1.0, (float(yID) / float(imgSize.y)) * 2.0 - 1.0);
-	float value = 1.0; // map(coord, trianglesBuffer.triangles[0].a, trianglesBuffer.triangles[0].b, trianglesBuffer.triangles[0].c); // 1.0;
-	for (uint i = 0; i < pushConstants.trianglesCount; ++ i) {
-		value = min(value, map(coord, trianglesBuffer.triangles[i].a, trianglesBuffer.triangles[i].b, trianglesBuffer.triangles[i].c));
-	}
 
-	imageStore(sdfImage, ivec2(xID, yID), value.xxxx);
+	uvec2 cellIdx = gl_GlobalInvocationID.xy / shadowData.gridSize.xx;
+
+	s_cellIdx = cellIdx.x * (shadowData.gridWidth) + cellIdx.y;
+
+	vec3 norm = vec3(0.0, 0.0, 1.0);
+
+	float t = intersect(coord);
+
+	//if (hit(coord, t) == 1) {
+		float value = 0.0;
+
+		for (uint i = 0; i < shadowData.ambientLightCount; ++ i) {
+			float s = softshadow2(vec3(coord, t), shadowData.ambientLights[i].normal.xyz, shadowData.ambientLights[i].normal.w);
+
+			imageStore(arrayImage, ivec3(xID, yID, i), (1.0 - s).xxxx);
+
+			value += (1.0 - s) * (1.0 / float(shadowData.ambientLightCount));
+		}
+
+		imageStore(sdfImage, ivec2(xID, yID), vec2(value, 0.25).xyxy);
+	/*} else {
+		for (uint i = 0; i < shadowData.ambientLightCount; ++ i) {
+			imageStore(arrayImage, ivec3(xID, yID, i), 0.0.xxxx);
+		}
+
+		imageStore(sdfImage, ivec2(xID, yID), vec2(0.0, 0.0).xyxy);
+	}*/
 }
