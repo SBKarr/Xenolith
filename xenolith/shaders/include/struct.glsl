@@ -23,6 +23,10 @@
 struct AmbientLightData {
 	vec4 normal;
 	vec4 color;
+	uint soft;
+	uint padding0;
+	uint padding1;
+	uint padding2;
 };
 
 struct DirectLightData {
@@ -32,15 +36,22 @@ struct DirectLightData {
 };
 
 struct ShadowData {
+	vec4 globalColor;
+
 	uint trianglesCount;
 	uint gridSize;
 	uint gridWidth;
 	uint gridHeight;
+
 	uint ambientLightCount;
 	uint directLightCount;
 	float bbOffset;
-	uint padding;
+	float density;
+
 	vec2 pix;
+	float luminosity;
+	float shadowDensity;
+
 	AmbientLightData ambientLights[16];
 	DirectLightData directLights[16];
 };

@@ -135,8 +135,6 @@ public:
 protected:
 	virtual void wakeup() = 0;
 
-	void pushFrameTime(uint64_t frame, uint64_t time);
-
 	Extent2 _screenExtent;
 
 	float _density = 1.0f;
@@ -173,9 +171,6 @@ protected:
 	std::atomic<uint64_t> _lastFrameInterval = 0;
 	math::MovingAverage<20, uint64_t> _avgFrameInterval;
 	std::atomic<uint64_t> _avgFrameIntervalValue = 0;
-
-	math::MovingAverage<20, uint64_t> _avgFenceInterval;
-	std::atomic<uint64_t> _avgFenceIntervalValue = 0;
 };
 
 }

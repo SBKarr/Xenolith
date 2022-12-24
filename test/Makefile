@@ -38,7 +38,8 @@ LOCAL_SHADERS := $(wildcard $(LOCAL_ROOT)/shaders/glsl/*)
 LOCAL_MODULES ?= \
 	xenolith_icons \
 	xenolith_gui \
-	xenolith_storage
+	xenolith_storage \
+	xenolith_material
 
 include $(STAPPLER_ROOT)/make/universal.mk
 

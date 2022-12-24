@@ -31,16 +31,23 @@ namespace stappler::xenolith::vk {
 class ShadowLightDataAttachment : public BufferAttachment {
 public:
 	struct LightData {
+		Color4F globalColor;
+
 		uint32_t trianglesCount;
 		uint32_t gridSize;
 		uint32_t gridWidth;
 		uint32_t gridHeight;
+
 		uint32_t ambientLightCount;
 		uint32_t directLightCount;
 		float bbOffset;
-		uint32_t padding0;
+		float density;
+
 		float pixX;
 		float pixY;
+		float luminosity;
+		float shadowDensity;
+
 		gl::AmbientLightData ambientLights[16];
 		gl::DirectLightData directLights[16];
 	};
@@ -104,16 +111,6 @@ protected:
 	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
 };
 
-class ShadowImageAttachment : public ImageAttachment {
-public:
-	virtual ~ShadowImageAttachment();
-
-	virtual bool init(StringView, Extent2 extent);
-
-protected:
-	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
-};
-
 class ShadowImageArrayAttachment : public ImageAttachment {
 public:
 	virtual ~ShadowImageArrayAttachment();
@@ -121,6 +118,8 @@ public:
 	virtual bool init(StringView, Extent2 extent);
 
 	virtual gl::ImageInfo getAttachmentInfo(const AttachmentHandle *, Extent3 e) const override;
+
+	virtual Extent3 getSizeForFrame(const FrameQueue &) const;
 
 protected:
 	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
@@ -149,7 +148,6 @@ public:
 	const ShadowLightDataAttachment *getLights() const { return _lights; }
 	const ShadowVertexAttachment *getVertexes() const { return _vertexes; }
 	const ShadowTrianglesAttachment *getTriangles() const { return _triangles; }
-	const ShadowImageAttachment *getImage() const { return _image; }
 	const ShadowImageArrayAttachment *getArray() const { return _array; }
 
 	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
@@ -162,7 +160,6 @@ protected:
 	const ShadowLightDataAttachment *_lights = nullptr;
 	const ShadowVertexAttachment *_vertexes = nullptr;
 	const ShadowTrianglesAttachment *_triangles = nullptr;
-	const ShadowImageAttachment *_image = nullptr;
 	const ShadowImageArrayAttachment *_array = nullptr;
 };
 
@@ -178,9 +175,9 @@ public:
 	virtual bool writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
 			uint32_t, bool, VkDescriptorBufferInfo &) override;
 
-	void allocateBuffer(DeviceFrameHandle *, uint32_t trianglesCount, uint32_t gridCells, Extent2 extent);
+	void allocateBuffer(DeviceFrameHandle *, uint32_t trianglesCount, float value, uint32_t gridCells, Extent2 extent);
 
-	float getBoxOffset() const;
+	float getBoxOffset(float value) const;
 
 	uint32_t getLightsCount() const;
 
@@ -206,6 +203,7 @@ public:
 	bool empty() const;
 
 	uint32_t getTrianglesCount() const { return _trianglesCount; }
+	float getMaxValue() const { return _maxValue; }
 
 protected:
 	virtual bool loadVertexes(FrameHandle &, const Rc<gl::CommandList> &);
@@ -215,6 +213,7 @@ protected:
 	Rc<DeviceBuffer> _transforms;
 	Vector<gl::VertexSpan> _spans;
 	uint32_t _trianglesCount = 0;
+	float _maxValue = 0.0f;
 };
 
 class ShadowTrianglesAttachmentHandle : public BufferAttachmentHandle {
@@ -239,15 +238,6 @@ protected:
 	Rc<DeviceBuffer> _gridIndex;
 };
 
-class ShadowImageAttachmentHandle : public ImageAttachmentHandle {
-public:
-	virtual ~ShadowImageAttachmentHandle() { }
-
-	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &, uint32_t, bool isExternal) const override;
-	virtual bool writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
-			uint32_t, bool, VkDescriptorImageInfo &) override;
-};
-
 class ShadowImageArrayAttachmentHandle : public ImageAttachmentHandle {
 public:
 	virtual ~ShadowImageArrayAttachmentHandle() { }
@@ -258,8 +248,12 @@ public:
 			uint32_t, bool, VkDescriptorImageInfo &) override;
 
 	gl::ImageInfo getImageInfo() const { return _currentImageInfo; }
+	float getShadowDensity() const { return _shadowDensity; }
+
+	virtual bool isAvailable(const FrameQueue &) const override;
 
 protected:
+	float _shadowDensity = 1.0f;
 	gl::ImageInfo _currentImageInfo;
 };
 
@@ -275,7 +269,6 @@ protected:
 	const ShadowLightDataAttachmentHandle *_lightsBuffer = nullptr;
 	const ShadowVertexAttachmentHandle *_vertexBuffer = nullptr;
 	const ShadowTrianglesAttachmentHandle *_trianglesBuffer = nullptr;
-	const ShadowImageAttachmentHandle *_imageAttachment = nullptr;
 	const ShadowImageArrayAttachmentHandle *_arrayAttachment = nullptr;
 
 	uint32_t _gridCellSize = 64;

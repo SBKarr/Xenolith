@@ -123,6 +123,7 @@ public:
 	using AttachmentHandle = renderqueue::AttachmentHandle;
 
 	static constexpr StringView ShadowPipeline = "ShadowPipeline";
+	static constexpr StringView ShadowPipelineNull = "ShadowPipelineNull";
 
 	struct RenderQueueInfo {
 		Application *app = nullptr;

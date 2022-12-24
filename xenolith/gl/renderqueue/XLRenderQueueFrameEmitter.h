@@ -29,6 +29,16 @@
 
 namespace stappler::xenolith::renderqueue {
 
+struct FrameAttachmentSpecialization {
+	Extent2 extent;
+	uint32_t nlights = 0;
+	float shadowDensity = 1.0f;
+
+	constexpr bool operator==(const FrameAttachmentSpecialization &other) const = default;
+	constexpr bool operator!=(const FrameAttachmentSpecialization &other) const = default;
+	constexpr auto operator<=>(const FrameAttachmentSpecialization &other) const = default;
+};
+
 class FrameRequest final : public Ref {
 public:
 	virtual ~FrameRequest();
@@ -41,6 +51,9 @@ public:
 
 	void addSignalDependency(Rc<DependencyEvent> &&);
 	void addSignalDependencies(Vector<Rc<DependencyEvent>> &&);
+
+	void addImageSpecialization(const ImageAttachment *, gl::ImageInfoData &&);
+	const gl::ImageInfoData *getImageSpecialization(const ImageAttachment *image) const;
 
 	bool addInput(const Attachment *, Rc<AttachmentInputData> &&);
 
@@ -83,6 +96,9 @@ public:
 
 	const Vector<Rc<DependencyEvent>> &getSignalDependencies() const { return _signalDependencies; }
 
+	void setFrameSpecialization(const FrameAttachmentSpecialization &spec) { _specialization = spec; }
+	const FrameAttachmentSpecialization &getFrameSpecialization() const { return _specialization; }
+
 	FrameRequest() = default;
 
 	void waitForInput(FrameQueue &, const Rc<AttachmentHandle> &a, Function<void(bool)> &&cb);
@@ -101,6 +117,7 @@ protected:
 	bool _persistentMappings = true; // true; // true; // try to map per-frame GPU memory persistently
 	uint64_t _sceneId = 0;
 
+	Map<const ImageAttachment *, gl::ImageInfoData> _imageSpecialization;
 	Map<const Attachment *, Function<bool(FrameAttachmentData &, bool)>> _output;
 
 	const Attachment *_swapchainAttachment = nullptr;
@@ -117,6 +134,8 @@ protected:
 	};
 
 	Map<const Attachment *, WaitInputData> _waitForInputs;
+
+	FrameAttachmentSpecialization _specialization;
 };
 
 // Frame emitter is an interface, that continuously spawns frames, and can control validity of a frame
@@ -148,6 +167,7 @@ public:
 
 	uint64_t getLastFrameTime() const;
 	uint64_t getAvgFrameTime() const;
+	uint64_t getAvgFenceTime() const;
 
 	bool isReadyForSubmit() const;
 
@@ -196,9 +216,12 @@ protected:
 	math::MovingAverage<20, uint64_t> _avgFrameTime;
 	std::atomic<uint64_t> _avgFrameTimeValue = 0;
 
+	math::MovingAverage<20, uint64_t> _avgFenceInterval;
+	std::atomic<uint64_t> _avgFenceIntervalValue = 0;
+
 	uint64_t _lastTotalFrameTime = 0;
 
-	Extent2 _cacheExtent;
+	FrameAttachmentSpecialization _cacheSpecialization;
 	Set<Rc<Queue>> _cacheRenderQueue;
 	Set<gl::ImageInfoData> _cacheImages;
 };

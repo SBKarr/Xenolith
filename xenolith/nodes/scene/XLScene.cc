@@ -85,12 +85,19 @@ void Scene::renderRequest(const Rc<FrameRequest> &req) {
 		});
 	});
 	info.lights = Rc<gl::ShadowLightInput>::alloc();
+	info.lights->sceneDensity = _density;
+	info.lights->shadowDensity = _shadowDensity;
 
-	auto l1 = Vec4(Vec3(_director->getGeneralProjection() * Vec2(0.0f, 0.0f), 1.0f).normalize(), 1.0 / 48.0f);
-	auto l2 = Vec4(Vec3(_director->getGeneralProjection() * Vec2(0.0f, 5.0f), 1.0f).normalize(), 1.0f / 48.0f);
-
-	info.lights->addAmbientLight(l1, Color4F::WHITE);
-	//info.lights->addAmbientLight(l2, Color4F::WHITE);
+	for (auto &it : _lights) {
+		switch (it->getType()) {
+		case SceneLightType::Ambient:
+			info.lights->addAmbientLight(it->getNormal(), it->getColor(), it->isSoftShadow());
+			break;
+		case SceneLightType::Direct:
+			info.lights->addDirectLight(it->getNormal(), it->getColor(), it->getData());
+			break;
+		}
+	}
 
 	render(info);
 
@@ -157,6 +164,22 @@ void Scene::render(RenderFrameInfo &info) {
 	eventDispatcher->commitStorage(move(info.input));
 }
 
+void Scene::onEnter(Scene *scene) {
+	Node::onEnter(scene);
+
+	for (auto &it : _lights) {
+		it->onEnter(scene);
+	}
+}
+
+void Scene::onExit() {
+	for (auto &it : _lights) {
+		it->onExit();
+	}
+
+	Node::onExit();
+}
+
 void Scene::onContentSizeDirty() {
 	Node::onContentSizeDirty();
 
@@ -186,6 +209,11 @@ void Scene::onPresented(Director *dir) {
 		}
 	}
 
+	auto l1 = Vec4(Vec3(_director->getGeneralProjection() * Vec2(0.0f, 0.0f), 1.0f).normalize(), 1.0f);
+
+	removeAllLights();
+	addLight(Rc<SceneLight>::create(SceneLightType::Ambient, l1));
+
 	onEnter(this);
 }
 
@@ -211,62 +239,6 @@ void Scene::onFrameStarted(FrameRequest &req) {
 
 void Scene::onFrameEnded(FrameRequest &req) {
 	release(req.getSceneId());
-}
-
-void Scene::on2dVertexInput(FrameQueue &frame, const Rc<renderqueue::AttachmentHandle> &attachment, Function<void(bool)> &&cb) {
-	if (!_director) {
-		cb(false);
-		return;
-	}
-
-	auto handle = frame.getFrame();
-
-	_director->getApplication()->performOnMainThread(
-			[this, handle, frame = Rc<renderqueue::FrameQueue>(&frame), attachment, cb = move(cb)] () mutable {
-		if (!_director) {
-			return;
-		}
-
-		RenderFrameInfo info;
-		info.pool = frame->getPool()->getPool();
-		info.commands = Rc<gl::CommandList>::create(frame->getPool());
-		info.commands->setStatCallback([dir = Rc<Director>(_director)] (gl::DrawStat stat) {
-			dir->getApplication()->performOnMainThread([dir = move(dir), stat] {
-				dir->pushDrawStat(stat);
-			});
-		});
-
-		render(info);
-
-		handle->performOnGlThread([attachment, commands = move(info.commands), cb = move(cb), frame = Rc<renderqueue::FrameQueue>(frame)] (FrameHandle &) mutable {
-			attachment->submitInput(*frame, move(commands), move(cb));
-		}, handle, false, "Scene::on2dVertexInput");
-
-		// submit material updates
-		if (!_pending.empty()) {
-			for (auto &it : _pending) {
-				Vector<Rc<renderqueue::DependencyEvent>> events;
-				if (_materialDependency) {
-					events.emplace_back(_materialDependency);
-				}
-
-				if (!it.second.toAdd.empty() || !it.second.toRemove.empty()) {
-					auto req = Rc<gl::MaterialInputData>::alloc();
-					req->attachment = it.first;
-					req->materialsToAddOrUpdate = move(it.second.toAdd);
-					req->materialsToRemove = move(it.second.toRemove);
-
-					for (auto &it : req->materialsToRemove) {
-						emplace_ordered(_revokedIds, it);
-					}
-
-					frame->getLoop()->compileMaterials(move(req), events);
-				}
-			}
-			_pending.clear();
-			_materialDependency = nullptr;
-		}
-	}, this);
 }
 
 uint64_t Scene::getMaterial(const MaterialInfo &info) const {
@@ -389,6 +361,144 @@ void Scene::revokeImages(const Vector<uint64_t> &vec) {
 			} else {
 				++ iit;
 			}
+		}
+	}
+}
+
+void Scene::specializeRequest(const Rc<FrameRequest> &req) {
+	if (auto a = _queue->getInputAttachment<vk::ShadowImageArrayAttachment>()) {
+		gl::ImageInfoData info = a->getImageInfo();
+		info.arrayLayers = gl::ArrayLayers(_lightsAmbientCount + _lightsDirectCount);
+		info.extent =  Extent2(std::floor(req->getExtent().width * _shadowDensity),
+				std::floor(req->getExtent().height * _shadowDensity));
+		req->addImageSpecialization(a, move(info));
+
+		auto spec = req->getFrameSpecialization();
+		spec.nlights = _lightsAmbientCount + _lightsDirectCount;
+		spec.shadowDensity = _shadowDensity;
+		req->setFrameSpecialization(spec);
+	}
+
+	req->setQueue(_queue);
+}
+
+bool Scene::addLight(SceneLight *light, uint64_t tag, StringView name) {
+	if (tag != InvalidTag) {
+		if (_lightsByTag.find(tag) != _lightsByTag.end()) {
+			log::vtext("Scene", "Light with tag ", tag, " is already defined");
+			return false;
+		}
+	}
+	if (!name.empty()) {
+		if (_lightsByName.find(name) != _lightsByName.end()) {
+			log::vtext("Scene", "Light with name ", name, " is already defined");
+			return false;
+		}
+	}
+
+	if (light->getScene()) {
+		log::vtext("Scene", "Light is already on scene");
+		return false;
+	}
+
+	switch (light->getType()) {
+	case SceneLightType::Ambient:
+		if (_lightsAmbientCount >= config::MaxAmbientLights) {
+			log::vtext("Scene", "Too many ambient lights");
+			return false;
+		}
+		break;
+	case SceneLightType::Direct:
+		if (_lightsDirectCount >= config::MaxDirectLights) {
+			log::vtext("Scene", "Too many direct lights");
+			return false;
+		}
+		break;
+	}
+
+	_lights.emplace_back(light);
+
+	switch (light->getType()) {
+	case SceneLightType::Ambient: ++ _lightsAmbientCount; break;
+	case SceneLightType::Direct: ++ _lightsDirectCount; break;
+	}
+
+	if (tag != InvalidTag) {
+		light->setTag(tag);
+		_lightsByTag.emplace(tag, light);
+	}
+
+	if (!name.empty()) {
+		light->setName(name);
+		_lightsByName.emplace(light->getName(), light);
+	}
+
+	if (_running) {
+		light->onEnter(this);
+	} else {
+		light->_scene = this;
+	}
+
+	return true;
+}
+
+SceneLight *Scene::getLightByTag(uint64_t tag) const {
+	auto it = _lightsByTag.find(tag);
+	if (it != _lightsByTag.end()) {
+		return it->second;
+	}
+	return nullptr;
+}
+
+SceneLight *Scene::getLightByName(StringView name) const {
+	auto it = _lightsByName.find(name);
+	if (it != _lightsByName.end()) {
+		return it->second;
+	}
+	return nullptr;
+}
+
+void Scene::removeLight(SceneLight *light) {
+	if (light->getScene() != this) {
+		return;
+	}
+
+	auto it = _lights.begin();
+	while (it != _lights.end()) {
+		if (*it == light) {
+			removeLight(it);
+			return;
+		}
+		++ it;
+	}
+}
+
+void Scene::removeLightByTag(uint64_t tag) {
+	if (auto l = getLightByTag(tag)) {
+		removeLight(l);
+	}
+}
+
+void Scene::removeLightByName(StringView name) {
+	if (auto l = getLightByName(name)) {
+		removeLight(l);
+	}
+}
+
+void Scene::removeAllLights() {
+	auto it = _lights.begin();
+	while (it != _lights.end()) {
+		it = removeLight(it);
+	}
+}
+
+void Scene::removeAllLightsByType(SceneLightType type) {
+	auto it = _lights.begin();
+	while (it != _lights.end()) {
+		if ((*it)->getType() == type) {
+			it = removeLight(it);
+		} else {
+			++ it;
 		}
 	}
 }
@@ -522,6 +632,33 @@ void Scene::listMaterials() const {
 			std::cout << "\t" << iit.info.description() << " -> " << iit.id << "\n";
 		}
 	}
+}
+
+Vector<Rc<SceneLight>>::iterator Scene::removeLight(Vector<Rc<SceneLight>>::iterator itVec) {
+	if ((*itVec)->isRunning()) {
+		(*itVec)->onExit();
+	}
+
+	if (!(*itVec)->getName().empty()) {
+		auto it = _lightsByName.find((*itVec)->getName());
+		if (it != _lightsByName.end()) {
+			_lightsByName.erase(it);
+		}
+	}
+
+	if ((*itVec)->getTag() != InvalidTag) {
+		auto it = _lightsByTag.find((*itVec)->getTag());
+		if (it != _lightsByTag.end()) {
+			_lightsByTag.erase(it);
+		}
+	}
+
+	switch ((*itVec)->getType()) {
+	case SceneLightType::Ambient: -- _lightsAmbientCount; break;
+	case SceneLightType::Direct: -- _lightsDirectCount; break;
+	}
+
+	return _lights.erase(itVec);
 }
 
 }

@@ -28,6 +28,12 @@
 
 namespace stappler::xenolith::renderqueue {
 
+struct FramePassDataRequired {
+	FramePassData *data;
+	FrameRenderPassState requiredState;
+	FrameRenderPassState lockedState;
+};
+
 struct FramePassData {
 	FrameRenderPassState state = FrameRenderPassState::Initial;
 	Rc<PassHandle> handle;
@@ -47,11 +53,13 @@ struct FramePassData {
 	// Attachment3 can be used in RenderPass2 after Complete state of RenderPass1
 	// 			(so, there are some actions on CPU required to start RenderPass2 with results of RenderPass1)
 	// Required state for RenderPass1 will be Complete (Ready < Submitted < Complete)
-	Vector<Pair<FramePassData *, FrameRenderPassState>> required;
+	Vector<FramePassDataRequired> required;
 	HashMap<FrameRenderPassState, Vector<FramePassData *>> waiters;
 
 	Rc<gl::Framebuffer> framebuffer;
 	bool waitForResult = false;
+
+	uint64_t submitTime = 0;
 };
 
 struct FrameAttachmentData {
@@ -107,6 +115,7 @@ public:
 
 	const HashMap<const PassData *, FramePassData> &getRenderPasses() const { return _renderPasses; }
 	const HashMap<const Attachment *, FrameAttachmentData> &getAttachments() const { return _attachments; }
+	uint64_t getSubmissionTime() const { return _submissionTime; }
 
 	const FrameAttachmentData *getAttachment(const Attachment *) const;
 	const FramePassData *getRenderPass(const PassData *) const;
@@ -127,6 +136,7 @@ protected:
 	void onAttachmentRelease(FrameAttachmentData &);
 
 	bool isRenderPassReady(const FramePassData &) const;
+	bool isRenderPassReadyForState(const FramePassData &, FrameRenderPassState) const;
 	void updateRenderPassState(FramePassData &, FrameRenderPassState);
 
 	void onRenderPassReady(FramePassData &);
@@ -171,6 +181,9 @@ protected:
 	uint32_t _renderPassCompleted = 0;
 
 	uint32_t _finalizedObjects = 0;
+	uint64_t _submissionTime = 0;
+
+	Vector<Pair<FramePassData *, FrameRenderPassState>> _awaitPasses;
 };
 
 }

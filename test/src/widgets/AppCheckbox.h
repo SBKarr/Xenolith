@@ -63,6 +63,8 @@ public:
 
 	virtual void onContentSizeDirty() override;
 
+	void setLabelColor(const Color4F &);
+
 protected:
 	using AppCheckbox::init;
 

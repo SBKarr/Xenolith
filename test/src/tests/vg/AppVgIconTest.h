@@ -26,6 +26,7 @@
 #include "AppLayoutTest.h"
 #include "XLIconNames.h"
 #include "XLVectorSprite.h"
+#include "XLGuiLayerRounded.h"
 #include "AppCheckbox.h"
 #include "AppSlider.h"
 
@@ -55,7 +56,7 @@ protected:
 
 	Label *_label = nullptr;
 	Label *_info = nullptr;
-	Node *_spriteLayer = nullptr;
+	LayerRounded *_spriteLayer = nullptr;
 	VectorSprite *_sprite = nullptr;
 	VectorSprite *_triangles = nullptr;
 

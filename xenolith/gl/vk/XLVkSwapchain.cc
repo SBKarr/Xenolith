@@ -160,7 +160,6 @@ bool SwapchainHandle::isOptimal() const {
 }
 
 bool SwapchainHandle::deprecate(bool fast) {
-	std::cout << "deprecate " << fast << "\n";
 	auto tmp = _deprecated;
 	_deprecated = true;
 	if (fast && _config.presentModeFast != gl::PresentMode::Unsupported) {

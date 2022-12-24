@@ -190,7 +190,10 @@ void View::threadDispose() {
 	}
 	_scheduledPresent.clear();
 
-	//_swapchain->invalidate();
+	if (_options.renderImageOffscreen) {
+		// offscreen does not need swapchain outside of view thread
+		_swapchain->invalidate();
+	}
 	_swapchain = nullptr;
 	_surface = nullptr;
 
@@ -570,16 +573,12 @@ void View::scheduleFence(Rc<Fence> &&fence) {
 	if (_running.load()) {
 		performOnThread([this, fence = move(fence)] () mutable {
 			auto loop = (Loop *)_loop.get();
-			auto frame = fence->getFrame();
-			auto t = fence->getArmedTime();
 			if (!fence->check(*loop, true)) {
 				auto frame = fence->getFrame();
 				if (frame != 0 && (_fenceOrder == 0 || _fenceOrder > frame)) {
 					_fenceOrder = frame;
 				}
 				_fences.emplace(move(fence));
-			} else if (frame) {
-				pushFrameTime(frame, t);
 			}
 		}, this, true);
 	} else {
@@ -981,12 +980,7 @@ void View::waitForFences(uint64_t min) {
 	while (it != _fences.end()) {
 		if ((*it)->getFrame() <= min) {
 			// log::vtext("View", "waitForFences: ", (*it)->getTag());
-			auto frame = (*it)->getFrame();
-			auto t = (*it)->getArmedTime();
 			if ((*it)->check(*loop, false)) {
-				if (frame) {
-					pushFrameTime(frame, t);
-				}
 				it = _fences.erase(it);
 			} else {
 				++ it;
@@ -1009,12 +1003,7 @@ void View::updateFences() {
 		auto loop = (Loop *)_loop.get();
 		auto it = _fences.begin();
 		while (it != _fences.end()) {
-			auto frame = (*it)->getFrame();
-			auto t = (*it)->getArmedTime();
 			if ((*it)->check(*loop, true)) {
-				if (frame) {
-					pushFrameTime(frame, t);
-				}
 				it = _fences.erase(it);
 			} else {
 				auto frame = (*it)->getFrame();

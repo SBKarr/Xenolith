@@ -39,7 +39,7 @@
 #endif
 
 #if XL_FRAME_QUEUE_DEBUG
-#define XL_FRAME_QUEUE_LOG(...) log::vtext("FrameQueue", "[", _order, "] ", __VA_ARGS__)
+#define XL_FRAME_QUEUE_LOG(...) log::vtext("FrameQueue", "[", _queue->getName(), ": ",  _order, "] ", __VA_ARGS__)
 #else
 #define XL_FRAME_QUEUE_LOG(...)
 #endif

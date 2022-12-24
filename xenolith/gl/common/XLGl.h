@@ -453,6 +453,10 @@ struct ViewInfo {
 struct AmbientLightData {
 	Vec4 normal;
 	Color4F color;
+	uint32_t soft;
+	uint32_t padding0;
+	uint32_t padding1;
+	uint32_t padding2;
 };
 
 struct DirectLightData {
@@ -462,12 +466,17 @@ struct DirectLightData {
 };
 
 struct ShadowLightInput : AttachmentInputData {
+	Color4F globalColor = Color4F::BLACK;
 	uint32_t ambientLightCount = 0;
 	uint32_t directLightCount = 0;
+	float sceneDensity = 1.0f;
+	float shadowDensity = 1.0f;
+	float luminosity = nan();
+	float padding0 = 0.0f;
 	AmbientLightData ambientLights[config::MaxAmbientLights];
 	DirectLightData directLights[config::MaxDirectLights];
 
-	bool addAmbientLight(const Vec4 &, const Color4F &);
+	bool addAmbientLight(const Vec4 &, const Color4F &, bool softShadow);
 	bool addDirectLight(const Vec4 &, const Color4F &, const Vec4 &);
 };
 

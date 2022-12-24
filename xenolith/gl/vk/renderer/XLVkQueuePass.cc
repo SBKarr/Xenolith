@@ -135,6 +135,15 @@ bool QueuePassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
 }
 
 void QueuePassHandle::submit(FrameQueue &q, Rc<FrameSync> &&sync, Function<void(bool)> &&onSubmited, Function<void(bool)> &&onComplete) {
+	if (!_pool) {
+		onSubmited(true);
+		q.getFrame()->performInQueue([this, onComplete = move(onComplete)] (FrameHandle &frame) mutable {
+			onComplete(true);
+			return true;
+		}, this, "RenderPass::complete");
+		return;
+	}
+
 	Rc<FrameHandle> f = q.getFrame(); // capture frame ref
 
 	_fence = _loop->acquireFence(f->getOrder());
@@ -212,9 +221,10 @@ Vector<VkCommandBuffer> QueuePassHandle::doPrepareCommands(FrameHandle &) {
 bool QueuePassHandle::doSubmit(FrameHandle &frame, Function<void(bool)> &&onSubmited) {
 	auto success = _queue->submit(*_sync, *_fence, *_pool, _buffers);
 	_pool = nullptr;
-	frame.performOnGlThread([this, success, onSubmited = move(onSubmited), queue = move(_queue)] (FrameHandle &frame) mutable {
+	frame.performOnGlThread([this, success, onSubmited = move(onSubmited), queue = move(_queue), armedTime = _fence->getArmedTime()] (FrameHandle &frame) mutable {
 		bool scheduleWithSwapcchain = false;
 
+		_queueData->submitTime = armedTime;
 		for (auto &it : _sync->images) {
 			if (it.image->isSwapchainImage()) {
 				scheduleWithSwapcchain = true;
@@ -225,6 +235,7 @@ bool QueuePassHandle::doSubmit(FrameHandle &frame, Function<void(bool)> &&onSubm
 			_device->releaseQueue(move(queue));
 			queue = nullptr;
 		}
+
 		if (success) {
 			if (scheduleWithSwapcchain) {
 				// from frame's perspective, onComplete event, binded with fence,

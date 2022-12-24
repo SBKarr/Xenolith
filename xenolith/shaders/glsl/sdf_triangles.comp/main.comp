@@ -35,7 +35,7 @@ layout(set = 0, binding = 2) buffer GridIndexesBuffer {
 
 void emplaceIntoGrid(int i, int j, uint gID) {
 	if (i >= 0 && i < shadowData.gridWidth && j >= 0 && j < shadowData.gridHeight) {
-		uint gridId = i * shadowData.gridWidth + j;
+		uint gridId = j * shadowData.gridWidth + i;
 		uint target = atomicAdd(gridSizeBuffer[1].grid[gridId], 1);
 		gridIndexBuffer[2].index[gridId * shadowData.trianglesCount + target] = gID;
 	}
@@ -47,9 +47,12 @@ void main() {
     if (gID < shadowData.trianglesCount) {
 		IndexData idx = indexBuffer[0].indexes[gID];
 
-		trianglesBuffer[0].triangles[gID].a = (transformObjectBuffer[2].transforms[idx.transform] * vertexBuffer[1].vertices[idx.a]).xy - shadowData.pix / 2.0;
-		trianglesBuffer[0].triangles[gID].b = (transformObjectBuffer[2].transforms[idx.transform] * vertexBuffer[1].vertices[idx.b]).xy - shadowData.pix / 2.0;
-		trianglesBuffer[0].triangles[gID].c = (transformObjectBuffer[2].transforms[idx.transform] * vertexBuffer[1].vertices[idx.c]).xy - shadowData.pix / 2.0;
+		trianglesBuffer[0].triangles[gID].a = ((transformObjectBuffer[2].transforms[idx.transform]
+				* vertexBuffer[1].vertices[idx.a]).xy + 1.0) / (shadowData.pix * shadowData.density.xx);
+		trianglesBuffer[0].triangles[gID].b = ((transformObjectBuffer[2].transforms[idx.transform]
+				* vertexBuffer[1].vertices[idx.b]).xy + 1.0) / (shadowData.pix * shadowData.density.xx);
+		trianglesBuffer[0].triangles[gID].c = ((transformObjectBuffer[2].transforms[idx.transform]
+				* vertexBuffer[1].vertices[idx.c]).xy + 1.0) / (shadowData.pix * shadowData.density.xx);
 		trianglesBuffer[0].triangles[gID].value = idx.value;
 		trianglesBuffer[0].triangles[gID].opacity = idx.opacity;
 
@@ -61,10 +64,8 @@ void main() {
 			max(max(trianglesBuffer[0].triangles[gID].a, trianglesBuffer[0].triangles[gID].b), trianglesBuffer[0].triangles[gID].c)
 			+ shadowData.bbOffset.xx;
 
-		ivec2 minCell = ivec2(trunc((trianglesBuffer[0].triangles[gID].bbMin + 1.0) / 2.0f *
-				vec2(shadowData.gridWidth, shadowData.gridHeight)));
-		ivec2 maxCell = ivec2(floor((trianglesBuffer[0].triangles[gID].bbMax + 1.0) / 2.0f *
-				vec2(shadowData.gridWidth, shadowData.gridHeight)));
+		ivec2 minCell = ivec2(trunc(trianglesBuffer[0].triangles[gID].bbMin * shadowData.density.xx / vec2(shadowData.gridSize, shadowData.gridSize)));
+		ivec2 maxCell = ivec2(floor(trianglesBuffer[0].triangles[gID].bbMax * shadowData.density.xx / vec2(shadowData.gridSize, shadowData.gridSize)));
 
 		for (int i = minCell.x; i <= maxCell.x; ++ i) {
 			for (int j = minCell.y; j <= maxCell.y; ++ j) {

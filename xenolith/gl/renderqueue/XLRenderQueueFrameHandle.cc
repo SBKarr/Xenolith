@@ -122,6 +122,16 @@ void FrameHandle::update(bool init) {
 	}
 }
 
+gl::ImageInfoData FrameHandle::getImageSpecialization(const ImageAttachment *a) const {
+	gl::ImageInfoData ret;
+	if (auto img = _request->getImageSpecialization(a)) {
+		ret = *img;
+	} else {
+		ret = a->getImageInfo();
+	}
+	return ret;
+}
+
 bool FrameHandle::isSwapchainAttachment(const Attachment *a) const {
 	return _request->isSwapchainAttachment(a);
 }
@@ -310,6 +320,7 @@ void FrameHandle::onQueueSubmitted(FrameQueue &queue) {
 }
 
 void FrameHandle::onQueueComplete(FrameQueue &queue) {
+	_submissionTime += queue.getSubmissionTime();
 	++ _queuesCompleted;
 	tryComplete();
 }

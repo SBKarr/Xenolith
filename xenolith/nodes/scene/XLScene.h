@@ -27,8 +27,11 @@ THE SOFTWARE.
 #include "XLRenderQueueResource.h"
 #include "XLRenderQueueQueue.h"
 #include "XLGlMaterial.h"
+#include "XLSceneLight.h"
 
 namespace stappler::xenolith {
+
+class SceneLight;
 
 class Scene : public Node {
 public:
@@ -47,6 +50,9 @@ public:
 	virtual void renderRequest(const Rc<FrameRequest> &);
 	virtual void render(RenderFrameInfo &info);
 
+	virtual void onEnter(Scene *) override;
+	virtual void onExit() override;
+
 	virtual void onContentSizeDirty() override;
 
 	const Rc<RenderQueue> &getRenderQueue() const { return _queue; }
@@ -57,7 +63,6 @@ public:
 
 	virtual void onFrameStarted(FrameRequest &);
 	virtual void onFrameEnded(FrameRequest &);
-	virtual void on2dVertexInput(FrameQueue &, const Rc<renderqueue::AttachmentHandle> &, Function<void(bool)> &&cb); // called on GL thread;
 
 	virtual uint64_t getMaterial(const MaterialInfo &) const;
 
@@ -70,7 +75,21 @@ public:
 	virtual void setDensity(float);
 	float getDensity() const { return _density; }
 
-	void revokeImages(const Vector<uint64_t> &);
+	virtual void revokeImages(const Vector<uint64_t> &);
+
+	virtual void specializeRequest(const Rc<FrameRequest> &req);
+
+	virtual bool addLight(SceneLight *, uint64_t tag = InvalidTag, StringView name = StringView());
+
+	virtual SceneLight *getLightByTag(uint64_t) const;
+	virtual SceneLight *getLightByName(StringView) const;
+
+	virtual void removeLight(SceneLight *);
+	virtual void removeLightByTag(uint64_t);
+	virtual void removeLightByName(StringView);
+
+	virtual void removeAllLights();
+	virtual void removeAllLightsByType(SceneLightType);
 
 protected:
 	using Node::init;
@@ -103,6 +122,8 @@ protected:
 
 	void listMaterials() const;
 
+	Vector<Rc<SceneLight>>::iterator removeLight(Vector<Rc<SceneLight>>::iterator);
+
 	struct SceneMaterialInfo {
 		MaterialInfo info;
 		gl::MaterialId id;
@@ -130,6 +151,13 @@ protected:
 	Vector<gl::MaterialId> _revokedIds;
 
 	float _density = 1.0f;
+	float _shadowDensity = 1.0f;
+
+	uint32_t _lightsAmbientCount = 0;
+	uint32_t _lightsDirectCount = 0;
+	Vector<Rc<SceneLight>> _lights;
+	Map<uint64_t, SceneLight *> _lightsByTag;
+	Map<StringView, SceneLight *> _lightsByName;
 };
 
 }

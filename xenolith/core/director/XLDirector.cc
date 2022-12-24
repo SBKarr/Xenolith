@@ -95,7 +95,7 @@ bool Director::acquireFrame(const Rc<FrameRequest> &req) {
 
 	update();
 	if (_scene) {
-		req->setQueue(_scene->getRenderQueue());
+		_scene->specializeRequest(req);
 	}
 
 	_application->performOnMainThread([this, req] {

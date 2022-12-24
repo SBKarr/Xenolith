@@ -117,4 +117,8 @@ void AppCheckboxWithLabel::onContentSizeDirty() {
 	_label->setPosition(Vec2(_contentSize.width + 16.0f, _contentSize.height / 2.0f));
 }
 
+void AppCheckboxWithLabel::setLabelColor(const Color4F &color) {
+	_label->setColor(color);
+}
+
 }

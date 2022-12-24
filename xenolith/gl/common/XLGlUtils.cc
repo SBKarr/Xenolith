@@ -152,12 +152,12 @@ void PipelineMaterialInfo::_setup(LineWidth width) {
 
 namespace stappler::xenolith::gl {
 
-bool ShadowLightInput::addAmbientLight(const Vec4 &pos, const Color4F &color) {
+bool ShadowLightInput::addAmbientLight(const Vec4 &pos, const Color4F &color, bool softShadow) {
 	if (ambientLightCount >= config::MaxAmbientLights) {
 		return false;
 	}
 
-	ambientLights[ambientLightCount++] = AmbientLightData{pos, color};
+	ambientLights[ambientLightCount++] = AmbientLightData{pos, color, uint32_t(softShadow ? 1 : 0)};
 	return true;
 }
 
@@ -1567,7 +1567,7 @@ String SurfaceInfo::description() const {
 }
 
 std::ostream & operator<<(std::ostream &stream, const ImageInfoData &value) {
-	stream << "ImageInfoData: " << value.extent;
+	stream << "ImageInfoData: " << value.extent << " Layers:" << value.arrayLayers.get();
 	return stream;
 }
 

@@ -38,7 +38,7 @@ bool FrameRequest::init(const Rc<FrameEmitter> &emitter, Rc<ImageStorage> &&targ
 	auto e = target->getInfo().extent;
 	_pool = Rc<PoolRef>::alloc();
 	_emitter = emitter;
-	_extent = Extent2(e.width, e.height);
+	_specialization.extent = _extent = Extent2(e.width, e.height);
 	_readyForSubmit = false;
 	_renderTarget = move(target);
 	_density = density;
@@ -48,7 +48,7 @@ bool FrameRequest::init(const Rc<FrameEmitter> &emitter, Rc<ImageStorage> &&targ
 bool FrameRequest::init(const Rc<FrameEmitter> &emitter, Extent2 e, float density) {
 	_pool = Rc<PoolRef>::alloc();
 	_emitter = emitter;
-	_extent = Extent2(e.width, e.height);
+	_specialization.extent = _extent = Extent2(e.width, e.height);
 	_readyForSubmit = false;
 	_density = density;
 	return true;
@@ -65,7 +65,7 @@ bool FrameRequest::init(const Rc<Queue> &q, Extent2 extent, float density) {
 	_pool = Rc<PoolRef>::alloc();
 	_queue = q;
 	_queue->beginFrame(*this);
-	_extent = extent;
+	_specialization.extent = _extent = extent;
 	_density = density;
 	return true;
 }
@@ -73,7 +73,7 @@ bool FrameRequest::init(const Rc<Queue> &q, Extent2 extent, float density) {
 bool FrameRequest::init(const Rc<Queue> &q, const Rc<FrameEmitter> &emitter, Extent2 extent, float density) {
 	if (init(q)) {
 		_emitter = emitter;
-		_extent = extent;
+		_specialization.extent = _extent = extent;
 		_density = density;
 		_readyForSubmit = emitter->isReadyForSubmit();
 		return true;
@@ -103,6 +103,23 @@ void FrameRequest::addSignalDependencies(Vector<Rc<DependencyEvent>> &&deps) {
 			_signalDependencies.emplace_back(move(it));
 		}
 	}
+}
+
+void FrameRequest::addImageSpecialization(const ImageAttachment *image, gl::ImageInfoData &&data) {
+	auto it = _imageSpecialization.find(image);
+	if (it != _imageSpecialization.end()) {
+		it->second = move(data);
+	} else {
+		_imageSpecialization.emplace(image, data);
+	}
+}
+
+const gl::ImageInfoData *FrameRequest::getImageSpecialization(const ImageAttachment *image) const {
+	auto it = _imageSpecialization.find(image);
+	if (it != _imageSpecialization.end()) {
+		return &it->second;
+	}
+	return nullptr;
 }
 
 bool FrameRequest::addInput(const Attachment *a, Rc<AttachmentInputData> &&data) {
@@ -336,6 +353,9 @@ uint64_t FrameEmitter::getLastFrameTime() const {
 uint64_t FrameEmitter::getAvgFrameTime() const {
 	return _avgFrameTimeValue;
 }
+uint64_t FrameEmitter::getAvgFenceTime() const {
+	return _avgFenceIntervalValue;
+}
 
 bool FrameEmitter::isReadyForSubmit() const {
 	return _frames.empty() && _framesPending.empty();
@@ -357,6 +377,11 @@ void FrameEmitter::onFrameComplete(FrameHandle &frame) {
 	_lastFrameTime = frame.getTimeEnd() - frame.getTimeStart();
 	_avgFrameTime.addValue(frame.getTimeEnd() - frame.getTimeStart());
 	_avgFrameTimeValue = _avgFrameTime.getAverage(true);
+
+	if (auto t = frame.getSubmissionTime()) {
+		_avgFenceInterval.addValue(t);
+		_avgFenceIntervalValue = _avgFenceInterval.getAverage(true);
+	}
 
 	auto it = _framesPending.begin();
 	while (it != _framesPending.end()) {
@@ -509,15 +534,15 @@ void FrameEmitter::enableCacheAttachments(const Rc<FrameHandle> &req) {
 		list.emplace(it->getRenderQueue());
 	}
 
-	Extent2 targetExtent = req->getExtent();
+	auto targetSpec = req->getFrameSpecialization();
 
-	if (_cacheRenderQueue != list || targetExtent != _cacheExtent) {
+	if (_cacheRenderQueue != list || targetSpec != _cacheSpecialization) {
 		Set<gl::ImageInfoData> images;
 		for (auto &it : queues) {
 			for (auto &a : it->getRenderQueue()->getAttachments()) {
 				if (a->getType() == AttachmentType::Image) {
 					auto img = (ImageAttachment *)a.get();
-					auto data = img->getImageInfo();
+					gl::ImageInfoData data = req->getImageSpecialization(img);
 					data.extent = img->getSizeForFrame(*it);
 					images.emplace(data);
 
@@ -531,7 +556,7 @@ void FrameEmitter::enableCacheAttachments(const Rc<FrameHandle> &req) {
 		}
 
 		_cacheRenderQueue = list;
-		_cacheExtent = targetExtent;
+		_cacheSpecialization = targetSpec;
 
 		for (auto &it : images) {
 			auto iit = _cacheImages.find(it);

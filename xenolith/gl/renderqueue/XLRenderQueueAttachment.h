@@ -40,6 +40,9 @@ struct AttachmentDependencyInfo {
 	// FrameRenderPassState, after which attachment can be used on next renderpass
 	// Or Initial if no dependencies
 	FrameRenderPassState requiredRenderPassState = FrameRenderPassState::Initial;
+
+	// FrameRenderPassState that can be processed before attachment is acquired
+	FrameRenderPassState lockedRenderPassState = FrameRenderPassState::Initial;
 };
 
 class Attachment : public NamedRef {
@@ -130,6 +133,7 @@ public:
 	void setOps(AttachmentOps ops) { _ops = ops; }
 
 	FrameRenderPassState getRequiredRenderPassState() const { return _dependency.requiredRenderPassState; }
+	FrameRenderPassState getLockedRenderPassState() const { return _dependency.lockedRenderPassState; }
 
 	const AttachmentDependencyInfo &getDependency() const { return _dependency; }
 

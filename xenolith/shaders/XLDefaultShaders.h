@@ -32,6 +32,7 @@ extern SpanView<uint32_t> MaterialVert;
 extern SpanView<uint32_t> SdfTrianglesComp;
 extern SpanView<uint32_t> SdfImageComp;
 extern SpanView<uint32_t> ShadowMergeFrag;
+extern SpanView<uint32_t> ShadowMergeNullFrag;
 extern SpanView<uint32_t> ShadowMergeVert;
 
 }

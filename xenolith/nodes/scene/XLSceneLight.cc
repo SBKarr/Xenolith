@@ -20,30 +20,58 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_TESTS_UTILS_APPUTILSSTORAGETEST_H_
-#define TEST_SRC_TESTS_UTILS_APPUTILSSTORAGETEST_H_
+#include "XLSceneLight.h"
 
-#include "AppLayoutTest.h"
+namespace stappler::xenolith {
 
-namespace stappler::xenolith::app {
-
-class UtilsStorageTestComponentContainer;
-
-class UtilsStorageTest : public LayoutTest {
-public:
-	virtual ~UtilsStorageTest() { }
-
-	virtual bool init();
-
-	virtual void onEnter(Scene *) override;
-	virtual void onExit() override;
-
-protected:
-	using LayoutTest::init;
-
-	Rc<UtilsStorageTestComponentContainer> _container;
-};
-
+bool SceneLight::init(SceneLightType type, const Vec4 &normal, const Color4F &color, const Vec4 &data) {
+	_type = type;
+	_normal = normal;
+	_color = color;
+	_data = data;
+	return true;
 }
 
-#endif /* TEST_SRC_TESTS_UTILS_APPUTILSSTORAGETEST_H_ */
+bool SceneLight::init(SceneLightType type, const Vec2 &normal, float k, const Color4F &color, const Vec4 &data) {
+	_type = type;
+	_enable2dNormal = true;
+	_2dNormal = normal;
+	_k = k;
+	_color = color;
+	_data = data;
+	return true;
+}
+
+void SceneLight::onEnter(Scene *scene) {
+	if (_enable2dNormal) {
+		_normal = Vec4(Vec3(_2dNormal.x, -_2dNormal.y, 1.0f).normalize(), _k);
+	}
+
+	_running = true;
+}
+
+void SceneLight::onExit() {
+	_running = false;
+}
+
+void SceneLight::setNormal(const Vec4 &vec) {
+	_normal = vec;
+}
+
+void SceneLight::setColor(const Color4F &color) {
+	_color = color;
+}
+
+void SceneLight::setData(const Vec4 &data) {
+	_data = data;
+}
+
+void SceneLight::setName(StringView str) {
+	_name = str.str<Interface>();
+}
+
+void SceneLight::setTag(uint64_t tag) {
+	_tag = tag;
+}
+
+}

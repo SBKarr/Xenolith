@@ -641,21 +641,11 @@ static void MaterialPass_makeShadowPass(MaterialPass_Data &data, renderqueue::Qu
 
 	data.lightBufferArray = Rc<ShadowImageArrayAttachment>::create("LightArray", defaultExtent);
 
-	auto sdf = Rc<ShadowImageAttachment>::create("Sdf", defaultExtent);
-
 	builder.addPassInput(pass, 0, data.lightDataInput, AttachmentDependencyInfo());
 	builder.addPassInput(pass, 0, vertexInput, AttachmentDependencyInfo());
 	builder.addPassOutput(pass, 0, triangles, AttachmentDependencyInfo());
 
 	builder.addPassOutput(pass, 0, data.lightBufferArray, AttachmentDependencyInfo{
-		PipelineStage::ComputeShader, AccessType::ShaderWrite,
-		PipelineStage::ComputeShader, AccessType::ShaderWrite,
-
-		// can be reused after RenderPass is submitted
-		FrameRenderPassState::Submitted,
-	}, DescriptorType::StorageImage);
-
-	builder.addPassOutput(pass, 0, sdf, AttachmentDependencyInfo{
 		PipelineStage::ComputeShader, AccessType::ShaderWrite,
 		PipelineStage::ComputeShader, AccessType::ShaderWrite,
 
@@ -777,6 +767,7 @@ static void MaterialPass_makePresentPass(MaterialPass_Data &data, renderqueue::Q
 	if (data.lightBufferArray) {
 		auto shadowVert = builder.addProgramByRef("ShadowMergeVert", xenolith::shaders::ShadowMergeVert);
 		auto shadowFrag = builder.addProgramByRef("ShadowMergeFrag", xenolith::shaders::ShadowMergeFrag);
+		auto shadowNullFrag = builder.addProgramByRef("ShadowMergeNullFrag", xenolith::shaders::ShadowMergeNullFrag);
 
 		builder.addGraphicPipeline(pass, 0, MaterialPass::ShadowPipeline, Vector<SpecializationInfo>({
 			// no specialization required for vertex shader
@@ -786,7 +777,16 @@ static void MaterialPass_makePresentPass(MaterialPass_Data &data, renderqueue::Q
 				PredefinedConstant::SamplersArraySize,
 			})
 		}), PipelineMaterialInfo({
-			BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
+			BlendInfo(gl::BlendFactor::Zero, gl::BlendFactor::SrcColor, gl::BlendOp::Add,
+					gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
+			DepthInfo()
+		}));
+		builder.addGraphicPipeline(pass, 0, MaterialPass::ShadowPipelineNull, Vector<SpecializationInfo>({
+			// no specialization required for vertex shader
+			shadowVert,
+			shadowNullFrag,
+		}), PipelineMaterialInfo({
+			BlendInfo(gl::BlendFactor::Zero, gl::BlendFactor::SrcColor, gl::BlendOp::Add,
 					gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
 			DepthInfo()
 		}));
@@ -797,6 +797,7 @@ static void MaterialPass_makePresentPass(MaterialPass_Data &data, renderqueue::Q
 
 			// can be reused after RenderPass is submitted
 			FrameRenderPassState::Submitted,
+			FrameRenderPassState::Submission
 		}, DescriptorType::SampledImage);
 	}
 
@@ -916,39 +917,41 @@ Vector<VkCommandBuffer> MaterialPassHandle::doPrepareCommands(FrameHandle &handl
 			outputImageBarriers.size(), outputImageBarriers.data());
 	}
 
-	auto cIdx = _device->getQueueFamily(QueueOperations::Compute)->index;
-	if (cIdx != _pool->getFamilyIdx()) {
-		VkBufferMemoryBarrier transferBufferBarrier({
-			VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
-			VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
-			cIdx, _pool->getFamilyIdx(),
-			_lightsBuffer->getBuffer()->getBuffer(), 0, VK_WHOLE_SIZE,
-		});
+	if (_lightsBuffer->getLightsCount() && _lightsBuffer->getBuffer()) {
+		auto cIdx = _device->getQueueFamily(QueueOperations::Compute)->index;
+		if (cIdx != _pool->getFamilyIdx()) {
+			VkBufferMemoryBarrier transferBufferBarrier({
+				VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+				VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
+				cIdx, _pool->getFamilyIdx(),
+				_lightsBuffer->getBuffer()->getBuffer(), 0, VK_WHOLE_SIZE,
+			});
 
-		auto image = (Image *)_arrayImage->getImage()->getImage().get();
+			auto image = (Image *)_arrayImage->getImage()->getImage().get();
 
-		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-				0, nullptr,
-				1, &transferBufferBarrier,
-				1, image->getPendingBarrier());
-	} else {
-		// no need for buffer barrier, only switch image layout
+			table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+					0, nullptr,
+					1, &transferBufferBarrier,
+					1, image->getPendingBarrier());
+		} else {
+			// no need for buffer barrier, only switch image layout
 
-		auto image = (Image *)_arrayImage->getImage()->getImage().get();
-		VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, VK_REMAINING_ARRAY_LAYERS};
-		VkImageMemoryBarrier transferImageBarrier({
-			VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
-			VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-			VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-			image->getImage(), range
-		});
-		image->setPendingBarrier(transferImageBarrier);
+			auto image = (Image *)_arrayImage->getImage()->getImage().get();
+			VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, VK_REMAINING_ARRAY_LAYERS};
+			VkImageMemoryBarrier transferImageBarrier({
+				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
+				VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+				VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+				image->getImage(), range
+			});
+			image->setPendingBarrier(transferImageBarrier);
 
-		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-				0, nullptr,
-				0, nullptr,
-				1, &transferImageBarrier);
+			table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+					0, nullptr,
+					0, nullptr,
+					1, &transferImageBarrier);
+		}
 	}
 
 	_data->impl.cast<RenderPassImpl>()->perform(*this, buf, [&] {
@@ -1080,7 +1083,15 @@ void MaterialPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, Vk
 		);
 	}
 
-	auto pipeline = (GraphicPipeline *)_data->subpasses[0].graphicPipelines.get(StringView(MaterialPass::ShadowPipeline))->pipeline.get();
+	if (_lightsBuffer->getLightsCount() && _lightsBuffer->getBuffer()) {
+		auto pipeline = (GraphicPipeline *)_data->subpasses[0].graphicPipelines.get(StringView(MaterialPass::ShadowPipeline))->pipeline.get();
+
+		table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->getPipeline());
+	} else {
+		auto pipeline = (GraphicPipeline *)_data->subpasses[0].graphicPipelines.get(StringView(MaterialPass::ShadowPipelineNull))->pipeline.get();
+
+		table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->getPipeline());
+	}
 
 	viewport = VkViewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
 	table->vkCmdSetViewport(buf, 0, 1, &viewport);
@@ -1088,11 +1099,10 @@ void MaterialPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, Vk
 	scissorRect = VkRect2D{ { 0, 0}, { currentExtent.width, currentExtent.height } };
 	table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
 
-	uint32_t samplerIndex = 1;
+	uint32_t samplerIndex = 1; // linear filtering
 	table->vkCmdPushConstants(buf, pass->getPipelineLayout(),
 			VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(uint32_t), &samplerIndex);
 
-	table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->getPipeline());
 
 	table->vkCmdDrawIndexed(buf,
 		6, // indexCount

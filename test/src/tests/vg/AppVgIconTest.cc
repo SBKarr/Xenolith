@@ -21,7 +21,6 @@
  **/
 
 #include "AppVgIconTest.h"
-#include "XLGuiLayerRounded.h"
 
 namespace stappler::xenolith::app {
 
@@ -43,7 +42,6 @@ bool VgIconTest::init() {
 		_sprite->setOpacity(0.5f);
 		_sprite->setQuality(initialQuality);
 		_sprite->setScale(initialScale);
-		_sprite->setShadowIndex(0.5f);
 	} while (0);
 
 	do {
@@ -63,6 +61,7 @@ bool VgIconTest::init() {
 	_spriteLayer = addChild(Rc<LayerRounded>::create(Color::Grey_100, 20.0f), -1);
 	_spriteLayer->setContentSize(Size2(256, 256));
 	_spriteLayer->setAnchorPoint(Anchor::Middle);
+	_spriteLayer->setShadowIndex(1.0);
 
 	_label = addChild(Rc<Label>::create());
 	_label->setFontSize(32);

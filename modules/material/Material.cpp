@@ -20,30 +20,7 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_TESTS_UTILS_APPUTILSSTORAGETEST_H_
-#define TEST_SRC_TESTS_UTILS_APPUTILSSTORAGETEST_H_
+#include "XLDefine.h"
 
-#include "AppLayoutTest.h"
-
-namespace stappler::xenolith::app {
-
-class UtilsStorageTestComponentContainer;
-
-class UtilsStorageTest : public LayoutTest {
-public:
-	virtual ~UtilsStorageTest() { }
-
-	virtual bool init();
-
-	virtual void onEnter(Scene *) override;
-	virtual void onExit() override;
-
-protected:
-	using LayoutTest::init;
-
-	Rc<UtilsStorageTestComponentContainer> _container;
-};
-
-}
-
-#endif /* TEST_SRC_TESTS_UTILS_APPUTILSSTORAGETEST_H_ */
+#include "MaterialColorHct.cc"
+#include "MaterialColorScheme.cc"

@@ -45,13 +45,17 @@ public:
 	uint64_t getTimeEnd() const { return _timeEnd; }
 	uint64_t getOrder() const { return _order; }
 	uint64_t getGen() const { return _gen; }
+	uint64_t getSubmissionTime() const { return _submissionTime; }
 	gl::Loop *getLoop() const { return _loop; }
 	gl::Device *getDevice() const { return _device; }
 	const Rc<FrameEmitter> &getEmitter() const { return _request->getEmitter(); }
 	const Rc<Queue> &getQueue() const { return _request->getQueue(); }
 	Extent2 getExtent() const { return _request->getExtent(); }
+	const FrameAttachmentSpecialization &getFrameSpecialization() const { return _request->getFrameSpecialization(); }
 	const Rc<PoolRef> &getPool() const { return _pool; }
 	const Rc<gl::View> &getSwapchain() const { return _request->getSwapchain(); }
+
+	gl::ImageInfoData getImageSpecialization(const ImageAttachment *) const;
 
 	const Rc<ImageStorage> &getRenderTarget() const { return _request->getRenderTarget(); }
 	const Vector<Rc<DependencyEvent>> &getSignalDependencies() const { return _request->getSignalDependencies(); }
@@ -116,6 +120,7 @@ protected:
 	uint64_t _timeEnd = 0;
 	uint64_t _gen = 0;
 	uint64_t _order = 0;
+	uint64_t _submissionTime = 0;
 	std::atomic<uint32_t> _tasksRequired = 0;
 	uint32_t _tasksCompleted = 0;
 	uint32_t _queuesSubmitted = 0;

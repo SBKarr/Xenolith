@@ -135,9 +135,9 @@ bool FrameQueue::setup() {
 
 	for (auto &passIt : _renderPasses) {
 		for (auto &it : passIt.second.required) {
-			auto wIt = it.first->waiters.find(it.second);
-			if (wIt == it.first->waiters.end()) {
-				wIt = it.first->waiters.emplace(it.second, Vector<FramePassData *>()).first;
+			auto wIt = it.data->waiters.find(it.requiredState);
+			if (wIt == it.data->waiters.end()) {
+				wIt = it.data->waiters.emplace(it.requiredState, Vector<FramePassData *>()).first;
 			}
 			wIt->second.emplace_back(&passIt.second);
 		}
@@ -187,6 +187,22 @@ void FrameQueue::update() {
 			} else {
 				it = _renderPassesInitial.erase(it);
 			}
+		}
+	} while (0);
+
+	do {
+		auto awaitPasses = move(_awaitPasses);
+		_awaitPasses.clear();
+		_awaitPasses.reserve(awaitPasses.size());
+
+		auto it = awaitPasses.begin();
+		while (it != awaitPasses.end()) {
+			if (isRenderPassReadyForState(*it->first, FrameRenderPassState(toInt(it->second) + 1))) {
+				updateRenderPassState(*it->first, it->second);
+			} else {
+				_awaitPasses.emplace_back(*it);
+			}
+			++ it;
 		}
 	} while (0);
 
@@ -243,20 +259,23 @@ const FramePassData *FrameQueue::getRenderPass(const PassData *p) const {
 
 void FrameQueue::addRequiredPass(FramePassData &pass, const FramePassData &required,
 		const FrameAttachmentData &attachment, const AttachmentDescriptor &desc) {
-	if (desc.getRequiredRenderPassState() == FrameRenderPassState::Initial) {
+	auto requiredState = desc.getRequiredRenderPassState();
+	auto lockedState = desc.getLockedRenderPassState();
+	if (requiredState == FrameRenderPassState::Initial) {
 		return;
 	}
 
 	auto lb = std::lower_bound(pass.required.begin(), pass.required.end(), &required,
-			[&] (const Pair<FramePassData *, FrameRenderPassState> &l, const FramePassData *r) {
-		return l.first < r;
+			[&] (const FramePassDataRequired &l, const FramePassData *r) {
+		return l.data < r;
 	});
 	if (lb == pass.required.end()) {
-		pass.required.emplace_back((FramePassData *)&required, desc.getRequiredRenderPassState());
-	} else if (lb->first != &required) {
-		pass.required.emplace(lb, (FramePassData *)&required, desc.getRequiredRenderPassState());
+		pass.required.emplace_back((FramePassData *)&required, requiredState, lockedState);
+	} else if (lb->data != &required) {
+		pass.required.emplace(lb, (FramePassData *)&required, requiredState, lockedState);
 	} else {
-		lb->second = FrameRenderPassState(std::max(toInt(lb->second), toInt(desc.getRequiredRenderPassState())));
+		lb->requiredState = FrameRenderPassState(std::max(toInt(lb->requiredState), toInt(requiredState)));
+		lb->lockedState = FrameRenderPassState(std::min(toInt(lb->lockedState), toInt(lockedState)));
 	}
 }
 
@@ -355,21 +374,21 @@ void FrameQueue::onAttachmentAcquire(FrameAttachmentData &attachment) {
 			attachment.image = _frame->getRenderTarget();
 		}
 
-		if (!attachment.image) {
+		if (!attachment.image && attachment.handle->isAvailable(*this)) {
 			attachment.image = _loop->acquireImage(img, attachment.handle.get(), attachment.extent);
-		}
 
-		if (!attachment.image) {
-			invalidate(attachment);
-			return;
-		}
+			if (!attachment.image) {
+				invalidate(attachment);
+				return;
+			}
 
-		_autorelease.emplace_front(attachment.image);
-		if (attachment.image->getSignalSem()) {
-			_autorelease.emplace_front(attachment.image->getSignalSem());
-		}
-		if (attachment.image->getWaitSem()) {
-			_autorelease.emplace_front(attachment.image->getWaitSem());
+			_autorelease.emplace_front(attachment.image);
+			if (attachment.image->getSignalSem()) {
+				_autorelease.emplace_front(attachment.image->getSignalSem());
+			}
+			if (attachment.image->getWaitSem()) {
+				_autorelease.emplace_front(attachment.image->getWaitSem());
+			}
 		}
 
 		if (isResourcePending(attachment)) {
@@ -417,9 +436,15 @@ void FrameQueue::onAttachmentRelease(FrameAttachmentData &attachment) {
 }
 
 bool FrameQueue::isRenderPassReady(const FramePassData &data) const {
+	return isRenderPassReadyForState(data, FrameRenderPassState::Initial);
+}
+
+bool FrameQueue::isRenderPassReadyForState(const FramePassData &data, FrameRenderPassState state) const {
 	for (auto &it : data.required) {
-		if (toInt(it.first->state) < toInt(it.second)) {
-			return false;
+		if (toInt(it.data->state) < toInt(it.requiredState)) {
+			if (state >= it.lockedState) {
+				return false;
+			}
 		}
 	}
 
@@ -437,6 +462,11 @@ void FrameQueue::updateRenderPassState(FramePassData &data, FrameRenderPassState
 	}
 
 	if (toInt(data.state) >= toInt(state)) {
+		return;
+	}
+
+	if (!isRenderPassReadyForState(data, FrameRenderPassState(toInt(state) + 1))) {
+		_awaitPasses.emplace_back(&data, state);
 		return;
 	}
 
@@ -549,16 +579,16 @@ void FrameQueue::onRenderPassOwned(FramePassData &data) {
 
 		if (view) {
 			auto e = view->getExtent();
-			if (e.width != data.extent.width || e.height != data.extent.height) {
-				_invalidate = true;
-				attachmentsAcquired = false;
-				return;
-			}
-
 			switch (imgDesc->getDescriptorType()) {
 			case DescriptorType::Unknown:
 			case DescriptorType::InputAttachment:
 			case DescriptorType::Attachment:
+				if (e.width != data.extent.width || e.height != data.extent.height) {
+					XL_FRAME_QUEUE_LOG("Fail to acquire ImageView: invalid extent for RenderPass");
+					_invalidate = true;
+					attachmentsAcquired = false;
+					return;
+				}
 				imageViews.emplace_back(move(view));
 				break;
 			default:
@@ -738,10 +768,13 @@ void FrameQueue::onRenderPassSubmitted(FramePassData &data) {
 	}
 
 	data.handle->getRenderPass()->releaseForFrame(*this);
-
+	if (!data.submitTime) {
+		data.submitTime = platform::device::_clock(platform::device::ClockType::Monotonic);
+	}
 }
 
 void FrameQueue::onRenderPassComplete(FramePassData &data) {
+	_submissionTime += platform::device::_clock(platform::device::ClockType::Monotonic) - data.submitTime;
 	if (_finalized) {
 		invalidate(data);
 		return;

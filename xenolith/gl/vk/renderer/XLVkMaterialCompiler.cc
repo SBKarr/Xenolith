@@ -332,8 +332,14 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(F
 
 	table->vkCmdCopyBuffer(buf, buffers.stagingBuffer->getBuffer(), buffers.targetBuffer->getBuffer(), 1, &indexesCopy);
 
-	VkPipelineStageFlags targetStages = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-	if (_pool->getClass() == QueueOperations::Transfer) {
+	VkPipelineStageFlags targetStages = 0;
+	if ((_pool->getClass() & QueueOperations::Graphics) != QueueOperations::None) {
+		targetStages |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	}
+	if ((_pool->getClass() & QueueOperations::Compute) != QueueOperations::None) {
+		targetStages |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+	}
+	if (!targetStages) {
 		targetStages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 	}
 

@@ -34,6 +34,7 @@ enum class LayoutName {
 	ActionTests,
 	VgTests,
 	UtilsTests,
+	MaterialTests,
 	Config,
 
 	GeneralUpdateTest = 256 * 1,
@@ -42,6 +43,7 @@ enum class LayoutName {
 	GeneralTransparencyTest,
 	GeneralAutofitTest,
 	GeneralTemporaryResourceTest,
+	GeneralShadowTest,
 
 	InputTouchTest = 256 * 2,
 	InputKeyboardTest,
@@ -57,6 +59,8 @@ enum class LayoutName {
 	VgIconList,
 
 	UtilsStorageTest = 256 * 5,
+
+	MaterialColorPickerTest = 256 * 6,
 };
 
 struct MenuData {
@@ -70,6 +74,7 @@ extern Vector<MenuData> s_inputTestsMenu;
 extern Vector<MenuData> s_actionTestsMenu;
 extern Vector<MenuData> s_vgTestsMenu;
 extern Vector<MenuData> s_utilsTestsMenu;
+extern Vector<MenuData> s_materialTestsMenu;
 
 LayoutName getRootLayoutForLayout(LayoutName);
 StringView getLayoutNameId(LayoutName);

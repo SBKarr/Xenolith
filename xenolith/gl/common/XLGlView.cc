@@ -204,7 +204,7 @@ uint64_t View::getAvgFrameTime() const {
 }
 
 uint64_t View::getAvgFenceTime() const {
-	return _avgFenceIntervalValue.load();
+	return _frameEmitter->getAvgFenceTime();
 }
 
 uint64_t View::getFrameInterval() const {
@@ -218,13 +218,6 @@ void View::setFrameInterval(uint64_t value) {
 		_frameInterval = value;
 		onFrameRate(this, int64_t(_frameInterval));
 	}, this, true);
-}
-
-void View::pushFrameTime(uint64_t frame, uint64_t time) {
-	auto dt = platform::device::_clock(platform::device::ClockType::Monotonic) - time;
-
-	_avgFenceInterval.addValue(dt);
-	_avgFenceIntervalValue = _avgFenceInterval.getAverage(true);
 }
 
 }

@@ -65,7 +65,7 @@ static constexpr bool VGProcessIntersectsInDrawer = false;
 
 inline uint16_t getGlThreadCount() {
 #if DEBUG
-	return 2;
+	return math::clamp(uint16_t(std::thread::hardware_concurrency()), uint16_t(2), uint16_t(4));
 #else
 	return math::clamp(uint16_t(std::thread::hardware_concurrency()), uint16_t(4), uint16_t(16));
 #endif
@@ -73,7 +73,7 @@ inline uint16_t getGlThreadCount() {
 
 inline uint16_t getMainThreadCount() {
 #if DEBUG
-	return 2;
+	return math::clamp(uint16_t(std::thread::hardware_concurrency() / 2), uint16_t(2), uint16_t(4));
 #else
 	return math::clamp(uint16_t(std::thread::hardware_concurrency() / 2), uint16_t(2), uint16_t(16));
 #endif
