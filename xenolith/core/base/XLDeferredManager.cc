@@ -23,6 +23,7 @@
 #include "XLDeferredManager.h"
 #include "XLApplication.h"
 #include "XLVectorCanvas.h"
+#include "XLFontLibrary.h"
 
 namespace stappler::xenolith {
 
@@ -83,6 +84,74 @@ Rc<LabelDeferredResult> DeferredManager::runLabel(Label::FormatSpec *format, con
 		});
 	}, ret);
 	return ret;
+}
+
+struct DeferredFontRequestsData : Ref {
+	virtual ~DeferredFontRequestsData() { }
+
+	DeferredFontRequestsData(const Rc<font::FontLibrary> &lib, const Vector<Pair<Rc<font::FontFaceObject>, Vector<char16_t>>> &req)
+	: library(lib) {
+		for (auto &it : req) {
+			nrequests += it.second.size();
+		}
+
+		fontRequests.reserve(nrequests);
+
+		for (uint32_t i = 0; i < req.size(); ++ i) {
+			faces.emplace_back(req[i].first);
+			for (auto &it : req[i].second) {
+				fontRequests.emplace_back(i, it);
+			}
+		}
+	}
+
+	void runThread() {
+		Vector<Rc<font::FontFaceObjectHandle>> threadFaces; threadFaces.resize(faces.size(), nullptr);
+		uint32_t target = current.fetch_add(1);
+		uint32_t c = 0;
+		while (target < nrequests) {
+			auto &v = fontRequests[target];
+			if (!threadFaces[v.first]) {
+				threadFaces[v.first] = library->makeThreadHandle(faces[v.first]);
+			}
+
+			threadFaces[v.first]->acquireTexture(v.second, [&] (const font::CharTexture &tex) {
+				onTexture(target, tex);
+			});
+			c = complete.fetch_add(1);
+			target = current.fetch_add(1);
+		}
+		threadFaces.clear();
+		if (c == nrequests - 1) {
+			onComplete();
+		}
+	}
+
+	std::atomic<uint32_t> current = 0;
+	std::atomic<uint32_t> complete = 0;
+	uint32_t nrequests = 0;
+	Vector<Rc<font::FontFaceObject>> faces;
+	Vector<Pair<uint32_t, char16_t>> fontRequests;
+
+	Rc<font::FontLibrary> library;
+	Function<void(uint32_t idx, const font::CharTexture &texData)> onTexture;
+	Function<void()> onComplete;
+};
+
+void DeferredManager::runFontRenderer(const Rc<font::FontLibrary> &lib,
+		const Vector<Pair<Rc<font::FontFaceObject>, Vector<char16_t>>> &req,
+		Function<void(uint32_t idx, const font::CharTexture &texData)> &&onTexture,
+		Function<void()> &&onComplete) {
+
+	auto data = Rc<DeferredFontRequestsData>::alloc(lib, req);
+	data->onTexture = move(onTexture);
+	data->onComplete = move(onComplete);
+
+	for (uint32_t i = 0; i < getThreadCount(); ++ i) {
+		perform([data] () {
+			data->runThread();
+		});
+	}
 }
 
 }

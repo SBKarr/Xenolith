@@ -27,6 +27,20 @@ namespace stappler::xenolith::font {
 
 constexpr uint32_t LAYOUT_PADDING  = 1;
 
+String FontSpecializationVector::getSpecializationArgs() const {
+	StringStream out;
+	out << "?size=" << fontSize.get();
+	out << "&weight=" << fontWeight.get();
+	out << "&width=" << fontStretch.get();
+	switch (fontStyle.get()) {
+	case FontStyle::Normal.get(): out << "&style=normal"; break;
+	case FontStyle::Italic.get(): out << "&style=italic"; break;
+	default: out << "&style=" << fontStyle.get(); break;
+	}
+	out << "&density=" << density;
+	return out.str();
+}
+
 String getFontConfigName(const StringView &fontFamily, FontSize fontSize, FontStyle fontStyle, FontWeight fontWeight,
 		FontStretch fontStretch, FontVariant fontVariant, bool caps) {
 	auto size = fontSize;
@@ -37,56 +51,17 @@ String getFontConfigName(const StringView &fontFamily, FontSize fontSize, FontSt
 	if (caps && fontVariant == FontVariant::SmallCaps) {
 		size -= FontSize(size.get() / 5);
 	}
-	if (size.get() == 0) {
-		if (size == FontSize::XXSmall) {
-			name += ".xxs";
-		} else if (size == FontSize::XSmall) {
-			name += ".xs";
-		} else if (size == FontSize::Small) {
-			name += ".s";
-		} else if (size == FontSize::Medium) {
-			name += ".m";
-		} else if (size == FontSize::Large) {
-			name += ".l";
-		} else if (size == FontSize::XLarge) {
-			name += ".xl";
-		} else if (size == FontSize::XXLarge) {
-			name += ".xxl";
-		} else {
-			name += "." + toString(size.get());
-		}
+
+	name += "." + toString(size.get());
+
+	switch (fontStyle.get()) {
+	case FontStyle::Normal.get(): name += ".n"; break;
+	case FontStyle::Italic.get(): name += ".i"; break;
+	default: name += "."; name += toString(fontStyle.get()); break;
 	}
 
-	switch (fontStyle) {
-	case FontStyle::Normal: name += ".n"; break;
-	case FontStyle::Italic: name += ".i"; break;
-	case FontStyle::Oblique: name += ".o"; break;
-	}
-
-	switch (fontWeight) {
-	case FontWeight::Normal: name += ".n"; break;
-	case FontWeight::Bold: name += ".b"; break;
-	case FontWeight::W100: name += ".100"; break;
-	case FontWeight::W200: name += ".200"; break;
-	case FontWeight::W300: name += ".300"; break;
-	case FontWeight::W500: name += ".500"; break;
-	case FontWeight::W600: name += ".600"; break;
-	case FontWeight::W800: name += ".800"; break;
-	case FontWeight::W900: name += ".900"; break;
-	}
-
-	switch (fontStretch) {
-	case FontStretch::Normal: name += ".n"; break;
-	case FontStretch::UltraCondensed: name += ".ucd"; break;
-	case FontStretch::ExtraCondensed: name += ".ecd"; break;
-	case FontStretch::Condensed: name += ".cd"; break;
-	case FontStretch::SemiCondensed: name += ".scd"; break;
-	case FontStretch::SemiExpanded: name += ".sex"; break;
-	case FontStretch::Expanded: name += ".ex"; break;
-	case FontStretch::ExtraExpanded: name += ".eex"; break;
-	case FontStretch::UltraExpanded: name += ".uex"; break;
-	}
-
+	name += toString(".", fontWeight.get());
+	name += toString(".", fontStretch.get());
 	return name;
 }
 
@@ -127,29 +102,11 @@ FontParameters FontParameters::create(const String &str) {
 			state = Weight;
 			break;
 		case Weight:
-			if (r.is("n")) { ret.fontWeight = FontWeight::Normal; }
-			else if (r.is("b")) { ret.fontWeight = FontWeight::Bold; }
-			else if (r.is("100")) { ret.fontWeight = FontWeight::W100; }
-			else if (r.is("200")) { ret.fontWeight = FontWeight::W200; }
-			else if (r.is("300")) { ret.fontWeight = FontWeight::W300; }
-			else if (r.is("400")) { ret.fontWeight = FontWeight::W400; }
-			else if (r.is("500")) { ret.fontWeight = FontWeight::W500; }
-			else if (r.is("600")) { ret.fontWeight = FontWeight::W600; }
-			else if (r.is("700")) { ret.fontWeight = FontWeight::W700; }
-			else if (r.is("800")) { ret.fontWeight = FontWeight::W800; }
-			else if (r.is("900")) { ret.fontWeight = FontWeight::W900; }
+			ret.fontWeight = FontWeight(r.readInteger(10).get(400));
 			state = Stretch;
 			break;
 		case Stretch:
-			if (r.is("n")) { ret.fontStretch = FontStretch::Normal; }
-			else if (r.is("ucd")) { ret.fontStretch = FontStretch::UltraCondensed; }
-			else if (r.is("ecd")) { ret.fontStretch = FontStretch::ExtraCondensed; }
-			else if (r.is("cd")) { ret.fontStretch = FontStretch::Condensed; }
-			else if (r.is("scd")) { ret.fontStretch = FontStretch::SemiCondensed; }
-			else if (r.is("sex")) { ret.fontStretch = FontStretch::SemiExpanded; }
-			else if (r.is("ex")) { ret.fontStretch = FontStretch::Expanded; }
-			else if (r.is("eex")) { ret.fontStretch = FontStretch::ExtraExpanded; }
-			else if (r.is("uex")) { ret.fontStretch = FontStretch::UltraExpanded; }
+			ret.fontStretch = FontStretch(r.readInteger(10).get(100 << 1));
 			state = Overflow;
 			break;
 		default: break;

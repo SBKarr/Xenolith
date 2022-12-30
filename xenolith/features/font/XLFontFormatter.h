@@ -31,7 +31,7 @@ typedef struct _HyphenDict HyphenDict;
 namespace stappler::xenolith::font {
 
 class FontController;
-class FontSizedLayout;
+class FontLayout;
 
 struct LineSpec { // 12 bytes
 	uint32_t start = 0;
@@ -53,7 +53,7 @@ struct RangeSpec {
 	uint16_t height = 0;
 
 	Metrics metrics;
-	Rc<FontSizedLayout> layout;
+	Rc<FontLayout> layout;
 };
 
 class FormatSpec : public Ref {
@@ -170,13 +170,12 @@ public:
 		Maximize,
 	};
 
-public:
 	Formatter();
 
 	// You MUST ensure that output exists until formatter is finalized
-	Formatter(FormatSpec *, float density = 1.0f);
+	Formatter(FormatSpec *);
 
-	void init(FormatSpec *, float density = 1.0f);
+	void init(FormatSpec *);
 
 	void setLinePositionCallback(const LinePositionCallback &);
 	void setWidth(uint16_t width);
@@ -191,7 +190,6 @@ public:
 	void setFillerChar(char16_t);
 	void setHyphens(HyphenMap *);
 	void setRequest(ContentRequest);
-	void setFontScale(float);
 
 	void begin(uint16_t indent, uint16_t blockMargin = 0);
 	bool read(const FontParameters &f, const TextParameters &s, WideStringView str, uint16_t front = 0, uint16_t back = 0);
@@ -200,14 +198,11 @@ public:
 
 	void finalize();
 	void reset(FormatSpec *);
-	void reset(FormatSpec *, float density);
 
 	uint16_t getHeight() const;
 	uint16_t getWidth() const;
 	uint16_t getMaxLineX() const;
 	uint16_t getLineHeight() const;
-
-	float getDensity() const;
 
 	FormatSpec *getOutput() const;
 
@@ -218,8 +213,6 @@ protected:
 	void parseWhiteSpace(WhiteSpace whiteSpacePolicy);
 	void parseFontLineHeight(uint16_t);
 	bool updatePosition(uint16_t &linePos, uint16_t &lineHeight);
-
-	//FontLayoutId getLayout(uint16_t pos) const;
 
 	uint16_t getAdvance(const CharSpec &c) const;
 	uint16_t getAdvance(uint16_t pos) const;
@@ -247,17 +240,14 @@ protected:
 
 	void updateLineHeight(uint16_t first, uint16_t last);
 
-	FormatSpec *  output = nullptr;
+	FormatSpec * _output = nullptr;
 	HyphenMap * _hyphens = nullptr;
 
-	size_t charPosition = 0;
+	size_t _charPosition = 0;
 
-	float density = 1.0f;
-	float fontScale = nan();
+	Rc<FontLayout> _primaryFontLayout;
 
-	Rc<FontSizedLayout> primaryFontId;
-
-	TextParameters textStyle;
+	TextParameters _textStyle;
 
 	bool preserveLineBreaks = false;
 	bool collapseSpaces = true;

@@ -20,44 +20,77 @@
  THE SOFTWARE.
  **/
 
-#ifndef XENOLITH_CORE_BASE_XLDEFERREDMANAGER_H_
-#define XENOLITH_CORE_BASE_XLDEFERREDMANAGER_H_
+#ifndef MODULES_MATERIAL_MATERIAL_H_
+#define MODULES_MATERIAL_MATERIAL_H_
 
-#include "SPThreadTaskQueue.h"
-#include "XLVectorResult.h"
-#include "XLLabel.h"
+#include "XLDefine.h"
 
-namespace stappler::xenolith {
+namespace stappler::xenolith::material {
 
-class DeferredManager : protected thread::TaskQueue {
-public:
-	virtual ~DeferredManager();
-
-	DeferredManager(Application *, StringView);
-
-	bool init(uint32_t threadCount);
-	void cancel();
-
-	void update();
-
-	Rc<VectorCanvasDeferredResult> runVectorCavas(Rc<VectorImageData> &&image, Size2 targetSize, Color4F color, float quality);
-	Rc<LabelDeferredResult> runLabel(Label::FormatSpec *format, const Color4F &);
-
-	void runFontRenderer(const Rc<font::FontLibrary> &,
-			const Vector<Pair<Rc<font::FontFaceObject>, Vector<char16_t>>> &req,
-			Function<void(uint32_t idx, const font::CharTexture &texData)> &&,
-			Function<void()> &&);
-
-	using mem_std::AllocBase::operator new;
-	using mem_std::AllocBase::operator delete;
-
-	using Ref::release;
-	using Ref::retain;
-
-protected:
-	Application *_application = nullptr;
+enum class ThemeType {
+	LightTheme,
+	DarkTheme,
 };
+
+enum class ColorRole {
+	Primary,
+	OnPrimary,
+	PrimaryContainer,
+	OnPrimaryContainer,
+	Secondary,
+	OnSecondary ,
+	SecondaryContainer,
+	OnSecondaryContainer,
+	Tertiary,
+	OnTertiary,
+	TertiaryContainer,
+	OnTertiaryContainer,
+	Error,
+	OnError,
+	ErrorContainer,
+	OnErrorContainer,
+	Background,
+	OnBackground,
+	Surface,
+	OnSurface,
+	SurfaceVariant,
+	OnSurfaceVariant,
+	Outline,
+	OutlineVariant,
+	Shadow,
+	Scrim,
+	InverseSurface,
+	InverseOnSurface,
+	InversePrimary,
+	Max
+};
+
+enum class Elevation {
+	Level0,	// 0dp
+	Level1, // 1dp 5%
+	Level2, // 3dp 8%
+	Level3, // 6dp 11%
+	Level4, // 8dp 12%
+	Level5, // 12dp 14%
+};
+
+enum class ShapeFamily {
+	RoundedCorners,
+	CutCorners,
+};
+
+enum class ShapeStyle {
+	None, // 0dp
+	ExtraSmall, // 4dp
+	Small, // 8dp
+	Medium, // 12dp
+	Large, // 16dp
+	ExtraLarge, // 28dp
+	Full // .
+};
+
+ColorRole getColorRoleOn(ColorRole, ThemeType);
 
 }
 
-#endif /* XENOLITH_CORE_BASE_XLDEFERREDMANAGER_H_ */
+#endif /* MODULES_MATERIAL_MATERIAL_H_ */

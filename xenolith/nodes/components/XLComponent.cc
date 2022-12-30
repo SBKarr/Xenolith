@@ -33,8 +33,12 @@ bool Component::init() {
 	return true;
 }
 
-void Component::onAdded() { }
-void Component::onRemoved() { }
+void Component::onAdded(Node *owner) {
+	_owner = owner;
+}
+void Component::onRemoved() {
+	_owner = nullptr;
+}
 
 void Component::onEnter(Scene *) {
 	_running = true;
@@ -52,10 +56,6 @@ void Component::onReorderChildDirty() { }
 
 bool Component::isRunning() const {
 	return _running;
-}
-
-void Component::setOwner(Node *owner) {
-	_owner = owner;
 }
 
 bool Component::isEnabled() const {

@@ -53,7 +53,7 @@ public:
 
 	virtual ~ScrollController();
 
-	virtual void onAdded() override;
+	virtual void onAdded(Node *owner) override;
 	virtual void onRemoved() override;
 	virtual void onContentSizeDirty() override;
 

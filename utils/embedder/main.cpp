@@ -26,10 +26,11 @@
 #include "SPValid.h"
 
 static constexpr auto HELP_STRING(
-R"HelpString(embedder -input <filename> --output <filename> --name <name>
+R"HelpString(embedder --input <filename> --output <filename> --name <name>
 Options:
     -v (--verbose)
     -h (--help)
+	-c (--compress)
 	-f (--force))HelpString");
 
 namespace stappler::xenolith::embedder {
@@ -43,6 +44,8 @@ static int parseOptionSwitch(Value &ret, char c, const char *str) {
 		ret.setBool(true, "verbose");
 	} else if (c == 'f') {
 		ret.setBool(true, "force");
+	} else if (c == 'c') {
+		ret.setBool(true, "compress");
 	}
 	return 1;
 }
@@ -54,6 +57,8 @@ static int parseOptionString(Value &ret, const StringView &str, int argc, const 
 		ret.setBool(true, "verbose");
 	} else if (str == "force") {
 		ret.setBool(true, "force");
+	} else if (str == "compress") {
+		ret.setBool(true, "compress");
 	} else if (str == "input") {
 		ret.setString(StringView(*argv), "input");
 		return 2;
@@ -130,8 +135,15 @@ SP_EXTERN_C int _spMain(argc, argv) {
 	}
 
 	if (!filesystem::exists(input)) {
-		std::cerr << "Input file '" << input << "' not exists\n";
-		return -1;
+		if (filesystem::exists(filesystem::currentDir<Interface>(input))) {
+			input = filesystem::currentDir<Interface>(input);
+			if (!filepath::isAbsolute(output)) {
+				output = filesystem::currentDir<Interface>(output);
+			}
+		} else {
+			std::cerr << "Input file '" << input << "' not exists\n";
+			return -1;
+		}
 	}
 
 	if (filesystem::exists(output)) {
@@ -148,6 +160,10 @@ SP_EXTERN_C int _spMain(argc, argv) {
 	}
 
 	auto data = filesystem::readIntoMemory<Interface>(input);
+
+	if (opts.getBool("compress")) {
+		data = data::compress<Interface>(data.data(), data.size(), data::EncodeFormat::Compression::LZ4HCCompression, false);
+	}
 
 	if (data.size() % sizeof(uint32_t) == 0) {
 		auto view = makeSpanView((uint32_t *)data.data(), data.size() / sizeof(uint32_t));
@@ -168,7 +184,7 @@ SP_EXTERN_C int _spMain(argc, argv) {
 		filesystem::write(output, stream.str());
 
 	} else {
-		std::cerr << "Input stride is invalid\n";
+		std::cerr << "Input stride is invalid: " << data.size() % sizeof(uint32_t) << "\n";
 		return -1;
 	}
 

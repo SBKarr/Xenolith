@@ -28,7 +28,7 @@ LOCAL_TOOLKIT := $(abspath ../xenolith/xenolith.mk)
 LOCAL_ROOT = .
 
 LOCAL_SRCS_DIRS :=  src tests
-LOCAL_SRCS_OBJS := shaders/XLAppShaders.cpp ../resources/fonts/XLResourceFontSource.cpp
+LOCAL_SRCS_OBJS := shaders/XLAppShaders.cpp
 
 LOCAL_INCLUDES_DIRS := src tests
 LOCAL_INCLUDES_OBJS := shaders ../resources/fonts

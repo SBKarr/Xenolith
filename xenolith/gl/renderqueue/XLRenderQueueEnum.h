@@ -24,6 +24,7 @@
 #define XENOLITH_GL_RENDERQUEUE_XLRENDERQUEUEENUM_H_
 
 #include "XLDefine.h"
+#include "XLPlatform.h"
 
 namespace stappler::xenolith::renderqueue {
 
@@ -254,6 +255,7 @@ struct DependencyEvent : public Ref {
 	virtual ~DependencyEvent() { }
 
 	uint32_t id = GetNextId();
+	uint64_t clock = platform::device::_clock(platform::device::ClockType::Monotonic);
 	std::atomic<uint32_t> signaled = 1;
 	std::atomic<bool> submitted = false;
 	bool success = true;

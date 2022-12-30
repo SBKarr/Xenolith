@@ -82,57 +82,37 @@ uint64_t Framebuffer::getHash() const {
 
 static std::atomic<uint64_t> s_ImageViewCurrentIndex = 1;
 
-bool ImageAtlas::init(size_t count, Extent2 imageSize) {
+bool ImageAtlas::init(uint32_t count, uint32_t objectSize, Extent2 imageSize) {
+	_objectSize = objectSize;
 	_imageExtent = imageSize;
 	_names.reserve(count);
-	_objects.reserve(count);
+	_data.reserve(count * objectSize);
 	return true;
 }
 
-Vec2 ImageAtlas::getObjectByName(uint32_t id) const {
+uint8_t *ImageAtlas::getObjectByName(uint32_t id) {
 	auto it = _names.find(id);
 	if (it != _names.end()) {
-		if (it->second < _objects.size()) {
-			return _objects[it->second];
+		if (it->second < _data.size() / _objectSize) {
+			return _data.data() + _objectSize * it->second;
 		}
 	}
-	return Vec2();
+	return nullptr;
 }
 
-Vec2 ImageAtlas::getObjectByOrder(uint32_t id) const {
-	if (id < _objects.size()) {
-		return _objects[id];
+uint8_t *ImageAtlas::getObjectByOrder(uint32_t order) {
+	if (order < _data.size() / _objectSize) {
+		return _data.data() + _objectSize * order;
 	}
-	return Vec2();
+	return nullptr;
 }
 
-bool ImageAtlas::getObjectByName(Vec2 &target, uint32_t id) const {
-	auto it = _names.find(id);
-	if (it != _names.end()) {
-		if (it->second < _objects.size()) {
-			target = _objects[it->second];
-			return true;
-		}
-	}
-	return false;
-}
+void ImageAtlas::addObject(uint32_t id, void *data) {
+	auto off = _data.size();
+	_data.resize(off + _objectSize);
+	memcpy(_data.data() + off, data,  _objectSize);
 
-bool ImageAtlas::getObjectByOrder(Vec2 &target, uint32_t id) const {
-	if (id < _objects.size()) {
-		target = _objects[id];
-		return true;
-	}
-	return false;
-}
-
-void ImageAtlas::addObject(uint32_t idx, Vec2 obj) {
-	_objects.emplace_back(obj);
-	auto num = _objects.size() - 1;
-	_names.emplace(idx, num);
-}
-
-Extent2 ImageAtlas::getImageExtent() const {
-	return _imageExtent;
+	_names.emplace(id, off / _objectSize);
 }
 
 bool ImageObject::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr) {

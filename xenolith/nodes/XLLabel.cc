@@ -24,6 +24,7 @@
 #include "XLEventListener.h"
 #include "XLApplication.h"
 #include "XLDeferredManager.h"
+#include "XLFontLayout.h"
 
 namespace stappler::xenolith {
 
@@ -442,9 +443,9 @@ Label::LineSpec Label::getLine(uint32_t num) const {
 }
 
 uint16_t Label::getFontHeight() const {
-	auto l = _source->getLayout(_style.font, _density);
+	auto l = _source->getLayout(_style.font);
 	if (l.get()) {
-		return _source->getFontHeight(l);
+		return l->getFontHeight();
 	}
 	return 0;
 }
@@ -465,7 +466,7 @@ void Label::updateVertexes() {
 
 	if (!_standalone) {
 		for (auto &it : _format->ranges) {
-			auto dep = _source->addTextureChars(it.layout->getId(), SpanView<font::CharSpec>(_format->chars, it.start, it.count));
+			auto dep = _source->addTextureChars(it.layout, SpanView<font::CharSpec>(_format->chars, it.start, it.count));
 			if (dep) {
 				emplace_ordered(_pendingDependencies, move(dep));
 			}

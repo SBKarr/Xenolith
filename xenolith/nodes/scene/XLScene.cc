@@ -101,6 +101,10 @@ void Scene::renderRequest(const Rc<FrameRequest> &req) {
 
 	render(info);
 
+	if (!info.commands->waitDependencies.empty()) {
+		_application->scheduleUpdate();
+	}
+
 	_director->getView()->getLoop()->performOnGlThread(
 			[req, q = _queue,
 			 commands = move(info.commands),
@@ -153,6 +157,7 @@ void Scene::render(RenderFrameInfo &info) {
 	auto eventDispatcher = _director->getInputDispatcher();
 
 	info.input = eventDispatcher->acquireNewStorage();
+	info.userdata = _frameUserdata;
 
 	visitGeometry(info, NodeFlags::None);
 	visitDraw(info, NodeFlags::None);

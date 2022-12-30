@@ -474,9 +474,8 @@ bool Node::addComponentItem(Component *com) {
 	XLASSERT(com != nullptr, "Argument must be non-nil");
 	XLASSERT(com->getOwner() == nullptr, "Component already added. It can't be added again");
 
-	com->setOwner(this);
 	_components.push_back(com);
-	com->onAdded();
+	com->onAdded(this);
 	if (this->isRunning()) {
 		com->onEnter(_scene);
 	}
@@ -495,7 +494,6 @@ bool Node::removeComponent(Component *com) {
 				com->onExit();
 			}
 			com->onRemoved();
-			com->setOwner(nullptr);
 			_components.erase(iter);
 			return true;
 		}
@@ -515,7 +513,6 @@ bool Node::removeComponentByTag(uint64_t tag) {
 				com->onExit();
 			}
 			com->onRemoved();
-			com->setOwner(nullptr);
 			_components.erase(iter);
 			return true;
 		}
@@ -536,7 +533,6 @@ bool Node::removeAllComponentByTag(uint64_t tag) {
 				com->onExit();
 			}
 			com->onRemoved();
-			com->setOwner(nullptr);
 			iter = _components.erase(iter);
 		} else {
 			++ iter;
@@ -549,7 +545,6 @@ bool Node::removeAllComponentByTag(uint64_t tag) {
 				com->onExit();
 			}
 			com->onRemoved();
-			com->setOwner(nullptr);
 			_components.erase(iter);
 			return true;
 		}
@@ -563,7 +558,6 @@ void Node::removeAllComponents() {
 			iter->onExit();
 		}
 		iter->onRemoved();
-		iter->setOwner(nullptr);
 	}
 
 	_components.clear();

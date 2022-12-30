@@ -91,6 +91,9 @@ public:
 	virtual void removeAllLights();
 	virtual void removeAllLightsByType(SceneLightType);
 
+	virtual void setFrameUserdata(Ref *ref) { _frameUserdata = ref; }
+	virtual Ref *getFrameUserdata() const { return _frameUserdata; }
+
 protected:
 	using Node::init;
 
@@ -158,6 +161,8 @@ protected:
 	Vector<Rc<SceneLight>> _lights;
 	Map<uint64_t, SceneLight *> _lightsByTag;
 	Map<StringView, SceneLight *> _lightsByName;
+
+	Rc<Ref> _frameUserdata;
 };
 
 }

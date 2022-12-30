@@ -77,6 +77,7 @@ public:
 
 protected:
 	virtual Vector<VkCommandBuffer> doPrepareCommands(FrameHandle &) override;
+	virtual void doSubmitted(FrameHandle &, Function<void(bool)> &&, bool) override;
 	virtual void doComplete(FrameQueue &, Function<void(bool)> &&, bool) override;
 
 	Rc<gl::MaterialSet> _outputData;
@@ -386,11 +387,16 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(F
 	return Vector<VkCommandBuffer>();
 }
 
-void MaterialCompilationRenderPassHandle::doComplete(FrameQueue &queue, Function<void(bool)> &&func, bool success) {
+void MaterialCompilationRenderPassHandle::doSubmitted(FrameHandle &frame, Function<void(bool)> &&func, bool success) {
 	if (success) {
 		_materialAttachment->getInputData()->attachment->setMaterials(_outputData);
 	}
 
+	QueuePassHandle::doSubmitted(frame, move(func), success);
+	frame.signalDependencies(success);
+}
+
+void MaterialCompilationRenderPassHandle::doComplete(FrameQueue &queue, Function<void(bool)> &&func, bool success) {
 	QueuePassHandle::doComplete(queue, move(func), success);
 }
 

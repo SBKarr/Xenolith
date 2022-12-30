@@ -31,8 +31,8 @@ ScrollController::Item::Item(NodeFunction &&f, Vec2 pos, Size2 size, int z, Stri
 
 ScrollController::~ScrollController() { }
 
-void ScrollController::onAdded() {
-	Component::onAdded();
+void ScrollController::onAdded(Node *owner) {
+	Component::onAdded(owner);
 	_scroll = dynamic_cast<ScrollViewBase *>(getOwner());
 	if (_scroll) {
 		_root = _scroll->getRoot();

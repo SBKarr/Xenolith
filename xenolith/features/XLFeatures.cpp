@@ -24,6 +24,8 @@ THE SOFTWARE.
 
 #include "XLFontStyle.cc"
 #include "XLFontFormatter.cc"
+#include "XLFontLayout.cc"
+#include "XLFontController.cc"
 #include "XLFontLibrary.cc"
 #include "XLFontFace.cc"
 #include "XLLabelParameters.cc"

@@ -22,6 +22,7 @@
 
 #include "XLVkRenderFontQueue.h"
 #include "XLFontFace.h"
+#include "XLDeferredManager.h"
 
 namespace stappler::xenolith::vk {
 
@@ -46,10 +47,16 @@ public:
 	const Vector<VkBufferImageCopy> &getBufferData() const { return _bufferData; }
 
 protected:
-	void writeBufferData(gl::RenderFontInput::FontRequest &, VkBufferImageCopy *target);
 	void writeAtlasData(FrameHandle &);
 
 	uint32_t nextBufferOffset(size_t blockSize);
+
+	struct CharTextureData {
+		int16_t x = 0;
+		int16_t y = 0;
+		uint16_t width = 0;
+		uint16_t height = 0;
+	};
 
 	Rc<gl::RenderFontInput> _input;
 	uint32_t _counter = 0;
@@ -60,6 +67,7 @@ protected:
 	Rc<DeviceBuffer> _frontBuffer;
 	Rc<gl::ImageAtlas> _atlas;
 	Vector<VkBufferImageCopy> _bufferData;
+	Vector<CharTextureData> _textureTarget;
 	Extent2 _imageExtent;
 	Mutex _mutex;
 	Function<void(bool)> _onInput;
@@ -99,6 +107,7 @@ public:
 protected:
 	virtual Vector<VkCommandBuffer> doPrepareCommands(FrameHandle &) override;
 
+	virtual void doSubmitted(FrameHandle &, Function<void(bool)> &&, bool) override;
 	virtual void doComplete(FrameQueue &, Function<void(bool)> &&, bool) override;
 
 	RenderFontAttachmentHandle *_fontAttachment = nullptr;
@@ -207,64 +216,45 @@ void RenderFontAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentInp
 		}
 
 		_bufferData.resize(totalCount + 1);
+		_textureTarget.resize(totalCount + 1);
 
-		size_t offset = 0;
+		auto t = platform::device::_clock(platform::device::ClockType::Monotonic);
+
 		_onInput = move(cb); // see RenderFontAttachmentHandle::writeAtlasData
-		for (auto &it : _input->requests) {
-			handle.performInQueue([this, req = &it, target = _bufferData.data() + offset] (FrameHandle &) -> bool {
-				writeBufferData(*req, target);
-				return true;
-			}, [this] (FrameHandle &handle, bool success) {
-				if (success) {
-					-- _counter;
-					if (_counter == 0) {
-						writeAtlasData(handle);
-					}
-				} else {
-					if (_onInput) {
-						_onInput(false);
-						_onInput = nullptr;
-					}
-				}
-			}, nullptr, "RenderFontAttachmentHandle::submitInput");
-			offset += it.second.size();
-		}
-	});
-}
 
-void RenderFontAttachmentHandle::writeBufferData(gl::RenderFontInput::FontRequest &req, VkBufferImageCopy *target) {
-	for (size_t i = 0; i < req.second.size(); ++ i) {
-		req.first->acquireTexture(req.second[i], [&] (uint8_t *ptr, uint32_t width, uint32_t rows, int pitch) {
-			auto size = rows * std::abs(pitch);
-			uint32_t offset = nextBufferOffset(rows * std::abs(pitch));
+		auto deferred = handle.getLoop()->getApplication()->getDeferredManager();
+
+		deferred->runFontRenderer(_input->library, _input->requests, [this] (uint32_t idx, const font::CharTexture &texData) {
+			auto size = texData.bitmapRows * std::abs(texData.pitch);
+			uint32_t offset = nextBufferOffset(texData.bitmapRows * std::abs(texData.pitch));
 			if (offset + size > Allocator::PageSize * 2) {
 				return;
 			}
 
-			if (pitch == 0) {
-				pitch = width;
-			}
-
-			if (pitch >= 0) {
-				_frontBuffer->setData(BytesView(ptr, pitch * rows), offset);
+			auto ptr = texData.bitmap;
+			if (texData.pitch >= 0) {
+				_frontBuffer->setData(BytesView(ptr, texData.pitch * texData.bitmapRows), offset);
 			} else {
-				for (size_t i = 0; i < rows; ++ i) {
-					_frontBuffer->setData(BytesView(ptr, -pitch), offset + i * (-pitch));
-					ptr += pitch;
+				for (size_t i = 0; i < texData.bitmapRows; ++ i) {
+					_frontBuffer->setData(BytesView(ptr, -texData.pitch), offset + i * (-texData.pitch));
+					ptr += texData.pitch;
 				}
 			}
 
-			*target = VkBufferImageCopy({
+			_bufferData[idx] = VkBufferImageCopy({
 				VkDeviceSize(offset),
 				uint32_t(/*pitch*/0),
-				uint32_t(font::CharLayout::getObjectId(req.first->getId(), req.second[i], font::FontAnchor::BottomLeft)),
+				uint32_t(font::CharLayout::getObjectId(texData.fontID, texData.charID, font::FontAnchor::BottomLeft)),
 				VkImageSubresourceLayers({VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}),
 				VkOffset3D({0, 0, 0}),
-				VkExtent3D({width, rows, 1})
+				VkExtent3D({texData.bitmapWidth, texData.bitmapRows, 1})
 			});
-			++ target;
+			_textureTarget[idx] = CharTextureData{texData.x, texData.y, texData.width, texData.height};
+		}, [this, t, handle = Rc<FrameHandle>(&handle)] {
+			writeAtlasData(*handle);
+			std::cout << "RenderFontAttachmentHandle::submitInput: " << platform::device::_clock(platform::device::ClockType::Monotonic) - t << "\n";
 		});
-	}
+	});
 }
 
 void RenderFontAttachmentHandle::writeAtlasData(FrameHandle &handle) {
@@ -293,9 +283,14 @@ void RenderFontAttachmentHandle::writeAtlasData(FrameHandle &handle) {
 		_bufferData[_bufferData.size() - 1].imageOffset =
 				VkOffset3D({int32_t(_imageExtent.width - 1), int32_t(_imageExtent.height - 1), 0});
 
-		auto atlas = Rc<gl::ImageAtlas>::create(_bufferData.size() * 4, _imageExtent);
+		auto atlas = Rc<gl::ImageAtlas>::create(_bufferData.size() * 4, sizeof(font::FontAtlasValue), _imageExtent);
 
-		for (auto &d : _bufferData) {
+		font::FontAtlasValue data[4];
+
+		for (uint32_t idx = 0; idx < _bufferData.size(); ++ idx) {
+			auto &d = _bufferData[idx];
+			auto &tex = _textureTarget[idx];
+
 			auto id = d.bufferImageHeight;
 			d.bufferImageHeight = 0;
 
@@ -304,14 +299,22 @@ void RenderFontAttachmentHandle::writeAtlasData(FrameHandle &handle) {
 			const float w = float(d.imageExtent.width);
 			const float h = float(d.imageExtent.height);
 
-			atlas->addObject(font::CharLayout::getObjectId(id, font::FontAnchor::BottomLeft),
-					Vec2(x / _imageExtent.width, y / _imageExtent.height));
-			atlas->addObject(font::CharLayout::getObjectId(id, font::FontAnchor::TopLeft),
-					Vec2(x / _imageExtent.width, (y + h) / _imageExtent.height));
-			atlas->addObject(font::CharLayout::getObjectId(id, font::FontAnchor::TopRight),
-					Vec2((x + w) / _imageExtent.width, (y + h) / _imageExtent.height));
-			atlas->addObject(font::CharLayout::getObjectId(id, font::FontAnchor::BottomRight),
-					Vec2((x + w) / _imageExtent.width, y / _imageExtent.height));
+			data[0].pos = Vec2(tex.x, tex.y);
+			data[0].tex = Vec2(x / _imageExtent.width, y / _imageExtent.height);
+
+			data[1].pos = Vec2(tex.x, tex.y + tex.height);
+			data[1].tex = Vec2(x / _imageExtent.width, (y + h) / _imageExtent.height);
+
+			data[2].pos = Vec2(tex.x + tex.width, tex.y + tex.height);
+			data[2].tex = Vec2((x + w) / _imageExtent.width, (y + h) / _imageExtent.height);
+
+			data[3].pos = Vec2(tex.x + tex.width, tex.y);
+			data[3].tex = Vec2((x + w) / _imageExtent.width, y / _imageExtent.height);
+
+			atlas->addObject(font::CharLayout::getObjectId(id, font::FontAnchor::BottomLeft), &data[0]);
+			atlas->addObject(font::CharLayout::getObjectId(id, font::FontAnchor::TopLeft), &data[1]);
+			atlas->addObject(font::CharLayout::getObjectId(id, font::FontAnchor::TopRight), &data[2]);
+			atlas->addObject(font::CharLayout::getObjectId(id, font::FontAnchor::BottomRight), &data[3]);
 		}
 
 		_atlas = atlas;
@@ -558,11 +561,11 @@ Vector<VkCommandBuffer> RenderFontRenderPassHandle::doPrepareCommands(FrameHandl
 	return ret;
 }
 
-void RenderFontRenderPassHandle::doComplete(FrameQueue &queue, Function<void(bool)> &&func, bool success) {
+void RenderFontRenderPassHandle::doSubmitted(FrameHandle &frame, Function<void(bool)> &&func, bool success) {
 	if (success) {
 		auto &input = _fontAttachment->getInput();
-		input->image->updateInstance(*queue.getLoop(), _targetImage, Rc<gl::ImageAtlas>(_fontAttachment->getAtlas()),
-				queue.getFrame()->getSignalDependencies());
+		input->image->updateInstance(*frame.getLoop(), _targetImage, Rc<gl::ImageAtlas>(_fontAttachment->getAtlas()),
+				frame.getSignalDependencies());
 
 		if (input->output) {
 			auto region = _outBuffer->map(0, _outBuffer->getSize(), true);
@@ -571,6 +574,11 @@ void RenderFontRenderPassHandle::doComplete(FrameQueue &queue, Function<void(boo
 		}
 	}
 
+	QueuePassHandle::doSubmitted(frame, move(func), success);
+	frame.signalDependencies(success);
+}
+
+void RenderFontRenderPassHandle::doComplete(FrameQueue &queue, Function<void(bool)> &&func, bool success) {
 	QueuePassHandle::doComplete(queue, move(func), success);
 }
 

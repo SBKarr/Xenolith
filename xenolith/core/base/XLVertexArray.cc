@@ -164,8 +164,7 @@ VertexArray::Quad & VertexArray::Quad::setColor(std::initializer_list<Color4F> &
 VertexArray::Quad & VertexArray::Quad::drawChar(const font::Metrics &m, const font::CharLayout &l, int16_t charX, int16_t charY,
 		const Color4B &color, font::TextDecoration, uint16_t face) {
 
-	setGeometry(Vec4(charX + l.xOffset, charY - (l.yOffset + l.height) - m.descender, 0.0f, 1.0f),
-			Size2(l.width, l.height));
+	setGeometry(Vec4(charX, charY - m.descender, 0.0f, 1.0f), Size2(0, 0)); // char placing based on atlas data
 	setColor(Color4F(color));
 
 	gl::Vertex_V4F_V4F_T2F2U *data = const_cast<gl::Vertex_V4F_V4F_T2F2U *>(vertexes.data());

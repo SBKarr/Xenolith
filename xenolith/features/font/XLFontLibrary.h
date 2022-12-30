@@ -23,188 +23,34 @@
 #ifndef XENOLITH_FEATURES_FONT_XLFONTLIBRARY_H_
 #define XENOLITH_FEATURES_FONT_XLFONTLIBRARY_H_
 
-#include "XLResourceCache.h"
-#include "XLFontFace.h"
+#include "XLFontController.h"
+#include <bitset>
 
 namespace stappler::xenolith::font {
 
-class FontFaceObject;
-class FontFaceData;
-class FontLibrary;
-class FontSizedLayout;
-
-class FontController : public Ref {
+class FontFaceObjectHandle : public Ref {
 public:
-	static EventHeader onLoaded;
-	static EventHeader onFontSourceUpdated;
+	virtual ~FontFaceObjectHandle();
 
-	class FontLayout;
+	bool init(const Rc<FontLibrary> &, Rc<FontFaceObject> &&, Function<void(const FontFaceObjectHandle *)> &&onDestroy);
 
-	struct FontSource {
-		String fontFilePath;
-		Bytes fontMemoryData;
-		BytesView fontExternalData;
-		Function<Bytes()> fontCallback;
-		Rc<FontFaceData> data;
-	};
+	FT_Face getFace() const { return _face->getFace(); }
 
-	struct FamilyQuery {
-		String family;
-		FontStyle style;
-		FontWeight weight;
-		FontStretch stretch;
-		Vector<const FontSource *> sources;
-		Vector<Pair<FontSize, FontCharString>> chars;
-	};
-
-	class Builder {
-	public:
-		struct Data;
-
-		~Builder();
-
-		Builder(StringView);
-
-		Builder(Builder &&);
-		Builder &operator=(Builder &&);
-
-		Builder(const Builder &) = delete;
-		Builder &operator=(const Builder &) = delete;
-
-		StringView getName() const;
-
-		const FontSource * addFontSource(StringView name, BytesView data);
-		const FontSource * addFontSource(StringView name, Bytes && data);
-		const FontSource * addFontSource(StringView name, FilePath data);
-		const FontSource * addFontSource(StringView name, Function<Bytes()> &&cb);
-
-		const FontSource *getFontSource(StringView) const;
-
-		const FamilyQuery * addFontFaceQuery(StringView family, FontStyle, FontWeight, FontStretch, const FontSource *,
-				Vector<Pair<FontSize,FontCharString>> &&chars = Vector<Pair<FontSize, FontCharString>>(), bool front = false);
-
-		const FamilyQuery * addFontFaceQuery(StringView family, FontStyle, FontWeight, FontStretch, Vector<const FontSource *> &&,
-				Vector<Pair<FontSize,FontCharString>> &&chars = Vector<Pair<FontSize, FontCharString>>(), bool front = false);
-
-		bool addAlias(StringView newAlias, StringView familyName);
-
-		Vector<const FamilyQuery *> getFontFamily(StringView family) const;
-		Map<String, String> getAliases() const;
-
-		Data *getData() const { return _data; }
-
-	protected:
-		void addSources(FamilyQuery *, Vector<const FontSource *> &&, bool front);
-		void addChars(FamilyQuery *, Vector<Pair<FontSize, FontCharString>> &&);
-
-		Data *_data;
-	};
-
-	virtual ~FontController();
-
-	bool init(const Rc<FontLibrary> &);
-
-	void addFont(StringView family, FontStyle, FontWeight, FontStretch, Rc<FontFaceData> &&, bool front = false);
-	void addFont(StringView family, FontStyle, FontWeight, FontStretch, Vector<Rc<FontFaceData>> &&, bool front = false);
-
-	// replaces previous alias
-	bool addAlias(StringView newAlias, StringView familyName);
-
-	bool isLoaded() const { return _loaded; }
-	const Rc<gl::DynamicImage> &getImage() const { return _image; }
-	const Rc<Texture> &getTexture() const { return _texture; }
-
-	FontLayoutId getLayout(const FontParameters &f, float scale);
-	void addString(FontLayoutId, const FontCharString &);
-	uint16_t getFontHeight(FontLayoutId)  const;
-	int16_t getKerningAmount(FontLayoutId, char16_t first, char16_t second, uint16_t face) const;
-	Metrics getMetrics(FontLayoutId)  const;
-	CharLayout getChar(FontLayoutId, char16_t, uint16_t &face) const;
-	StringView getFontName(FontLayoutId) const;
-
-	Rc<FontSizedLayout> getSizedLayout(FontLayoutId) const;
-
-	Rc<renderqueue::DependencyEvent> addTextureChars(FontLayoutId, SpanView<CharSpec>);
-
-	uint32_t getFamilyIndex(StringView) const;
-	StringView getFamilyName(uint32_t idx) const;
-
-	void update();
+	bool acquireTexture(char16_t, const Callback<void(const CharTexture &)> &);
 
 protected:
-	friend class FontLibrary;
-
-	void setImage(Rc<gl::DynamicImage> &&);
-	void setLoaded(bool);
-
-	FontLayout * getFontLayout(const FontParameters &style);
-
-	void setAliases(Map<String, String> &&);
-
-	bool _loaded = false;
-	String _defaultFontFamily = "default";
-	Rc<Texture> _texture;
-	Rc<gl::DynamicImage> _image;
 	Rc<FontLibrary> _library;
-
-	Map<String, String> _aliases;
-	Vector<StringView> _familiesNames;
-	Map<StringView, Vector<FontLayout *>> _families;
-	HashMap<StringView, Rc<FontLayout>> _layouts;
-	Vector<FontSizedLayout *> _sizes;
-	Rc<renderqueue::DependencyEvent> _dependency;
-
-	std::atomic<uint16_t> _nextId = 1;
-	bool _dirty = false;
-	mutable Mutex _mutex;
-	mutable Mutex _sizesMutex;
-};
-
-// TODO: should be immutable object
-class FontSizedLayout : public Ref {
-public:
-	virtual ~FontSizedLayout() { }
-	FontSizedLayout() { }
-
-	bool init(FontSize, String &&, FontLayoutId, FontController::FontLayout *, Rc<FontFaceObject> &&);
-	bool init(FontSize, String &&, FontLayoutId, FontController::FontLayout *, Vector<Rc<FontFaceObject>> &&);
-
-	FontSize getSize() const { return _size; }
-	StringView getName() const { return _name; }
-	FontLayoutId getId() const { return _id; }
-	FontController::FontLayout *getLayout() const { return _layout; }
-	const Vector<Rc<FontFaceObject>> &getFaces() const { return _faces; }
-
-	bool isComplete() const;
-
-	bool addString(const FontCharString &, Vector<char16_t> &failed) const;
-	uint16_t getFontHeight() const;
-	int16_t getKerningAmount(char16_t first, char16_t second, uint16_t face) const;
-	Metrics getMetrics() const;
-	CharLayout getChar(char16_t, uint16_t &face) const;
-	StringView getFontName() const;
-
-	bool addTextureChars(SpanView<CharSpec>) const;
-
-	// void prefixFonts(size_t count);
-
-protected:
-	FontSize _size;
-	String _name;
-	FontLayoutId _id;
-	FontController::FontLayout *_layout = nullptr;
-	Metrics _metrics;
-	Vector<Rc<FontFaceObject>> _faces;
+	Rc<FontFaceObject> _face;
+	Function<void(const FontFaceObjectHandle *)> _onDestroy;
 };
 
 class FontLibrary : public Ref {
 public:
 	enum class DefaultFontName {
 		None,
-		RobotoMono_Bold,
-		RobotoMono_BoldItalic,
-		RobotoMono_Italic,
-		RobotoMono_Regular,
+		RobotoFlex_VariableFont,
+		RobotoMono_VariableFont,
+		RobotoMono_Italic_VariableFont,
 	};
 
 	struct FontData {
@@ -237,12 +83,12 @@ public:
 
 	const Application *getApplication() const { return _application; }
 
-	Rc<FontFaceData> openFontData(StringView, const Callback<FontData()> & = nullptr);
+	Rc<FontFaceData> openFontData(StringView, FontLayoutParameters params, const Callback<FontData()> & = nullptr);
 
-	Rc<FontFaceObject> openFontFace(StringView, FontSize, const Callback<FontData()> &);
-	Rc<FontFaceObject> openFontFace(const Rc<FontFaceData> &, FontSize);
+	Rc<FontFaceObject> openFontFace(StringView, const FontSpecializationVector &, const Callback<FontData()> &);
+	Rc<FontFaceObject> openFontFace(const Rc<FontFaceData> &, const FontSpecializationVector &);
 
-	void update();
+	void update(uint64_t clock);
 
 	FontController::Builder makeDefaultControllerBuilder(StringView);
 
@@ -250,6 +96,11 @@ public:
 
 	void updateImage(const Rc<gl::DynamicImage> &, Vector<Pair<Rc<FontFaceObject>, Vector<char16_t>>> &&,
 			Rc<renderqueue::DependencyEvent> &&);
+
+	uint16_t getNextId();
+	void releaseId(uint16_t);
+
+	Rc<FontFaceObjectHandle> makeThreadHandle(const Rc<FontFaceObject> &);
 
 protected:
 	FT_Face newFontFace(BytesView);
@@ -266,15 +117,17 @@ protected:
 	bool _active = false;
 
 	Mutex _mutex;
-	uint16_t _nextId = 0;
+	std::shared_mutex _sharedMutex;
 	Map<StringView, Rc<FontFaceObject>> _faces;
 	Map<StringView, Rc<FontFaceData>> _data;
+	Map<FontFaceObject *, Map<std::thread::id, Rc<FontFaceObjectHandle>>> _threads;
 	FT_Library _library = nullptr;
 
 	const Application *_application = nullptr;
 	Rc<gl::Loop> _loop; // for texture streaming
 	Rc<renderqueue::Queue> _queue;
 	Vector<ImageQuery> _pendingImageQueries;
+	std::bitset<1024 * 16> _fontIds;
 };
 
 }

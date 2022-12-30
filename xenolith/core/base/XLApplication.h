@@ -94,7 +94,7 @@ public:
 	// - update thread queue
 	// - check for network status
 	// - ckeck if DeviceIdentifier was acquired
-	virtual void update(uint64_t dt);
+	virtual void update(uint64_t clock, uint64_t dt);
 
 	// Run application with parsed command line data
 	virtual int run(Value &&);

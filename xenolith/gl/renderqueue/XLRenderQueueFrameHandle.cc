@@ -353,6 +353,10 @@ void FrameHandle::waitForInput(FrameQueue &queue, const Rc<AttachmentHandle> &a,
 	_request->waitForInput(queue, a, move(cb));
 }
 
+void FrameHandle::signalDependencies(bool success) {
+	_request->signalDependencies(*_loop, success);
+}
+
 void FrameHandle::onQueueInvalidated(FrameQueue &) {
 	++ _queuesCompleted;
 	invalidate();

@@ -33,6 +33,19 @@ using Metric = stappler::vg::Metric;
 
 using EnumSize = uint8_t;
 
+enum class FontVariableAxis {
+	None,
+	Weight = 1 << 0, // wght
+	Width = 1 << 1, // wdth
+	Italic = 1 << 2, // ital
+	Slant = 1 << 3, // slnt
+	OpticalSize = 1 << 4, // opsz
+
+	Stretch = Width,
+};
+
+SP_DEFINE_ENUM_AS_MASK(FontVariableAxis)
+
 enum class Autofit : EnumSize {
 	None,
 	Width,
@@ -84,45 +97,47 @@ enum class VerticalAlign : EnumSize {
 	Bottom
 };
 
-enum class FontStyle : EnumSize {
-	Normal,
-	Italic,
-	Oblique,
+// slnt axis or special value for Italic
+struct FontStyle : ValueWrapper<int16_t, class FontWeightFlag> {
+	static const FontStyle Normal;
+	static const FontStyle Italic;
+	static const FontStyle Oblique;
+
+	static constexpr FontStyle FromDegrees(float d) {
+		return FontStyle(std::floor(d * 64.0f));
+	}
+
+	using ValueWrapper::ValueWrapper;
 };
 
-enum class FontWeight : EnumSize {
-	W100,
-	W200,
-	W300,
-	W400,
-	W500,
-	W600,
-	W700,
-	W800,
-	W900,
-	Thin = W100,
-	ExtraLight = W200,
-	Light = W300,
-	Normal = W400,
-	Regular = W400,
-	Medium = W500,
-	SemiBold = W600,
-	Bold = W700,
-	ExtraBold = W800,
-	Heavy = W900,
-	Black = W900,
+struct FontWeight : ValueWrapper<uint16_t, class FontWeightFlag> {
+	static const FontWeight Thin;
+	static const FontWeight ExtraLight;
+	static const FontWeight Light;
+	static const FontWeight Normal;
+	static const FontWeight Regular;
+	static const FontWeight Medium;
+	static const FontWeight SemiBold;
+	static const FontWeight Bold;
+	static const FontWeight ExtraBold;
+	static const FontWeight Heavy;
+	static const FontWeight Black;
+
+	using ValueWrapper::ValueWrapper;
 };
 
-enum class FontStretch : EnumSize {
-	UltraCondensed,
-	ExtraCondensed,
-	Condensed,
-	SemiCondensed,
-	Normal,
-	SemiExpanded,
-	Expanded,
-	ExtraExpanded,
-	UltraExpanded
+struct FontStretch : ValueWrapper<uint16_t, class FontStretchFlag> {
+	static const FontStretch UltraCondensed;
+	static const FontStretch ExtraCondensed;
+	static const FontStretch Condensed;
+	static const FontStretch SemiCondensed;
+	static const FontStretch Normal;
+	static const FontStretch SemiExpanded;
+	static const FontStretch Expanded;
+	static const FontStretch ExtraExpanded;
+	static const FontStretch UltraExpanded;
+
+	using ValueWrapper::ValueWrapper;
 };
 
 enum class FontVariant : EnumSize {
@@ -170,16 +185,32 @@ struct TextParameters {
 	inline bool operator != (const TextParameters &other) const = default;
 };
 
-struct FontParameters {
-	static FontParameters create(const String &);
-
+struct FontLayoutParameters {
 	FontStyle fontStyle = FontStyle::Normal;
 	FontWeight fontWeight = FontWeight::Normal;
 	FontStretch fontStretch = FontStretch::Normal;
+
+	inline bool operator == (const FontLayoutParameters &other) const = default;
+	inline bool operator != (const FontLayoutParameters &other) const = default;
+};
+
+struct FontSpecializationVector : FontLayoutParameters {
+	FontSize fontSize = FontSize(14);
+	float density = 1.0f;
+
+	String getSpecializationArgs() const;
+
+	inline bool operator == (const FontSpecializationVector &other) const = default;
+	inline bool operator != (const FontSpecializationVector &other) const = default;
+};
+
+struct FontParameters : FontSpecializationVector {
+	static FontParameters create(const String &);
+
 	FontVariant fontVariant = FontVariant::Normal;
 	ListStyleType listStyleType = ListStyleType::None;
-	FontSize fontSize = FontSize::Medium;
 	StringView fontFamily;
+	bool persistent = false;
 
 	String getConfigName(bool caps = false) const;
 	FontParameters getSmallCaps() const;
@@ -191,6 +222,28 @@ struct FontParameters {
 String getFontConfigName(const StringView &fontFamily, FontSize fontSize, FontStyle fontStyle, FontWeight fontWeight,
 		FontStretch fontStretch, FontVariant fontVariant, bool caps);
 
+constexpr FontStretch FontStretch::UltraCondensed = FontStretch(50 << 1);
+constexpr FontStretch FontStretch::ExtraCondensed = FontStretch((62 << 1) | 1);
+constexpr FontStretch FontStretch::Condensed = FontStretch(75 << 1);
+constexpr FontStretch FontStretch::SemiCondensed = FontStretch((87 << 1) | 1);
+constexpr FontStretch FontStretch::Normal = FontStretch(100 << 1);
+constexpr FontStretch FontStretch::SemiExpanded = FontStretch((112 << 1) | 1);
+constexpr FontStretch FontStretch::Expanded = FontStretch(125 << 1);
+constexpr FontStretch FontStretch::ExtraExpanded = FontStretch(150 << 1);
+constexpr FontStretch FontStretch::UltraExpanded = FontStretch(200 << 1);
+
+constexpr FontWeight FontWeight::Thin = FontWeight(100);
+constexpr FontWeight FontWeight::ExtraLight = FontWeight(200);
+constexpr FontWeight FontWeight::Light = FontWeight(300);
+constexpr FontWeight FontWeight::Normal = FontWeight(400);
+constexpr FontWeight FontWeight::Regular = FontWeight(400);
+constexpr FontWeight FontWeight::Medium = FontWeight(500);
+constexpr FontWeight FontWeight::SemiBold = FontWeight(600);
+constexpr FontWeight FontWeight::Bold = FontWeight(700);
+constexpr FontWeight FontWeight::ExtraBold = FontWeight(800);
+constexpr FontWeight FontWeight::Heavy = FontWeight(900);
+constexpr FontWeight FontWeight::Black = FontWeight(1000);
+
 constexpr FontSize FontSize::XXSmall = FontSize(uint16_t(8));
 constexpr FontSize FontSize::XSmall = FontSize(uint16_t(10));
 constexpr FontSize FontSize::Small = FontSize(uint16_t(12));
@@ -198,6 +251,10 @@ constexpr FontSize FontSize::Medium = FontSize(uint16_t(14));
 constexpr FontSize FontSize::Large = FontSize(uint16_t(16));
 constexpr FontSize FontSize::XLarge = FontSize(uint16_t(20));
 constexpr FontSize FontSize::XXLarge = FontSize(uint16_t(24));
+
+constexpr FontStyle FontStyle::Normal = FontStyle(0);
+constexpr FontStyle FontStyle::Italic = FontStyle(minOf<int16_t>());
+constexpr FontStyle FontStyle::Oblique = FontStyle(-10 << 6);
 
 using FontLayoutId = ValueWrapper<uint16_t, class FontLayoutIdTag>;
 
@@ -228,11 +285,11 @@ struct CharLayout final {
 	static FontAnchor getAnchorForObject(uint32_t);
 
 	char16_t charID = 0;
-	int16_t xOffset = 0;
-	int16_t yOffset = 0;
 	uint16_t xAdvance = 0;
-	uint16_t width;
-	uint16_t height;
+	//int16_t xOffset = 0;
+	//int16_t yOffset = 0;
+	//uint16_t width;
+	//uint16_t height;
 
 	operator char16_t() const { return charID; }
 };
@@ -245,14 +302,22 @@ struct CharSpec final {
 };
 
 struct CharTexture final {
+	uint16_t fontID = 0;
 	char16_t charID = 0;
-	uint16_t x = 0;
-	uint16_t y = 0;
+	int16_t x = 0;
+	int16_t y = 0;
 	uint16_t width = 0;
 	uint16_t height = 0;
-	uint8_t texture = maxOf<uint8_t>();
 
-	operator char16_t() const { return charID; }
+	uint32_t bitmapWidth;
+	uint32_t bitmapRows;
+	int pitch;
+	uint8_t *bitmap;
+};
+
+struct FontAtlasValue {
+	Vec2 pos;
+	Vec2 tex;
 };
 
 struct FontCharString final {
@@ -279,16 +344,6 @@ struct EmplaceCharInterface {
 
 Extent2 emplaceChars(const EmplaceCharInterface &, const SpanView<void *> &,
 		float totalSquare = std::numeric_limits<float>::quiet_NaN());
-
-inline bool operator< (const CharTexture &t, const CharTexture &c) { return t.charID < c.charID; }
-inline bool operator> (const CharTexture &t, const CharTexture &c) { return t.charID > c.charID; }
-inline bool operator<= (const CharTexture &t, const CharTexture &c) { return t.charID <= c.charID; }
-inline bool operator>= (const CharTexture &t, const CharTexture &c) { return t.charID >= c.charID; }
-
-inline bool operator< (const CharTexture &t, const char16_t &c) { return t.charID < c; }
-inline bool operator> (const CharTexture &t, const char16_t &c) { return t.charID > c; }
-inline bool operator<= (const CharTexture &t, const char16_t &c) { return t.charID <= c; }
-inline bool operator>= (const CharTexture &t, const char16_t &c) { return t.charID >= c; }
 
 inline bool operator< (const CharLayout &l, const CharLayout &c) { return l.charID < c.charID; }
 inline bool operator> (const CharLayout &l, const CharLayout &c) { return l.charID > c.charID; }

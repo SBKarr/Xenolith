@@ -195,12 +195,7 @@ Rc<gl::CommandList> VertexMaterialAttachmentHandle::popCommands() const {
 	return ret;
 }
 
-bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<gl::CommandList> &commands) {
-	auto handle = dynamic_cast<FrameHandle *>(&fhandle);
-	if (!handle) {
-		return false;
-	}
-
+struct VertexMaterialDrawPlan {
 	struct PlanCommandInfo {
 		const gl::CmdGeneral *cmd;
 		SpanView<gl::TransformedVertexData> vertexes;
@@ -214,6 +209,14 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 		uint32_t transforms = 0;
 		Map<gl::StateId, std::forward_list<PlanCommandInfo>> states;
 	};
+
+	struct WriteTarget {
+		uint8_t *transform;
+		uint8_t *vertexes;
+		uint8_t *indexes;
+	};
+
+	Extent2 surfaceExtent;
 
 	uint32_t excludeVertexes = 0;
 	uint32_t excludeIndexes = 0;
@@ -232,11 +235,22 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 	// write plan for transparent objects, that should be drawn in order
 	Map<SpanView<int16_t>, std::unordered_map<gl::MaterialId, MaterialWritePlan>, ZIndexLess> transparentWritePlan;
 
-	auto emplaceWritePlan = [&] (std::unordered_map<gl::MaterialId, MaterialWritePlan> &writePlan,
-			const gl::Command *c, const gl::CmdGeneral *cmd, SpanView<gl::TransformedVertexData> vertexes) {
+	std::forward_list<Vector<gl::TransformedVertexData>> deferredTmp;
+
+	uint32_t vertexOffset = 0;
+	uint32_t indexOffset = 0;
+	uint32_t transtormOffset = 0;
+
+	uint32_t materialVertexes = 0;
+	uint32_t materialIndexes = 0;
+	uint32_t transformIdx = 0;
+
+	VertexMaterialDrawPlan(Extent2 surfaceExtent) : surfaceExtent{surfaceExtent} { }
+
+	void emplaceWritePlan(const gl::Material *material, std::unordered_map<gl::MaterialId, MaterialWritePlan> &writePlan,
+				const gl::Command *c, const gl::CmdGeneral *cmd, SpanView<gl::TransformedVertexData> vertexes) {
 		auto it = writePlan.find(cmd->material);
 		if (it == writePlan.end()) {
-			auto material = _materialSet->getMaterialById(cmd->material);
 			if (material) {
 				it = writePlan.emplace(cmd->material, MaterialWritePlan()).first;
 				it->second.material = material;
@@ -274,30 +288,28 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 		if (pathsIt == paths.end()) {
 			paths.emplace(cmd->zPath, 0.0f);
 		}
-	};
+	}
 
-	auto pushVertexData = [&] (const gl::Command *c, const gl::CmdVertexArray *cmd) {
-		auto material = _materialSet->getMaterialById(cmd->material);
+	void pushVertexData(gl::MaterialSet *materialSet, const gl::Command *c, const gl::CmdVertexArray *cmd) {
+		auto material = materialSet->getMaterialById(cmd->material);
 		if (!material) {
 			return;
 		}
 		if (material->getPipeline()->isSolid()) {
-			emplaceWritePlan(solidWritePlan, c, cmd, cmd->vertexes);
+			emplaceWritePlan(material, solidWritePlan, c, cmd, cmd->vertexes);
 		} else if (cmd->renderingLevel == RenderingLevel::Surface) {
-			emplaceWritePlan(surfaceWritePlan, c, cmd, cmd->vertexes);
+			emplaceWritePlan(material, surfaceWritePlan, c, cmd, cmd->vertexes);
 		} else {
 			auto v = transparentWritePlan.find(cmd->zPath);
 			if (v == transparentWritePlan.end()) {
 				v = transparentWritePlan.emplace(cmd->zPath, std::unordered_map<gl::MaterialId, MaterialWritePlan>()).first;
 			}
-			emplaceWritePlan(v->second, c, cmd, cmd->vertexes);
+			emplaceWritePlan(material, v->second, c, cmd, cmd->vertexes);
 		}
 	};
 
-	std::forward_list<Vector<gl::TransformedVertexData>> deferredTmp;
-
-	auto pushDeferred = [&] (const gl::Command *c, const gl::CmdDeferred *cmd) {
-		auto material = _materialSet->getMaterialById(cmd->material);
+	void pushDeferred(gl::MaterialSet *materialSet, const gl::Command *c, const gl::CmdDeferred *cmd) {
+		auto material = materialSet->getMaterialById(cmd->material);
 		if (!material) {
 			return;
 		}
@@ -324,103 +336,30 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 		}
 
 		if (cmd->renderingLevel == RenderingLevel::Solid) {
-			emplaceWritePlan(solidWritePlan, c, cmd, vertexes);
+			emplaceWritePlan(material, solidWritePlan, c, cmd, vertexes);
 		} else if (cmd->renderingLevel == RenderingLevel::Surface) {
-			emplaceWritePlan(surfaceWritePlan, c, cmd, vertexes);
+			emplaceWritePlan(material, surfaceWritePlan, c, cmd, vertexes);
 		} else {
 			auto v = transparentWritePlan.find(cmd->zPath);
 			if (v == transparentWritePlan.end()) {
 				v = transparentWritePlan.emplace(cmd->zPath, std::unordered_map<gl::MaterialId, MaterialWritePlan>()).first;
 			}
-			emplaceWritePlan(v->second, c, cmd, vertexes);
+			emplaceWritePlan(material, v->second, c, cmd, vertexes);
 		}
-	};
+	}
 
-	auto cmd = commands->getFirst();
-	while (cmd) {
-		switch (cmd->type) {
-		case gl::CommandType::CommandGroup:
-			break;
-		case gl::CommandType::VertexArray:
-			pushVertexData(cmd, (const gl::CmdVertexArray *)cmd->data);
-			break;
-		case gl::CommandType::Deferred:
-			pushDeferred(cmd, (const gl::CmdDeferred *)cmd->data);
-			break;
-		case gl::CommandType::ShadowArray:
-		case gl::CommandType::ShadowDeferred:
-			break;
+	void updatePathsDepth() {
+		float depthScale = 1.0f / float(paths.size() + 1);
+		float depthOffset = 1.0f - depthScale;
+		for (auto &it : paths) {
+			it.second = depthOffset;
+			depthOffset -= depthScale;
 		}
-		cmd = cmd->next;
 	}
 
-	if (globalWritePlan.vertexes == 0 || globalWritePlan.indexes == 0) {
-		return true;
-	}
-
-	float depthScale = 1.0f / float(paths.size() + 1);
-	float depthOffset = 1.0f - depthScale;
-	for (auto &it : paths) {
-		/*std::cout << "Path:";
-		for (auto &z : it.first) {
-			std::cout << " " << z;
-		}
-		std::cout << "\n";*/
-		it.second = depthOffset;
-		depthOffset -= depthScale;
-	}
-
-	auto devFrame = static_cast<DeviceFrameHandle *>(handle);
-
-	auto pool = devFrame->getMemPool(this);
-
-	// create buffers
-	_indexes = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(gl::BufferUsage::IndexBuffer, (globalWritePlan.indexes + 6) * sizeof(uint32_t)));
-
-	_vertexes = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(gl::BufferUsage::StorageBuffer, (globalWritePlan.vertexes + 4) * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
-
-	_transforms = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(gl::BufferUsage::StorageBuffer, (globalWritePlan.transforms + 1) * sizeof(gl::TransformObject)));
-
-	if (!_vertexes || !_indexes || !_transforms) {
-		return false;
-	}
-
-	DeviceBuffer::MappedRegion vertexesMap, indexesMap, transformMap;
-
-	Bytes vertexData, indexData, transformData;
-
-	if (fhandle.isPersistentMapping()) {
-		vertexesMap = _vertexes->map();
-		indexesMap = _indexes->map();
-		transformMap = _transforms->map();
-
-		memset(vertexesMap.ptr, 0, sizeof(gl::Vertex_V4F_V4F_T2F2U) * 1024);
-		memset(indexesMap.ptr, 0, sizeof(uint32_t) * 1024);
-	} else {
-		vertexData.resize(_vertexes->getSize());
-		indexData.resize(_indexes->getSize());
-		transformData.resize(_transforms->getSize());
-
-		vertexesMap.ptr = vertexData.data(); vertexesMap.size = vertexData.size();
-		indexesMap.ptr = indexData.data(); indexesMap.size = indexData.size();
-		transformMap.ptr = transformData.data(); transformMap.size = transformData.size();
-	}
-
-	uint32_t vertexOffset = 0;
-	uint32_t indexOffset = 0;
-	uint32_t transtormOffset = 0;
-
-	uint32_t materialVertexes = 0;
-	uint32_t materialIndexes = 0;
-	uint32_t transformIdx = 0;
-
-	// write initial full screen quad
-	do {
+	void pushInitial(WriteTarget &writeTarget) {
 		gl::TransformObject val;
-		memcpy(transformMap.ptr, &val, sizeof(gl::TransformObject));
+		memcpy(writeTarget.transform, &val, sizeof(gl::TransformObject));
 		transtormOffset += sizeof(gl::TransformObject); ++ transformIdx;
 
 		Vector<uint32_t> indexes{ 0, 2, 1, 0, 3, 2 };
@@ -443,31 +382,31 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 			}
 		};
 
-		auto target = (gl::Vertex_V4F_V4F_T2F2U *)vertexesMap.ptr + vertexOffset;
+		auto target = (gl::Vertex_V4F_V4F_T2F2U *)writeTarget.vertexes + vertexOffset;
 		memcpy(target, (uint8_t *)vertexes.data(), vertexes.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U));
-		memcpy(indexesMap.ptr, (uint8_t *)indexes.data(), indexes.size() * sizeof(uint32_t));
+		memcpy(writeTarget.indexes, (uint8_t *)indexes.data(), indexes.size() * sizeof(uint32_t));
 
 		vertexOffset += vertexes.size();
 		indexOffset += indexes.size();
-	} while (0);
+	}
 
-
-	auto pushVertexes = [&] (const gl::MaterialId &materialId, const MaterialWritePlan &plan,
-			const gl::CmdGeneral *cmd, const gl::TransformObject &transform, gl::VertexData *vertexes) {
-
-		auto target = (gl::Vertex_V4F_V4F_T2F2U *)vertexesMap.ptr + vertexOffset;
+	void pushVertexes(WriteTarget &writeTarget, const gl::MaterialId &materialId, const MaterialWritePlan &plan,
+				const gl::CmdGeneral *cmd, const gl::TransformObject &transform, gl::VertexData *vertexes) {
+		auto target = (gl::Vertex_V4F_V4F_T2F2U *)writeTarget.vertexes + vertexOffset;
 		memcpy(target, (uint8_t *)vertexes->data.data(),
 				vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U));
 
-		memcpy(transformMap.ptr + transtormOffset, &transform, sizeof(gl::TransformObject));
+		memcpy(writeTarget.transform + transtormOffset, &transform, sizeof(gl::TransformObject));
 
 		float atlasScaleX = 1.0f;
 		float atlasScaleY = 1.0f;
+		Mat4 inverseTransform;
 
 		if (plan.atlas) {
 			auto ext = plan.atlas->getImageExtent();
 			atlasScaleX = 1.0f / ext.width;
 			atlasScaleY = 1.0f / ext.height;
+			inverseTransform = transform.transform.getInversed();
 		}
 
 		size_t idx = 0;
@@ -476,7 +415,14 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 			t.material = transformIdx | transformIdx << 16;
 
 			if (plan.atlas && t.object) {
-				if (!plan.atlas->getObjectByName(t.tex, t.object)) {
+				if (font::FontAtlasValue *d = (font::FontAtlasValue *)plan.atlas->getObjectByName(t.object)) {
+					// scale to (-1.0, 1.0), then transform into command space
+					Vec2 scaledPos = inverseTransform * (d->pos / Vec2(surfaceExtent.width, surfaceExtent.height) * 2.0f);
+					t.pos.x += scaledPos.x;
+					t.pos.y += scaledPos.y;
+					t.tex = d->tex;
+				} else {
+					std::cout << "Not found: " << t.object << " " << string::toUtf8<Interface>(char16_t(t.object)) << "\n";
 					auto anchor = font::CharLayout::getAnchorForObject(t.object);
 					switch (anchor) {
 					case font::FontAnchor::BottomLeft:
@@ -496,7 +442,7 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 			}
 		}
 
-		auto indexTarget = (uint32_t *)indexesMap.ptr + indexOffset;
+		auto indexTarget = (uint32_t *)writeTarget.indexes + indexOffset;
 
 		for (auto &it : vertexes->indexes) {
 			*(indexTarget++) = it + vertexOffset;
@@ -509,9 +455,9 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 
 		materialVertexes += vertexes->data.size();
 		materialIndexes += vertexes->indexes.size();
-	};
+	}
 
-	auto drawWritePlan = [&] (std::unordered_map<gl::MaterialId, MaterialWritePlan> &writePlan) {
+	void drawWritePlan(Vector<gl::VertexSpan> &spans, WriteTarget &writeTarget, std::unordered_map<gl::MaterialId, MaterialWritePlan> &writePlan) {
 		// optimize draw order, minimize switching pipeline, textureSet and descriptors
 		Vector<const Pair<const gl::MaterialId, MaterialWritePlan> *> drawOrder;
 
@@ -553,21 +499,103 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 							val.offset.z = pathIt->second;
 						}
 
-						pushVertexes(it->first, it->second, cmd.cmd, val, iit.data.get());
+						pushVertexes(writeTarget, it->first, it->second, cmd.cmd, val, iit.data.get());
 					}
 				}
 
-				_spans.emplace_back(gl::VertexSpan({ it->first, materialIndexes, 1, indexOffset - materialIndexes, state.first}));
+				spans.emplace_back(gl::VertexSpan({ it->first, materialIndexes, 1, indexOffset - materialIndexes, state.first}));
 			}
 		}
-	};
-
-	drawWritePlan(solidWritePlan);
-	drawWritePlan(surfaceWritePlan);
-
-	for (auto &it : transparentWritePlan) {
-		drawWritePlan(it.second);
 	}
+
+	void pushAll(Vector<gl::VertexSpan> &spans, WriteTarget &writeTarget) {
+		pushInitial(writeTarget);
+
+		drawWritePlan(spans, writeTarget, solidWritePlan);
+		drawWritePlan(spans, writeTarget, surfaceWritePlan);
+
+		for (auto &it : transparentWritePlan) {
+			drawWritePlan(spans, writeTarget, it.second);
+		}
+	}
+};
+
+bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<gl::CommandList> &commands) {
+	auto handle = dynamic_cast<FrameHandle *>(&fhandle);
+	if (!handle) {
+		return false;
+	}
+
+	VertexMaterialDrawPlan plan(fhandle.getExtent());
+
+	auto cmd = commands->getFirst();
+	while (cmd) {
+		switch (cmd->type) {
+		case gl::CommandType::CommandGroup:
+			break;
+		case gl::CommandType::VertexArray:
+			plan.pushVertexData(_materialSet.get(), cmd, (const gl::CmdVertexArray *)cmd->data);
+			break;
+		case gl::CommandType::Deferred:
+			plan.pushDeferred(_materialSet.get(), cmd, (const gl::CmdDeferred *)cmd->data);
+			break;
+		case gl::CommandType::ShadowArray:
+		case gl::CommandType::ShadowDeferred:
+			break;
+		}
+		cmd = cmd->next;
+	}
+
+	if (plan.globalWritePlan.vertexes == 0 || plan.globalWritePlan.indexes == 0) {
+		return true;
+	}
+
+	plan.updatePathsDepth();
+
+	auto devFrame = static_cast<DeviceFrameHandle *>(handle);
+
+	auto pool = devFrame->getMemPool(this);
+
+	// create buffers
+	_indexes = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
+			gl::BufferInfo(gl::BufferUsage::IndexBuffer, (plan.globalWritePlan.indexes + 6) * sizeof(uint32_t)));
+
+	_vertexes = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
+			gl::BufferInfo(gl::BufferUsage::StorageBuffer, (plan.globalWritePlan.vertexes + 4) * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
+
+	_transforms = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
+			gl::BufferInfo(gl::BufferUsage::StorageBuffer, (plan.globalWritePlan.transforms + 1) * sizeof(gl::TransformObject)));
+
+	if (!_vertexes || !_indexes || !_transforms) {
+		return false;
+	}
+
+	DeviceBuffer::MappedRegion vertexesMap, indexesMap, transformMap;
+
+	Bytes vertexData, indexData, transformData;
+
+	if (fhandle.isPersistentMapping()) {
+		vertexesMap = _vertexes->map();
+		indexesMap = _indexes->map();
+		transformMap = _transforms->map();
+
+		memset(vertexesMap.ptr, 0, sizeof(gl::Vertex_V4F_V4F_T2F2U) * 1024);
+		memset(indexesMap.ptr, 0, sizeof(uint32_t) * 1024);
+	} else {
+		vertexData.resize(_vertexes->getSize());
+		indexData.resize(_indexes->getSize());
+		transformData.resize(_transforms->getSize());
+
+		vertexesMap.ptr = vertexData.data(); vertexesMap.size = vertexData.size();
+		indexesMap.ptr = indexData.data(); indexesMap.size = indexData.size();
+		transformMap.ptr = transformData.data(); transformMap.size = transformData.size();
+	}
+
+	VertexMaterialDrawPlan::WriteTarget writeTarget{transformMap.ptr, vertexesMap.ptr, indexesMap.ptr};
+
+	// write initial full screen quad
+	plan.pushAll(_spans, writeTarget);
+
 
 	if (fhandle.isPersistentMapping()) {
 		_vertexes->unmap(vertexesMap, true);
@@ -579,9 +607,9 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 		_transforms->setData(transformData);
 	}
 
-	_drawStat.vertexes = globalWritePlan.vertexes - excludeVertexes;
-	_drawStat.triangles = (globalWritePlan.indexes - excludeIndexes) / 3;
-	_drawStat.zPaths = paths.size();
+	_drawStat.vertexes = plan.globalWritePlan.vertexes - plan.excludeVertexes;
+	_drawStat.triangles = (plan.globalWritePlan.indexes - plan.excludeIndexes) / 3;
+	_drawStat.zPaths = plan.paths.size();
 	_drawStat.drawCalls = _spans.size();
 	_drawStat.materials = _materialSet->getMaterials().size();
 

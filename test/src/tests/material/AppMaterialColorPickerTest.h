@@ -23,7 +23,7 @@
 #ifndef TEST_SRC_TESTS_MATERIAL_APPMATERIALCOLORPICKERTEST_H_
 #define TEST_SRC_TESTS_MATERIAL_APPMATERIALCOLORPICKERTEST_H_
 
-#include "../../../../modules/material/MaterialColorScheme.h"
+#include "MaterialColorScheme.h"
 #include "AppLayoutTest.h"
 #include "AppCheckbox.h"
 #include "AppSlider.h"
@@ -35,19 +35,19 @@ class MaterialColorSchemeNode : public Layer {
 public:
 	virtual ~MaterialColorSchemeNode() { }
 
-	virtual bool init(material::ColorScheme::Name);
+	virtual bool init(material::ColorRole);
 
 	virtual void onContentSizeDirty() override;
 
-	virtual void setSchemeColor(material::ColorScheme::Type, Color4B background, Color4B label);
+	virtual void setSchemeColor(material::ThemeType, Color4B background, Color4B label);
 
 protected:
 	void updateLabels();
 
 	Label *_labelName = nullptr;
 	Label *_labelDesc = nullptr;
-	material::ColorScheme::Type _type;
-	material::ColorScheme::Name _name;
+	material::ThemeType _type;
+	material::ColorRole _name;
 };
 
 class MaterialColorPickerSprite : public Sprite {
@@ -94,7 +94,7 @@ class MaterialColorPickerTest : public LayoutTest {
 public:
 	virtual ~MaterialColorPickerTest() { }
 
-	virtual bool init();
+	virtual bool init() override;
 
 	virtual void onEnter(Scene *) override;
 	virtual void onExit() override;
@@ -117,10 +117,10 @@ protected:
 	LayerRounded *_spriteLayer = nullptr;
 	material::ColorHCT _colorHct;
 	material::ColorScheme _colorScheme;
-	material::ColorScheme::Type _themeType = material::ColorScheme::LightTheme;
+	material::ThemeType _themeType = material::ThemeType::LightTheme;
 	bool _isContentColor = false;
 
-	std::array<MaterialColorSchemeNode *, material::ColorScheme::Max> _nodes;
+	std::array<MaterialColorSchemeNode *, toInt(material::ColorRole::Max)> _nodes;
 };
 
 }

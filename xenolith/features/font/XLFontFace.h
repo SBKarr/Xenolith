@@ -24,6 +24,7 @@
 #define XENOLITH_FEATURES_FONT_XLFONTFACE_H_
 
 #include "XLFontStyle.h"
+#include <shared_mutex>
 
 typedef struct FT_LibraryRec_ * FT_Library;
 typedef struct FT_FaceRec_ * FT_Face;
@@ -87,27 +88,59 @@ public:
 	bool init(StringView, Bytes &&);
 	bool init(StringView, Function<Bytes()> &&);
 
+	void inspectVariableFont(FontLayoutParameters params, FT_Face);
+
 	StringView getName() const { return _name; }
 	BytesView getView() const;
+
+	FontVariableAxis getVariableAxis() const { return _variableAxis; }
+
+	FontWeight getWeightMin() const { return _weightMin; }
+	FontWeight getWeightMax() const { return _weightMax; }
+	FontStretch getStretchMin() const { return _stretchMin; }
+	FontStretch getStretchMax() const { return _stretchMax; }
+	FontStyle getSlantMin() const { return _slantMin; }
+	FontStyle getSlantMax() const { return _slantMax; }
+	uint32_t getOpticalSizeMin() const { return _opticalSizeMin; }
+	uint32_t getOpticalSizeMax() const { return _opticalSizeMax; }
+	uint32_t getItalicMin() const { return _italicMin; }
+	uint32_t getItalicMax() const { return _italicMax; }
+
+	FontSpecializationVector getSpecialization(const FontSpecializationVector &) const;
 
 protected:
 	bool _persistent = false;
 	String _name;
 	BytesView _view;
 	Bytes _data;
+	FontVariableAxis _variableAxis = FontVariableAxis::None;
+	FontWeight _weightMin;
+	FontWeight _weightMax;
+	FontStretch _stretchMin;
+	FontStretch _stretchMax;
+	FontStyle _slantMin;
+	FontStyle _slantMax;
+	uint32_t _opticalSizeMin = 0;
+	uint32_t _opticalSizeMax = 0;
+	uint32_t _italicMin = 0;
+	uint32_t _italicMax = 0;
+	FontLayoutParameters _params;
 };
 
 class FontFaceObject : public Ref {
 public:
 	virtual ~FontFaceObject();
 
-	bool init(StringView, const Rc<FontFaceData> &, FT_Face, FontSize, uint16_t);
+	bool init(StringView, const Rc<FontFaceData> &, FT_Face, const FontSpecializationVector &, uint16_t);
 
 	StringView getName() const { return _name; }
 	uint16_t getId() const { return _id; }
 	FT_Face getFace() const { return _face; }
+	const Rc<FontFaceData> &getData() const { return _data; }
+	const FontSpecializationVector &getSpec() const { return _spec; }
 
-	bool acquireTexture(char16_t, const Callback<void(uint8_t *, uint32_t width, uint32_t rows, int pitch)> &);
+	bool acquireTexture(char16_t, const Callback<void(const CharTexture &)> &);
+	bool acquireTextureUnsafe(char16_t, const Callback<void(const CharTexture &)> &);
 
 	// returns true if updated
 	bool addChars(const Vector<char16_t> &chars, bool expand, Vector<char16_t> *failed);
@@ -127,14 +160,14 @@ protected:
 	String _name;
 	Rc<FontFaceData> _data;
 	uint16_t _id = 0;
-	FontSize _size;
 	FT_Face _face = nullptr;
+	FontSpecializationVector _spec;
 	Metrics _metrics;
 	Vector<char16_t> _required;
 	FontCharStorage<CharLayout> _chars;
 	HashMap<uint32_t, int16_t> _kerning;
 	Mutex _faceMutex;
-	mutable Mutex _charsMutex;
+	mutable std::shared_mutex _charsMutex;
 	mutable Mutex _requiredMutex;
 };
 

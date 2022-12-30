@@ -47,6 +47,7 @@ struct RenderFrameInfo {
 	Rc<gl::ShadowLightInput> lights;
 
 	Rc<InputListenerStorage> input;
+	Rc<Ref> userdata;
 };
 
 }

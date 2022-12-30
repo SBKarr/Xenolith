@@ -103,6 +103,8 @@ public:
 
 	virtual void waitForInput(FrameQueue &queue, const Rc<AttachmentHandle> &a, Function<void(bool)> &&cb);
 
+	virtual void signalDependencies(bool success);
+
 protected:
 	virtual bool setup();
 

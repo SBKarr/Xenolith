@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,38 +20,31 @@
  THE SOFTWARE.
  **/
 
-#include "XLTestNetworkSprite.h"
-#include "XLScene.h"
-#include "XLDirector.h"
-#include "XLApplication.h"
+#ifndef TEST_SRC_TESTS_MATERIAL_APPMATERIALDYNAMICFONTTEST_H_
+#define TEST_SRC_TESTS_MATERIAL_APPMATERIALDYNAMICFONTTEST_H_
 
-namespace stappler::xenolith::test {
+#include "AppLayoutTest.h"
+#include "AppCheckbox.h"
+#include "AppSlider.h"
 
-bool NetworkTestSprite::init() {
-	if (!Sprite::init()) {
-		return false;
-	}
+namespace stappler::xenolith::app {
 
-	setColor(Color::Orange_500);
-	return true;
-}
+class MaterialDynamicFontTest : public LayoutTest {
+public:
+	virtual ~MaterialDynamicFontTest() { }
 
-void NetworkTestSprite::onEnter(Scene *scene) {
-	Sprite::onEnter(scene);
+	virtual bool init() override;
 
-	/*auto app = scene->getDirector()->getApplication();
+	virtual void onContentSizeDirty() override;
 
-	auto h = Rc<network::DataHandle>::create("https://geobase.stappler.org/proxy/getHeaders");
-	// h->addHeader("X-Test", "123");
-	h->perform(app, [] (network::Handle &handle, data::Value &data) {
-		auto url = handle.getUrl();
-		auto code = handle.getErrorCode();
-		auto err = handle.getError();
-		auto resp = handle.getResponseCode();
-
-		log::vtext("NetworkTest", "[", resp, "] ", url, ": ", code, " - ", err);
-		std::cout << data::EncodeFormat::Pretty << data << "\n";
-	});*/
-}
+protected:
+	Label *_label = nullptr;
+	AppSliderWithLabel *_sliderSize = nullptr;
+	AppSliderWithLabel *_sliderWeight = nullptr;
+	AppSliderWithLabel *_sliderWidth = nullptr;
+	AppSliderWithLabel *_sliderStyle = nullptr;
+};
 
 }
+
+#endif /* TEST_SRC_TESTS_MATERIAL_APPMATERIALDYNAMICFONTTEST_H_ */

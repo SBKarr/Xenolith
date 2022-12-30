@@ -348,8 +348,9 @@ void Application::runLoop(TimeInterval iv) {
 
 		auto dt = TimeInterval::microseconds(clock - lastUpdate);
 		if (dt >= iv || _immediateUpdate) {
-			update(dt.toMicros());
+			update(clock, dt.toMicros());
 			lastUpdate = clock;
+			_immediateUpdate = false;
 		}
 	} while (!_shouldEndLoop);
 }
@@ -360,7 +361,7 @@ void Application::end() {
 	}, this);
 }
 
-void Application::update(uint64_t dt) {
+void Application::update(uint64_t clock, uint64_t dt) {
 	memory::pool::push(_updatePool);
 
 	if (!_isNetworkOnline) {
@@ -376,11 +377,11 @@ void Application::update(uint64_t dt) {
 	}
 
 	if (_fontController) {
-		_fontController->update();
+		_fontController->update(clock);
 	}
 
 	if (_fontLibrary) {
-		_fontLibrary->update();
+		_fontLibrary->update(clock);
 	}
 
 	memory::pool::pop();

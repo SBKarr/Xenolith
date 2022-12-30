@@ -219,13 +219,11 @@ public:
 	static float getStringWidth(font::FontController *, const DescriptionStyle &,
 			const WideStringView &, float density = 0.0f, bool localized = false);
 
-public:
 	virtual ~LabelParameters();
 
 	virtual bool isLabelDirty() const;
 	virtual StyleVec compileStyle() const;
 
-public:
 	template <char ... Chars>
 	void setString(metastring::metastring<Chars ...> &&str) {
 		setString(str.to_string());
@@ -266,7 +264,6 @@ public:
 
 	virtual bool empty() const { return _string16.empty(); }
 
-public:
 	void setAlignment(Alignment alignment);
 	Alignment getAlignment() const;
 
@@ -329,6 +326,9 @@ public:
 	void setLocaleEnabled(bool);
 	bool isLocaleEnabled() const;
 
+	void setPersistentLayout(bool);
+	bool isPersistentLayout() const;
+
 protected:
 	virtual bool hasLocaleTags(const WideStringView &) const;
 	virtual WideString resolveLocaleTags(const WideStringView &) const;
@@ -362,6 +362,8 @@ protected:
 	bool _opticalAlignment = false;
 	bool _emplaceAllChars = false;
 	char16_t _fillerChar = u'…';
+
+	bool _persistentLayout = false;
 };
 
 }

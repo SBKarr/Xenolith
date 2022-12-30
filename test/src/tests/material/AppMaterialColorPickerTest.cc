@@ -24,7 +24,7 @@
 
 namespace stappler::xenolith::app {
 
-bool MaterialColorSchemeNode::init(material::ColorScheme::Name name) {
+bool MaterialColorSchemeNode::init(material::ColorRole name) {
 	if (!Layer::init()) {
 		return false;
 	}
@@ -49,7 +49,7 @@ void MaterialColorSchemeNode::onContentSizeDirty() {
 	_labelDesc->setPosition(Vec2(_contentSize.width - 4.0f, 4.0f));
 }
 
-void MaterialColorSchemeNode::setSchemeColor(material::ColorScheme::Type type, Color4B background, Color4B label) {
+void MaterialColorSchemeNode::setSchemeColor(material::ThemeType type, Color4B background, Color4B label) {
 	setColor(Color4F(background));
 	_labelName->setColor(Color4F(label));
 	_labelDesc->setColor(Color4F(label));
@@ -59,72 +59,72 @@ void MaterialColorSchemeNode::setSchemeColor(material::ColorScheme::Type type, C
 
 void MaterialColorSchemeNode::updateLabels() {
 	switch (_type) {
-	case material::ColorScheme::LightTheme:
+	case material::ThemeType::LightTheme:
 		switch (_name) {
-		case material::ColorScheme::Primary: _labelName->setString("Primary"); _labelDesc->setString("Primary40"); break;
-		case material::ColorScheme::OnPrimary: _labelName->setString("On Primary"); _labelDesc->setString("Primary100"); break;
-		case material::ColorScheme::PrimaryContainer: _labelName->setString("Primary Container"); _labelDesc->setString("Primary90"); break;
-		case material::ColorScheme::OnPrimaryContainer: _labelName->setString("On Primary Container"); _labelDesc->setString("Primary10"); break;
-		case material::ColorScheme::Secondary: _labelName->setString("Secondary"); _labelDesc->setString("Secondary40"); break;
-		case material::ColorScheme::OnSecondary: _labelName->setString("On Secondary"); _labelDesc->setString("Secondary100"); break;
-		case material::ColorScheme::SecondaryContainer: _labelName->setString("Secondary Container"); _labelDesc->setString("Secondary90"); break;
-		case material::ColorScheme::OnSecondaryContainer: _labelName->setString("On Secondary Container"); _labelDesc->setString("Secondary10"); break;
-		case material::ColorScheme::Tertiary: _labelName->setString("Tertiary"); _labelDesc->setString("Tertiary40"); break;
-		case material::ColorScheme::OnTertiary: _labelName->setString("On Tertiary"); _labelDesc->setString("Tertiary100"); break;
-		case material::ColorScheme::TertiaryContainer: _labelName->setString("Tertiary Container"); _labelDesc->setString("Tertiary90"); break;
-		case material::ColorScheme::OnTertiaryContainer: _labelName->setString("On Tertiary Container"); _labelDesc->setString("Tertiary10"); break;
-		case material::ColorScheme::Error: _labelName->setString("Error"); _labelDesc->setString("Error40"); break;
-		case material::ColorScheme::OnError: _labelName->setString("On Error"); _labelDesc->setString("Error100"); break;
-		case material::ColorScheme::ErrorContainer: _labelName->setString("Error Container"); _labelDesc->setString("Error90"); break;
-		case material::ColorScheme::OnErrorContainer: _labelName->setString("On Error Container"); _labelDesc->setString("Error10"); break;
-		case material::ColorScheme::Background: _labelName->setString("Background"); _labelDesc->setString("Neutral99"); break;
-		case material::ColorScheme::OnBackground: _labelName->setString("On Background"); _labelDesc->setString("Neutral10"); break;
-		case material::ColorScheme::Surface: _labelName->setString("Surface"); _labelDesc->setString("Neutral99"); break;
-		case material::ColorScheme::OnSurface: _labelName->setString("On Surface"); _labelDesc->setString("Neutral10"); break;
-		case material::ColorScheme::SurfaceVariant: _labelName->setString("Surface Variant"); _labelDesc->setString("Neutral-variant90"); break;
-		case material::ColorScheme::OnSurfaceVariant: _labelName->setString("On Surface Variant"); _labelDesc->setString("Neutral-variant30"); break;
-		case material::ColorScheme::Outline: _labelName->setString("Outline"); _labelDesc->setString("Neutral-variant50"); break;
-		case material::ColorScheme::OutlineVariant: _labelName->setString("Outline Variant"); _labelDesc->setString(""); break;
-		case material::ColorScheme::Shadow: _labelName->setString("Shadow"); _labelDesc->setString(""); break;
-		case material::ColorScheme::Scrim: _labelName->setString("Scrim"); _labelDesc->setString(""); break;
-		case material::ColorScheme::InverseSurface: _labelName->setString("Inverse Surface"); _labelDesc->setString(""); break;
-		case material::ColorScheme::InverseOnSurface: _labelName->setString("Inverse On Surface"); _labelDesc->setString(""); break;
-		case material::ColorScheme::InversePrimary: _labelName->setString("Inverse Primary"); _labelDesc->setString(""); break;
-		case material::ColorScheme::Max: break;
+		case material::ColorRole::Primary: _labelName->setString("Primary"); _labelDesc->setString("Primary40"); break;
+		case material::ColorRole::OnPrimary: _labelName->setString("On Primary"); _labelDesc->setString("Primary100"); break;
+		case material::ColorRole::PrimaryContainer: _labelName->setString("Primary Container"); _labelDesc->setString("Primary90"); break;
+		case material::ColorRole::OnPrimaryContainer: _labelName->setString("On Primary Container"); _labelDesc->setString("Primary10"); break;
+		case material::ColorRole::Secondary: _labelName->setString("Secondary"); _labelDesc->setString("Secondary40"); break;
+		case material::ColorRole::OnSecondary: _labelName->setString("On Secondary"); _labelDesc->setString("Secondary100"); break;
+		case material::ColorRole::SecondaryContainer: _labelName->setString("Secondary Container"); _labelDesc->setString("Secondary90"); break;
+		case material::ColorRole::OnSecondaryContainer: _labelName->setString("On Secondary Container"); _labelDesc->setString("Secondary10"); break;
+		case material::ColorRole::Tertiary: _labelName->setString("Tertiary"); _labelDesc->setString("Tertiary40"); break;
+		case material::ColorRole::OnTertiary: _labelName->setString("On Tertiary"); _labelDesc->setString("Tertiary100"); break;
+		case material::ColorRole::TertiaryContainer: _labelName->setString("Tertiary Container"); _labelDesc->setString("Tertiary90"); break;
+		case material::ColorRole::OnTertiaryContainer: _labelName->setString("On Tertiary Container"); _labelDesc->setString("Tertiary10"); break;
+		case material::ColorRole::Error: _labelName->setString("Error"); _labelDesc->setString("Error40"); break;
+		case material::ColorRole::OnError: _labelName->setString("On Error"); _labelDesc->setString("Error100"); break;
+		case material::ColorRole::ErrorContainer: _labelName->setString("Error Container"); _labelDesc->setString("Error90"); break;
+		case material::ColorRole::OnErrorContainer: _labelName->setString("On Error Container"); _labelDesc->setString("Error10"); break;
+		case material::ColorRole::Background: _labelName->setString("Background"); _labelDesc->setString("Neutral99"); break;
+		case material::ColorRole::OnBackground: _labelName->setString("On Background"); _labelDesc->setString("Neutral10"); break;
+		case material::ColorRole::Surface: _labelName->setString("Surface"); _labelDesc->setString("Neutral99"); break;
+		case material::ColorRole::OnSurface: _labelName->setString("On Surface"); _labelDesc->setString("Neutral10"); break;
+		case material::ColorRole::SurfaceVariant: _labelName->setString("Surface Variant"); _labelDesc->setString("Neutral-variant90"); break;
+		case material::ColorRole::OnSurfaceVariant: _labelName->setString("On Surface Variant"); _labelDesc->setString("Neutral-variant30"); break;
+		case material::ColorRole::Outline: _labelName->setString("Outline"); _labelDesc->setString("Neutral-variant50"); break;
+		case material::ColorRole::OutlineVariant: _labelName->setString("Outline Variant"); _labelDesc->setString(""); break;
+		case material::ColorRole::Shadow: _labelName->setString("Shadow"); _labelDesc->setString(""); break;
+		case material::ColorRole::Scrim: _labelName->setString("Scrim"); _labelDesc->setString(""); break;
+		case material::ColorRole::InverseSurface: _labelName->setString("Inverse Surface"); _labelDesc->setString(""); break;
+		case material::ColorRole::InverseOnSurface: _labelName->setString("Inverse On Surface"); _labelDesc->setString(""); break;
+		case material::ColorRole::InversePrimary: _labelName->setString("Inverse Primary"); _labelDesc->setString(""); break;
+		case material::ColorRole::Max: break;
 		}
 		break;
-	case material::ColorScheme::DarkTheme:
+	case material::ThemeType::DarkTheme:
 		switch (_name) {
-		case material::ColorScheme::Primary: _labelName->setString("Primary"); _labelDesc->setString("Primary80"); break;
-		case material::ColorScheme::OnPrimary: _labelName->setString("On Primary"); _labelDesc->setString("Primary20"); break;
-		case material::ColorScheme::PrimaryContainer: _labelName->setString("Primary Container"); _labelDesc->setString("Primary30"); break;
-		case material::ColorScheme::OnPrimaryContainer: _labelName->setString("On Primary Container"); _labelDesc->setString("Primary90"); break;
-		case material::ColorScheme::Secondary: _labelName->setString("Secondary"); _labelDesc->setString("Secondary80"); break;
-		case material::ColorScheme::OnSecondary: _labelName->setString("On Secondary"); _labelDesc->setString("Secondary20"); break;
-		case material::ColorScheme::SecondaryContainer: _labelName->setString("Secondary Container"); _labelDesc->setString("Secondary30"); break;
-		case material::ColorScheme::OnSecondaryContainer: _labelName->setString("On Secondary Container"); _labelDesc->setString("Secondary90"); break;
-		case material::ColorScheme::Tertiary: _labelName->setString("Tertiary"); _labelDesc->setString("Tertiary80"); break;
-		case material::ColorScheme::OnTertiary: _labelName->setString("On Tertiary"); _labelDesc->setString("Tertiary20"); break;
-		case material::ColorScheme::TertiaryContainer: _labelName->setString("Tertiary Container"); _labelDesc->setString("Tertiary30"); break;
-		case material::ColorScheme::OnTertiaryContainer: _labelName->setString("On Tertiary Container"); _labelDesc->setString("Tertiary90"); break;
-		case material::ColorScheme::Error: _labelName->setString("Error"); _labelDesc->setString("Error80"); break;
-		case material::ColorScheme::OnError: _labelName->setString("On Error"); _labelDesc->setString("Error20"); break;
-		case material::ColorScheme::ErrorContainer: _labelName->setString("Error Container"); _labelDesc->setString("Error30"); break;
-		case material::ColorScheme::OnErrorContainer: _labelName->setString("On Error Container"); _labelDesc->setString("Error90"); break;
-		case material::ColorScheme::Background: _labelName->setString("Background"); _labelDesc->setString("Neutral10"); break;
-		case material::ColorScheme::OnBackground: _labelName->setString("On Background"); _labelDesc->setString("Neutral90"); break;
-		case material::ColorScheme::Surface: _labelName->setString("Surface"); _labelDesc->setString("Neutral10"); break;
-		case material::ColorScheme::OnSurface: _labelName->setString("On Surface"); _labelDesc->setString("Neutral90"); break;
-		case material::ColorScheme::SurfaceVariant: _labelName->setString("Surface Variant"); _labelDesc->setString("Neutral-variant30"); break;
-		case material::ColorScheme::OnSurfaceVariant: _labelName->setString("On Surface Variant"); _labelDesc->setString("Neutral-variant80"); break;
-		case material::ColorScheme::Outline: _labelName->setString("Outline"); _labelDesc->setString("Neutral-variant60"); break;
-		case material::ColorScheme::OutlineVariant: _labelName->setString("Outline Variant"); _labelDesc->setString(""); break;
-		case material::ColorScheme::Shadow: _labelName->setString("Shadow"); _labelDesc->setString(""); break;
-		case material::ColorScheme::Scrim: _labelName->setString("Scrim"); _labelDesc->setString(""); break;
-		case material::ColorScheme::InverseSurface: _labelName->setString("Inverse Surface"); _labelDesc->setString(""); break;
-		case material::ColorScheme::InverseOnSurface: _labelName->setString("Inverse On Surface"); _labelDesc->setString(""); break;
-		case material::ColorScheme::InversePrimary: _labelName->setString("Inverse Primary"); _labelDesc->setString(""); break;
-		case material::ColorScheme::Max: break;
+		case material::ColorRole::Primary: _labelName->setString("Primary"); _labelDesc->setString("Primary80"); break;
+		case material::ColorRole::OnPrimary: _labelName->setString("On Primary"); _labelDesc->setString("Primary20"); break;
+		case material::ColorRole::PrimaryContainer: _labelName->setString("Primary Container"); _labelDesc->setString("Primary30"); break;
+		case material::ColorRole::OnPrimaryContainer: _labelName->setString("On Primary Container"); _labelDesc->setString("Primary90"); break;
+		case material::ColorRole::Secondary: _labelName->setString("Secondary"); _labelDesc->setString("Secondary80"); break;
+		case material::ColorRole::OnSecondary: _labelName->setString("On Secondary"); _labelDesc->setString("Secondary20"); break;
+		case material::ColorRole::SecondaryContainer: _labelName->setString("Secondary Container"); _labelDesc->setString("Secondary30"); break;
+		case material::ColorRole::OnSecondaryContainer: _labelName->setString("On Secondary Container"); _labelDesc->setString("Secondary90"); break;
+		case material::ColorRole::Tertiary: _labelName->setString("Tertiary"); _labelDesc->setString("Tertiary80"); break;
+		case material::ColorRole::OnTertiary: _labelName->setString("On Tertiary"); _labelDesc->setString("Tertiary20"); break;
+		case material::ColorRole::TertiaryContainer: _labelName->setString("Tertiary Container"); _labelDesc->setString("Tertiary30"); break;
+		case material::ColorRole::OnTertiaryContainer: _labelName->setString("On Tertiary Container"); _labelDesc->setString("Tertiary90"); break;
+		case material::ColorRole::Error: _labelName->setString("Error"); _labelDesc->setString("Error80"); break;
+		case material::ColorRole::OnError: _labelName->setString("On Error"); _labelDesc->setString("Error20"); break;
+		case material::ColorRole::ErrorContainer: _labelName->setString("Error Container"); _labelDesc->setString("Error30"); break;
+		case material::ColorRole::OnErrorContainer: _labelName->setString("On Error Container"); _labelDesc->setString("Error90"); break;
+		case material::ColorRole::Background: _labelName->setString("Background"); _labelDesc->setString("Neutral10"); break;
+		case material::ColorRole::OnBackground: _labelName->setString("On Background"); _labelDesc->setString("Neutral90"); break;
+		case material::ColorRole::Surface: _labelName->setString("Surface"); _labelDesc->setString("Neutral10"); break;
+		case material::ColorRole::OnSurface: _labelName->setString("On Surface"); _labelDesc->setString("Neutral90"); break;
+		case material::ColorRole::SurfaceVariant: _labelName->setString("Surface Variant"); _labelDesc->setString("Neutral-variant30"); break;
+		case material::ColorRole::OnSurfaceVariant: _labelName->setString("On Surface Variant"); _labelDesc->setString("Neutral-variant80"); break;
+		case material::ColorRole::Outline: _labelName->setString("Outline"); _labelDesc->setString("Neutral-variant60"); break;
+		case material::ColorRole::OutlineVariant: _labelName->setString("Outline Variant"); _labelDesc->setString(""); break;
+		case material::ColorRole::Shadow: _labelName->setString("Shadow"); _labelDesc->setString(""); break;
+		case material::ColorRole::Scrim: _labelName->setString("Scrim"); _labelDesc->setString(""); break;
+		case material::ColorRole::InverseSurface: _labelName->setString("Inverse Surface"); _labelDesc->setString(""); break;
+		case material::ColorRole::InverseOnSurface: _labelName->setString("Inverse On Surface"); _labelDesc->setString(""); break;
+		case material::ColorRole::InversePrimary: _labelName->setString("Inverse Primary"); _labelDesc->setString(""); break;
+		case material::ColorRole::Max: break;
 		}
 		break;
 	}
@@ -291,10 +291,10 @@ bool MaterialColorPickerTest::init() {
 
 	_lightCheckbox = addChild(Rc<AppCheckboxWithLabel>::create("Dark theme", false, [this] (bool value) {
 		if (value) {
-			_themeType = material::ColorScheme::DarkTheme;
+			_themeType = material::ThemeType::DarkTheme;
 			_background->setVisible(true);
 		} else {
-			_themeType = material::ColorScheme::LightTheme;
+			_themeType = material::ThemeType::LightTheme;
 			_background->setVisible(false);
 		}
 		updateColor(material::ColorHCT(_colorHct));
@@ -331,8 +331,8 @@ bool MaterialColorPickerTest::init() {
 	_spriteLayer->setContentSize(Size2(98, 98));
 	_spriteLayer->setAnchorPoint(Anchor::TopLeft);
 
-	for (auto i = toInt(material::ColorScheme::Primary); i < toInt(material::ColorScheme::Max); ++ i) {
-		auto v = addChild(Rc<MaterialColorSchemeNode>::create(material::ColorScheme::Name(i)));
+	for (auto i = toInt(material::ColorRole::Primary); i < toInt(material::ColorRole::Max); ++ i) {
+		auto v = addChild(Rc<MaterialColorSchemeNode>::create(material::ColorRole(i)));
 		v->setAnchorPoint(Anchor::TopLeft);
 		_nodes[i] = v;
 	}
@@ -371,7 +371,7 @@ void MaterialColorPickerTest::onContentSizeDirty() {
 	Vec2 origin(16.0f, _contentSize.height - 164.0f);
 	Size2 size((_contentSize.width - 32.0f) / 4.0f, 48.0f);
 
-	for (auto i = toInt(material::ColorScheme::Primary); i < toInt(material::ColorScheme::Max); ++ i) {
+	for (auto i = toInt(material::ColorRole::Primary); i < toInt(material::ColorRole::Max); ++ i) {
 		auto row = i % 4;
 
 		_nodes[i]->setContentSize(size);
@@ -392,19 +392,19 @@ void MaterialColorPickerTest::updateColor(material::ColorHCT &&color) {
 
 	_colorScheme = material::ColorScheme(_themeType, _colorHct, _isContentColor);
 
-	for (auto i = toInt(material::ColorScheme::Primary); i < toInt(material::ColorScheme::Max); ++ i) {
-		_nodes[i]->setSchemeColor(_themeType, _colorScheme.get(material::ColorScheme::Name(i)), _colorScheme.on(material::ColorScheme::Name(i)));
+	for (auto i = toInt(material::ColorRole::Primary); i < toInt(material::ColorRole::Max); ++ i) {
+		_nodes[i]->setSchemeColor(_themeType, _colorScheme.get(material::ColorRole(i)), _colorScheme.on(material::ColorRole(i)));
 	}
 
 	switch (_themeType) {
-	case material::ColorScheme::LightTheme:
+	case material::ThemeType::LightTheme:
 		_huePicker->setLabelColor(Color::Black);
 		_chromaPicker->setLabelColor(Color::Black);
 		_tonePicker->setLabelColor(Color::Black);
 		_lightCheckbox->setLabelColor(Color::Black);
 		_contentCheckbox->setLabelColor(Color::Black);
 		break;
-	case material::ColorScheme::DarkTheme:
+	case material::ThemeType::DarkTheme:
 		_huePicker->setLabelColor(Color::White);
 		_chromaPicker->setLabelColor(Color::White);
 		_tonePicker->setLabelColor(Color::White);

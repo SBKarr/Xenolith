@@ -22,19 +22,20 @@
 
 #include "XLFontFormatter.h"
 #include "XLFontLibrary.h"
+#include "XLFontLayout.h"
 #include "hyphen/hyphen.h"
 
 namespace stappler::xenolith::font {
 
 static FontLayoutId FontLayoutIdInvalid(maxOf<uint16_t>());
 
-Formatter::Formatter() : output(nullptr), density(1.0f) { }
+Formatter::Formatter() : _output(nullptr) { }
 
-Formatter::Formatter(FormatSpec *o, float density)
-: output(o), density(density) { }
+Formatter::Formatter(FormatSpec *o)
+: _output(o) { }
 
-void Formatter::init(FormatSpec *o, float d) {
-	reset(o, d);
+void Formatter::init(FormatSpec *o) {
+	reset(o);
 }
 
 void Formatter::setLinePositionCallback(const LinePositionCallback &func) {
@@ -83,9 +84,6 @@ void Formatter::setHyphens(HyphenMap *map) {
 }
 void Formatter::setRequest(ContentRequest req) {
 	request = req;
-}
-void Formatter::setFontScale(float scale) {
-	fontScale = scale;
 }
 
 void Formatter::begin(uint16_t ind, uint16_t blockMargin) {
@@ -152,16 +150,16 @@ void Formatter::parseFontLineHeight(uint16_t h) {
 
 bool Formatter::updatePosition(uint16_t &linePos, uint16_t &height) {
 	if (linePositionFunc) {
-		std::tie(lineOffset, width) = linePositionFunc(linePos, height, density);
+		std::tie(lineOffset, width) = linePositionFunc(linePos, height, _primaryFontLayout->getSpec().density);
 		width = std::min(width, defaultWidth);
 
 		uint16_t maxHeight = lineHeight * 16;
 		uint16_t extraHeight = 0;
 
-		while (width < primaryFontId->getFontHeight() && extraHeight < maxHeight) {
+		while (width < _primaryFontLayout->getFontHeight() && extraHeight < maxHeight) {
 			extraHeight += lineHeight;
 			linePos += lineHeight;
-			std::tie(lineOffset, width) = linePositionFunc(linePos, height, density);
+			std::tie(lineOffset, width) = linePositionFunc(linePos, height, _primaryFontLayout->getSpec().density);
 			width = std::min(width, defaultWidth);
 		}
 
@@ -172,22 +170,13 @@ bool Formatter::updatePosition(uint16_t &linePos, uint16_t &height) {
 	return true;
 }
 
-/*FontLayoutId Formatter::getLayout(uint16_t pos) const {
-	for (const RangeSpec &it : output->ranges) {
-		if (pos >= it.start && pos < it.start + it.count) {
-			return it.layout;
-		}
-	}
-	return primaryFontId;
-}*/
-
 uint16_t Formatter::getAdvance(const CharSpec &ch) const {
 	return ch.advance;
 }
 
 uint16_t Formatter::getAdvance(uint16_t pos) const {
-	if (pos < output->chars.size()) {
-		return getAdvance(output->chars.at(pos));
+	if (pos < _output->chars.size()) {
+		return getAdvance(_output->chars.at(pos));
 	} else {
 		return 0;
 	}
@@ -198,7 +187,7 @@ inline uint16_t Formatter::getAdvancePosition(const CharSpec &ch) const {
 }
 
 inline uint16_t Formatter::getAdvancePosition(uint16_t pos) const {
-	return (pos < output->chars.size())?getAdvancePosition(output->chars.at(pos)):(uint16_t)0;
+	return (pos < _output->chars.size())?getAdvancePosition(_output->chars.at(pos)):(uint16_t)0;
 }
 
 inline uint16_t Formatter::getOriginPosition(const CharSpec &ch) const {
@@ -206,7 +195,7 @@ inline uint16_t Formatter::getOriginPosition(const CharSpec &ch) const {
 }
 
 inline uint16_t Formatter::getOriginPosition(uint16_t pos) const {
-	return (pos < output->chars.size())?getOriginPosition(output->chars.at(pos)):(uint16_t)0;
+	return (pos < _output->chars.size())?getOriginPosition(_output->chars.at(pos)):(uint16_t)0;
 }
 
 bool Formatter::isSpecial(char16_t ch) const {
@@ -225,7 +214,7 @@ uint16_t Formatter::checkBullet(uint16_t first, uint16_t len) const {
 
 	uint16_t offset = 0;
 	for (uint16_t i = first; i < first + len - 1; i++) {
-		auto ch = output->chars.at(i).charID;
+		auto ch = _output->chars.at(i).charID;
 		if (chars::CharGroup<char16_t, CharGroupId::OpticalAlignmentBullet>::match(ch)) {
 			offset ++;
 		} else if (string::isspace(ch) && offset >= 1) {
@@ -239,41 +228,41 @@ uint16_t Formatter::checkBullet(uint16_t first, uint16_t len) const {
 }
 
 void Formatter::pushLineFiller(bool replaceLastChar) {
-	output->overflow = true;
+	_output->overflow = true;
 	if (_fillerChar == 0) {
 		return;
 	}
 
-	auto charDef = primaryFontId->getChar(_fillerChar, faceId);
+	auto charDef = _primaryFontLayout->getChar(_fillerChar, faceId);
 	if (!charDef) {
 		return;
 	}
 
-	if (replaceLastChar && !output->chars.empty()) {
-		auto &bc = output->chars.back();
+	if (replaceLastChar && !_output->chars.empty()) {
+		auto &bc = _output->chars.back();
 		bc.charID = _fillerChar;
 		bc.advance = charDef.xAdvance;
 	} else {
-		output->chars.emplace_back(CharSpec{_fillerChar, lineX, charDef.xAdvance, faceId});
+		_output->chars.emplace_back(CharSpec{_fillerChar, lineX, charDef.xAdvance, faceId});
 		charNum ++;
 	}
 }
 
 bool Formatter::pushChar(char16_t ch) {
-	if (textStyle.textTransform == TextTransform::Uppercase) {
+	if (_textStyle.textTransform == TextTransform::Uppercase) {
 		ch = string::toupper(ch);
-	} else if (textStyle.textTransform == TextTransform::Lowercase) {
+	} else if (_textStyle.textTransform == TextTransform::Lowercase) {
 		ch = string::tolower(ch);
 	}
 
-	CharLayout charDef = primaryFontId->getChar(ch, faceId);
+	CharLayout charDef = _primaryFontLayout->getChar(ch, faceId);
 
 	if (charDef.charID == 0) {
 		if (ch == (char16_t)0x00AD) {
-			charDef = primaryFontId->getChar('-', faceId);
+			charDef = _primaryFontLayout->getChar('-', faceId);
 		} else {
 			log::format("RichTextFormatter", "%s: Attempted to use undefined character: %d '%s'",
-					primaryFontId->getName().data(), ch, string::toUtf8<Interface>(ch).c_str());
+					_primaryFontLayout->getName().data(), ch, string::toUtf8<Interface>(ch).c_str());
 			return true;
 		}
 	}
@@ -287,12 +276,12 @@ bool Formatter::pushChar(char16_t ch) {
 	CharSpec spec{ch, posX, charDef.xAdvance, faceId};
 
 	if (ch == (char16_t)0x00AD) {
-		if (textStyle.hyphens == Hyphens::Manual || textStyle.hyphens == Hyphens::Auto) {
+		if (_textStyle.hyphens == Hyphens::Manual || _textStyle.hyphens == Hyphens::Auto) {
 			wordWrapPos = charNum + 1;
 		}
 	} else if (ch == u'-' || ch == u'+' || ch == u'*' || ch == u'/' || ch == u'\\') {
 		auto pos = charNum;
-		while(pos > firstInLine && (!string::isspace(output->chars.at(pos - 1).charID))) {
+		while(pos > firstInLine && (!string::isspace(_output->chars.at(pos - 1).charID))) {
 			pos --;
 		}
 		if (charNum - pos > 2) {
@@ -318,7 +307,7 @@ bool Formatter::pushChar(char16_t ch) {
 		}
 	}
 	charNum ++;
-	output->chars.push_back(std::move(spec));
+	_output->chars.push_back(std::move(spec));
 
 	return true;
 }
@@ -334,14 +323,14 @@ bool Formatter::pushSpace(bool wrap) {
 }
 
 bool Formatter::pushTab() {
-	CharLayout charDef = primaryFontId->getChar(' ', faceId);
+	CharLayout charDef = _primaryFontLayout->getChar(' ', faceId);
 
 	auto posX = lineX;
 	auto tabPos = (lineX + charDef.xAdvance) / (charDef.xAdvance * 4) + 1;
 	lineX = tabPos * charDef.xAdvance * 4;
 
 	charNum ++;
-	output->chars.push_back(CharSpec{char16_t('\t'), posX, uint16_t(lineX - posX), faceId});
+	_output->chars.push_back(CharSpec{char16_t('\t'), posX, uint16_t(lineX - posX), faceId});
 	if (wordWrap) {
 		wordWrapPos = charNum;
 	}
@@ -350,7 +339,7 @@ bool Formatter::pushTab() {
 }
 
 uint16_t Formatter::getLineAdvancePos(uint16_t lastPos) {
-	auto &origChar = output->chars.at(lastPos);
+	auto &origChar = _output->chars.at(lastPos);
 	auto ch = origChar.charID;
 	if (ch == ' ' && lastPos > firstInLine) {
 		lastPos --;
@@ -360,7 +349,7 @@ uint16_t Formatter::getLineAdvancePos(uint16_t lastPos) {
 	}
 
 	auto a = getAdvancePosition(lastPos);
-	auto &lastChar = output->chars.at(lastPos);
+	auto &lastChar = _output->chars.at(lastPos);
 	ch = lastChar.charID;
 	if (isSpecial(ch)) {
 		if (ch == '.' || ch == ',') {
@@ -373,7 +362,7 @@ uint16_t Formatter::getLineAdvancePos(uint16_t lastPos) {
 }
 
 bool Formatter::pushLine(uint16_t first, uint16_t len, bool forceAlign) {
-	if (maxLines && output->lines.size() + 1 == maxLines && forceAlign) {
+	if (maxLines && _output->lines.size() + 1 == maxLines && forceAlign) {
 		pushLineFiller(true);
 		return false;
 	}
@@ -381,17 +370,17 @@ bool Formatter::pushLine(uint16_t first, uint16_t len, bool forceAlign) {
 	uint16_t linePos = lineY + currentLineHeight;
 
 	if (len > 0) {
-		output->lines.push_back(LineSpec{first, len, linePos, currentLineHeight});
+		_output->lines.push_back(LineSpec{first, len, linePos, currentLineHeight});
 		uint16_t advance = getLineAdvancePos(first + len - 1);
 		uint16_t offsetLeft = (advance < (width + lineOffset))?((width + lineOffset) - advance):0;
 		if (offsetLeft > 0 && alignment == TextAlign::Right) {
 			for (uint16_t i = first; i < first + len; i++) {
-				output->chars.at(i).pos += offsetLeft;
+				_output->chars.at(i).pos += offsetLeft;
 			}
 		} else if (offsetLeft > 0 && alignment == TextAlign::Center) {
 			offsetLeft /= 2;
 			for (uint16_t i = first; i < first + len; i++) {
-				output->chars.at(i).pos += offsetLeft;
+				_output->chars.at(i).pos += offsetLeft;
 			}
 		} else if ((offsetLeft > 0 || (advance > width + lineOffset)) && alignment == TextAlign::Justify && forceAlign && len > 0) {
 			int16_t joffset = (advance > width + lineOffset)?(width + lineOffset - advance):offsetLeft;
@@ -403,7 +392,7 @@ bool Formatter::pushLine(uint16_t first, uint16_t len, bool forceAlign) {
 			}
 
 			for (uint16_t i = first; i < first + len - 1; i++) {
-				auto ch = output->chars.at(i).charID;
+				auto ch = _output->chars.at(i).charID;
 				if (string::isspace(ch) && ch != '\n') {
 					spacesCount ++;
 				}
@@ -411,13 +400,13 @@ bool Formatter::pushLine(uint16_t first, uint16_t len, bool forceAlign) {
 
 			int16_t offset = 0;
 			for (uint16_t i = first; i < first + len; i++) {
-				auto ch = output->chars.at(i).charID;
+				auto ch = _output->chars.at(i).charID;
 				if (ch != char16_t(0xffff) && string::isspace(ch) && ch != '\n' && spacesCount > 0) {
 					offset += joffset / spacesCount;
 					joffset -= joffset / spacesCount;
 					spacesCount --;
 				} else {
-					output->chars.at(i).pos += offset;
+					_output->chars.at(i).pos += offset;
 				}
 			}
 		}
@@ -434,7 +423,7 @@ bool Formatter::pushLine(uint16_t first, uint16_t len, bool forceAlign) {
 	currentLineHeight = min(rangeLineHeight, lineHeight);
 	parseFontLineHeight(rangeLineHeight);
 	width = defaultWidth;
-	if (defaultWidth >= primaryFontId->getFontHeight()) {
+	if (defaultWidth >= _primaryFontLayout->getFontHeight()) {
 		if (!updatePosition(lineY, currentLineHeight)) {
 			return false;
 		}
@@ -455,7 +444,7 @@ bool Formatter::pushLine(bool forceAlign) {
 void Formatter::updateLineHeight(uint16_t first, uint16_t last) {
 	if (!lineHeightIsAbsolute) {
 		bool found = false;
-		for (RangeSpec &it : output->ranges) {
+		for (RangeSpec &it : _output->ranges) {
 			if (it.start <= first && it.start + it.count > first) {
 				found = true;
 			} else if (it.start > last) {
@@ -469,11 +458,11 @@ void Formatter::updateLineHeight(uint16_t first, uint16_t last) {
 }
 
 bool Formatter::pushLineBreak() {
-	if (chars::CharGroup<char16_t, CharGroupId::WhiteSpace>::match(output->chars.back().charID)) {
+	if (chars::CharGroup<char16_t, CharGroupId::WhiteSpace>::match(_output->chars.back().charID)) {
 		return true;
 	}
 
-	if (firstInLine >= wordWrapPos - 1 && (maxLines != 0 && output->lines.size() + 1 != maxLines)) {
+	if (firstInLine >= wordWrapPos - 1 && (maxLines != 0 && _output->lines.size() + 1 != maxLines)) {
 		return true;
 	}
 
@@ -490,7 +479,7 @@ bool Formatter::pushLineBreak() {
 			firstInLine = wordEnd;
 			wordWrapPos = wordEnd;
 
-			auto &ch = output->chars.at(wordEnd);
+			auto &ch = _output->chars.at(wordEnd);
 
 			ch.pos = lineX;
 			lineX += ch.advance;
@@ -499,7 +488,7 @@ bool Formatter::pushLineBreak() {
 		}
 	} else {
 		// we can wrap the word
-		auto &ch = output->chars.at((wordWrapPos - 1));
+		auto &ch = _output->chars.at((wordWrapPos - 1));
 		if (!string::isspace(ch.charID)) {
 			if (!pushLine(firstInLine, (wordWrapPos) - firstInLine, true)) {
 				return false;
@@ -511,9 +500,9 @@ bool Formatter::pushLineBreak() {
 		}
 		firstInLine = wordStart;
 
-		if (wordStart < output->chars.size()) {
+		if (wordStart < _output->chars.size()) {
 			uint16_t originOffset = getOriginPosition(wordStart);
-			auto &bc = output->chars.at((wordStart));
+			auto &bc = _output->chars.at((wordStart));
 			if (isSpecial(bc.charID)) {
 				originOffset += bc.advance / 2;
 			}
@@ -523,7 +512,7 @@ bool Formatter::pushLineBreak() {
 			}
 
 			for (uint32_t i = wordStart; i <= wordEnd; i++) {
-				output->chars.at(i).pos -= originOffset;
+				_output->chars.at(i).pos -= originOffset;
 			}
 			lineX -= originOffset;
 		} else {
@@ -535,7 +524,7 @@ bool Formatter::pushLineBreak() {
 
 bool Formatter::pushLineBreakChar() {
 	charNum ++;
-	output->chars.push_back(CharSpec{char16_t(0x0A), lineX, 0, 0});
+	_output->chars.push_back(CharSpec{char16_t(0x0A), lineX, 0, 0});
 
 	if (!pushLine(false)) {
 		return false;
@@ -548,8 +537,8 @@ bool Formatter::pushLineBreakChar() {
 bool Formatter::readChars(WideStringView &r, const Vector<uint8_t> &hyph) {
 	size_t wordPos = 0;
 	auto hIt = hyph.begin();
-	bool startWhitespace = output->chars.empty();
-	for (c = r[0]; !r.empty(); ++charPosition, ++wordPos, ++r, c = r[0]) {
+	bool startWhitespace = _output->chars.empty();
+	for (c = r[0]; !r.empty(); ++_charPosition, ++wordPos, ++r, c = r[0]) {
 		if (hIt != hyph.end() && wordPos == *hIt) {
 			pushChar((char16_t)0x00AD);
 			++ hIt;
@@ -584,7 +573,7 @@ bool Formatter::readChars(WideStringView &r, const Vector<uint8_t> &hyph) {
 		if (c < char16_t(0x20)) {
 			if (emplaceAllChars) {
 				charNum ++;
-				output->chars.push_back(CharSpec{char16_t(0xFFFF), lineX, 0, 0});
+				_output->chars.push_back(CharSpec{char16_t(0xFFFF), lineX, 0, 0});
 			}
 			continue;
 		}
@@ -623,7 +612,7 @@ bool Formatter::readChars(WideStringView &r, const Vector<uint8_t> &hyph) {
 			}
 		}
 
-		auto kerning = primaryFontId->getKerningAmount(b, c, faceId);
+		auto kerning = _primaryFontLayout->getKerningAmount(b, c, faceId);
 		lineX += kerning;
 		if (!pushChar(c)) {
 			return false;
@@ -660,25 +649,19 @@ bool Formatter::readChars(WideStringView &r, const Vector<uint8_t> &hyph) {
 bool Formatter::read(const FontParameters &f, const TextParameters &s, WideStringView str, uint16_t frontOffset, uint16_t backOffset) {
 	return read(f, s, str.data(), str.size(), frontOffset, backOffset);
 }
+
 bool Formatter::read(const FontParameters &f, const TextParameters &s, const char16_t *str, size_t len, uint16_t frontOffset, uint16_t backOffset) {
 	if (!str) {
 		return false;
 	}
 
-	FontLayoutId primary, secondary = FontLayoutIdInvalid;
+	_primaryFontLayout = nullptr;
 
-	primaryFontId = nullptr;
-
-	primary = output->source->getLayout(f, fontScale);
-	if (primary.get() == 0) {
-		return false;
-	}
+	Rc<FontLayout> primaryLayout;
+	Rc<FontLayout> secondaryLayout;
 
 	if (f.fontVariant == FontVariant::SmallCaps) {
-		secondary = output->source->getLayout(f.getSmallCaps(), fontScale);
-		if (secondary.get() == 0) {
-			return false;
-		}
+		//secondary = _output->source->getLayout(f.getSmallCaps());
 
 		FontCharString primaryStr;
 		FontCharString secondaryStr;
@@ -689,7 +672,7 @@ bool Formatter::read(const FontParameters &f, const TextParameters &s, const cha
 			} else if (s.textTransform == TextTransform::Lowercase) {
 				ch = string::tolower(ch);
 			}
-			if (secondary != FontLayoutIdInvalid && ch != string::toupper(ch)) {
+			if (ch != string::toupper(ch)) {
 				secondaryStr.addChar(string::toupper(ch));
 			} else {
 				primaryStr.addChar(ch);
@@ -701,9 +684,12 @@ bool Formatter::read(const FontParameters &f, const TextParameters &s, const cha
 		primaryStr.addChar('-');
 		primaryStr.addChar(' ');
 		primaryStr.addChar(char16_t(0xAD));
-		output->source->addString(primary, primaryStr);
-		if (secondary != FontLayoutIdInvalid) {
-			output->source->addString(secondary, secondaryStr);
+
+		primaryLayout = _output->source->getLayoutForString(f, primaryStr);
+		secondaryLayout = _output->source->getLayoutForString(f.getSmallCaps(), secondaryStr);
+
+		if (!secondaryLayout) {
+			return false;
 		}
 	} else {
 		FontCharString primaryStr;
@@ -727,13 +713,11 @@ bool Formatter::read(const FontParameters &f, const TextParameters &s, const cha
 		primaryStr.addChar(' ');
 		primaryStr.addChar(char16_t(0xAD));
 
-		output->source->addString(primary, primaryStr);
+		primaryLayout = _output->source->getLayoutForString(f, primaryStr);
 	}
 
-	Rc<FontSizedLayout> primaryLayout = output->source->getSizedLayout(primary);
-	Rc<FontSizedLayout> secondaryLayout;
-	if (secondary != FontLayoutIdInvalid) {
-		secondaryLayout = output->source->getSizedLayout(secondary);
+	if (!primaryLayout) {
+		return false;
 	}
 
 	auto h = primaryLayout->getFontHeight();
@@ -751,7 +735,7 @@ bool Formatter::read(const FontParameters &f, const TextParameters &s, const cha
 					caps = true;
 					if (blockSize > 0) {
 						readWithRange(RangeSpec{false, false, s.textDecoration, s.verticalAlign,
-							uint32_t(output->chars.size()), 0, Color4B(s.color, s.opacity), h,
+							uint32_t(_output->chars.size()), 0, Color4B(s.color, s.opacity), h,
 							primaryLayout->getMetrics(), primaryLayout},
 								s, str + blockStart, blockSize, frontOffset, backOffset);
 					}
@@ -763,7 +747,7 @@ bool Formatter::read(const FontParameters &f, const TextParameters &s, const cha
 					caps = false;
 					if (blockSize > 0) {
 						readWithRange(RangeSpec{false, false, s.textDecoration, s.verticalAlign,
-							uint32_t(output->chars.size()), 0, Color4B(s.color, s.opacity), h,
+							uint32_t(_output->chars.size()), 0, Color4B(s.color, s.opacity), h,
 							secondaryLayout->getMetrics(), secondaryLayout},
 								capsParams, str + blockStart, blockSize, frontOffset, backOffset);
 					}
@@ -776,19 +760,19 @@ bool Formatter::read(const FontParameters &f, const TextParameters &s, const cha
 		if (blockSize > 0) {
 			if (caps) {
 				return readWithRange(RangeSpec{false, false, s.textDecoration, s.verticalAlign,
-					uint32_t(output->chars.size()), 0, Color4B(s.color, s.opacity), h,
+					uint32_t(_output->chars.size()), 0, Color4B(s.color, s.opacity), h,
 					secondaryLayout->getMetrics(), secondaryLayout},
 						capsParams, str + blockStart, blockSize, frontOffset, backOffset);
 			} else {
 				return readWithRange(RangeSpec{false, false, s.textDecoration, s.verticalAlign,
-					uint32_t(output->chars.size()), 0, Color4B(s.color, s.opacity), h,
+					uint32_t(_output->chars.size()), 0, Color4B(s.color, s.opacity), h,
 					primaryLayout->getMetrics(), primaryLayout},
 						s, str + blockStart, blockSize, frontOffset, backOffset);
 			}
 		}
 	} else {
 		return readWithRange(RangeSpec{false, false, s.textDecoration, s.verticalAlign,
-			uint32_t(output->chars.size()), 0, Color4B(s.color, s.opacity), h,
+			uint32_t(_output->chars.size()), 0, Color4B(s.color, s.opacity), h,
 			primaryLayout->getMetrics(), primaryLayout},
 				s, str, len, frontOffset, backOffset);
 	}
@@ -797,22 +781,21 @@ bool Formatter::read(const FontParameters &f, const TextParameters &s, const cha
 }
 
 bool Formatter::read(const FontParameters &f, const TextParameters &s, uint16_t blockWidth, uint16_t blockHeight) {
-	primaryFontId = nullptr;
+	_primaryFontLayout = nullptr;
 
-	auto primary = output->source->getLayout(f, fontScale);
-	Rc<FontSizedLayout> primaryLayout = output->source->getSizedLayout(primary);
-
+	Rc<FontLayout> primaryLayout = _output->source->getLayout(f);
 	return readWithRange(RangeSpec{false, false, s.textDecoration, s.verticalAlign,
-		uint32_t(output->chars.size()), 0, Color4B(s.color, s.opacity), blockHeight,
+		uint32_t(_output->chars.size()), 0, Color4B(s.color, s.opacity), blockHeight,
 		primaryLayout->getMetrics(), primaryLayout},
 			s, blockWidth, blockHeight);
 }
 
-bool Formatter::readWithRange(RangeSpec && range, const TextParameters &s, const char16_t *str, size_t len, uint16_t frontOffset, uint16_t backOffset) {
-	primaryFontId = range.layout;
+bool Formatter::readWithRange(RangeSpec && range, const TextParameters &s,
+		const char16_t *str, size_t len, uint16_t frontOffset, uint16_t backOffset) {
+	_primaryFontLayout = range.layout;
 	rangeLineHeight = range.height;
 
-	charPosition = 0;
+	_charPosition = 0;
 	if (bufferedSpace) {
 		pushSpace();
 		bufferedSpace = false;
@@ -820,13 +803,13 @@ bool Formatter::readWithRange(RangeSpec && range, const TextParameters &s, const
 
 	parseFontLineHeight(rangeLineHeight);
 
-	textStyle = s;
-	parseWhiteSpace(textStyle.whiteSpace);
+	_textStyle = s;
+	parseWhiteSpace(_textStyle.whiteSpace);
 	if (!updatePosition(lineY, currentLineHeight)) {
 		return false;
 	}
 
-	if (!output->chars.empty() && output->chars.back().charID == ' ' && collapseSpaces) {
+	if (!_output->chars.empty() && _output->chars.back().charID == ' ' && collapseSpaces) {
 		while (len > 0 && ((string::isspace(str[0]) && str[0] != 0x00A0) || str[0] < 0x20)) {
 			len --; str ++;
 		}
@@ -835,9 +818,9 @@ bool Formatter::readWithRange(RangeSpec && range, const TextParameters &s, const
 	b = 0;
 
 	lineX += frontOffset;
-	charPosition = 0;
+	_charPosition = 0;
 	WideStringView r(str, len);
-	if (textStyle.hyphens == Hyphens::Auto && _hyphens) {
+	if (_textStyle.hyphens == Hyphens::Auto && _hyphens) {
 		while (!r.empty()) {
 			WideStringView tmp = r.readUntil<WideStringView::CharGroup<CharGroupId::Latin>,
 					WideStringView::CharGroup<CharGroupId::Cyrillic>>();
@@ -854,27 +837,27 @@ bool Formatter::readWithRange(RangeSpec && range, const TextParameters &s, const
 		readChars(r);
 	}
 
-	range.count = uint32_t(output->chars.size() - range.start);
+	range.count = uint32_t(_output->chars.size() - range.start);
 	if (range.count > 0) {
-		output->ranges.emplace_back(std::move(range));
+		_output->ranges.emplace_back(std::move(range));
 	}
 	lineX += backOffset;
 
 	return true;
 }
 bool Formatter::readWithRange(RangeSpec &&range, const TextParameters &s, uint16_t blockWidth, uint16_t blockHeight) {
-	primaryFontId = range.layout;
+	_primaryFontLayout = range.layout;
 	rangeLineHeight = range.height;
 
-	charPosition = 0;
+	_charPosition = 0;
 	if (bufferedSpace) {
 		pushSpace();
 		bufferedSpace = false;
 	}
 
 
-	textStyle = s;
-	parseWhiteSpace(textStyle.whiteSpace);
+	_textStyle = s;
+	parseWhiteSpace(_textStyle.whiteSpace);
 
 	if (maxWidth && lineX + blockWidth > maxWidth) {
 		pushLineFiller(false);
@@ -906,7 +889,7 @@ bool Formatter::readWithRange(RangeSpec &&range, const TextParameters &s, uint16
 	CharSpec spec{char16_t(0xFFFF), lineX, blockWidth, 0};
 	lineX += spec.advance;
 	charNum ++;
-	output->chars.push_back(std::move(spec));
+	_output->chars.push_back(std::move(spec));
 
 	switch (request) {
 	case ContentRequest::Minimize:
@@ -927,8 +910,8 @@ bool Formatter::readWithRange(RangeSpec &&range, const TextParameters &s, uint16
 	}
 
 
-	range.count = uint32_t(output->chars.size() - range.start);
-	output->ranges.emplace_back(std::move(range));
+	range.count = uint32_t(_output->chars.size() - range.start);
+	_output->ranges.emplace_back(std::move(range));
 
 	return true;
 }
@@ -938,14 +921,14 @@ void Formatter::finalize() {
 		pushLine(false);
 	}
 
-	if (!output->chars.empty() && output->chars.back().charID == char16_t(0x0A)) {
+	if (!_output->chars.empty() && _output->chars.back().charID == char16_t(0x0A)) {
 		pushLine(false);
 	}
 
-	auto chars = output->chars.size();
-	if (chars > 0 && output->ranges.size() > 0 && output->lines.size() > 0) {
-		auto &lastRange = output->ranges.back();
-		auto &lastLine = output->lines.back();
+	auto chars = _output->chars.size();
+	if (chars > 0 && _output->ranges.size() > 0 && _output->lines.size() > 0) {
+		auto &lastRange = _output->ranges.back();
+		auto &lastLine = _output->lines.back();
 
 		if (lastLine.start + lastLine.count != chars) {
 			lastLine.count = uint32_t(chars - lastLine.start);
@@ -956,13 +939,13 @@ void Formatter::finalize() {
 		}
 	}
 
-	output->width = getWidth();
-	output->height = getHeight();
-	output->maxLineX = getMaxLineX();
+	_output->width = getWidth();
+	_output->height = getHeight();
+	_output->maxLineX = getMaxLineX();
 }
 
 void Formatter::reset(FormatSpec *o) {
-	output = o;
+	_output = o;
 
 	b = 0;
 	c = 0;
@@ -989,11 +972,6 @@ void Formatter::reset(FormatSpec *o) {
 	bufferedSpace = false;
 }
 
-void Formatter::reset(FormatSpec *o, float d) {
-	density = d;
-	reset(o);
-}
-
 uint16_t Formatter::getHeight() const {
 	return lineY;
 }
@@ -1007,12 +985,8 @@ uint16_t Formatter::getLineHeight() const {
 	return lineHeight;
 }
 
-float Formatter::getDensity() const {
-	return density;
-}
-
 FormatSpec *Formatter::getOutput() const {
-	return output;
+	return _output;
 }
 
 FormatSpec::FormatSpec(Rc<FontController> &&s) : source(move(s)) { }

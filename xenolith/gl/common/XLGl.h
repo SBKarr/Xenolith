@@ -401,6 +401,7 @@ struct RenderFontInput : public AttachmentInputData {
 	using FontRequest = Pair<Rc<font::FontFaceObject>, Vector<char16_t>>;
 
 	Rc<DynamicImage> image;
+	Rc<font::FontLibrary> library;
 	Vector<FontRequest> requests;
 	Function<void(const ImageInfo &, BytesView)> output;
 };

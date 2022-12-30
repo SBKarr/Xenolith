@@ -64,6 +64,7 @@ public:
 	void onOutputInvalidated(gl::Loop &, FrameAttachmentData &) const;
 
 	void finalize(gl::Loop &, bool success);
+	void signalDependencies(gl::Loop &, bool success);
 
 	bool bindSwapchainCallback(Function<bool(FrameAttachmentData &, bool)> &&);
 	bool bindSwapchain(const Rc<gl::View> &);

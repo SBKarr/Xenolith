@@ -245,9 +245,9 @@ bool QueuePassHandle::doSubmit(FrameHandle &frame, Function<void(bool)> &&onSubm
 				if (auto &view = frame.getSwapchain()) {
 					((View *)view.get())->scheduleFence(move(_fence));
 				}
-				onSubmited(true);
+				doSubmitted(frame, move(onSubmited), true);
 			} else {
-				onSubmited(true);
+				doSubmitted(frame, move(onSubmited), true);
 				_fence->schedule(*_loop);
 			}
 			_fence = nullptr;
@@ -256,12 +256,16 @@ bool QueuePassHandle::doSubmit(FrameHandle &frame, Function<void(bool)> &&onSubm
 			log::vtext("VK-Error", "Fail to vkQueueSubmit");
 			_fence->schedule(*_loop);
 			_fence = nullptr;
-			onSubmited(false);
+			doSubmitted(frame, move(onSubmited), false);
 			invalidate();
 		}
 		_sync = nullptr;
 	}, nullptr, false, "RenderPassHandle::doSubmit");
 	return success;
+}
+
+void QueuePassHandle::doSubmitted(FrameHandle &frame, Function<void(bool)> &&func, bool success) {
+	func(success);
 }
 
 void QueuePassHandle::doComplete(FrameQueue &, Function<void(bool)> &&func, bool success) {

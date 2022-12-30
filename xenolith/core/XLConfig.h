@@ -58,6 +58,9 @@ static constexpr uint64_t MaxDirectorDeltaTime = 100'000'000 / 16;
 // max chars count, used by locale::hasLocaleTagsFast
 static constexpr size_t MaxFastLocaleChars = size_t(127);
 
+// preload char layouts for whole group when char from this group is met
+static constexpr bool FontPreloadGroups = false;
+
 // offset for vertex-based antialiasing in vector images
 static constexpr float VGAntialiasFactor = 0.5f;
 

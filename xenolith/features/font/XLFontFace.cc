@@ -24,6 +24,14 @@
 
 namespace stappler::xenolith::font {
 
+static constexpr uint32_t getAxisTag(char c1, char c2, char c3, char c4) {
+	return uint32_t(c1 & 0xFF) << 24 | uint32_t(c2 & 0xFF) << 16 | uint32_t(c3 & 0xFF) << 8 | uint32_t(c4 & 0xFF);
+}
+
+static constexpr uint32_t getAxisTag(const char c[4]) {
+	return getAxisTag(c[0], c[1], c[2], c[3]);
+}
+
 static CharGroupId getCharGroupForChar(char16_t c) {
 	using namespace chars;
 	if (CharGroup<char16_t, CharGroupId::Numbers>::match(c)) {
@@ -71,26 +79,178 @@ bool FontFaceData::init(StringView name, Function<Bytes()> &&cb) {
 	return true;
 }
 
+void FontFaceData::inspectVariableFont(FontLayoutParameters params, FT_Face face) {
+	FT_MM_Var *masters = nullptr;
+	FT_Get_MM_Var(face, &masters);
+
+	if (masters) {
+		for (FT_UInt i = 0; i < masters->num_axis; ++ i) {
+			auto tag = masters->axis[i].tag;
+			if (tag == getAxisTag("wght")) {
+				_variableAxis |= FontVariableAxis::Weight;
+				_weightMin = FontWeight(masters->axis[i].minimum >> 16);
+				_weightMax = FontWeight(masters->axis[i].maximum >> 16);
+			} else if (tag == getAxisTag("wdth")) {
+				_variableAxis |= FontVariableAxis::Width;
+				_stretchMin = FontStretch(masters->axis[i].minimum >> 15);
+				_stretchMax = FontStretch(masters->axis[i].maximum >> 15);
+			} else if (tag == getAxisTag("ital")) {
+				_variableAxis |= FontVariableAxis::Italic;
+				_italicMin = masters->axis[i].minimum;
+				_italicMax = masters->axis[i].maximum;
+			} else if (tag == getAxisTag("slnt")) {
+				_variableAxis |= FontVariableAxis::Slant;
+				_slantMin = FontStyle(masters->axis[i].minimum >> 10);
+				_slantMax = FontStyle(masters->axis[i].maximum >> 10);
+			} else if (tag == getAxisTag("opsz")) {
+				_variableAxis |= FontVariableAxis::OpticalSize;
+				_opticalSizeMin = masters->axis[i].minimum;
+				_opticalSizeMax = masters->axis[i].maximum;
+			}
+			std::cout << "Variable axis: [" << masters->axis[i].tag << "] "
+					<< (masters->axis[i].minimum >> 16) << " - " << (masters->axis[i].maximum >> 16)
+					<< " def: "<< (masters->axis[i].def >> 16) << "\n";
+		}
+	}
+
+	// apply static params
+	if ((_variableAxis & FontVariableAxis::Weight) == FontVariableAxis::None) {
+		_weightMin = _weightMax = params.fontWeight;
+	}
+	if ((_variableAxis & FontVariableAxis::Width) == FontVariableAxis::None) {
+		_stretchMin = _stretchMax = params.fontStretch;
+	}
+	if ((_variableAxis & FontVariableAxis::Italic) == FontVariableAxis::None &&
+			(_variableAxis & FontVariableAxis::Slant) == FontVariableAxis::None) {
+		switch (params.fontStyle.get()) {
+		case FontStyle::Normal.get(): break;
+		case FontStyle::Italic.get(): _italicMin = _italicMax = 1; break;
+		default: _slantMin = _slantMax = FontStyle::Oblique; break;
+		}
+	}
+
+	_params = params;
+}
+
 BytesView FontFaceData::getView() const {
 	return _view;
 }
 
+FontSpecializationVector FontFaceData::getSpecialization(const FontSpecializationVector &vec) const {
+	FontSpecializationVector ret = vec;
+	ret.fontStyle = _params.fontStyle;
+	ret.fontStretch = _params.fontStretch;
+	ret.fontWeight = _params.fontWeight;
+	if ((_variableAxis & FontVariableAxis::Weight) != FontVariableAxis::None) {
+		ret.fontWeight = math::clamp(vec.fontWeight, _weightMin, _weightMax);
+	}
+	if ((_variableAxis & FontVariableAxis::Stretch) != FontVariableAxis::None) {
+		ret.fontStretch = math::clamp(vec.fontStretch, _stretchMin, _stretchMax);
+	}
+
+	if (ret.fontStyle != vec.fontStyle) {
+		switch (vec.fontStyle.get()) {
+		case FontStyle::Normal.get():
+			if (_params.fontStyle == FontStyle::Italic
+					&& (_variableAxis & FontVariableAxis::Italic) != FontVariableAxis::None
+					&& _italicMin != _italicMax) {
+				// we can disable italic
+				ret.fontStyle = FontStyle::Normal;
+			} else if (_params.fontStyle == FontStyle::Oblique
+					&& (_variableAxis & FontVariableAxis::Slant) != FontVariableAxis::None
+					&& _slantMin <= FontStyle::Normal && _slantMax >= FontStyle::Normal) {
+				//  we can remove slant
+				ret.fontStyle = math::clamp(FontStyle::Normal, _slantMin, _slantMax);
+			}
+			break;
+		case FontStyle::Italic.get():
+			// try true italic or slant emulation
+			if ((_variableAxis & FontVariableAxis::Italic) != FontVariableAxis::None && _italicMin != _italicMax) {
+				ret.fontStyle = FontStyle::Italic;
+			} else if ((_variableAxis & FontVariableAxis::Slant) != FontVariableAxis::None) {
+				ret.fontStyle = math::clamp(FontStyle::Oblique, _slantMin, _slantMax);
+			}
+			break;
+		default:
+			if ((_variableAxis & FontVariableAxis::Slant) != FontVariableAxis::None) {
+				ret.fontStyle = math::clamp(vec.fontStyle, _slantMin, _slantMax);
+			} else if ((_variableAxis & FontVariableAxis::Italic) != FontVariableAxis::None && _italicMin != _italicMax) {
+				ret.fontStyle = FontStyle::Italic;
+			}
+			break;
+		}
+	}
+
+	return ret;
+}
+
 FontFaceObject::~FontFaceObject() { }
 
-bool FontFaceObject::init(StringView name, const Rc<FontFaceData> &data, FT_Face face, FontSize fontSize, uint16_t id) {
-		//we want to use unicode
+bool FontFaceObject::init(StringView name, const Rc<FontFaceData> &data, FT_Face face, const FontSpecializationVector &spec, uint16_t id) {
 	auto err = FT_Select_Charmap(face, FT_ENCODING_UNICODE);
 	if (err != FT_Err_Ok) {
 		return false;
 	}
 
+	if (data->getVariableAxis() != FontVariableAxis::None) {
+		Vector<FT_Fixed> vector;
+
+		FT_MM_Var *masters;
+		FT_Get_MM_Var(face, &masters);
+
+		if (masters) {
+			for (FT_UInt i = 0; i < masters->num_axis; ++ i) {
+				auto tag = masters->axis[i].tag;
+				if (tag == getAxisTag("wght")) {
+					vector.emplace_back(math::clamp(spec.fontWeight, data->getWeightMin(), data->getWeightMax()).get() << 16);
+				} else if (tag == getAxisTag("wdth")) {
+					vector.emplace_back(math::clamp(spec.fontStretch, data->getStretchMin(), data->getStretchMax()).get() << 15);
+				} else if (tag == getAxisTag("ital")) {
+					switch (spec.fontStyle.get()) {
+					case FontStyle::Normal.get(): vector.emplace_back(data->getItalicMin()); break;
+					case FontStyle::Italic.get(): vector.emplace_back(data->getItalicMax()); break;
+					default:
+						if ((data->getVariableAxis() & FontVariableAxis::Slant) != FontVariableAxis::None) {
+							vector.emplace_back(data->getItalicMin()); // has true oblique
+						} else {
+							vector.emplace_back(data->getItalicMax());
+						}
+						break;
+					}
+				} else if (tag == getAxisTag("slnt")) {
+					switch (spec.fontStyle.get()) {
+					case FontStyle::Normal.get(): vector.emplace_back(0); break;
+					case FontStyle::Italic.get():
+						if ((data->getVariableAxis() & FontVariableAxis::Italic) != FontVariableAxis::None) {
+							vector.emplace_back(masters->axis[i].def);
+						} else {
+							vector.emplace_back(math::clamp(FontStyle::Oblique, data->getSlantMin(), data->getSlantMax()).get() << 10);
+						}
+						break;
+					default:
+						vector.emplace_back(math::clamp(spec.fontStyle, data->getSlantMin(), data->getSlantMax()).get() << 10);
+						break;
+					}
+				} else if (tag == getAxisTag("opsz")) {
+					auto opticalSize = uint32_t(floorf(spec.fontSize.get() / spec.density)) << 16;
+					vector.emplace_back(math::clamp(opticalSize, data->getOpticalSizeMin(), data->getOpticalSizeMax()));
+				} else {
+					vector.emplace_back(masters->axis[i].def);
+				}
+			}
+
+			FT_Set_Var_Design_Coordinates(face, vector.size(), vector.data());
+		}
+	}
+
 	// set the requested font size
-	err = FT_Set_Pixel_Sizes(face, fontSize.get(), fontSize.get());
+	err = FT_Set_Pixel_Sizes(face, spec.fontSize.get(), spec.fontSize.get());
 	if (err != FT_Err_Ok) {
 		return false;
 	}
 
-	_metrics.size = fontSize.get();
+	_spec = spec;
+	_metrics.size = spec.fontSize.get();
 	_metrics.height = face->size->metrics.height >> 6;
 	_metrics.ascender = face->size->metrics.ascender >> 6;
 	_metrics.descender = face->size->metrics.descender >> 6;
@@ -100,15 +260,18 @@ bool FontFaceObject::init(StringView name, const Rc<FontFaceData> &data, FT_Face
 	_name = name.str<Interface>();
 	_id = id;
 	_data = data;
-	_size = fontSize;
 	_face = face;
 
 	return true;
 }
 
-bool FontFaceObject::acquireTexture(char16_t theChar, const Callback<void(uint8_t *, uint32_t width, uint32_t rows, int pitch)> &cb) {
+bool FontFaceObject::acquireTexture(char16_t theChar, const Callback<void(const CharTexture &)> &cb) {
 	std::unique_lock<Mutex> lock(_faceMutex);
 
+	return acquireTextureUnsafe(theChar, cb);
+}
+
+bool FontFaceObject::acquireTextureUnsafe(char16_t theChar, const Callback<void(const CharTexture &)> &cb) {
 	int glyph_index = FT_Get_Char_Index(_face, theChar);
 	if (!glyph_index) {
 		return false;
@@ -123,7 +286,16 @@ bool FontFaceObject::acquireTexture(char16_t theChar, const Callback<void(uint8_
 
 	if (_face->glyph->bitmap.buffer != nullptr) {
 		if (_face->glyph->bitmap.pixel_mode == FT_PIXEL_MODE_GRAY) {
-			cb(_face->glyph->bitmap.buffer, _face->glyph->bitmap.width, _face->glyph->bitmap.rows, _face->glyph->bitmap.pitch);
+			cb(CharTexture{_id, theChar,
+				static_cast<int16_t>(_face->glyph->metrics.horiBearingX >> 6),
+				static_cast<int16_t>(- (_face->glyph->metrics.horiBearingY >> 6)),
+				static_cast<uint16_t>(_face->glyph->metrics.width >> 6),
+				static_cast<uint16_t>(_face->glyph->metrics.height >> 6),
+				_face->glyph->bitmap.width,
+				_face->glyph->bitmap.rows,
+				_face->glyph->bitmap.pitch ? _face->glyph->bitmap.pitch : int(_face->glyph->bitmap.width),
+				_face->glyph->bitmap.buffer
+			});
 			return true;
 		}
 	} else {
@@ -137,6 +309,10 @@ bool FontFaceObject::acquireTexture(char16_t theChar, const Callback<void(uint8_
 bool FontFaceObject::addChars(const Vector<char16_t> &chars, bool expand, Vector<char16_t> *failed) {
 	bool updated = false;
 	uint32_t mask = 0;
+
+	if constexpr (!config::FontPreloadGroups) {
+		expand = false;
+	}
 
 	// for some chars, we add full group, not only requested char
 	for (auto &c : chars) {
@@ -193,7 +369,7 @@ Vector<char16_t> FontFaceObject::getRequiredChars() const {
 }
 
 CharLayout FontFaceObject::getChar(char16_t c) const {
-	std::unique_lock<Mutex> lock(_charsMutex);
+	std::shared_lock lock(_charsMutex);
 	auto l = _chars.get(c);
 	if (l && l->charID == c) {
 		return *l;
@@ -202,7 +378,7 @@ CharLayout FontFaceObject::getChar(char16_t c) const {
 }
 
 int16_t FontFaceObject::getKerningAmount(char16_t first, char16_t second) const {
-	std::unique_lock<Mutex> lock(_charsMutex);
+	std::shared_lock lock(_charsMutex);
 	uint32_t key = (first << 16) | (second & 0xffff);
 	auto it = _kerning.find(key);
 	if (it != _kerning.end()) {
@@ -212,7 +388,20 @@ int16_t FontFaceObject::getKerningAmount(char16_t first, char16_t second) const 
 }
 
 bool FontFaceObject::addChar(char16_t theChar, bool &updated) {
-	std::unique_lock<Mutex> charsLock(_charsMutex);
+	do {
+		// try to get char with shared lock
+		std::shared_lock charsLock(_charsMutex);
+		auto value = _chars.get(theChar);
+		if (value) {
+			if (value->charID == theChar) {
+				return true;
+			} else if (value->charID == char16_t(0xFFFF)) {
+				return false;
+			}
+		}
+	} while (0);
+
+	std::unique_lock charsUniqueLock(_charsMutex);
 	auto value = _chars.get(theChar);
 	if (value) {
 		if (value->charID == theChar) {
@@ -223,25 +412,33 @@ bool FontFaceObject::addChar(char16_t theChar, bool &updated) {
 	}
 
 	std::unique_lock<Mutex> faceLock(_faceMutex);
-	int cIdx = FT_Get_Char_Index(_face, theChar);
+	FT_UInt cIdx = FT_Get_Char_Index(_face, theChar);
 	if (!cIdx) {
-		_chars.emplace(theChar, CharLayout{char16_t(0xFFFF), 0, 0, 0, 0, 0 });
+		_chars.emplace(theChar, CharLayout{char16_t(0xFFFF)});
 		return false;
 	}
 
-	auto err = FT_Load_Glyph(_face, cIdx, FT_LOAD_DEFAULT | FT_LOAD_NO_BITMAP);
+	FT_Fixed advance;
+	auto err = FT_Get_Advance(_face, cIdx, FT_LOAD_DEFAULT | FT_LOAD_NO_BITMAP, &advance);
 	if (err != FT_Err_Ok) {
-		_chars.emplace(theChar, CharLayout{char16_t(0xFFFF), 0, 0, 0, 0, 0 });
+		_chars.emplace(theChar, CharLayout{char16_t(0xFFFF)});
 		return false;
 	}
+
+	/*auto err = FT_Load_Glyph(_face, cIdx, FT_LOAD_DEFAULT | FT_LOAD_NO_BITMAP);
+	if (err != FT_Err_Ok) {
+		_chars.emplace(theChar, CharLayout{char16_t(0xFFFF)});
+		return false;
+	}*/
 
 	// store result in the passed rectangle
 	_chars.emplace(theChar, CharLayout{theChar,
-		static_cast<int16_t>(_face->glyph->metrics.horiBearingX >> 6),
-		static_cast<int16_t>(- (_face->glyph->metrics.horiBearingY >> 6)),
-		static_cast<uint16_t>(_face->glyph->metrics.horiAdvance >> 6),
-		static_cast<uint16_t>(_face->glyph->metrics.width >> 6),
-		static_cast<uint16_t>(_face->glyph->metrics.height >> 6)});
+		//static_cast<int16_t>(_face->glyph->metrics.horiBearingX >> 6),
+		//static_cast<int16_t>(- (_face->glyph->metrics.horiBearingY >> 6)),
+		static_cast<uint16_t>(advance >> 16),
+		//static_cast<uint16_t>(_face->glyph->metrics.width >> 6),
+		//static_cast<uint16_t>(_face->glyph->metrics.height >> 6)
+		});
 
 	if (!chars::isspace(theChar)) {
 		updated = true;

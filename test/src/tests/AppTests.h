@@ -61,6 +61,7 @@ enum class LayoutName {
 	UtilsStorageTest = 256 * 5,
 
 	MaterialColorPickerTest = 256 * 6,
+	MaterialDynamicFontTest,
 };
 
 struct MenuData {

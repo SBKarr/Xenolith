@@ -69,6 +69,7 @@ bool UtilScene::FpsDisplay::init(font::FontController *fontController) {
 		_label->setOnContentSizeDirtyCallback([this] {
 			setContentSize(_label->getContentSize());
 		});
+		_label->setPersistentLayout(true);
 		_label->addCommandFlags(gl::CommandFlags::DoNotCount);
 	}
 

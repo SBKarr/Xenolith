@@ -36,7 +36,7 @@ public:
 	virtual ~Component();
 	virtual bool init();
 
-	virtual void onAdded();
+	virtual void onAdded(Node *owner);
 	virtual void onRemoved();
 
 	virtual void onEnter(Scene *);
@@ -53,7 +53,6 @@ public:
 	virtual bool isEnabled() const;
 	virtual void setEnabled(bool b);
 
-	void setOwner(Node *pOwner);
 	Node* getOwner() const { return _owner; }
 
 	void setTag(uint64_t);

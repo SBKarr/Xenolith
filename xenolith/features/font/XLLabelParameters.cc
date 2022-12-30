@@ -105,7 +105,7 @@ bool LabelParameters::ExternalFormatter::init(font::FontController *s, float w, 
 		_density = density;
 	}
 	_spec.setSource(s);
-	_formatter.init(&_spec, _density);
+	_formatter.init(&_spec);
 	if (w > 0.0f) {
 		_formatter.setWidth((uint16_t)roundf(w * _density));
 	}
@@ -113,7 +113,7 @@ bool LabelParameters::ExternalFormatter::init(font::FontController *s, float w, 
 }
 
 void LabelParameters::ExternalFormatter::setLineHeightAbsolute(float value) {
-	_formatter.setLineHeightAbsolute((uint16_t)(value * _formatter.getDensity()));
+	_formatter.setLineHeightAbsolute((uint16_t)(value * _density));
 }
 
 void LabelParameters::ExternalFormatter::setLineHeightRelative(float value) {
@@ -172,7 +172,7 @@ float LabelParameters::getStringWidth(font::FontController *source, const Descri
 
 	font::FormatSpec spec;
 	spec.setSource(source);
-	font::Formatter fmt(&spec, density);
+	font::Formatter fmt(&spec);
 	fmt.begin(0, 0);
 
 	if (localized && locale::hasLocaleTags(str)) {
@@ -209,7 +209,7 @@ Size2 LabelParameters::getLabelSize(font::FontController *source, const Descript
 
 	font::FormatSpec spec;
 	spec.setSource(source);
-	font::Formatter fmt(&spec, density);
+	font::Formatter fmt(&spec);
 	fmt.setWidth((uint16_t)roundf(w * density));
 	fmt.begin(0, 0);
 
@@ -434,6 +434,17 @@ bool LabelParameters::isLocaleEnabled() const {
 	return _localeEnabled;
 }
 
+void LabelParameters::setPersistentLayout(bool value) {
+	if (_persistentLayout != value) {
+		_persistentLayout = value;
+		_labelDirty = true;
+	}
+}
+
+bool LabelParameters::isPersistentLayout() const {
+	return _persistentLayout;
+}
+
 void LabelParameters::setString(const StringView &newString) {
 	if (newString == _string8) {
 		return;
@@ -581,7 +592,7 @@ bool LabelParameters::updateFormatSpec(FormatSpec *format, const StyleVec &compi
 
 		format->clear();
 
-		font::Formatter formatter(format, density);
+		font::Formatter formatter(format);
 		formatter.setWidth((uint16_t)roundf(_width * density));
 		formatter.setTextAlignment(_alignment);
 		formatter.setMaxWidth((uint16_t)roundf(_maxWidth * density));
@@ -589,7 +600,6 @@ bool LabelParameters::updateFormatSpec(FormatSpec *format, const StyleVec &compi
 		formatter.setOpticalAlignment(_opticalAlignment);
 		formatter.setFillerChar(_fillerChar);
 		formatter.setEmplaceAllChars(_emplaceAllChars);
-		formatter.setFontScale(density);
 
 		if (_lineHeight != 0.0f) {
 			if (_isLineHeightAbsolute) {
@@ -604,6 +614,8 @@ bool LabelParameters::updateFormatSpec(FormatSpec *format, const StyleVec &compi
 		size_t drawedChars = 0;
 		for (auto &it : compiledStyles) {
 			DescriptionStyle params = _style.merge(format->source.cast<font::FontController>(), it.style);
+			params.font.density = density;
+			params.font.persistent = _persistentLayout;
 			if (adjustValue > 0) {
 				params.font.fontSize -= FontSize(adjustValue);
 			}

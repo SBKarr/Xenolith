@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,38 +20,19 @@
  THE SOFTWARE.
  **/
 
-#include "XLTestNetworkSprite.h"
-#include "XLScene.h"
-#include "XLDirector.h"
-#include "XLApplication.h"
+#ifndef MODULES_MATERIAL_MATERIALNODE_H_
+#define MODULES_MATERIAL_MATERIALNODE_H_
 
-namespace stappler::xenolith::test {
+#include "Material.h"
+#include "XLVectorSprite.h"
 
-bool NetworkTestSprite::init() {
-	if (!Sprite::init()) {
-		return false;
-	}
+namespace stappler::xenolith::material {
 
-	setColor(Color::Orange_500);
-	return true;
-}
-
-void NetworkTestSprite::onEnter(Scene *scene) {
-	Sprite::onEnter(scene);
-
-	/*auto app = scene->getDirector()->getApplication();
-
-	auto h = Rc<network::DataHandle>::create("https://geobase.stappler.org/proxy/getHeaders");
-	// h->addHeader("X-Test", "123");
-	h->perform(app, [] (network::Handle &handle, data::Value &data) {
-		auto url = handle.getUrl();
-		auto code = handle.getErrorCode();
-		auto err = handle.getError();
-		auto resp = handle.getResponseCode();
-
-		log::vtext("NetworkTest", "[", resp, "] ", url, ": ", code, " - ", err);
-		std::cout << data::EncodeFormat::Pretty << data << "\n";
-	});*/
-}
+class MaterialNode : public VectorSprite {
+public:
+protected:
+};
 
 }
+
+#endif /* MODULES_MATERIAL_MATERIALNODE_H_ */

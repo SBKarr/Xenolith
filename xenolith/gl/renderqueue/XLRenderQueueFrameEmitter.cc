@@ -199,7 +199,16 @@ void FrameRequest::finalize(gl::Loop &loop, bool success) {
 		_emitter = nullptr;
 	}
 
-	loop.signalDependencies(_signalDependencies, success);
+	if (!_signalDependencies.empty()) {
+		loop.signalDependencies(_signalDependencies, success);
+	}
+}
+
+void FrameRequest::signalDependencies(gl::Loop &loop, bool success) {
+	if (!_signalDependencies.empty()) {
+		loop.signalDependencies(_signalDependencies, success);
+		_signalDependencies.clear();
+	}
 }
 
 bool FrameRequest::bindSwapchainCallback(Function<bool(FrameAttachmentData &, bool)> &&cb) {
