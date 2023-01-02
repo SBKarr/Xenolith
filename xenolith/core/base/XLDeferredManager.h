@@ -44,8 +44,8 @@ public:
 	Rc<LabelDeferredResult> runLabel(Label::FormatSpec *format, const Color4F &);
 
 	void runFontRenderer(const Rc<font::FontLibrary> &,
-			const Vector<Pair<Rc<font::FontFaceObject>, Vector<char16_t>>> &req,
-			Function<void(uint32_t idx, const font::CharTexture &texData)> &&,
+			const Vector<font::FontUpdateRequest> &req,
+			Function<void(uint32_t reqIdx, const font::CharTexture &texData)> &&,
 			Function<void()> &&);
 
 	using mem_std::AllocBase::operator new;

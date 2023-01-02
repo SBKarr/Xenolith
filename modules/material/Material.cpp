@@ -23,6 +23,8 @@
 #include "XLDefine.h"
 #include "Material.h"
 #include "MaterialColorScheme.cc"
+#include "MaterialStyleContainer.cc"
+#include "MaterialNode.cc"
 
 namespace stappler::xenolith::material {
 

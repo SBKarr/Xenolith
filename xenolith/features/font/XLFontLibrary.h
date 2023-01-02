@@ -94,7 +94,7 @@ public:
 
 	Rc<FontController> acquireController(FontController::Builder &&);
 
-	void updateImage(const Rc<gl::DynamicImage> &, Vector<Pair<Rc<FontFaceObject>, Vector<char16_t>>> &&,
+	void updateImage(const Rc<gl::DynamicImage> &, Vector<FontUpdateRequest> &&,
 			Rc<renderqueue::DependencyEvent> &&);
 
 	uint16_t getNextId();
@@ -110,7 +110,7 @@ protected:
 
 	struct ImageQuery {
 		Rc<gl::DynamicImage> image;
-		Vector<Pair<Rc<FontFaceObject>, Vector<char16_t>>> chars;
+		Vector<FontUpdateRequest> chars;
 		Rc<renderqueue::DependencyEvent> dependency;
 	};
 

@@ -452,7 +452,7 @@ Rc<FontController> FontLibrary::acquireController(FontController::Builder &&b) {
 	return ret;
 }
 
-void FontLibrary::updateImage(const Rc<gl::DynamicImage> &image, Vector<Pair<Rc<FontFaceObject>, Vector<char16_t>>> &&data,
+void FontLibrary::updateImage(const Rc<gl::DynamicImage> &image, Vector<font::FontUpdateRequest> &&data,
 		Rc<renderqueue::DependencyEvent> &&dep) {
 	if (!_active) {
 		_pendingImageQueries.emplace_back(ImageQuery{image, move(data), move(dep)});

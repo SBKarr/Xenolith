@@ -26,6 +26,26 @@
 
 namespace stappler::xenolith::vk {
 
+struct RenderFontCharTextureData {
+	int16_t x = 0;
+	int16_t y = 0;
+	uint16_t width = 0;
+	uint16_t height = 0;
+};
+
+struct RenderFontCharPersistentData {
+	RenderFontCharTextureData texture;
+	uint32_t objectId;
+	uint32_t bufferIdx;
+	uint32_t offset;
+};
+
+struct RenderFontPersistentBufferUserdata : public Ref {
+	Rc<DeviceMemoryPool> mempool;
+	Vector<Rc<DeviceBuffer>> buffers;
+	std::unordered_map<uint32_t, RenderFontCharPersistentData> chars;
+};
+
 class RenderFontAttachment : public renderqueue::GenericAttachment {
 public:
 	virtual ~RenderFontAttachment();
@@ -42,32 +62,44 @@ public:
 
 	Extent2 getImageExtent() const { return _imageExtent; }
 	const Rc<gl::RenderFontInput> &getInput() const { return _input; }
-	const Rc<DeviceBuffer> &getBuffer() const { return _frontBuffer; }
+	const Rc<DeviceBuffer> &getTmpBuffer() const { return _frontBuffer; }
+	const Rc<DeviceBuffer> &getPersistentTargetBuffer() const { return _persistentTargetBuffer; }
 	const Rc<gl::ImageAtlas> &getAtlas() const { return _atlas; }
-	const Vector<VkBufferImageCopy> &getBufferData() const { return _bufferData; }
+	const Rc<RenderFontPersistentBufferUserdata> &getUserdata() const { return _userdata; }
+	const Vector<VkBufferImageCopy> &getCopyFromTmpBufferData() const { return _copyFromTmpBufferData; }
+	const Map<DeviceBuffer *, Vector<VkBufferImageCopy>> &getCopyFromPersistentBufferData() const { return _copyFromPersistentBufferData; }
+	const Vector<VkBufferCopy> &getCopyToPersistentBufferData() const { return _copyToPersistentBufferData; }
 
 protected:
-	void writeAtlasData(FrameHandle &);
+	void doSubmitInput(FrameHandle &, Function<void(bool)> &&cb, Rc<gl::RenderFontInput> &&d);
+	void writeAtlasData(FrameHandle &, bool underlinePersistent);
 
 	uint32_t nextBufferOffset(size_t blockSize);
+	uint32_t nextPersistentTransferOffset(size_t blockSize);
 
-	struct CharTextureData {
-		int16_t x = 0;
-		int16_t y = 0;
-		uint16_t width = 0;
-		uint16_t height = 0;
-	};
+	bool addPersistentCopy(uint16_t fontId, char16_t c);
+	void pushCopyTexture(uint32_t reqIdx, const font::CharTexture &texData);
+	void pushAtlasTexture(gl::ImageAtlas *, VkBufferImageCopy &);
 
 	Rc<gl::RenderFontInput> _input;
+	Rc<RenderFontPersistentBufferUserdata> _userdata;
 	uint32_t _counter = 0;
 	VkDeviceSize _bufferSize = 0;
 	VkDeviceSize _optimalRowAlignment = 1;
 	VkDeviceSize _optimalTextureAlignment = 1;
-	std::atomic<size_t> _bufferOffset = 0;
+	std::atomic<uint32_t> _bufferOffset = 0;
+	std::atomic<uint32_t> _persistentOffset = 0;
+	std::atomic<uint32_t> _copyFromTmpOffset = 0;
+	std::atomic<uint32_t> _copyToPersistentOffset = 0;
+	std::atomic<uint32_t> _textureTargetOffset = 0;
 	Rc<DeviceBuffer> _frontBuffer;
+	Rc<DeviceBuffer> _persistentTargetBuffer;
 	Rc<gl::ImageAtlas> _atlas;
-	Vector<VkBufferImageCopy> _bufferData;
-	Vector<CharTextureData> _textureTarget;
+	Vector<VkBufferImageCopy> _copyFromTmpBufferData;
+	Map<DeviceBuffer *, Vector<VkBufferImageCopy>> _copyFromPersistentBufferData;
+	Vector<VkBufferCopy> _copyToPersistentBufferData;
+	Vector<RenderFontCharPersistentData> _copyPersistentCharData;
+	Vector<RenderFontCharTextureData> _textureTarget;
 	Extent2 _imageExtent;
 	Mutex _mutex;
 	Function<void(bool)> _onInput;
@@ -156,24 +188,26 @@ bool RenderFontAttachmentHandle::setup(FrameQueue &handle, Function<void(bool)> 
 	return true;
 }
 
-static Extent2 RenderFontAttachmentHandle_buildTextureData(SpanView<VkBufferImageCopy> requests) {
+static Extent2 RenderFontAttachmentHandle_buildTextureData(Vector<SpanView<VkBufferImageCopy>> requests) {
 	memory::vector<VkBufferImageCopy *> layoutData; layoutData.reserve(requests.size());
 
 	float totalSquare = 0.0f;
 
-	for (auto &d : requests) {
-		auto it = std::lower_bound(layoutData.begin(), layoutData.end(), &d,
-				[] (const VkBufferImageCopy * l, const VkBufferImageCopy * r) -> bool {
-			if (l->imageExtent.height == r->imageExtent.height && l->imageExtent.width == r->imageExtent.width) {
-				return l->bufferImageHeight < r->bufferImageHeight;
-			} else if (l->imageExtent.height == r->imageExtent.height) {
-				return l->imageExtent.width > r->imageExtent.width;
-			} else {
-				return l->imageExtent.height > r->imageExtent.height;
-			}
-		});
-		layoutData.emplace(it, (VkBufferImageCopy *)&d);
-		totalSquare += d.imageExtent.width * d.imageExtent.height;
+	for (auto &v : requests) {
+		for (auto &d : v) {
+			auto it = std::lower_bound(layoutData.begin(), layoutData.end(), &d,
+					[] (const VkBufferImageCopy * l, const VkBufferImageCopy * r) -> bool {
+				if (l->imageExtent.height == r->imageExtent.height && l->imageExtent.width == r->imageExtent.width) {
+					return l->bufferImageHeight < r->bufferImageHeight;
+				} else if (l->imageExtent.height == r->imageExtent.height) {
+					return l->imageExtent.width > r->imageExtent.width;
+				} else {
+					return l->imageExtent.height > r->imageExtent.height;
+				}
+			});
+			layoutData.emplace(it, (VkBufferImageCopy *)&d);
+			totalSquare += d.imageExtent.width * d.imageExtent.height;
+		}
 	}
 
 	font::EmplaceCharInterface iface({
@@ -199,139 +233,298 @@ void RenderFontAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentInp
 	}
 
 	q.getFrame()->waitForDependencies(data->waitDependencies, [this, cb = move(cb), d = move(d)] (FrameHandle &handle, bool success) mutable {
-		_counter = d->requests.size();
-		_input = d;
-
-		auto frame = static_cast<DeviceFrameHandle *>(&handle);
-		auto memPool =  frame->getMemPool(&handle);
-
-		_frontBuffer = memPool->spawn(AllocationUsage::HostTransitionSource, gl::BufferInfo(
-			gl::ForceBufferUsage(gl::BufferUsage::TransferSrc),
-			size_t(Allocator::PageSize * 2)
-		));
-
-		size_t totalCount = 0;
-		for (auto &it : _input->requests) {
-			totalCount += it.second.size();
-		}
-
-		_bufferData.resize(totalCount + 1);
-		_textureTarget.resize(totalCount + 1);
-
-		auto t = platform::device::_clock(platform::device::ClockType::Monotonic);
-
-		_onInput = move(cb); // see RenderFontAttachmentHandle::writeAtlasData
-
-		auto deferred = handle.getLoop()->getApplication()->getDeferredManager();
-
-		deferred->runFontRenderer(_input->library, _input->requests, [this] (uint32_t idx, const font::CharTexture &texData) {
-			auto size = texData.bitmapRows * std::abs(texData.pitch);
-			uint32_t offset = nextBufferOffset(texData.bitmapRows * std::abs(texData.pitch));
-			if (offset + size > Allocator::PageSize * 2) {
-				return;
-			}
-
-			auto ptr = texData.bitmap;
-			if (texData.pitch >= 0) {
-				_frontBuffer->setData(BytesView(ptr, texData.pitch * texData.bitmapRows), offset);
-			} else {
-				for (size_t i = 0; i < texData.bitmapRows; ++ i) {
-					_frontBuffer->setData(BytesView(ptr, -texData.pitch), offset + i * (-texData.pitch));
-					ptr += texData.pitch;
-				}
-			}
-
-			_bufferData[idx] = VkBufferImageCopy({
-				VkDeviceSize(offset),
-				uint32_t(/*pitch*/0),
-				uint32_t(font::CharLayout::getObjectId(texData.fontID, texData.charID, font::FontAnchor::BottomLeft)),
-				VkImageSubresourceLayers({VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}),
-				VkOffset3D({0, 0, 0}),
-				VkExtent3D({texData.bitmapWidth, texData.bitmapRows, 1})
-			});
-			_textureTarget[idx] = CharTextureData{texData.x, texData.y, texData.width, texData.height};
-		}, [this, t, handle = Rc<FrameHandle>(&handle)] {
-			writeAtlasData(*handle);
-			std::cout << "RenderFontAttachmentHandle::submitInput: " << platform::device::_clock(platform::device::ClockType::Monotonic) - t << "\n";
-		});
+		handle.performInQueue([this, cb = move(cb), d = move(d)] (FrameHandle &handle) mutable -> bool {
+			doSubmitInput(handle, move(cb), move(d));
+			return true;
+		}, d, "RenderFontAttachmentHandle::submitInput");
 	});
 }
 
-void RenderFontAttachmentHandle::writeAtlasData(FrameHandle &handle) {
-	handle.performInQueue([this] (FrameHandle &) -> bool {
+void RenderFontAttachmentHandle::doSubmitInput(FrameHandle &handle, Function<void(bool)> &&cb, Rc<gl::RenderFontInput> &&d) {
+	_counter = d->requests.size();
+	_input = d;
+	if (auto instance = d->image->getInstance()) {
+		if (auto ud = instance->userdata.cast<RenderFontPersistentBufferUserdata>()) {
+			_userdata = ud;
+		}
+	}
+
+	// process persistent chars
+	bool underlinePersistent = false;
+	uint32_t totalCount = 0;
+	for (auto &it : _input->requests) {
+		totalCount += it.chars.size();
+	}
+
+	_textureTarget.resize(totalCount + 1); // used in addPersistentCopy
+
+	uint32_t extraPersistent = 0;
+	uint32_t processedPersistent = 0;
+	if (_userdata) {
+		for (auto &it : _input->requests) {
+			if (it.persistent) {
+				for (auto &c : it.chars) {
+					if (addPersistentCopy(it.object->getId(), c)) {
+						++ processedPersistent;
+						c = 0;
+					} else {
+						++ extraPersistent;
+					}
+				}
+			}
+		}
+
+		if (addPersistentCopy(font::CharLayout::SourceMax, 0)) {
+			underlinePersistent = true;
+		}
+	} else {
+		for (auto &it : _input->requests) {
+			if (it.persistent) {
+				extraPersistent += it.chars.size();
+			}
+		}
+
+		underlinePersistent = false;
+	}
+
+	_onInput = move(cb); // see RenderFontAttachmentHandle::writeAtlasData
+
+	if (processedPersistent == totalCount && underlinePersistent) {
+		// no need to transfer extra chars
+		writeAtlasData(handle, underlinePersistent);
+		return;
+	}
+
+	auto frame = static_cast<DeviceFrameHandle *>(&handle);
+	auto memPool =  frame->getMemPool(&handle);
+
+	_frontBuffer = memPool->spawn(AllocationUsage::HostTransitionSource, gl::BufferInfo(
+		gl::ForceBufferUsage(gl::BufferUsage::TransferSrc),
+		size_t(Allocator::PageSize * 2)
+	));
+
+	_copyFromTmpBufferData.resize(totalCount - processedPersistent + (underlinePersistent ? 0 : 1));
+
+	if (extraPersistent > 0 || !underlinePersistent) {
+		_copyToPersistentBufferData.resize(extraPersistent + (underlinePersistent ? 0 : 1));
+		_copyPersistentCharData.resize(extraPersistent + (underlinePersistent ? 0 : 1));
+
+		if (!_userdata) {
+			_userdata = Rc<RenderFontPersistentBufferUserdata>::alloc();
+			_userdata->mempool = Rc<DeviceMemoryPool>::create(memPool->getAllocator(), false);
+			_userdata->buffers.emplace_back(_userdata->mempool->spawn(AllocationUsage::DeviceLocal, gl::BufferInfo(
+					gl::ForceBufferUsage(gl::BufferUsage::TransferSrc | gl::BufferUsage::TransferDst),
+					size_t(Allocator::PageSize * 2)
+				)));
+			_persistentTargetBuffer = _userdata->buffers.back();
+		} else {
+			auto tmp = move(_userdata);
+			_userdata = Rc<RenderFontPersistentBufferUserdata>::alloc();
+			_userdata->mempool = tmp->mempool;
+			_userdata->chars = tmp->chars;
+			_userdata->buffers = tmp->buffers;
+
+			if (!_userdata->buffers.empty()) {
+				_persistentTargetBuffer = _userdata->buffers.back();
+			}
+		}
+	}
+
+	auto deferred = handle.getLoop()->getApplication()->getDeferredManager();
+	deferred->runFontRenderer(_input->library, _input->requests, [this] (uint32_t reqIdx, const font::CharTexture &texData) {
+		pushCopyTexture(reqIdx, texData);
+	}, [this, handle = Rc<FrameHandle>(&handle), underlinePersistent] {
+		writeAtlasData(*handle, underlinePersistent);
+		// std::cout << "RenderFontAttachmentHandle::submitInput: " << platform::device::_clock(platform::device::ClockType::Monotonic) - handle->getTimeStart() << "\n";
+	});
+}
+
+void RenderFontAttachmentHandle::writeAtlasData(FrameHandle &handle, bool underlinePersistent) {
+	Vector<SpanView<VkBufferImageCopy>> commands;
+	if (!underlinePersistent) {
 		// write single white pixel for underlines
-		uint32_t offset = nextBufferOffset(1);
+		uint32_t offset = _frontBuffer->reserveBlock(1, _optimalTextureAlignment);
 		if (offset + 1 <= Allocator::PageSize * 2) {
 			uint8_t whiteColor = 255;
 			_frontBuffer->setData(BytesView(&whiteColor, 1), offset);
-			_bufferData[_bufferData.size() - 1] = VkBufferImageCopy({
+			auto objectId = font::CharLayout::getObjectId(font::CharLayout::SourceMax, char16_t(0), font::FontAnchor::BottomLeft);
+			auto texOffset = _textureTargetOffset.fetch_add(1);
+			_copyFromTmpBufferData[_copyFromTmpBufferData.size() - 1] = VkBufferImageCopy({
 				VkDeviceSize(offset),
-				uint32_t(0),
-				uint32_t( font::CharLayout::getObjectId(font::CharLayout::SourceMax, char16_t(0), font::FontAnchor::BottomLeft)),
+				uint32_t(texOffset),
+				uint32_t(objectId),
 				VkImageSubresourceLayers({VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}),
 				VkOffset3D({0, 0, 0}),
 				VkExtent3D({1, 1, 1})
 			});
+
+			auto targetOffset = _persistentTargetBuffer->reserveBlock(1, _optimalTextureAlignment);
+			_textureTarget[texOffset] = RenderFontCharTextureData{0, 0, 1, 1};
+			_copyToPersistentBufferData[_copyToPersistentBufferData.size() - 1] = VkBufferCopy({
+				offset, targetOffset, 1
+			});
+			_copyPersistentCharData[_copyPersistentCharData.size() - 1] = RenderFontCharPersistentData{
+				RenderFontCharTextureData{0, 0, 1, 1},
+				objectId, 0, uint32_t(targetOffset)
+			};
 		}
+	}
 
-		auto pool = memory::pool::create(memory::pool::acquire());
-		memory::pool::push(pool);
-
-		// TODO - use GPU rectangle placement
-		_imageExtent = RenderFontAttachmentHandle_buildTextureData(SpanView<VkBufferImageCopy>(_bufferData.data(), _bufferData.size() - 1));
-
-		_bufferData[_bufferData.size() - 1].imageOffset =
-				VkOffset3D({int32_t(_imageExtent.width - 1), int32_t(_imageExtent.height - 1), 0});
-
-		auto atlas = Rc<gl::ImageAtlas>::create(_bufferData.size() * 4, sizeof(font::FontAtlasValue), _imageExtent);
-
-		font::FontAtlasValue data[4];
-
-		for (uint32_t idx = 0; idx < _bufferData.size(); ++ idx) {
-			auto &d = _bufferData[idx];
-			auto &tex = _textureTarget[idx];
-
-			auto id = d.bufferImageHeight;
-			d.bufferImageHeight = 0;
-
-			const float x = float(d.imageOffset.x);
-			const float y = float(d.imageOffset.y);
-			const float w = float(d.imageExtent.width);
-			const float h = float(d.imageExtent.height);
-
-			data[0].pos = Vec2(tex.x, tex.y);
-			data[0].tex = Vec2(x / _imageExtent.width, y / _imageExtent.height);
-
-			data[1].pos = Vec2(tex.x, tex.y + tex.height);
-			data[1].tex = Vec2(x / _imageExtent.width, (y + h) / _imageExtent.height);
-
-			data[2].pos = Vec2(tex.x + tex.width, tex.y + tex.height);
-			data[2].tex = Vec2((x + w) / _imageExtent.width, (y + h) / _imageExtent.height);
-
-			data[3].pos = Vec2(tex.x + tex.width, tex.y);
-			data[3].tex = Vec2((x + w) / _imageExtent.width, y / _imageExtent.height);
-
-			atlas->addObject(font::CharLayout::getObjectId(id, font::FontAnchor::BottomLeft), &data[0]);
-			atlas->addObject(font::CharLayout::getObjectId(id, font::FontAnchor::TopLeft), &data[1]);
-			atlas->addObject(font::CharLayout::getObjectId(id, font::FontAnchor::TopRight), &data[2]);
-			atlas->addObject(font::CharLayout::getObjectId(id, font::FontAnchor::BottomRight), &data[3]);
+	// fill new persistent chars
+	for (auto &it : _copyPersistentCharData) {
+		it.bufferIdx = _userdata->buffers.size() - 1;
+		auto cIt = _userdata->chars.find(it.objectId);
+		if (cIt == _userdata->chars.end()) {
+			_userdata->chars.emplace(it.objectId, it);
+		} else {
+			cIt->second = it;
 		}
+	}
 
-		_atlas = atlas;
+	auto pool = memory::pool::create(memory::pool::acquire());
+	memory::pool::push(pool);
 
-		memory::pool::pop();
-		memory::pool::destroy(pool);
+	// TODO - use GPU rectangle placement
+	commands.emplace_back(_copyFromTmpBufferData);
+	for (auto &it : _copyFromPersistentBufferData) {
+		commands.emplace_back(it.second);
+	}
 
-		return true;
-	}, [this] (FrameHandle &handle, bool success) {
-		_onInput(success);
+	_imageExtent = RenderFontAttachmentHandle_buildTextureData(commands);
+
+	auto atlas = Rc<gl::ImageAtlas>::create(_copyFromTmpBufferData.size() * 4, sizeof(font::FontAtlasValue), _imageExtent);
+
+	for (auto &c : commands) {
+		for (auto &it : c) {
+			pushAtlasTexture(atlas, const_cast<VkBufferImageCopy &>(it));
+		}
+	}
+
+	_atlas = atlas;
+
+	memory::pool::pop();
+	memory::pool::destroy(pool);
+
+	handle.performOnGlThread([this] (FrameHandle &handle) {
+		_onInput(true);
 		_onInput = nullptr;
-	}, nullptr, "RenderFontAttachmentHandle::writeAtlasData");
+	}, this, false, "RenderFontAttachmentHandle::writeAtlasData");
 }
 
 uint32_t RenderFontAttachmentHandle::nextBufferOffset(size_t blockSize) {
 	auto alignedSize = math::align(uint64_t(blockSize), _optimalTextureAlignment);
 	return _bufferOffset.fetch_add(alignedSize);
+}
+
+uint32_t RenderFontAttachmentHandle::nextPersistentTransferOffset(size_t blockSize) {
+	auto alignedSize = math::align(uint64_t(blockSize), _optimalTextureAlignment);
+	return _persistentOffset.fetch_add(alignedSize);
+}
+
+bool RenderFontAttachmentHandle::addPersistentCopy(uint16_t fontId, char16_t c) {
+	auto objId = font::CharLayout::getObjectId(fontId, c, font::FontAnchor::BottomLeft);
+	auto it = _userdata->chars.find(objId);
+	if (it != _userdata->chars.end()) {
+		auto &buf = _userdata->buffers[it->second.bufferIdx];
+		auto bufIt = _copyFromPersistentBufferData.find(buf.get());
+		if (bufIt == _copyFromPersistentBufferData.end()) {
+			bufIt = _copyFromPersistentBufferData.emplace(buf, Vector<VkBufferImageCopy>()).first;
+		}
+
+		auto texTarget = _textureTargetOffset.fetch_add(1);
+		bufIt->second.emplace_back(VkBufferImageCopy{
+			VkDeviceSize(it->second.offset),
+			uint32_t(texTarget),
+			uint32_t(objId),
+			VkImageSubresourceLayers({VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}),
+			VkOffset3D({0, 0, 0}),
+			VkExtent3D({it->second.texture.width, it->second.texture.height, 1})
+		});
+
+		_textureTarget[texTarget] = it->second.texture;
+		return true;
+	}
+	return false;
+}
+
+void RenderFontAttachmentHandle::pushCopyTexture(uint32_t reqIdx, const font::CharTexture &texData) {
+	if (texData.width != texData.bitmapWidth || texData.height != texData.bitmapRows) {
+		std::cout << "Invalid size: " << texData.width << ";" << texData.height
+				<< " vs. " << texData.bitmapWidth << ";" << texData.bitmapRows << "\n";
+	}
+
+	auto size = texData.bitmapRows * std::abs(texData.pitch);
+	uint32_t offset = _frontBuffer->reserveBlock(size, _optimalTextureAlignment);
+	if (offset + size > Allocator::PageSize * 2) {
+		return;
+	}
+
+	auto ptr = texData.bitmap;
+	if (texData.pitch >= 0) {
+		_frontBuffer->setData(BytesView(ptr, texData.pitch * texData.bitmapRows), offset);
+	} else {
+		for (size_t i = 0; i < texData.bitmapRows; ++ i) {
+			_frontBuffer->setData(BytesView(ptr, -texData.pitch), offset + i * (-texData.pitch));
+			ptr += texData.pitch;
+		}
+	}
+
+	auto objectId = font::CharLayout::getObjectId(texData.fontID, texData.charID, font::FontAnchor::BottomLeft);
+	auto texOffset = _textureTargetOffset.fetch_add(1);
+	_copyFromTmpBufferData[_copyFromTmpOffset.fetch_add(1)] = VkBufferImageCopy({
+		VkDeviceSize(offset),
+		uint32_t(texOffset),
+		uint32_t(objectId),
+		VkImageSubresourceLayers({VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}),
+		VkOffset3D({0, 0, 0}),
+		VkExtent3D({texData.bitmapWidth, texData.bitmapRows, 1})
+	});
+	_textureTarget[texOffset] = RenderFontCharTextureData{texData.x, texData.y, texData.width, texData.height};
+
+	if (_input->requests[reqIdx].persistent) {
+		auto targetIdx = _copyToPersistentOffset.fetch_add(1);
+		auto targetOffset = _persistentTargetBuffer->reserveBlock(size, _optimalTextureAlignment);
+		_copyToPersistentBufferData[targetIdx] = VkBufferCopy({
+			offset, targetOffset, size
+		});
+		_copyPersistentCharData[targetIdx] = RenderFontCharPersistentData{
+			RenderFontCharTextureData{texData.x, texData.y, texData.width, texData.height},
+			objectId, 0, uint32_t(targetOffset)
+		};
+	}
+}
+
+void RenderFontAttachmentHandle::pushAtlasTexture(gl::ImageAtlas *atlas, VkBufferImageCopy &d) {
+	font::FontAtlasValue data[4];
+
+	auto texOffset = d.bufferRowLength;
+	auto id = d.bufferImageHeight;
+	d.bufferImageHeight = 0;
+	d.bufferRowLength = 0;
+
+	auto &tex = _textureTarget[texOffset];
+
+	const float x = float(d.imageOffset.x);
+	const float y = float(d.imageOffset.y);
+	const float w = float(d.imageExtent.width);
+	const float h = float(d.imageExtent.height);
+
+	data[0].pos = Vec2(tex.x, tex.y);
+	data[0].tex = Vec2(x / _imageExtent.width, y / _imageExtent.height);
+
+	data[1].pos = Vec2(tex.x, tex.y + tex.height);
+	data[1].tex = Vec2(x / _imageExtent.width, (y + h) / _imageExtent.height);
+
+	data[2].pos = Vec2(tex.x + tex.width, tex.y + tex.height);
+	data[2].tex = Vec2((x + w) / _imageExtent.width, (y + h) / _imageExtent.height);
+
+	data[3].pos = Vec2(tex.x + tex.width, tex.y);
+	data[3].tex = Vec2((x + w) / _imageExtent.width, y / _imageExtent.height);
+
+	atlas->addObject(font::CharLayout::getObjectId(id, font::FontAnchor::BottomLeft), &data[0]);
+	atlas->addObject(font::CharLayout::getObjectId(id, font::FontAnchor::TopLeft), &data[1]);
+	atlas->addObject(font::CharLayout::getObjectId(id, font::FontAnchor::TopRight), &data[2]);
+	atlas->addObject(font::CharLayout::getObjectId(id, font::FontAnchor::BottomRight), &data[3]);
 }
 
 RenderFontRenderPass::~RenderFontRenderPass() { }
@@ -413,7 +606,9 @@ Vector<VkCommandBuffer> RenderFontRenderPassHandle::doPrepareCommands(FrameHandl
 	auto dev = (Device *)handle.getDevice();
 
 	auto &input = _fontAttachment->getInput();
-	auto &bufferData = _fontAttachment->getBufferData();
+	auto &copyFromTmp = _fontAttachment->getCopyFromTmpBufferData();
+	auto &copyFromPersistent = _fontAttachment->getCopyFromPersistentBufferData();
+	auto &copyToPersistent = _fontAttachment->getCopyToPersistentBufferData();
 
 	auto &masterImage = input->image;
 	auto instance = masterImage->getInstance();
@@ -433,6 +628,14 @@ Vector<VkCommandBuffer> RenderFontRenderPassHandle::doPrepareCommands(FrameHandl
 	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 	table->vkBeginCommandBuffer(buf, &beginInfo);
 
+	Vector<VkBufferMemoryBarrier> persistentBarriers;
+	for (auto &it : copyFromPersistent) {
+		if (auto b = it.first->getPendingBarrier()) {
+			persistentBarriers.emplace_back(*b);
+			it.first->dropPendingBarrier();
+		}
+	}
+
 	VkImageMemoryBarrier inputBarrier({
 		VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
 		0, VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -444,13 +647,33 @@ Vector<VkCommandBuffer> RenderFontRenderPassHandle::doPrepareCommands(FrameHandl
 		})
 	});
 
-	table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+	table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
 			0, nullptr,
-			0, nullptr,
+			persistentBarriers.size(), persistentBarriers.data(),
 			1, &inputBarrier);
 
-	table->vkCmdCopyBufferToImage(buf, _fontAttachment->getBuffer()->getBuffer(), _targetImage->getImage(),
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, bufferData.size(), bufferData.data());
+	// copy from temporary buffer
+	if (!copyFromTmp.empty()) {
+		table->vkCmdCopyBufferToImage(buf, _fontAttachment->getTmpBuffer()->getBuffer(), _targetImage->getImage(),
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, copyFromTmp.size(), copyFromTmp.data());
+	}
+
+	// copy from persistent buffers
+	for (auto &it : copyFromPersistent) {
+		table->vkCmdCopyBufferToImage(buf, it.first->getBuffer(), _targetImage->getImage(),
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, it.second.size(), it.second.data());
+	}
+
+	if (!copyToPersistent.empty()) {
+		table->vkCmdCopyBuffer(buf, _fontAttachment->getTmpBuffer()->getBuffer(), _fontAttachment->getPersistentTargetBuffer()->getBuffer(),
+				copyToPersistent.size(), copyToPersistent.data());
+		_fontAttachment->getPersistentTargetBuffer()->setPendingBarrier(VkBufferMemoryBarrier({
+			VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+			VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+			_fontAttachment->getPersistentTargetBuffer()->getBuffer(), 0, _fontAttachment->getPersistentTargetBuffer()->getReservedSize()
+		}));
+	}
 
 	auto sourceLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 	if (auto q = dev->getQueueFamily(getQueueOperations(info.type))) {
@@ -565,7 +788,7 @@ void RenderFontRenderPassHandle::doSubmitted(FrameHandle &frame, Function<void(b
 	if (success) {
 		auto &input = _fontAttachment->getInput();
 		input->image->updateInstance(*frame.getLoop(), _targetImage, Rc<gl::ImageAtlas>(_fontAttachment->getAtlas()),
-				frame.getSignalDependencies());
+				Rc<Ref>(_fontAttachment->getUserdata()), frame.getSignalDependencies());
 
 		if (input->output) {
 			auto region = _outBuffer->map(0, _outBuffer->getSize(), true);

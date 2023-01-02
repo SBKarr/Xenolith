@@ -44,12 +44,13 @@ Rc<DynamicImageInstance> DynamicImage::getInstance() {
 	return _instance;
 }
 
-void DynamicImage::updateInstance(Loop &loop, const Rc<ImageObject> &obj, Rc<ImageAtlas> &&atlas,
+void DynamicImage::updateInstance(Loop &loop, const Rc<ImageObject> &obj, Rc<ImageAtlas> &&atlas, Rc<Ref> &&userdata,
 		const Vector<Rc<renderqueue::DependencyEvent>> &deps) {
 	auto newInstance = Rc<DynamicImageInstance>::alloc();
 	static_cast<ImageInfo &>(newInstance->data) = obj->getInfo();
 	newInstance->data.image = obj;
 	newInstance->data.atlas = move(atlas);
+	newInstance->userdata = move(userdata);
 	newInstance->image = this;
 
 	std::unique_lock<Mutex> lock(_mutex);

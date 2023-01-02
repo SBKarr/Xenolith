@@ -21,8 +21,13 @@
  **/
 
 #include "MaterialStyleContainer.h"
+#include "XLScene.h"
 
 namespace stappler::xenolith::material {
+
+XL_DECLARE_EVENT_CLASS(StyleContainer, onAttached)
+XL_DECLARE_EVENT_CLASS(StyleContainer, onPrimaryColorSchemeUpdate)
+XL_DECLARE_EVENT_CLASS(StyleContainer, onExtraColorSchemeUpdate)
 
 bool StyleContainer::init() {
 	if (!Component::init()) {
@@ -34,11 +39,17 @@ bool StyleContainer::init() {
 
 void StyleContainer::onEnter(Scene *scene) {
 	Component::onEnter(scene);
+	_scene = scene;
+	_scene->setFrameUserdata(this);
 	onAttached(this, true);
 }
 
 void StyleContainer::onExit() {
 	onAttached(this, false);
+	if (_scene->getFrameUserdata() == this) {
+		_scene->setFrameUserdata(nullptr);
+	}
+	_scene = nullptr;
 	Component::onExit();
 }
 
@@ -72,7 +83,7 @@ const ColorScheme *StyleContainer::setExtraScheme(StringView name, ThemeType typ
 	if (it != _extraSchemes.end()) {
 		it->second.set(type, palette);
 	} else {
-		it = _extraSchemes.emplace(name.str<Interface>(), ColorScheme(type, palette));
+		it = _extraSchemes.emplace(name.str<Interface>(), ColorScheme(type, palette)).first;
 	}
 	if (_running) {
 		onExtraColorSchemeUpdate(this, name);
@@ -85,7 +96,7 @@ const ColorScheme *StyleContainer::setExtraScheme(StringView name, ThemeType typ
 	if (it != _extraSchemes.end()) {
 		it->second.set(type, color, isContent);
 	} else {
-		it = _extraSchemes.emplace(name.str<Interface>(), ColorScheme(type, color, isContent));
+		it = _extraSchemes.emplace(name.str<Interface>(), ColorScheme(type, color, isContent)).first;
 	}
 	if (_running) {
 		onExtraColorSchemeUpdate(this, name);
@@ -98,7 +109,7 @@ const ColorScheme *StyleContainer::setExtraScheme(StringView name, ThemeType typ
 	if (it != _extraSchemes.end()) {
 		it->second.set(type, color, isContent);
 	} else {
-		it = _extraSchemes.emplace(name.str<Interface>(), ColorScheme(type, color, isContent));
+		it = _extraSchemes.emplace(name.str<Interface>(), ColorScheme(type, color, isContent)).first;
 	}
 	if (_running) {
 		onExtraColorSchemeUpdate(this, name);

@@ -217,4 +217,29 @@ void DeviceBuffer::unmap(const MappedRegion &region, bool flush) {
 	}
 }
 
+uint64_t DeviceBuffer::reserveBlock(uint64_t blockSize, uint64_t alignment) {
+	auto alignedSize = math::align(uint64_t(blockSize), alignment);
+	auto ret = _targetOffset.fetch_add(alignedSize);
+	if (ret + blockSize > _info.size) {
+		return maxOf<uint64_t>();
+	}
+	return ret;
+}
+
+void DeviceBuffer::setPendingBarrier(const VkBufferMemoryBarrier &barrier) {
+	_barrier = barrier;
+}
+
+const VkBufferMemoryBarrier *DeviceBuffer::getPendingBarrier() const {
+	if (_barrier) {
+		return &_barrier.value();
+	} else {
+		return nullptr;
+	}
+}
+
+void DeviceBuffer::dropPendingBarrier() {
+	_barrier.reset();
+}
+
 }

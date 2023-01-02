@@ -36,6 +36,7 @@ bool LayoutMenuItem::init(StringView str, Function<void()> &&cb) {
 	_label->setFontWeight(Label::FontWeight::Normal);
 	_label->setAnchorPoint(Anchor::Middle);
 	_label->setFontSize(26);
+	_label->setPersistentLayout(true);
 
 	auto l = addInputListener(Rc<InputListener>::create());
 	l->setTouchFilter([] (const InputEvent &event, const InputListener::DefaultEventFilter &) {

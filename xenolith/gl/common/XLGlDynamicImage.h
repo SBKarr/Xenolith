@@ -34,6 +34,7 @@ struct DynamicImageInstance : public Ref {
 	virtual ~DynamicImageInstance() { }
 
 	ImageData data;
+	Rc<Ref> userdata;
 	Rc<DynamicImage> image = nullptr;
 	uint32_t gen = 0;
 };
@@ -49,7 +50,7 @@ public:
 
 	Rc<DynamicImageInstance> getInstance();
 
-	void updateInstance(Loop &, const Rc<ImageObject> &, Rc<ImageAtlas> && = Rc<ImageAtlas>(),
+	void updateInstance(Loop &, const Rc<ImageObject> &, Rc<ImageAtlas> && = Rc<ImageAtlas>(), Rc<Ref> &&userdata = Rc<Ref>(),
 			const Vector<Rc<renderqueue::DependencyEvent>> & = Vector<Rc<renderqueue::DependencyEvent>>());
 
 	void addTracker(const MaterialAttachment *);

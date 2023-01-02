@@ -36,6 +36,8 @@ class FontFaceData;
 class FontLibrary;
 class FontLayout;
 
+using FontUpdateRequest = gl::FontUpdateRequest;
+
 class FontController : public Ref {
 public:
 	static EventHeader onLoaded;

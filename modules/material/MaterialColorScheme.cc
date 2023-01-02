@@ -555,7 +555,7 @@ CorePalette::CorePalette(Cam16Float hue, Cam16Float chroma, bool is_content)
 , neutralVariant(hue, is_content ? std::fmin(chroma / Cam16Float(6), Cam16Float(8)) : 8)
 , error(25, 84) { }
 
-ColorScheme::ColorScheme(ThemeType type, const CorePalette &palette) : type(type) {
+ColorScheme::ColorScheme(ThemeType type, const CorePalette &palette) : type(type), palette(palette) {
 	set(type, palette);
 }
 
@@ -631,6 +631,8 @@ void ColorScheme::set(ThemeType t, const CorePalette &palette) {
 		colors[toInt(ColorRole::InversePrimary)] = Color4B(palette.primary.get(40));
 		break;
 	}
+
+	this->palette = palette;
 }
 
 void ColorScheme::set(ThemeType type, const Color4F &color, bool isContent) {
@@ -639,6 +641,80 @@ void ColorScheme::set(ThemeType type, const Color4F &color, bool isContent) {
 
 void ColorScheme::set(ThemeType type, const ColorHCT &color, bool isContent) {
 	set(type, CorePalette(color.data.hue, color.data.chroma, isContent));
+}
+
+ColorHCT ColorScheme::hct(ColorRole name) const {
+	switch (type) {
+	case ThemeType::LightTheme:
+		switch (name) {
+		case ColorRole::Primary: return palette.primary.hct(40); break;
+		case ColorRole::OnPrimary: return palette.primary.hct(100); break;
+		case ColorRole::PrimaryContainer: return palette.primary.hct(90); break;
+		case ColorRole::OnPrimaryContainer: return palette.primary.hct(10); break;
+		case ColorRole::Secondary: return palette.secondary.hct(40); break;
+		case ColorRole::OnSecondary: return palette.secondary.hct(100); break;
+		case ColorRole::SecondaryContainer: return palette.secondary.hct(90); break;
+		case ColorRole::OnSecondaryContainer: return palette.secondary.hct(10); break;
+		case ColorRole::Tertiary: return palette.tertiary.hct(40); break;
+		case ColorRole::OnTertiary: return palette.tertiary.hct(100); break;
+		case ColorRole::TertiaryContainer: return palette.tertiary.hct(90); break;
+		case ColorRole::OnTertiaryContainer: return palette.tertiary.hct(10); break;
+		case ColorRole::Error: return palette.error.hct(40); break;
+		case ColorRole::OnError: return palette.error.hct(100); break;
+		case ColorRole::ErrorContainer: return palette.error.hct(90); break;
+		case ColorRole::OnErrorContainer: return palette.error.hct(10); break;
+		case ColorRole::Background: return palette.neutral.hct(99); break;
+		case ColorRole::OnBackground: return palette.neutral.hct(10); break;
+		case ColorRole::Surface: return palette.neutral.hct(99); break;
+		case ColorRole::OnSurface: return palette.neutral.hct(10); break;
+		case ColorRole::SurfaceVariant: return palette.neutralVariant.hct(90); break;
+		case ColorRole::OnSurfaceVariant: return palette.neutralVariant.hct(30); break;
+		case ColorRole::Outline: return palette.neutralVariant.hct(50); break;
+		case ColorRole::OutlineVariant: return palette.neutralVariant.hct(80); break;
+		case ColorRole::Shadow: return palette.neutral.hct(0); break;
+		case ColorRole::Scrim: return palette.neutral.hct(0); break;
+		case ColorRole::InverseSurface: return palette.neutral.hct(20); break;
+		case ColorRole::InverseOnSurface: return palette.neutral.hct(95); break;
+		case ColorRole::InversePrimary: return palette.primary.hct(80); break;
+		case ColorRole::Max: break;
+		}
+		break;
+	case ThemeType::DarkTheme:
+		switch (name) {
+		case ColorRole::Primary: return palette.primary.hct(80); break;
+		case ColorRole::OnPrimary: return palette.primary.hct(20); break;
+		case ColorRole::PrimaryContainer: return palette.primary.hct(30); break;
+		case ColorRole::OnPrimaryContainer: return palette.primary.hct(90); break;
+		case ColorRole::Secondary: return palette.secondary.hct(80); break;
+		case ColorRole::OnSecondary: return palette.secondary.hct(20); break;
+		case ColorRole::SecondaryContainer: return palette.secondary.hct(30); break;
+		case ColorRole::OnSecondaryContainer: return palette.secondary.hct(90); break;
+		case ColorRole::Tertiary: return palette.tertiary.hct(80); break;
+		case ColorRole::OnTertiary: return palette.tertiary.hct(20); break;
+		case ColorRole::TertiaryContainer: return palette.tertiary.hct(30); break;
+		case ColorRole::OnTertiaryContainer: return palette.tertiary.hct(90); break;
+		case ColorRole::Error: return palette.error.hct(80); break;
+		case ColorRole::OnError: return palette.error.hct(20); break;
+		case ColorRole::ErrorContainer: return palette.error.hct(30); break;
+		case ColorRole::OnErrorContainer: return palette.error.hct(80); break;
+		case ColorRole::Background: return palette.neutral.hct(10); break;
+		case ColorRole::OnBackground: return palette.neutral.hct(90); break;
+		case ColorRole::Surface: return palette.neutral.hct(10); break;
+		case ColorRole::OnSurface: return palette.neutral.hct(90); break;
+		case ColorRole::SurfaceVariant: return palette.neutralVariant.hct(30); break;
+		case ColorRole::OnSurfaceVariant: return palette.neutralVariant.hct(80); break;
+		case ColorRole::Outline: return palette.neutralVariant.hct(60); break;
+		case ColorRole::OutlineVariant: return palette.neutralVariant.hct(30); break;
+		case ColorRole::Shadow: return palette.neutral.hct(0); break;
+		case ColorRole::Scrim: return palette.neutral.hct(0); break;
+		case ColorRole::InverseSurface: return palette.neutral.hct(90); break;
+		case ColorRole::InverseOnSurface: return palette.neutral.hct(20); break;
+		case ColorRole::InversePrimary: return palette.primary.hct(40); break;
+		case ColorRole::Max: break;
+		}
+		break;
+	}
+	return ColorHCT();
 }
 
 }

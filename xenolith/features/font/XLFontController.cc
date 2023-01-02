@@ -412,7 +412,7 @@ void FontController::update(uint64_t clock) {
 	_clock = clock;
 	removeUnusedLayouts();
 	if (_dirty && _loaded) {
-		Vector<Pair<Rc<FontFaceObject>, Vector<char16_t>>> objects;
+		Vector<FontUpdateRequest> objects;
 		std::shared_lock lock(_layoutSharedMutex);
 		for (auto &it : _layouts) {
 			for (auto &iit : it.second->getFaces()) {
@@ -421,18 +421,18 @@ void FontController::update(uint64_t clock) {
 				}
 
 				auto lb = std::lower_bound(objects.begin(), objects.end(), iit,
-						[] (const Pair<Rc<FontFaceObject>, Vector<char16_t>> &l, FontFaceObject *r) {
-					return l.first.get() < r;
+						[] (const FontUpdateRequest &l, FontFaceObject *r) {
+					return l.object.get() < r;
 				});
 				if (lb == objects.end()) {
 					auto req = iit->getRequiredChars();
 					if (!req.empty()) {
-						objects.emplace_back(iit, move(req));
+						objects.emplace_back(FontUpdateRequest{iit, move(req), it.second->isPersistent()});
 					}
-				} else if (lb != objects.end() && lb->first != iit) {
+				} else if (lb != objects.end() && lb->object != iit) {
 					auto req = iit->getRequiredChars();
 					if (!req.empty()) {
-						objects.emplace(lb, iit, move(req));
+						objects.emplace(lb, FontUpdateRequest{iit, move(req), it.second->isPersistent()});
 					}
 				}
 			}

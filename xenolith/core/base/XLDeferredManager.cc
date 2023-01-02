@@ -89,17 +89,17 @@ Rc<LabelDeferredResult> DeferredManager::runLabel(Label::FormatSpec *format, con
 struct DeferredFontRequestsData : Ref {
 	virtual ~DeferredFontRequestsData() { }
 
-	DeferredFontRequestsData(const Rc<font::FontLibrary> &lib, const Vector<Pair<Rc<font::FontFaceObject>, Vector<char16_t>>> &req)
+	DeferredFontRequestsData(const Rc<font::FontLibrary> &lib, const Vector<font::FontUpdateRequest> &req)
 	: library(lib) {
 		for (auto &it : req) {
-			nrequests += it.second.size();
+			nrequests += it.chars.size();
 		}
 
 		fontRequests.reserve(nrequests);
 
 		for (uint32_t i = 0; i < req.size(); ++ i) {
-			faces.emplace_back(req[i].first);
-			for (auto &it : req[i].second) {
+			faces.emplace_back(req[i].object);
+			for (auto &it : req[i].chars) {
 				fontRequests.emplace_back(i, it);
 			}
 		}
@@ -111,12 +111,18 @@ struct DeferredFontRequestsData : Ref {
 		uint32_t c = 0;
 		while (target < nrequests) {
 			auto &v = fontRequests[target];
+			if (v.second == 0) {
+				c = complete.fetch_add(1);
+				target = current.fetch_add(1);
+				continue;
+			}
+
 			if (!threadFaces[v.first]) {
 				threadFaces[v.first] = library->makeThreadHandle(faces[v.first]);
 			}
 
 			threadFaces[v.first]->acquireTexture(v.second, [&] (const font::CharTexture &tex) {
-				onTexture(target, tex);
+				onTexture(v.first, tex);
 			});
 			c = complete.fetch_add(1);
 			target = current.fetch_add(1);
@@ -134,13 +140,13 @@ struct DeferredFontRequestsData : Ref {
 	Vector<Pair<uint32_t, char16_t>> fontRequests;
 
 	Rc<font::FontLibrary> library;
-	Function<void(uint32_t idx, const font::CharTexture &texData)> onTexture;
+	Function<void(uint32_t reqIdx, const font::CharTexture &texData)> onTexture;
 	Function<void()> onComplete;
 };
 
 void DeferredManager::runFontRenderer(const Rc<font::FontLibrary> &lib,
-		const Vector<Pair<Rc<font::FontFaceObject>, Vector<char16_t>>> &req,
-		Function<void(uint32_t idx, const font::CharTexture &texData)> &&onTexture,
+		const Vector<font::FontUpdateRequest> &req,
+		Function<void(uint32_t reqIdx, const font::CharTexture &texData)> &&onTexture,
 		Function<void()> &&onComplete) {
 
 	auto data = Rc<DeferredFontRequestsData>::alloc(lib, req);

@@ -52,7 +52,10 @@ public:
 	const ColorScheme *setExtraScheme(StringView, ThemeType, const ColorHCT &, bool isContent);
 	const ColorScheme *getExtraScheme(StringView) const;
 
+	const Scene *getScene() const { return _scene; }
+
 protected:
+	Scene *_scene = nullptr;
 	ColorScheme _primaryScheme = ColorScheme(ThemeType::LightTheme, ColorHCT(292, 100, 50, 1.0f), false);
 	Map<String, ColorScheme> _extraSchemes;
 };

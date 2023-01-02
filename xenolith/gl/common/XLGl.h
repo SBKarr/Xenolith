@@ -397,12 +397,16 @@ protected:
 	std::atomic<bool> _isReady;
 };
 
-struct RenderFontInput : public AttachmentInputData {
-	using FontRequest = Pair<Rc<font::FontFaceObject>, Vector<char16_t>>;
+struct FontUpdateRequest {
+	Rc<font::FontFaceObject> object;
+	Vector<char16_t> chars;
+	bool persistent = false;
+};
 
+struct RenderFontInput : public AttachmentInputData {
 	Rc<DynamicImage> image;
 	Rc<font::FontLibrary> library;
-	Vector<FontRequest> requests;
+	Vector<FontUpdateRequest> requests;
 	Function<void(const ImageInfo &, BytesView)> output;
 };
 

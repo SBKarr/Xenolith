@@ -279,7 +279,9 @@ struct Cam16 {
 		const Float e_hue = 0.25 * (std::cos(Float(hue_prime * std::numbers::pi / 180.0 + 2.0) + 3.8));
 		const Float p1 = 50000.0 / 13.0 * e_hue * ViewingConditions::DEFAULT.n_c * ViewingConditions::DEFAULT.ncb;
 		const Float t = p1 * std::sqrt(a * a + b * b) / (u + Float(0.305));
-		const Float alpha = std::pow(t, Float(0.9)) * std::pow(Float(1.64) - std::pow(Float(0.29), ViewingConditions::DEFAULT.background_y_to_white_point_y), Float(0.73));
+		const Float tmpA =  std::pow(Float(1.64) - std::pow(Float(0.29), ViewingConditions::DEFAULT.background_y_to_white_point_y), Float(0.73));
+		const Float tmpB = std::pow(t, Float(0.9));
+		const Float alpha = tmpB * tmpA;
 		const Float c = alpha * std::sqrt(j / Float(100.0));
 		const Float m = c * ViewingConditions::DEFAULT.fl_root;
 		const Float s = 50.0 * sqrt((alpha * ViewingConditions::DEFAULT.c) / (ViewingConditions::DEFAULT.aw + 4.0));
@@ -335,6 +337,9 @@ struct alignas(16) ColorHCT {
 
 	Color4F asColor4F() const { return color; }
 
+	ColorHCT &operator=(const Color4F &color) { *this = ColorHCT(color); return *this; }
+	ColorHCT &operator=(const ColorHCT &color) = default;
+
 	inline operator Color4F () const {
 		return asColor4F();
 	}
@@ -347,6 +352,8 @@ struct alignas(16) ColorHCT {
 };
 
 struct TonalPalette {
+	TonalPalette() = default;
+
 	explicit TonalPalette(const Color4F &color)
 	: TonalPalette(Cam16::create(color)) { }
 
@@ -360,8 +367,12 @@ struct TonalPalette {
 		return ColorHCT::solveColor4F(hue, chroma, tone, alpha);
 	}
 
-	Cam16Float hue;
-	Cam16Float chroma;
+	ColorHCT hct(Cam16Float tone, float alpha = 1.0f) const {
+		return ColorHCT(hue, chroma, tone, alpha);
+	}
+
+	Cam16Float hue = Cam16Float(0.0);
+	Cam16Float chroma = Cam16Float(0.5);
 };
 
 /**
@@ -370,6 +381,7 @@ struct TonalPalette {
  * hue as the key color, and all vary in chroma.
  */
 struct CorePalette {
+	CorePalette() = default;
 	CorePalette(const Color4F &, bool isContentColor);
 	CorePalette(const Cam16 &, bool isContentColor);
 	CorePalette(Cam16Float hue, Cam16Float chroma, bool isContentColor);
@@ -400,8 +412,11 @@ struct ColorScheme {
 		return colors[toInt(getColorRoleOn(name, type))];
 	}
 
+	ColorHCT hct(ColorRole name) const;
+
 	ThemeType type = ThemeType::LightTheme;
 	std::array<Color4B, toInt(ColorRole::Max)> colors;
+	CorePalette palette;
 };
 
 }

@@ -20,22 +20,33 @@
  THE SOFTWARE.
  **/
 
-#ifndef MODULES_MATERIAL_MATERIALSCENE_H_
-#define MODULES_MATERIAL_MATERIALSCENE_H_
+#ifndef TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_
+#define TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_
 
-#include "Material.h"
-#include "XLUtilScene.h"
+#include "AppLayoutTest.h"
+#include "AppCheckbox.h"
+#include "AppSlider.h"
+#include "MaterialNode.h"
+#include "MaterialStyleContainer.h"
 
-namespace stappler::xenolith::material {
+namespace stappler::xenolith::app {
 
-class MaterialScene : public UtilScene {
+class MaterialNodeTest : public LayoutTest {
 public:
-	virtual ~MaterialScene() { }
+	virtual ~MaterialNodeTest() { }
 
+	virtual bool init() override;
+
+	virtual void onContentSizeDirty() override;
 
 protected:
+	material::StyleContainer *_style = nullptr;
+	material::MaterialNode *_nodeElevation = nullptr;
+	material::MaterialNode *_nodeCornerRounded = nullptr;
+	material::MaterialNode *_nodeCornerCut = nullptr;
+	material::MaterialNode *_nodeShadow = nullptr;
 };
 
 }
 
-#endif /* MODULES_MATERIAL_MATERIALSCENE_H_ */
+#endif /* TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_ */
