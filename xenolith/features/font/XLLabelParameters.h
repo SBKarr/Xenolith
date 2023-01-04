@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -42,6 +43,7 @@ public:
 	using FontStyle = font::FontStyle;
 	using FontWeight = font::FontWeight;
 	using FontStretch = font::FontStretch;
+	using FontGrade = font::FontGrade;
 
 	using Opacity = OpacityValue;
 	using FontSize = font::FontSize;
@@ -65,6 +67,7 @@ public:
 			FontWeight,
 			FontStretch,
 			FontFamily,
+			FontGrade,
 		};
 
 		union Value {
@@ -78,6 +81,7 @@ public:
 			FontStyle fontStyle;
 			FontWeight fontWeight;
 			FontStretch fontStretch;
+			FontGrade fontGrade;
 			uint32_t fontFamily;
 
 			Value();
@@ -99,6 +103,7 @@ public:
 			Param(const FontWeight &val) : name(Name::FontWeight) { value.fontWeight = val; }
 			Param(const FontStretch &val) : name(Name::FontStretch) { value.fontStretch = val; }
 			Param(const FontFamily &val) : name(Name::FontFamily) { value.fontFamily = val.get(); }
+			Param(const FontGrade &val) : name(Name::FontGrade) { value.fontGrade = val; }
 		};
 
 		Style() { }
@@ -167,6 +172,7 @@ public:
 		static void readParameter(DescriptionStyle &p, FontStyle value) { p.font.fontStyle = value; }
 		static void readParameter(DescriptionStyle &p, FontWeight value) { p.font.fontWeight = value; }
 		static void readParameter(DescriptionStyle &p, FontStretch value) { p.font.fontStretch = value; }
+		static void readParameter(DescriptionStyle &p, FontGrade value) { p.font.fontGrade = value; }
 
 		template <typename T, typename ... Args>
 		static void readParameters(DescriptionStyle &p, T && t, Args && ... args) {
@@ -299,6 +305,9 @@ public:
 	void setFontStretch(const FontStretch &);
 	FontStretch getFontStretch() const;
 
+	void setFontGrade(const FontGrade &);
+	FontGrade getFontGrade() const;
+
 	void setFontFamily(const StringView &);
 	StringView getFontFamily() const;
 
@@ -333,7 +342,8 @@ protected:
 	virtual bool hasLocaleTags(const WideStringView &) const;
 	virtual WideString resolveLocaleTags(const WideStringView &) const;
 
-protected:
+	virtual void specializeStyle(DescriptionStyle &style, float density) const;
+
 	WideString _string16;
 	String _string8;
 

@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -101,6 +102,8 @@ public:
 	FontStretch getStretchMax() const { return _stretchMax; }
 	FontStyle getSlantMin() const { return _slantMin; }
 	FontStyle getSlantMax() const { return _slantMax; }
+	FontGrade getGradeMin() const { return _gradeMin; }
+	FontGrade getGradeMax() const { return _gradeMax; }
 	uint32_t getOpticalSizeMin() const { return _opticalSizeMin; }
 	uint32_t getOpticalSizeMax() const { return _opticalSizeMax; }
 	uint32_t getItalicMin() const { return _italicMin; }
@@ -124,6 +127,8 @@ protected:
 	uint32_t _opticalSizeMax = 0;
 	uint32_t _italicMin = 0;
 	uint32_t _italicMax = 0;
+	FontGrade _gradeMin;
+	FontGrade _gradeMax;
 	FontLayoutParameters _params;
 };
 

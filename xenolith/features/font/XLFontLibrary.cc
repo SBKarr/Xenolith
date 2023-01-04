@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -267,6 +268,11 @@ void FontLibrary::update(uint64_t clock) {
 	for (auto &it : erased) {
 		_threads.erase(it.get());
 	}
+}
+
+void FontLibrary::invalidate() {
+	std::unique_lock uniqueLock(_sharedMutex);
+	_threads.clear();
 }
 
 static Bytes openResourceFont(FontLibrary::DefaultFontName name) {

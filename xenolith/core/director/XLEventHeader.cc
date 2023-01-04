@@ -37,6 +37,7 @@ struct EventList {
 		_knownEvents.insert(header);
 		return (uint32_t)_knownEvents.size();
 	}
+
 	void removeEventHeader(const EventHeader *header) {
 		_knownEvents.erase(header);
 	}

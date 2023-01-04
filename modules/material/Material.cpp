@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -22,9 +23,12 @@
 
 #include "XLDefine.h"
 #include "Material.h"
-#include "MaterialColorScheme.cc"
-#include "MaterialStyleContainer.cc"
+
+#include "style/MaterialColorScheme.cc"
+#include "style/MaterialStyleContainer.cc"
+#include "style/MaterialStyleData.cc"
 #include "MaterialNode.cc"
+#include "MaterialLabel.cc"
 
 namespace stappler::xenolith::material {
 
@@ -62,6 +66,30 @@ ColorRole getColorRoleOn(ColorRole role, ThemeType type) {
 	case ColorRole::Max: break;
 	}
 	return role;
+}
+
+Rc<ActionEase> makeEasing(Rc<ActionInterval> &&action, EasingType type) {
+	switch (type) {
+	case EasingType::Standard:
+		return Rc<EaseBezierAction>::create(move(action), 0.2f, 0.0f, 0.0f, 1.0f);
+		break;
+	case EasingType::StandardAccelerate:
+		return Rc<EaseBezierAction>::create(move(action), 0.3f, 0.0f, 1.0f, 1.0f);
+		break;
+	case EasingType::StandardDecelerate:
+		return Rc<EaseBezierAction>::create(move(action), 0.0f, 0.0f, 0.0f, 1.0f);
+		break;
+	case EasingType::Emphasized:
+		return Rc<EaseBezierAction>::create(move(action), 0.2f, 0.0f, 0.0f, 1.0f);
+		break;
+	case EasingType::EmphasizedAccelerate:
+		return Rc<EaseBezierAction>::create(move(action), 0.3f, 0.0f, 0.8f, 0.15f);
+		break;
+	case EasingType::EmphasizedDecelerate:
+		return Rc<EaseBezierAction>::create(move(action), 0.05f, 0.7f, 0.1f, 1.0f);
+		break;
+	}
+	return nullptr;
 }
 
 }

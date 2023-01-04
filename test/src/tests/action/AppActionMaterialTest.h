@@ -21,32 +21,36 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_TESTS_MATERIAL_APPMATERIALDYNAMICFONTTEST_H_
-#define TEST_SRC_TESTS_MATERIAL_APPMATERIALDYNAMICFONTTEST_H_
+#ifndef TEST_SRC_TESTS_ACTION_APPACTIONMATERIALTEST_H_
+#define TEST_SRC_TESTS_ACTION_APPACTIONMATERIALTEST_H_
 
 #include "AppLayoutTest.h"
-#include "AppCheckbox.h"
 #include "AppSlider.h"
+#include "AppButton.h"
+#include "Material.h"
 
 namespace stappler::xenolith::app {
 
-class MaterialDynamicFontTest : public LayoutTest {
+class ActionEaseNode;
+
+class ActionMaterialTest : public LayoutTest {
 public:
-	virtual ~MaterialDynamicFontTest() { }
+	virtual ~ActionMaterialTest() { }
 
 	virtual bool init() override;
 
 	virtual void onContentSizeDirty() override;
 
 protected:
-	Label *_label = nullptr;
-	AppSliderWithLabel *_sliderSize = nullptr;
-	AppSliderWithLabel *_sliderWeight = nullptr;
-	AppSliderWithLabel *_sliderWidth = nullptr;
-	AppSliderWithLabel *_sliderStyle = nullptr;
-	AppSliderWithLabel *_sliderGrade = nullptr;
+	using LayoutTest::init;
+
+	Rc<ActionInterval> makeAction(material::EasingType, Rc<ActionInterval> &&) const;
+
+	AppSliderWithLabel *_slider = nullptr;
+	ButtonWithLabel *_button = nullptr;
+	Vector<ActionEaseNode *> _nodes;
 };
 
 }
 
-#endif /* TEST_SRC_TESTS_MATERIAL_APPMATERIALDYNAMICFONTTEST_H_ */
+#endif /* TEST_SRC_TESTS_ACTION_APPACTIONMATERIALTEST_H_ */

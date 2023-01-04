@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,8 +21,8 @@
  THE SOFTWARE.
  **/
 
-#ifndef MODULES_MATERIAL_MATERIALCOLORSCHEME_H_
-#define MODULES_MATERIAL_MATERIALCOLORSCHEME_H_
+#ifndef MODULES_MATERIAL_STYLE_MATERIALCOLORSCHEME_H_
+#define MODULES_MATERIAL_STYLE_MATERIALCOLORSCHEME_H_
 
 #include "Material.h"
 
@@ -305,14 +306,14 @@ struct Cam16 {
 };
 
 struct alignas(16) ColorHCT {
-	struct alignas(16) Data {
+	struct alignas(16) Values {
 		float hue;
 		float chroma;
 		float tone;
 		float alpha;
 
-		bool operator==(const Data& right) const = default;
-		bool operator!=(const Data& right) const = default;
+		bool operator==(const Values& right) const = default;
+		bool operator!=(const Values& right) const = default;
 	};
 
 	static ColorHCT progress(const ColorHCT &a, const ColorHCT &b, float p);
@@ -321,10 +322,13 @@ struct alignas(16) ColorHCT {
 	static ColorHCT solveColorHCT(Cam16Float h, Cam16Float c, Cam16Float t, float a);
 	static Color4F solveColor4F(Cam16Float h, Cam16Float c, Cam16Float t, float a);
 
-	constexpr ColorHCT() : data({0.0f, 0.5f, 0.0f, 1.0f}), color(Color4F::BLACK) { }
+	constexpr ColorHCT() : data({0.0f, 50.0f, 0.0f, 1.0f}), color(Color4F::BLACK) { }
 
 	ColorHCT(float h, float c, float t, float a)
 	: data({Cam16::sanitizeDegrees(h), c, t, a}), color(solveColor4F(Cam16::sanitizeDegrees(h), c, t, a)) { }
+
+	ColorHCT(const Values &d)
+	: data(d), color(solveColor4F(Cam16::sanitizeDegrees(data.hue), data.chroma, data.tone, data.alpha)) { }
 
 	explicit ColorHCT(const Color4F& c) {
 		auto cam = Cam16::create(c);
@@ -347,7 +351,7 @@ struct alignas(16) ColorHCT {
 	bool operator==(const ColorHCT& right) const = default;
 	bool operator!=(const ColorHCT& right) const = default;
 
-	Data data;
+	Values data;
 	Color4F color;
 };
 
@@ -369,6 +373,10 @@ struct TonalPalette {
 
 	ColorHCT hct(Cam16Float tone, float alpha = 1.0f) const {
 		return ColorHCT(hue, chroma, tone, alpha);
+	}
+
+	ColorHCT::Values values(Cam16Float tone, float alpha = 1.0f) const {
+		return ColorHCT::Values{hue, chroma, tone, alpha};
 	}
 
 	Cam16Float hue = Cam16Float(0.0);
@@ -404,18 +412,21 @@ struct ColorScheme {
 	void set(ThemeType, const Color4F &, bool isContent);
 	void set(ThemeType, const ColorHCT &, bool isContent);
 
-	Color4B get(ColorRole name) const {
+	Color4F get(ColorRole name) const {
 		return colors[toInt(name)];
 	}
 
-	Color4B on(ColorRole name) const {
+	Color4F on(ColorRole name) const {
 		return colors[toInt(getColorRoleOn(name, type))];
 	}
 
 	ColorHCT hct(ColorRole name) const;
 
+	// faster then complete color
+	ColorHCT::Values values(ColorRole name) const;
+
 	ThemeType type = ThemeType::LightTheme;
-	std::array<Color4B, toInt(ColorRole::Max)> colors;
+	std::array<Color4F, toInt(ColorRole::Max)> colors;
 	CorePalette palette;
 };
 
@@ -430,4 +441,4 @@ xenolith::material::ColorHCT progress<xenolith::material::ColorHCT>(const xenoli
 
 }
 
-#endif /* MODULES_MATERIAL_MATERIALCOLORSCHEME_H_ */
+#endif /* MODULES_MATERIAL_STYLE_MATERIALCOLORSCHEME_H_ */

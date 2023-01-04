@@ -1,5 +1,6 @@
 /**
-Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -23,6 +24,11 @@ THE SOFTWARE.
 #include "XLComponent.h"
 
 namespace stappler::xenolith {
+
+uint64_t Component::GetNextComponentId() {
+	static std::atomic<uint64_t> s_value = 1;
+	return s_value.fetch_add(1);
+}
 
 Component::Component()
 : _owner(nullptr), _enabled(true) { }
@@ -66,8 +72,8 @@ void Component::setEnabled(bool b) {
 	_enabled = b;
 }
 
-void Component::setTag(uint64_t tag) {
-	_tag = tag;
+void Component::setFrameTag(uint64_t tag) {
+	_frameTag = tag;
 }
 
 }

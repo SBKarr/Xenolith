@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -21,6 +22,8 @@
  **/
 
 #include "AppMaterialColorPickerTest.h"
+#include "MaterialNode.h"
+#include "MaterialLabel.h"
 
 namespace stappler::xenolith::app {
 
@@ -49,10 +52,10 @@ void MaterialColorSchemeNode::onContentSizeDirty() {
 	_labelDesc->setPosition(Vec2(_contentSize.width - 4.0f, 4.0f));
 }
 
-void MaterialColorSchemeNode::setSchemeColor(material::ThemeType type, Color4B background, Color4B label) {
-	setColor(Color4F(background));
-	_labelName->setColor(Color4F(label));
-	_labelDesc->setColor(Color4F(label));
+void MaterialColorSchemeNode::setSchemeColor(material::ThemeType type, Color4F background, Color4F label) {
+	setColor(background);
+	_labelName->setColor(label);
+	_labelDesc->setColor(label);
 	_type = type;
 	updateLabels();
 }
@@ -144,10 +147,11 @@ bool MaterialColorPickerSprite::init(Type type, const material::ColorHCT &color,
 	case Type::Tone: _value = _targetColor.data.tone / 100.0f; break;
 	}
 
-	_label = addChild(Rc<Label>::create());
+	_label = addChild(Rc<material::MaterialLabel>::create(material::TypescaleRole::TitleLarge), 1);
 	_label->setFontSize(20);
 	_label->setAnchorPoint(Anchor::MiddleLeft);
 	_label->setString(makeString());
+	_label->setPersistentLayout(true);
 
 	_indicator = addChild(Rc<Layer>::create(Color::Grey_500));
 	_indicator->setAnchorPoint(Anchor::MiddleLeft);

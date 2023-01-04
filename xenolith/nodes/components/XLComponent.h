@@ -1,5 +1,6 @@
 /**
-Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -24,14 +25,17 @@ THE SOFTWARE.
 #define COMPONENTS_XENOLITH_NODES_XLCOMPONENT_H_
 
 #include "XLDefine.h"
-#include "XLRenderFrameInfo.h"
 
 namespace stappler::xenolith {
 
+struct RenderFrameInfo;
 class Node;
+class Scene;
 
 class Component : public Ref {
 public:
+	static uint64_t GetNextComponentId();
+
 	Component();
 	virtual ~Component();
 	virtual bool init();
@@ -55,14 +59,14 @@ public:
 
 	Node* getOwner() const { return _owner; }
 
-	void setTag(uint64_t);
-	uint64_t getTag() const { return _tag; }
+	void setFrameTag(uint64_t);
+	uint64_t getFrameTag() const { return _frameTag; }
 
 protected:
 	Node *_owner = nullptr;
 	bool _enabled = true;
 	bool _running = false;
-	uint64_t _tag = InvalidTag;
+	uint64_t _frameTag = InvalidTag;
 };
 
 }

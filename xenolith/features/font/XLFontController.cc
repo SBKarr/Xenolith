@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -498,6 +499,10 @@ FontSpecializationVector FontController::findSpecialization(const FamilySpec &fa
 			ret += 75000; // Oblique-Italic replacement
 		} else if (existed.fontStyle == required.fontStyle && existed.fontStyle == FontStyle::Normal) {
 			ret += 50000;
+		}
+
+		if (existed.fontGrade == required.fontGrade) {
+			ret += (400 - std::abs(int(required.fontGrade.get()) - int(existed.fontGrade.get()))) * 50;
 		}
 
 		ret += (1000 - std::abs(int(required.fontWeight.get()) - int(existed.fontWeight.get()))) * 100;

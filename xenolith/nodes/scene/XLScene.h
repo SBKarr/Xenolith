@@ -1,5 +1,6 @@
 /**
-Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -91,9 +92,6 @@ public:
 	virtual void removeAllLights();
 	virtual void removeAllLightsByType(SceneLightType);
 
-	virtual void setFrameUserdata(Ref *ref) { _frameUserdata = ref; }
-	virtual Ref *getFrameUserdata() const { return _frameUserdata; }
-
 protected:
 	using Node::init;
 
@@ -161,8 +159,6 @@ protected:
 	Vector<Rc<SceneLight>> _lights;
 	Map<uint64_t, SceneLight *> _lightsByTag;
 	Map<StringView, SceneLight *> _lightsByName;
-
-	Rc<Ref> _frameUserdata;
 };
 
 }

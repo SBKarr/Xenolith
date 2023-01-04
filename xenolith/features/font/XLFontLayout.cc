@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -26,7 +27,7 @@
 namespace stappler::xenolith::font {
 
 String FontLayout::constructName(StringView family, const FontSpecializationVector &vec) {
-	return getFontConfigName(family, vec.fontSize, vec.fontStyle, vec.fontWeight, vec.fontStretch, FontVariant::Normal, false);
+	return getFontConfigName(family, vec.fontSize, vec.fontStyle, vec.fontWeight, vec.fontStretch, vec.fontGrade, FontVariant::Normal, false);
 }
 
 bool FontLayout::init(String &&name, StringView family, FontSpecializationVector &&spec, Rc<FontFaceData> &&data, FontLibrary *c) {

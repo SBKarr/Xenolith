@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -108,6 +109,13 @@ enum class PixelFormat {
 	DS, // depth-stencil
 	S // stencil
 };
+
+enum class CommandFlags : uint16_t {
+	None,
+	DoNotCount = 1 << 0
+};
+
+SP_DEFINE_ENUM_AS_MASK(CommandFlags)
 
 struct SamplerInfo {
 	Filter magFilter = Filter::Nearest;
@@ -483,6 +491,17 @@ struct ShadowLightInput : AttachmentInputData {
 
 	bool addAmbientLight(const Vec4 &, const Color4F &, bool softShadow);
 	bool addDirectLight(const Vec4 &, const Color4F &, const Vec4 &);
+};
+
+struct DrawStateValues {
+	renderqueue::DynamicState enabled = renderqueue::DynamicState::None;
+	URect viewport;
+	URect scissor;
+
+	bool operator==(const DrawStateValues &) const = default;
+
+	bool isScissorEnabled() const { return (enabled & renderqueue::DynamicState::Scissor) != renderqueue::DynamicState::None; }
+	bool isViewportEnabled() const { return (enabled & renderqueue::DynamicState::Viewport) != renderqueue::DynamicState::None; }
 };
 
 String getBufferFlagsDescription(BufferFlags fmt);

@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -145,12 +146,7 @@ void Device::invalidateObjects() {
 				log::vtext("Gl-Device", "Object ", (void *)it, " (", typeid(*it).name(),
 						") [rc:", ref->getReferenceCount(), "] was not destroyed before device destruction");
 			}
-		} else {
-			log::vtext("Gl-Device", "Object ", (void *)it, " (", typeid(*it).name(),
-					") was not destroyed before device destruction");
-		}
 #if SP_REF_DEBUG
-		if (auto ref = dynamic_cast<const Ref *>(it)) {
 			log::vtext("Gl-Device", "Backtrace for ", (void *)it);
 			ref->foreachBacktrace([] (uint64_t id, Time time, const std::vector<std::string> &vec) {
 				StringStream stream;
@@ -160,8 +156,12 @@ void Device::invalidateObjects() {
 				}
 				log::text("Gl-Device-Backtrace", stream.str());
 			});
-		}
 #endif
+		} else {
+			log::vtext("Gl-Device", "Object ", (void *)it, " (", typeid(*it).name(),
+					") was not destroyed before device destruction");
+		}
+
 		it->invalidate();
 	}
 }

@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -38,11 +39,14 @@ String FontSpecializationVector::getSpecializationArgs() const {
 	default: out << "&style=" << fontStyle.get(); break;
 	}
 	out << "&density=" << density;
+	if (fontGrade != FontGrade::Normal) {
+		out << "&grade=" << fontGrade.get();
+	}
 	return out.str();
 }
 
 String getFontConfigName(const StringView &fontFamily, FontSize fontSize, FontStyle fontStyle, FontWeight fontWeight,
-		FontStretch fontStretch, FontVariant fontVariant, bool caps) {
+		FontStretch fontStretch, FontGrade fontGrade, FontVariant fontVariant, bool caps) {
 	auto size = fontSize;
 	String name;
 	name.reserve(fontFamily.size() + 14);
@@ -62,6 +66,7 @@ String getFontConfigName(const StringView &fontFamily, FontSize fontSize, FontSt
 
 	name += toString(".", fontWeight.get());
 	name += toString(".", fontStretch.get());
+	name += toString(".", fontGrade.get());
 	return name;
 }
 
@@ -116,7 +121,7 @@ FontParameters FontParameters::create(const String &str) {
 }
 
 String FontParameters::getConfigName(bool caps) const {
-	return getFontConfigName(fontFamily, fontSize, fontStyle, fontWeight, fontStretch, fontVariant, caps);
+	return getFontConfigName(fontFamily, fontSize, fontStyle, fontWeight, fontStretch, fontGrade, fontVariant, caps);
 }
 
 FontParameters FontParameters::getSmallCaps() const {

@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -38,13 +39,19 @@ public:
 	virtual bool init() override;
 
 	virtual void onContentSizeDirty() override;
+	virtual void onEnter(Scene *) override;
 
 protected:
 	material::StyleContainer *_style = nullptr;
+
+	material::MaterialNode *_background = nullptr;
 	material::MaterialNode *_nodeElevation = nullptr;
 	material::MaterialNode *_nodeCornerRounded = nullptr;
 	material::MaterialNode *_nodeCornerCut = nullptr;
 	material::MaterialNode *_nodeShadow = nullptr;
+
+	MaterialColorPickerSprite *_huePicker = nullptr;
+	AppCheckboxWithLabel *_lightCheckbox = nullptr;
 };
 
 }

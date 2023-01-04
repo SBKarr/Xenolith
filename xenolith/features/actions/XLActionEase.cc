@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -374,8 +375,33 @@ float quadraticInOut(float time) {
 	return resultTime;
 }
 
-float bezieratFunction(float t, float a, float b, float c, float d) {
-	return (powf(1 - t, 3) * a + 3 * t * (powf(1 - t, 2)) * b + 3 * powf(t, 2) * (1 - t) * c + powf(t, 3) * d);
+static float evaluateCubic(float t, float p1, float p2) {
+	return
+		// std::pow(1.0f - t, 3.0f) * p0 // - p0 = 0.0f
+		3.0f * std::pow(1.0f - t, 2) * t * p1
+		+ 3.0f * (1.0f - t) * std::pow(t, 2.0f) * p2
+		+ std::pow(t, 3.0f); // p3 = 1.0f
+}
+
+float bezieratFunction(float t, float x1, float y1, float x2, float y2) {
+	static constexpr float ErrorBound = 0.001;
+
+    float start = 0.0f;
+    float end = 1.0f;
+
+    while (true) {
+    	const float midpoint = (start + end) / 2;
+    	const float estimate = evaluateCubic(midpoint, x1, x2);
+		if (std::abs(t - estimate) < ErrorBound) {
+			return evaluateCubic(midpoint, y1, y2);
+		}
+		if (estimate < t) {
+			start = midpoint;
+		} else {
+			end = midpoint;
+		}
+    }
+    return nan();
 }
 
 }

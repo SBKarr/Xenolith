@@ -21,32 +21,42 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_TESTS_MATERIAL_APPMATERIALDYNAMICFONTTEST_H_
-#define TEST_SRC_TESTS_MATERIAL_APPMATERIALDYNAMICFONTTEST_H_
+#ifndef MODULES_MATERIAL_STYLE_MATERIALSTYLEDATA_H_
+#define MODULES_MATERIAL_STYLE_MATERIALSTYLEDATA_H_
 
-#include "AppLayoutTest.h"
-#include "AppCheckbox.h"
-#include "AppSlider.h"
+#include "MaterialColorScheme.h"
 
-namespace stappler::xenolith::app {
+namespace stappler::xenolith::material {
 
-class MaterialDynamicFontTest : public LayoutTest {
-public:
-	virtual ~MaterialDynamicFontTest() { }
+class StyleContainer;
 
-	virtual bool init() override;
+struct StyleData {
+	static StyleData progress(const StyleData &, const StyleData &, float p);
+	static StyleData Background;
 
-	virtual void onContentSizeDirty() override;
+	bool apply(const Size2 &contentSize, const StyleContainer *);
 
-protected:
-	Label *_label = nullptr;
-	AppSliderWithLabel *_sliderSize = nullptr;
-	AppSliderWithLabel *_sliderWeight = nullptr;
-	AppSliderWithLabel *_sliderWidth = nullptr;
-	AppSliderWithLabel *_sliderStyle = nullptr;
-	AppSliderWithLabel *_sliderGrade = nullptr;
+	bool operator==(const StyleData &) const = default;
+	bool operator!=(const StyleData &) const = default;
+
+	String schemeName;
+	ColorRole colorRule = ColorRole::Primary;
+	Elevation elevation = Elevation::Level0;
+	ShapeFamily shapeFamily = ShapeFamily::RoundedCorners;
+	ShapeStyle shapeStyle = ShapeStyle::None;
+	NodeStyle nodeStyle = NodeStyle::Tonal;
+
+	ThemeType themeType = ThemeType::LightTheme;
+	Color4F colorScheme;
+	Color4F colorElevation;
+	ColorHCT colorHCT;
+	ColorHCT colorBackground;
+	ColorHCT colorOn;
+	float cornerRadius = 0.0f;
+	float elevationValue = 0.0f;
+	float shadowValue = 0.0f;
 };
 
 }
 
-#endif /* TEST_SRC_TESTS_MATERIAL_APPMATERIALDYNAMICFONTTEST_H_ */
+#endif /* MODULES_MATERIAL_STYLE_MATERIALSTYLEDATA_H_ */

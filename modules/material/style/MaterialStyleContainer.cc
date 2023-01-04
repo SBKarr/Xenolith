@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -29,26 +30,25 @@ XL_DECLARE_EVENT_CLASS(StyleContainer, onAttached)
 XL_DECLARE_EVENT_CLASS(StyleContainer, onPrimaryColorSchemeUpdate)
 XL_DECLARE_EVENT_CLASS(StyleContainer, onExtraColorSchemeUpdate)
 
+uint64_t StyleContainer::ComponentFrameTag = Component::GetNextComponentId();
+
 bool StyleContainer::init() {
 	if (!Component::init()) {
 		return false;
 	}
 
+	_frameTag = ComponentFrameTag;
 	return true;
 }
 
 void StyleContainer::onEnter(Scene *scene) {
 	Component::onEnter(scene);
 	_scene = scene;
-	_scene->setFrameUserdata(this);
 	onAttached(this, true);
 }
 
 void StyleContainer::onExit() {
 	onAttached(this, false);
-	if (_scene->getFrameUserdata() == this) {
-		_scene->setFrameUserdata(nullptr);
-	}
 	_scene = nullptr;
 	Component::onExit();
 }

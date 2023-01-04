@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -327,12 +328,12 @@ void Label::updateColor() {
 	if (_format) {
 		for (auto &it : _format->ranges) {
 			if (!it.colorDirty) {
-				it.color.r = uint8_t(_displayedColor.r / 255.0f);
-				it.color.g = uint8_t(_displayedColor.g / 255.0f);
-				it.color.b = uint8_t(_displayedColor.b / 255.0f);
+				it.color.r = uint8_t(_displayedColor.r * 255.0f);
+				it.color.g = uint8_t(_displayedColor.g * 255.0f);
+				it.color.b = uint8_t(_displayedColor.b * 255.0f);
 			}
 			if (!it.opacityDirty) {
-				it.color.a = uint8_t(_displayedColor.a / 255.0f);
+				it.color.a = uint8_t(_displayedColor.a * 255.0f);
 			}
 		}
 	}
@@ -461,6 +462,7 @@ void Label::updateVertexes() {
 
 	if (!_format || _format->chars.size() == 0 || _string16.empty()) {
 		_vertexes.clear();
+		_labelDirty = false;
 		return;
 	}
 

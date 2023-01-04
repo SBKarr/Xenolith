@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -39,7 +40,7 @@ public:
 
 	virtual void onContentSizeDirty() override;
 
-	virtual void setSchemeColor(material::ThemeType, Color4B background, Color4B label);
+	virtual void setSchemeColor(material::ThemeType, Color4F background, Color4F label);
 
 protected:
 	void updateLabels();

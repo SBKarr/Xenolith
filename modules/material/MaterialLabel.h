@@ -1,5 +1,4 @@
 /**
- Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
  Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,32 +20,35 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_TESTS_MATERIAL_APPMATERIALDYNAMICFONTTEST_H_
-#define TEST_SRC_TESTS_MATERIAL_APPMATERIALDYNAMICFONTTEST_H_
+#ifndef MODULES_MATERIAL_MATERIALLABEL_H_
+#define MODULES_MATERIAL_MATERIALLABEL_H_
 
-#include "AppLayoutTest.h"
-#include "AppCheckbox.h"
-#include "AppSlider.h"
+#include "Material.h"
+#include "XLLabel.h"
 
-namespace stappler::xenolith::app {
+namespace stappler::xenolith::material {
 
-class MaterialDynamicFontTest : public LayoutTest {
+class MaterialLabel : public Label {
 public:
-	virtual ~MaterialDynamicFontTest() { }
+	virtual ~MaterialLabel() { }
 
-	virtual bool init() override;
+	virtual bool init(TypescaleRole);
+	virtual bool init(TypescaleRole, StringView);
+	virtual bool init(TypescaleRole, StringView, float w, Alignment = Alignment::Left);
 
-	virtual void onContentSizeDirty() override;
+	virtual TypescaleRole getRole() const { return _role; }
+	virtual void setRole(TypescaleRole);
 
 protected:
-	Label *_label = nullptr;
-	AppSliderWithLabel *_sliderSize = nullptr;
-	AppSliderWithLabel *_sliderWeight = nullptr;
-	AppSliderWithLabel *_sliderWidth = nullptr;
-	AppSliderWithLabel *_sliderStyle = nullptr;
-	AppSliderWithLabel *_sliderGrade = nullptr;
+	virtual bool visitDraw(RenderFrameInfo &, NodeFlags parentFlags) override;
+	virtual void specializeStyle(DescriptionStyle &style, float density) const override;
+
+	using Label::init;
+
+	TypescaleRole _role = TypescaleRole::Unknown;
+	ThemeType _themeType = ThemeType::LightTheme;
 };
 
 }
 
-#endif /* TEST_SRC_TESTS_MATERIAL_APPMATERIALDYNAMICFONTTEST_H_ */
+#endif /* MODULES_MATERIAL_MATERIALLABEL_H_ */

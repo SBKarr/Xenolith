@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -40,6 +41,7 @@ enum class FontVariableAxis {
 	Italic = 1 << 2, // ital
 	Slant = 1 << 3, // slnt
 	OpticalSize = 1 << 4, // opsz
+	Grade = 1 << 5, // GRAD
 
 	Stretch = Width,
 };
@@ -140,6 +142,15 @@ struct FontStretch : ValueWrapper<uint16_t, class FontStretchFlag> {
 	using ValueWrapper::ValueWrapper;
 };
 
+struct FontGrade : ValueWrapper<int16_t, class FontGradeFlag> {
+	static const FontGrade Thin;
+	static const FontGrade Reduced;
+	static const FontGrade Normal;
+	static const FontGrade Heavy;
+
+	using ValueWrapper::ValueWrapper;
+};
+
 enum class FontVariant : EnumSize {
 	Normal,
 	SmallCaps,
@@ -189,6 +200,7 @@ struct FontLayoutParameters {
 	FontStyle fontStyle = FontStyle::Normal;
 	FontWeight fontWeight = FontWeight::Normal;
 	FontStretch fontStretch = FontStretch::Normal;
+	FontGrade fontGrade = FontGrade::Normal;
 
 	inline bool operator == (const FontLayoutParameters &other) const = default;
 	inline bool operator != (const FontLayoutParameters &other) const = default;
@@ -220,7 +232,7 @@ struct FontParameters : FontSpecializationVector {
 };
 
 String getFontConfigName(const StringView &fontFamily, FontSize fontSize, FontStyle fontStyle, FontWeight fontWeight,
-		FontStretch fontStretch, FontVariant fontVariant, bool caps);
+		FontStretch fontStretch, FontGrade fontGrade, FontVariant fontVariant, bool caps);
 
 constexpr FontStretch FontStretch::UltraCondensed = FontStretch(50 << 1);
 constexpr FontStretch FontStretch::ExtraCondensed = FontStretch((62 << 1) | 1);
@@ -255,6 +267,11 @@ constexpr FontSize FontSize::XXLarge = FontSize(uint16_t(24));
 constexpr FontStyle FontStyle::Normal = FontStyle(0);
 constexpr FontStyle FontStyle::Italic = FontStyle(minOf<int16_t>());
 constexpr FontStyle FontStyle::Oblique = FontStyle(-10 << 6);
+
+constexpr FontGrade FontGrade::Thin = FontGrade(-200);
+constexpr FontGrade FontGrade::Reduced = FontGrade(-50);
+constexpr FontGrade FontGrade::Normal = FontGrade(0);
+constexpr FontGrade FontGrade::Heavy = FontGrade(150);
 
 using FontLayoutId = ValueWrapper<uint16_t, class FontLayoutIdTag>;
 

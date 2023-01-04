@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -23,35 +24,31 @@
 #ifndef MODULES_MATERIAL_MATERIALNODE_H_
 #define MODULES_MATERIAL_MATERIALNODE_H_
 
-#include "MaterialColorScheme.h"
+#include "style/MaterialStyleData.h"
 #include "XLVectorSprite.h"
 
 namespace stappler::xenolith::material {
 
-class StyleContainer;
+class MaterialNodeInterior : public Component {
+public:
+	static uint64_t ComponentFrameTag;
 
-struct StyleData {
-	static StyleData progress(const StyleData &, const StyleData &, float p);
+	virtual ~MaterialNodeInterior() { }
 
-	void apply(const Size2 &contentSize, const StyleContainer *);
+	virtual bool init() override;
+	virtual bool init(StyleData &&style);
 
-	bool operator==(const StyleData &) const = default;
-	bool operator!=(const StyleData &) const = default;
+	virtual void onAdded(Node *owner) override;
+	virtual void visit(RenderFrameInfo &, NodeFlags parentFlags) override;
 
-	String schemeName;
-	ColorRole colorRule = ColorRole::Primary;
-	Elevation elevation = Elevation::Level0;
-	ShapeFamily shapeFamily = ShapeFamily::RoundedCorners;
-	ShapeStyle shapeStyle = ShapeStyle::None;
-	bool hasShadow = false;
+	virtual void setStyle(StyleData &&style) { _interiorStyle = move(style); }
+	virtual const StyleData &getStyle() const { return _interiorStyle; }
 
-	Color4F colorScheme;
-	Color4F colorElevation;
-	ColorHCT colorHCT;
-	ColorHCT colorBackground;
-	float cornerRadius = 0.0f;
-	float elevationValue = 0.0f;
-	float shadowValue = 0.0f;
+	virtual bool isOwnedByMaterialNode() const { return _ownerIsMaterialNode; }
+
+protected:
+	bool _ownerIsMaterialNode = false;
+	StyleData _interiorStyle;
 };
 
 class MaterialNode : public VectorSprite {
@@ -61,6 +58,7 @@ public:
 	virtual ~MaterialNode() { }
 
 	virtual bool init(StyleData &&);
+	virtual bool init(const StyleData &);
 
 	virtual const StyleData &getStyleOrigin() const { return _styleOrigin; }
 	virtual const StyleData &getStyleTarget() const { return _styleTarget; }
@@ -73,6 +71,8 @@ public:
 
 protected:
 	virtual void applyStyle(const StyleData &);
+
+	MaterialNodeInterior *_interior = nullptr;
 
 	StyleData _styleOrigin;
 	StyleData _styleTarget;

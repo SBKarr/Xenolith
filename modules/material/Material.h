@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -24,6 +25,7 @@
 #define MODULES_MATERIAL_MATERIAL_H_
 
 #include "XLDefine.h"
+#include "XLActionEase.h"
 
 namespace stappler::xenolith::material {
 
@@ -89,7 +91,47 @@ enum class ShapeStyle {
 	Full // .
 };
 
+enum class EasingType {
+	Standard,
+	StandardAccelerate,
+	StandardDecelerate,
+	Emphasized,
+	EmphasizedAccelerate,
+	EmphasizedDecelerate,
+};
+
+enum class TypescaleRole {
+	DisplayLarge, // 57 400
+	DisplayMedium, // 45 400
+	DisplaySmall, // 36 400
+	HeadlineLarge, // 32 400
+	HeadlineMedium, // 28 400
+	HeadlineSmall, // 24 400
+	TitleLarge, // 22 400
+	TitleMedium, // 16 500
+	TitleSmall, // 14 500
+	LabelLarge, // 14 500
+	LabelMedium, // 12 500
+	LabelSmall, // 11 500
+	BodyLarge, // 16 400 0.5
+	BodyMedium, // 14 400 0.25
+	BodySmall, // 12 400 0.4
+	Unknown,
+};
+
+enum class NodeStyle {
+	Tonal,
+	TonalElevated,
+	Elevated,
+	Filled,
+	FilledElevated,
+	Outlined,
+	Text
+};
+
 ColorRole getColorRoleOn(ColorRole, ThemeType);
+
+Rc<ActionEase> makeEasing(Rc<ActionInterval> &&, EasingType = EasingType::Standard);
 
 }
 

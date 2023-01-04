@@ -1,5 +1,6 @@
 /**
-Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -29,6 +30,7 @@ THE SOFTWARE.
 #include "XLDirector.h"
 #include "XLScheduler.h"
 #include "XLActionManager.h"
+#include "XLRenderFrameInfo.h"
 
 namespace stappler::xenolith {
 
@@ -507,7 +509,7 @@ bool Node::removeComponentByTag(uint64_t tag) {
 	}
 
 	for (auto iter = _components.begin(); iter != _components.end(); ++iter) {
-		if ((*iter)->getTag() == tag) {
+		if ((*iter)->getFrameTag() == tag) {
 			auto com = (*iter);
 			if (this->isRunning()) {
 				com->onExit();
@@ -527,7 +529,7 @@ bool Node::removeAllComponentByTag(uint64_t tag) {
 
 	auto iter = _components.begin();
 	while (iter != _components.end()) {
-		if ((*iter)->getTag() == tag) {
+		if ((*iter)->getFrameTag() == tag) {
 			auto com = (*iter);
 			if (this->isRunning()) {
 				com->onExit();
@@ -539,7 +541,7 @@ bool Node::removeAllComponentByTag(uint64_t tag) {
 		}
 	}
 	for (; iter != _components.end(); ++iter) {
-		if ((*iter)->getTag() == tag) {
+		if ((*iter)->getFrameTag() == tag) {
 			auto com = (*iter);
 			if (this->isRunning()) {
 				com->onExit();
@@ -1031,6 +1033,14 @@ bool Node::visitDraw(RenderFrameInfo &info, NodeFlags parentFlags) {
 		info.zPath.push_back(order);
 	}
 
+	memory::vector< memory::vector<Rc<Component>> * > components;
+
+	for (auto &it : _components) {
+		if (it->isEnabled() && it->getFrameTag() != InvalidTag) {
+			components.emplace_back(info.pushComponent(it));
+		}
+	}
+
 	size_t i = 0;
 
 	if (!_children.empty()) {
@@ -1052,6 +1062,10 @@ bool Node::visitDraw(RenderFrameInfo &info, NodeFlags parentFlags) {
 		}
 	} else {
 		visitSelf(info, flags, visibleByCamera);
+	}
+
+	for (auto &it : components) {
+		info.popComponent(it);
 	}
 
 	if (order != ZOrderTransparent) {

@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -54,6 +55,7 @@ LabelParameters::DescriptionStyle LabelParameters::DescriptionStyle::merge(
 		case Style::Name::FontWeight: ret.font.fontWeight = it.value.fontWeight; break;
 		case Style::Name::FontStretch: ret.font.fontStretch = it.value.fontStretch; break;
 		case Style::Name::FontFamily: ret.font.fontFamily = source->getFamilyName(it.value.fontFamily); break;
+		case Style::Name::FontGrade: ret.font.fontGrade = it.value.fontGrade; break;
 		}
 	}
 	return ret;
@@ -342,6 +344,17 @@ LabelParameters::FontStretch LabelParameters::getFontStretch() const {
 	return _style.font.fontStretch;
 }
 
+void LabelParameters::setFontGrade(const FontGrade &value) {
+	if (value != _style.font.fontGrade) {
+		_style.font.fontGrade = value;
+		_labelDirty = true;
+	}
+}
+
+LabelParameters::FontGrade LabelParameters::getFontGrade() const {
+	return _style.font.fontGrade;
+}
+
 void LabelParameters::setFontFamily(const StringView &value) {
 	if (value != _style.font.fontFamily) {
 		_fontFamilyStorage = value.str<Interface>();
@@ -614,8 +627,7 @@ bool LabelParameters::updateFormatSpec(FormatSpec *format, const StyleVec &compi
 		size_t drawedChars = 0;
 		for (auto &it : compiledStyles) {
 			DescriptionStyle params = _style.merge(format->source.cast<font::FontController>(), it.style);
-			params.font.density = density;
-			params.font.persistent = _persistentLayout;
+			specializeStyle(params, density);
 			if (adjustValue > 0) {
 				params.font.fontSize -= FontSize(adjustValue);
 			}
@@ -728,6 +740,11 @@ bool LabelParameters::hasLocaleTags(const WideStringView &str) const {
 
 WideString LabelParameters::resolveLocaleTags(const WideStringView &str) const {
 	return locale::resolveLocaleTags(str);
+}
+
+void LabelParameters::specializeStyle(DescriptionStyle &style, float density) const {
+	style.font.density = density;
+	style.font.persistent = _persistentLayout;
 }
 
 }

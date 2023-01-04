@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +23,7 @@
 
 #include "AppCheckbox.h"
 #include "XLInputListener.h"
-#include "XLLabel.h"
+#include "MaterialLabel.h"
 
 namespace stappler::xenolith::app {
 
@@ -103,8 +104,7 @@ bool AppCheckboxWithLabel::init(StringView title, bool value, Function<void(bool
 		return false;
 	}
 
-	_label = addChild(Rc<Label>::create());
-	_label->setFontSize(24);
+	_label = addChild(Rc<material::MaterialLabel>::create(material::TypescaleRole::HeadlineSmall));
 	_label->setAnchorPoint(Anchor::MiddleLeft);
 	_label->setString(title);
 

@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,8 +21,8 @@
  THE SOFTWARE.
  **/
 
-#ifndef MODULES_MATERIAL_MATERIALSTYLECONTAINER_H_
-#define MODULES_MATERIAL_MATERIALSTYLECONTAINER_H_
+#ifndef MODULES_MATERIAL_STYLE_MATERIALSTYLECONTAINER_H_
+#define MODULES_MATERIAL_STYLE_MATERIALSTYLECONTAINER_H_
 
 #include "MaterialColorScheme.h"
 #include "XLComponent.h"
@@ -34,6 +35,8 @@ public:
 	static EventHeader onAttached; // sent when container enabled or disabled
 	static EventHeader onPrimaryColorSchemeUpdate;
 	static EventHeader onExtraColorSchemeUpdate;
+
+	static uint64_t ComponentFrameTag;
 
 	virtual ~StyleContainer() { }
 
@@ -62,4 +65,4 @@ protected:
 
 }
 
-#endif /* MODULES_MATERIAL_MATERIALSTYLECONTAINER_H_ */
+#endif /* MODULES_MATERIAL_STYLE_MATERIALSTYLECONTAINER_H_ */

@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -38,6 +39,7 @@
 #include "input/AppInputSwipeTest.cc"
 #include "input/AppInputTextTest.cc"
 #include "action/AppActionEaseTest.cc"
+#include "action/AppActionMaterialTest.cc"
 #include "vg/AppVgTessCanvas.cc"
 #include "vg/AppVgTessTest.cc"
 #include "vg/AppVgIconTest.cc"
@@ -80,8 +82,8 @@ Vector<MenuData> s_inputTestsMenu({
 });
 
 Vector<MenuData> s_actionTestsMenu({
-	MenuData{LayoutName::ActionProgressTest, "Progress test"},
 	MenuData{LayoutName::ActionEaseTest, "Ease test"},
+	MenuData{LayoutName::ActionMaterialTest, "Material test"},
 });
 
 Vector<MenuData> s_vgTestsMenu({
@@ -131,8 +133,8 @@ LayoutName getRootLayoutForLayout(LayoutName name) {
 		return LayoutName::InputTests;
 		break;
 
-	case LayoutName::ActionProgressTest:
 	case LayoutName::ActionEaseTest:
+	case LayoutName::ActionMaterialTest:
 		return LayoutName::ActionTests;
 		break;
 
@@ -180,8 +182,8 @@ StringView getLayoutNameId(LayoutName name) {
 	case LayoutName::InputSwipeTest: return "org.stappler.xenolith.test.InputSwipeTest"; break;
 	case LayoutName::InputTextTest: return "org.stappler.xenolith.test.InputTextTest"; break;
 
-	case LayoutName::ActionProgressTest: return "org.stappler.xenolith.test.ActionProgressTest"; break;
 	case LayoutName::ActionEaseTest: return "org.stappler.xenolith.test.ActionEaseTest"; break;
+	case LayoutName::ActionMaterialTest: return "org.stappler.xenolith.test.ActionMaterialTest"; break;
 
 	case LayoutName::VgTessTest: return "org.stappler.xenolith.test.VgTessTest"; break;
 	case LayoutName::VgIconTest: return "org.stappler.xenolith.test.VgIconTest"; break;
@@ -220,8 +222,8 @@ LayoutName getLayoutNameById(StringView name) {
 	else if (name == "org.stappler.xenolith.test.InputSwipeTest") { return LayoutName::InputSwipeTest; }
 	else if (name == "org.stappler.xenolith.test.InputTextTest") { return LayoutName::InputTextTest; }
 
-	else if (name == "org.stappler.xenolith.test.ActionProgressTest") { return LayoutName::ActionProgressTest; }
 	else if (name == "org.stappler.xenolith.test.ActionEaseTest") { return LayoutName::ActionEaseTest; }
+	else if (name == "org.stappler.xenolith.test.ActionMaterialTest") { return LayoutName::ActionMaterialTest; }
 
 	else if (name == "org.stappler.xenolith.test.VgTessTest") { return LayoutName::VgTessTest; }
 	else if (name == "org.stappler.xenolith.test.VgIconTest") { return LayoutName::VgIconTest; }
@@ -261,8 +263,8 @@ Rc<Node> makeLayoutNode(LayoutName name) {
 	case LayoutName::InputSwipeTest: return Rc<InputSwipeTest>::create(); break;
 	case LayoutName::InputTextTest: return Rc<InputTextTest>::create(); break;
 
-	case LayoutName::ActionProgressTest: return Rc<RootLayout>::create(); break;
 	case LayoutName::ActionEaseTest: return Rc<ActionEaseTest>::create(); break;
+	case LayoutName::ActionMaterialTest: return Rc<ActionMaterialTest>::create(); break;
 
 	case LayoutName::VgTessTest: return Rc<VgTessTest>::create(); break;
 	case LayoutName::VgIconTest: return Rc<VgIconTest>::create(); break;

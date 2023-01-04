@@ -1,5 +1,6 @@
 /**
 Copyright (c) 2020-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -252,6 +253,11 @@ int Application::run(Value &&data) {
 		ret = onMainLoop();
 
 		_fontController = nullptr;
+
+		_deferred->cancel();
+		_deferred = nullptr;
+
+		_fontLibrary->invalidate();
 		_fontLibrary = nullptr;
 
 		_glLoop->cancel();

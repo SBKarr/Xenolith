@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -106,6 +107,10 @@ void FontFaceData::inspectVariableFont(FontLayoutParameters params, FT_Face face
 				_variableAxis |= FontVariableAxis::OpticalSize;
 				_opticalSizeMin = masters->axis[i].minimum;
 				_opticalSizeMax = masters->axis[i].maximum;
+			} else if (tag == getAxisTag("GRAD")) {
+				_variableAxis |= FontVariableAxis::Grade;
+				_gradeMin = FontGrade(masters->axis[i].minimum >> 16);
+				_gradeMax = FontGrade(masters->axis[i].maximum >> 16);
 			}
 			std::cout << "Variable axis: [" << masters->axis[i].tag << "] "
 					<< (masters->axis[i].minimum >> 16) << " - " << (masters->axis[i].maximum >> 16)
@@ -146,6 +151,9 @@ FontSpecializationVector FontFaceData::getSpecialization(const FontSpecializatio
 	}
 	if ((_variableAxis & FontVariableAxis::Stretch) != FontVariableAxis::None) {
 		ret.fontStretch = math::clamp(vec.fontStretch, _stretchMin, _stretchMax);
+	}
+	if ((_variableAxis & FontVariableAxis::Grade) != FontVariableAxis::None) {
+		ret.fontGrade = math::clamp(vec.fontGrade, _gradeMin, _gradeMax);
 	}
 
 	if (ret.fontStyle != vec.fontStyle) {
@@ -234,6 +242,8 @@ bool FontFaceObject::init(StringView name, const Rc<FontFaceData> &data, FT_Face
 				} else if (tag == getAxisTag("opsz")) {
 					auto opticalSize = uint32_t(floorf(spec.fontSize.get() / spec.density)) << 16;
 					vector.emplace_back(math::clamp(opticalSize, data->getOpticalSizeMin(), data->getOpticalSizeMax()));
+				} else if (tag == getAxisTag("GRAD")) {
+					vector.emplace_back(math::clamp(spec.fontGrade, data->getGradeMin(), data->getGradeMax()).get() << 16);
 				} else {
 					vector.emplace_back(masters->axis[i].def);
 				}

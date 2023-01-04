@@ -1,4 +1,5 @@
 # Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+# Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 # 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -21,8 +22,8 @@
 MODULE_XENOLITH_MATERIAL_LIBS :=
 MODULE_XENOLITH_MATERIAL_SRCS_DIRS := $(XENOLITH_MODULE_DIR)/material
 MODULE_XENOLITH_MATERIAL_SRCS_OBJS := 
-MODULE_XENOLITH_MATERIAL_INCLUDES_DIRS :=
-MODULE_XENOLITH_MATERIAL_INCLUDES_OBJS := $(XENOLITH_MODULE_DIR)/material 
+MODULE_XENOLITH_MATERIAL_INCLUDES_DIRS := $(XENOLITH_MODULE_DIR)/material
+MODULE_XENOLITH_MATERIAL_INCLUDES_OBJS :=
 MODULE_XENOLITH_MATERIAL_DEPENDS_ON := common_geom
 
 # module name resolution

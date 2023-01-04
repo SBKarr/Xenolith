@@ -1,5 +1,6 @@
 /**
-Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -23,6 +24,7 @@ THE SOFTWARE.
 #ifndef COMPONENTS_XENOLITH_NODES_XLNODE_H_
 #define COMPONENTS_XENOLITH_NODES_XLNODE_H_
 
+#include "XLGl.h"
 #include "XLComponent.h"
 
 namespace stappler::xenolith {
@@ -406,7 +408,7 @@ auto Node::getComponentByType() const -> T * {
 template <typename T>
 auto Node::getComponentByType(uint32_t tag) const -> T * {
 	for (auto &it : _components) {
-		if (it->getTag() == tag) {
+		if (it->getFrameTag() == tag) {
 			if (auto ret = dynamic_cast<T *>(it.get())) {
 				return ret;
 			}
