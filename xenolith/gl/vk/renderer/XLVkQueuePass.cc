@@ -185,35 +185,26 @@ QueueOperations QueuePassHandle::getQueueOps() const {
 }
 
 Vector<VkCommandBuffer> QueuePassHandle::doPrepareCommands(FrameHandle &) {
-	auto table = _device->getTable();
-	auto buf = _pool->allocBuffer(*_device);
+	auto buf = _pool->recordBuffer(*_device, [&] (CommandBuffer &buf) {
+		_data->impl.cast<RenderPassImpl>()->perform(*this, buf, [&] {
+			auto currentExtent = getFramebuffer()->getExtent();
 
-	auto currentExtent = getFramebuffer()->getExtent();
+			VkViewport viewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
+			buf.cmdSetViewport(0, makeSpanView(&viewport, 1));
 
-	VkCommandBufferBeginInfo beginInfo { };
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	beginInfo.pInheritanceInfo = nullptr;
+			VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
+			buf.cmdSetScissor(0, makeSpanView(&scissorRect, 1));
 
-	if (table->vkBeginCommandBuffer(buf, &beginInfo) != VK_SUCCESS) {
-		return Vector<VkCommandBuffer>();
-	}
+			auto pipeline = _data->subpasses[0].graphicPipelines.get(StringView("Default"));
 
-	_data->impl.cast<RenderPassImpl>()->perform(*this, buf, [&] {
-		VkViewport viewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
-		table->vkCmdSetViewport(buf, 0, 1, &viewport);
-
-		VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
-		table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
-
-		auto pipeline = _data->subpasses[0].graphicPipelines.get(StringView("Default"));
-
-		table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, ((GraphicPipeline *)pipeline->pipeline.get())->getPipeline());
-		table->vkCmdDraw(buf, 3, 1, 0, 0);
+			buf.cmdBindPipeline((GraphicPipeline *)pipeline->pipeline.get());
+			buf.cmdDraw(3, 1, 0, 0);
+		});
+		return true;
 	});
 
-	if (table->vkEndCommandBuffer(buf) == VK_SUCCESS) {
-		return Vector<VkCommandBuffer>{buf};
+	if (buf) {
+		return Vector<VkCommandBuffer>{buf->getBuffer()};
 	}
 	return Vector<VkCommandBuffer>();
 }
@@ -349,54 +340,29 @@ bool VertexPassHandle::prepare(FrameQueue &queue, Function<void(bool)> &&cb) {
 	return QueuePassHandle::prepare(queue, move(cb));
 }
 
-Vector<VkCommandBuffer> VertexPassHandle::doPrepareCommands(FrameHandle &) {
-	auto table = _device->getTable();
-	auto buf = _pool->allocBuffer(*_device);
+Vector<VkCommandBuffer> VertexPassHandle::doPrepareCommands(FrameHandle &handle) {
 	auto pass = (RenderPassImpl *)_data->impl.get();
-	auto currentExtent = getFramebuffer()->getExtent();
+	auto buf = _pool->recordBuffer(*_device, [&] (CommandBuffer &buf) {
+		pass->perform(*this, buf, [&] {
+			auto currentExtent = getFramebuffer()->getExtent();
 
-	VkCommandBufferBeginInfo beginInfo { };
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	beginInfo.pInheritanceInfo = nullptr;
+			VkViewport viewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
+			buf.cmdSetViewport(0, makeSpanView(&viewport, 1));
 
-	if (table->vkBeginCommandBuffer(buf, &beginInfo) != VK_SUCCESS) {
-		return Vector<VkCommandBuffer>();
-	}
+			VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
+			buf.cmdSetScissor(0, makeSpanView(&scissorRect, 1));
 
-	auto fb = (Framebuffer *)getFramebuffer().get();
+			auto pipeline = _data->subpasses[0].graphicPipelines.get(StringView("Vertexes"));
+			buf.cmdBindPipeline((GraphicPipeline *)pipeline->pipeline.get());
+			buf.cmdBindIndexBuffer(_mainBuffer->getIndexes(), 0, VK_INDEX_TYPE_UINT32);
+			buf.cmdBindDescriptorSets(pass);
+			buf.cmdDrawIndexed(6, 1, 0, 0, 0);
+		});
+		return true;
+	});
 
-	VkRenderPassBeginInfo renderPassInfo { };
-	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	renderPassInfo.renderPass = _data->impl.cast<RenderPassImpl>()->getRenderPass();
-	renderPassInfo.framebuffer = fb->getFramebuffer();
-	renderPassInfo.renderArea.offset = { 0, 0 };
-	renderPassInfo.renderArea.extent = VkExtent2D{currentExtent.width, currentExtent.height};
-	VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
-	renderPassInfo.clearValueCount = 1;
-	renderPassInfo.pClearValues = &clearColor;
-	table->vkCmdBeginRenderPass(buf, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-	VkViewport viewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
-	table->vkCmdSetViewport(buf, 0, 1, &viewport);
-
-	VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
-	table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
-
-	auto pipeline = _data->subpasses[0].graphicPipelines.get(StringView("Vertexes"));
-	table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, ((GraphicPipeline *)pipeline->pipeline.get())->getPipeline());
-
-	auto idx = _mainBuffer->getIndexes()->getBuffer();
-
-	table->vkCmdBindIndexBuffer(buf, idx, 0, VK_INDEX_TYPE_UINT32);
-
-	table->vkCmdBindDescriptorSets(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, pass->getPipelineLayout(), 0,
-			pass->getDescriptorSets().size(), pass->getDescriptorSets().data(), 0, nullptr);
-	table->vkCmdDrawIndexed(buf, 6, 1, 0, 0, 0);
-
-	table->vkCmdEndRenderPass(buf);
-	if (table->vkEndCommandBuffer(buf) == VK_SUCCESS) {
-		return Vector<VkCommandBuffer>{buf};
+	if (buf) {
+		return Vector<VkCommandBuffer>{buf->getBuffer()};
 	}
 	return Vector<VkCommandBuffer>();
 }

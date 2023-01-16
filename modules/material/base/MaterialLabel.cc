@@ -21,11 +21,12 @@
  **/
 
 #include "MaterialLabel.h"
-#include "MaterialNode.h"
+#include "MaterialSurface.h"
+#include "XLRenderFrameInfo.h"
 
 namespace stappler::xenolith::material {
 
-bool MaterialLabel::init(TypescaleRole role) {
+bool TypescaleLabel::init(TypescaleRole role) {
 	if (!Label::init()) {
 		return false;
 	}
@@ -35,7 +36,7 @@ bool MaterialLabel::init(TypescaleRole role) {
 	return true;
 }
 
-bool MaterialLabel::init(TypescaleRole role, StringView str) {
+bool TypescaleLabel::init(TypescaleRole role, StringView str) {
 	if (!Label::init(str)) {
 		return false;
 	}
@@ -45,7 +46,7 @@ bool MaterialLabel::init(TypescaleRole role, StringView str) {
 	return true;
 }
 
-bool MaterialLabel::init(TypescaleRole role, StringView str, float w, Alignment a) {
+bool TypescaleLabel::init(TypescaleRole role, StringView str, float w, Alignment a) {
 	if (!Label::init(str, w, a)) {
 		return false;
 	}
@@ -55,7 +56,7 @@ bool MaterialLabel::init(TypescaleRole role, StringView str, float w, Alignment 
 	return true;
 }
 
-void MaterialLabel::setRole(TypescaleRole role) {
+void TypescaleLabel::setRole(TypescaleRole role) {
 	_role = role;
 	switch (_role) {
 	case TypescaleRole::DisplayLarge: setFontSize(57); setFontWeight(FontWeight(400)); break; // 57 400
@@ -77,15 +78,26 @@ void MaterialLabel::setRole(TypescaleRole role) {
 	}
 }
 
-bool MaterialLabel::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
+bool TypescaleLabel::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 	if (!_visible) {
 		return false;
 	}
 
-	auto style = frame.getComponent<MaterialNodeInterior>(MaterialNodeInterior::ComponentFrameTag);
+	auto style = frame.getComponent<SurfaceInterior>(SurfaceInterior::ComponentFrameTag);
 	if (style) {
-		auto color = style->getStyle().colorOn.asColor4F();
-		setColor(color);
+		auto &s = style->getStyle();
+		auto color = s.colorOn.asColor4F();
+		if (color != getColor()) {
+			setColor(color, true);
+		}
+
+		if (getRenderingLevel() != RenderingLevel::Default) {
+			if (s.colorElevation.a < 1.0f && style->getStyle().colorElevation.a > 0.0f) {
+				setRenderingLevel(RenderingLevel::Transparent);
+			} else {
+				setRenderingLevel(RenderingLevel::Surface);
+			}
+		}
 
 		if (_themeType != style->getStyle().themeType) {
 			_themeType = style->getStyle().themeType;
@@ -96,7 +108,7 @@ bool MaterialLabel::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 	return Label::visitDraw(frame, parentFlags);
 }
 
-void MaterialLabel::specializeStyle(DescriptionStyle &style, float density) const {
+void TypescaleLabel::specializeStyle(DescriptionStyle &style, float density) const {
 	struct PersistentStyle {
 		FontSize size;
 		FontWeight weight;

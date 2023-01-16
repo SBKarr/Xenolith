@@ -104,7 +104,7 @@ bool AppCheckboxWithLabel::init(StringView title, bool value, Function<void(bool
 		return false;
 	}
 
-	_label = addChild(Rc<material::MaterialLabel>::create(material::TypescaleRole::HeadlineSmall));
+	_label = addChild(Rc<material::TypescaleLabel>::create(material::TypescaleRole::HeadlineSmall));
 	_label->setAnchorPoint(Anchor::MiddleLeft);
 	_label->setString(title);
 

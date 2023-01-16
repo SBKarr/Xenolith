@@ -1,5 +1,4 @@
 /**
- Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
  Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,15 +20,37 @@
  THE SOFTWARE.
  **/
 
-#include "XLDefine.h"
+#ifndef TEST_SRC_TESTS_MATERIAL_APPMATERIALBUTTONTEST_H_
+#define TEST_SRC_TESTS_MATERIAL_APPMATERIALBUTTONTEST_H_
 
-#include "base/MaterialCam16.cc"
-#include "base/MaterialColorScheme.cc"
-#include "base/MaterialStyleContainer.cc"
-#include "base/MaterialEasing.cc"
-#include "base/MaterialSurface.cc"
-#include "base/MaterialLabel.cc"
-#include "base/MaterialSurfaceInterior.cc"
-#include "base/MaterialSurfaceStyle.cc"
+#include "MaterialButton.h"
+#include "AppLayoutTest.h"
 
-#include "components/MaterialButton.cc"
+namespace stappler::xenolith::app {
+
+class MaterialColorPickerSprite;
+class AppCheckboxWithLabel;
+
+class MaterialButtonTest : public LayoutTest {
+public:
+	virtual ~MaterialButtonTest() { }
+
+	virtual bool init() override;
+
+	virtual void onContentSizeDirty() override;
+	virtual void onEnter(Scene *) override;
+
+protected:
+	material::StyleContainer *_style = nullptr;
+
+	material::Surface *_background = nullptr;
+	material::TypescaleLabel *_label = nullptr;
+	Vector<material::Button *> _buttons;
+
+	MaterialColorPickerSprite *_huePicker = nullptr;
+	AppCheckboxWithLabel *_lightCheckbox = nullptr;
+};
+
+}
+
+#endif /* TEST_SRC_TESTS_MATERIAL_APPMATERIALBUTTONTEST_H_ */

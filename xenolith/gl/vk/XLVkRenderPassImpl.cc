@@ -52,7 +52,8 @@ bool RenderPassImpl::Data::cleanup(Device &dev) {
 }
 
 bool RenderPassImpl::init(Device &dev, PassData &data) {
-	switch (data.renderPass->getType()) {
+	_type = data.renderPass->getType();
+	switch (_type) {
 	case gl::RenderPassType::Graphics:
 		return initGraphicsPass(dev, data);
 		break;
@@ -71,11 +72,10 @@ bool RenderPassImpl::init(Device &dev, PassData &data) {
 }
 
 VkRenderPass RenderPassImpl::getRenderPass(bool alt) const {
-	if (!alt) {
-		return _data->renderPass;
-	} else {
+	if (alt && _data->renderPassAlternative) {
 		return _data->renderPassAlternative;
 	}
+	return _data->renderPass;
 }
 
 VkDescriptorSet RenderPassImpl::getDescriptorSet(uint32_t idx) const {
@@ -260,7 +260,7 @@ bool RenderPassImpl::writeDescriptors(const QueuePassHandle &handle, bool async)
 	return true;
 }
 
-void RenderPassImpl::perform(const QueuePassHandle &handle, VkCommandBuffer buf, const Callback<void()> &cb) {
+void RenderPassImpl::perform(const QueuePassHandle &handle, CommandBuffer &buf, const Callback<void()> &cb) {
 	bool useAlternative = false;
 	for (auto &it : _variableAttachments) {
 		if (auto aHandle = handle.getAttachmentHandle(it)) {
@@ -271,26 +271,12 @@ void RenderPassImpl::perform(const QueuePassHandle &handle, VkCommandBuffer buf,
 		}
 	}
 
-	if (auto pass = getRenderPass(useAlternative)) {
-		auto dev = (Device *)_device;
-		auto table = dev->getTable();
-
-		auto fb = (Framebuffer *)handle.getFramebuffer().get();
-		auto currentExtent = fb->getExtent();
-
-		VkRenderPassBeginInfo renderPassInfo { };
-		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		renderPassInfo.renderPass = pass;
-		renderPassInfo.framebuffer = fb->getFramebuffer();
-		renderPassInfo.renderArea.offset = { 0, 0 };
-		renderPassInfo.renderArea.extent = VkExtent2D{currentExtent.width, currentExtent.height};
-		renderPassInfo.clearValueCount = _clearValues.size();
-		renderPassInfo.pClearValues = _clearValues.data();
-		table->vkCmdBeginRenderPass(buf, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+	if (_data->renderPass) {
+		buf.cmdBeginRenderPass(this, (Framebuffer *)handle.getFramebuffer().get(), VK_SUBPASS_CONTENTS_INLINE, useAlternative);
 
 		cb();
 
-		table->vkCmdEndRenderPass(buf);
+		buf.cmdEndRenderPass();
 	} else {
 		cb();
 	}

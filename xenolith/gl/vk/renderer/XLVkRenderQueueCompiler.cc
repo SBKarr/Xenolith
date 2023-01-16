@@ -338,47 +338,40 @@ bool RenderQueuePassHandle::prepare(FrameQueue &frame, Function<void(bool)> &&cb
 		}
 
 		frame.getFrame()->performInQueue([this, hasMaterials] (FrameHandle &frame) {
-			auto buf = _pool->allocBuffer(*_device);
-			auto table = _device->getTable();
+			auto buf = _pool->recordBuffer(*_device, [&] (CommandBuffer &buf) {
+				Vector<VkImageMemoryBarrier> outputImageBarriers;
+				Vector<VkBufferMemoryBarrier> outputBufferBarriers;
 
-			VkCommandBufferBeginInfo beginInfo{};
-			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-			beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-			table->vkBeginCommandBuffer(buf, &beginInfo);
-
-			Vector<VkImageMemoryBarrier> outputImageBarriers;
-			Vector<VkBufferMemoryBarrier> outputBufferBarriers;
-
-			if (_resource) {
-				if (!_resource->prepareCommands(_pool->getFamilyIdx(), buf, outputImageBarriers, outputBufferBarriers)) {
-					log::vtext("vk::RenderQueueCompiler", "Fail to compile resource for ", _queue->getName());
-					return false;
+				if (_resource) {
+					if (!_resource->prepareCommands(_pool->getFamilyIdx(), buf.getBuffer(), outputImageBarriers, outputBufferBarriers)) {
+						log::vtext("vk::RenderQueueCompiler", "Fail to compile resource for ", _queue->getName());
+						return false;
+					}
+					_resource->compile();
 				}
-				_resource->compile();
-			}
 
-			if (hasMaterials) {
-				for (auto &it : _queue->getAttachments()) {
-					if (auto v = it.cast<gl::MaterialAttachment>()) {
-						if (!prepareMaterials(frame, buf, v, outputBufferBarriers)) {
-							log::vtext("vk::RenderQueueCompiler", "Fail to compile predefined materials for ", _queue->getName());
-							return false;
+				if (hasMaterials) {
+					for (auto &it : _queue->getAttachments()) {
+						if (auto v = it.cast<gl::MaterialAttachment>()) {
+							if (!prepareMaterials(frame, buf.getBuffer(), v, outputBufferBarriers)) {
+								log::vtext("vk::RenderQueueCompiler", "Fail to compile predefined materials for ", _queue->getName());
+								return false;
+							}
 						}
 					}
 				}
+
+				_device->getTable()->vkCmdPipelineBarrier(buf.getBuffer(), VK_PIPELINE_STAGE_TRANSFER_BIT,
+					VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
+					0, nullptr,
+					outputBufferBarriers.size(), outputBufferBarriers.data(),
+					outputImageBarriers.size(), outputImageBarriers.data());
+				return true;
+			});
+
+			if (buf) {
+				_buffers.emplace_back(buf->getBuffer());
 			}
-
-			table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-				VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
-				0, nullptr,
-				outputBufferBarriers.size(), outputBufferBarriers.data(),
-				outputImageBarriers.size(), outputImageBarriers.data());
-
-			if (table->vkEndCommandBuffer(buf) != VK_SUCCESS) {
-				return false;
-			}
-
-			_buffers.emplace_back(buf);
 			return true;
 		}, [this, cb = move(cb)] (FrameHandle &frame, bool success) {
 			if (success) {

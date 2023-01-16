@@ -1,5 +1,4 @@
 /**
- Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
  Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,84 +20,13 @@
  THE SOFTWARE.
  **/
 
-#ifndef MODULES_MATERIAL_MATERIAL_H_
-#define MODULES_MATERIAL_MATERIAL_H_
+#ifndef MODULES_MATERIAL_BASE_MATERIALLABEL_H_
+#define MODULES_MATERIAL_BASE_MATERIALLABEL_H_
 
-#include "XLDefine.h"
-#include "XLActionEase.h"
+#include "MaterialColorScheme.h"
+#include "XLLabel.h"
 
 namespace stappler::xenolith::material {
-
-enum class ThemeType {
-	LightTheme,
-	DarkTheme,
-};
-
-enum class ColorRole {
-	Primary,
-	OnPrimary,
-	PrimaryContainer,
-	OnPrimaryContainer,
-	Secondary,
-	OnSecondary ,
-	SecondaryContainer,
-	OnSecondaryContainer,
-	Tertiary,
-	OnTertiary,
-	TertiaryContainer,
-	OnTertiaryContainer,
-	Error,
-	OnError,
-	ErrorContainer,
-	OnErrorContainer,
-	Background,
-	OnBackground,
-	Surface,
-	OnSurface,
-	SurfaceVariant,
-	OnSurfaceVariant,
-	Outline,
-	OutlineVariant,
-	Shadow,
-	Scrim,
-	InverseSurface,
-	InverseOnSurface,
-	InversePrimary,
-	Max
-};
-
-enum class Elevation {
-	Level0,	// 0dp
-	Level1, // 1dp 5%
-	Level2, // 3dp 8%
-	Level3, // 6dp 11%
-	Level4, // 8dp 12%
-	Level5, // 12dp 14%
-};
-
-enum class ShapeFamily {
-	RoundedCorners,
-	CutCorners,
-};
-
-enum class ShapeStyle {
-	None, // 0dp
-	ExtraSmall, // 4dp
-	Small, // 8dp
-	Medium, // 12dp
-	Large, // 16dp
-	ExtraLarge, // 28dp
-	Full // .
-};
-
-enum class EasingType {
-	Standard,
-	StandardAccelerate,
-	StandardDecelerate,
-	Emphasized,
-	EmphasizedAccelerate,
-	EmphasizedDecelerate,
-};
 
 enum class TypescaleRole {
 	DisplayLarge, // 57 400
@@ -119,20 +47,27 @@ enum class TypescaleRole {
 	Unknown,
 };
 
-enum class NodeStyle {
-	Tonal,
-	TonalElevated,
-	Elevated,
-	Filled,
-	FilledElevated,
-	Outlined,
-	Text
+class TypescaleLabel : public Label {
+public:
+	virtual ~TypescaleLabel() { }
+
+	virtual bool init(TypescaleRole);
+	virtual bool init(TypescaleRole, StringView);
+	virtual bool init(TypescaleRole, StringView, float w, Alignment = Alignment::Left);
+
+	virtual TypescaleRole getRole() const { return _role; }
+	virtual void setRole(TypescaleRole);
+
+protected:
+	virtual bool visitDraw(RenderFrameInfo &, NodeFlags parentFlags) override;
+	virtual void specializeStyle(DescriptionStyle &style, float density) const override;
+
+	using Label::init;
+
+	TypescaleRole _role = TypescaleRole::Unknown;
+	ThemeType _themeType = ThemeType::LightTheme;
 };
-
-ColorRole getColorRoleOn(ColorRole, ThemeType);
-
-Rc<ActionEase> makeEasing(Rc<ActionInterval> &&, EasingType = EasingType::Standard);
 
 }
 
-#endif /* MODULES_MATERIAL_MATERIAL_H_ */
+#endif /* MODULES_MATERIAL_BASE_MATERIALLABEL_H_ */

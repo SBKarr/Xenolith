@@ -21,62 +21,50 @@
  THE SOFTWARE.
  **/
 
-#ifndef MODULES_MATERIAL_MATERIALNODE_H_
-#define MODULES_MATERIAL_MATERIALNODE_H_
+#ifndef MODULES_MATERIAL_BASE_MATERIALSURFACE_H_
+#define MODULES_MATERIAL_BASE_MATERIALSURFACE_H_
 
-#include "style/MaterialStyleData.h"
+#include "MaterialSurfaceStyle.h"
 #include "XLVectorSprite.h"
 
 namespace stappler::xenolith::material {
 
-class MaterialNodeInterior : public Component {
-public:
-	static uint64_t ComponentFrameTag;
+class SurfaceInterior;
 
-	virtual ~MaterialNodeInterior() { }
-
-	virtual bool init() override;
-	virtual bool init(StyleData &&style);
-
-	virtual void onAdded(Node *owner) override;
-	virtual void visit(RenderFrameInfo &, NodeFlags parentFlags) override;
-
-	virtual void setStyle(StyleData &&style) { _interiorStyle = move(style); }
-	virtual const StyleData &getStyle() const { return _interiorStyle; }
-
-	virtual bool isOwnedByMaterialNode() const { return _ownerIsMaterialNode; }
-
-protected:
-	bool _ownerIsMaterialNode = false;
-	StyleData _interiorStyle;
-};
-
-class MaterialNode : public VectorSprite {
+class Surface : public VectorSprite {
 public:
 	static constexpr uint32_t TransitionActionTag = maxOf<uint32_t>() - 1;
 
-	virtual ~MaterialNode() { }
+	virtual ~Surface() { }
 
-	virtual bool init(StyleData &&);
-	virtual bool init(const StyleData &);
+	virtual bool init(const SurfaceStyle &);
 
-	virtual const StyleData &getStyleOrigin() const { return _styleOrigin; }
-	virtual const StyleData &getStyleTarget() const { return _styleTarget; }
-	virtual const StyleData &getStyleCurrent() const { return _styleCurrent; }
+	virtual const SurfaceStyle &getStyleOrigin() const { return _styleOrigin; }
+	virtual const SurfaceStyle &getStyleTarget() const { return _styleTarget; }
 
-	virtual void setStyle(StyleData &&);
-	virtual void setStyle(StyleData &&, float duration);
+	virtual const SurfaceStyleData &getStyleCurrent() const { return _styleDataCurrent; }
+
+	virtual void setStyle(const SurfaceStyle &);
+	virtual void setStyle(const SurfaceStyle &, float duration);
 
 	virtual bool visitDraw(RenderFrameInfo &, NodeFlags parentFlags) override;
 
 protected:
-	virtual void applyStyle(const StyleData &);
+	virtual void applyStyle(const SurfaceStyleData &);
 
-	MaterialNodeInterior *_interior = nullptr;
+	virtual RenderingLevel getRealRenderingLevel() const override;
 
-	StyleData _styleOrigin;
-	StyleData _styleTarget;
-	StyleData _styleCurrent;
+	SurfaceInterior *_interior = nullptr;
+
+	SurfaceStyle _styleOrigin;
+	SurfaceStyle _styleTarget;
+
+	SurfaceStyleData _styleDataOrigin;
+	SurfaceStyleData _styleDataTarget;
+	SurfaceStyleData _styleDataCurrent;
+
+	float _fillValue = 0.0f;
+	float _outlineValue = 0.0f;
 	float _styleProgress = 0.0f;
 	float _realCornerRadius = nan();
 	bool _styleDirty = true;
@@ -85,4 +73,4 @@ protected:
 
 }
 
-#endif /* MODULES_MATERIAL_MATERIALNODE_H_ */
+#endif /* MODULES_MATERIAL_BASE_MATERIALSURFACE_H_ */

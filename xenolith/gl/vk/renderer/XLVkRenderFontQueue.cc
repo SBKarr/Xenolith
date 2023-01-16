@@ -601,10 +601,6 @@ void RenderFontRenderPassHandle::finalize(FrameQueue &handle, bool successful) {
 Vector<VkCommandBuffer> RenderFontRenderPassHandle::doPrepareCommands(FrameHandle &handle) {
 	Vector<VkCommandBuffer> ret;
 
-	auto buf = _pool->allocBuffer(*_device);
-	auto table = _device->getTable();
-	auto dev = (Device *)handle.getDevice();
-
 	auto &input = _fontAttachment->getInput();
 	auto &copyFromTmp = _fontAttachment->getCopyFromTmpBufferData();
 	auto &copyFromPersistent = _fontAttachment->getCopyFromPersistentBufferData();
@@ -621,166 +617,110 @@ Vector<VkCommandBuffer> RenderFontRenderPassHandle::doPrepareCommands(FrameHandl
 	info.format = gl::ImageFormat::R8_UNORM;
 	info.extent = _fontAttachment->getImageExtent();
 
-	_targetImage = dev->getAllocator()->spawnPersistent(AllocationUsage::DeviceLocal, info, false, instance->data.image->getIndex());
+	_targetImage = _device->getAllocator()->spawnPersistent(AllocationUsage::DeviceLocal, info, false, instance->data.image->getIndex());
 
-	VkCommandBufferBeginInfo beginInfo{};
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	table->vkBeginCommandBuffer(buf, &beginInfo);
+	auto buf = _pool->recordBuffer(*_device, [&] (CommandBuffer &buf) {
 
-	Vector<VkBufferMemoryBarrier> persistentBarriers;
-	for (auto &it : copyFromPersistent) {
-		if (auto b = it.first->getPendingBarrier()) {
-			persistentBarriers.emplace_back(*b);
-			it.first->dropPendingBarrier();
+		Vector<BufferMemoryBarrier> persistentBarriers;
+		for (auto &it : copyFromPersistent) {
+			if (auto b = it.first->getPendingBarrier()) {
+				persistentBarriers.emplace_back(*b);
+				it.first->dropPendingBarrier();
+			}
 		}
-	}
 
-	VkImageMemoryBarrier inputBarrier({
-		VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
-		0, VK_ACCESS_TRANSFER_WRITE_BIT,
-		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		_targetImage->getImage(), VkImageSubresourceRange({
-			VK_IMAGE_ASPECT_COLOR_BIT,
-			0, 1, 0, 1
-		})
+		ImageMemoryBarrier inputBarrier(_targetImage,
+			0, VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+		buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+				persistentBarriers, makeSpanView(&inputBarrier, 1));
+
+		// copy from temporary buffer
+		if (!copyFromTmp.empty()) {
+			buf.cmdCopyBufferToImage(_fontAttachment->getTmpBuffer(), _targetImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, copyFromTmp);
+		}
+
+		// copy from persistent buffers
+		for (auto &it : copyFromPersistent) {
+			buf.cmdCopyBufferToImage(it.first, _targetImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, it.second);
+		}
+
+		if (!copyToPersistent.empty()) {
+			buf.cmdCopyBuffer(_fontAttachment->getTmpBuffer(), _fontAttachment->getPersistentTargetBuffer(), copyToPersistent);
+			_fontAttachment->getPersistentTargetBuffer()->setPendingBarrier(BufferMemoryBarrier(_fontAttachment->getPersistentTargetBuffer(),
+				VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+				QueueFamilyTransfer(), 0, _fontAttachment->getPersistentTargetBuffer()->getReservedSize()
+			));
+		}
+
+		auto sourceLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		if (auto q = _device->getQueueFamily(getQueueOperations(info.type))) {
+			uint32_t srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			uint32_t dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+			if (q->index != _pool->getFamilyIdx()) {
+				srcQueueFamilyIndex = _pool->getFamilyIdx();
+				dstQueueFamilyIndex = q->index;
+			}
+
+			if (input->output) {
+				auto extent = _targetImage->getInfo().extent;
+				auto &frame = static_cast<DeviceFrameHandle &>(handle);
+				auto memPool = frame.getMemPool(&handle);
+
+				_outBuffer = memPool->spawn(AllocationUsage::HostTransitionDestination, gl::BufferInfo(
+					gl::ForceBufferUsage(gl::BufferUsage::TransferDst),
+					size_t(extent.width * extent.height * extent.depth),
+					gl::RenderPassType::Transfer
+				));
+
+				ImageMemoryBarrier reverseBarrier(_targetImage,
+					VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+					sourceLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+				buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, makeSpanView(&reverseBarrier, 1));
+
+				sourceLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+				buf.cmdCopyImageToBuffer(_targetImage, sourceLayout, _outBuffer, 0);
+
+				BufferMemoryBarrier bufferOutBarrier(_outBuffer,
+					VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT);
+
+				buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, makeSpanView(&bufferOutBarrier, 1));
+			}
+
+			ImageMemoryBarrier outputBarrier(_targetImage,
+				VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+				sourceLayout, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				QueueFamilyTransfer{srcQueueFamilyIndex, dstQueueFamilyIndex});
+
+			if (q->index != _pool->getFamilyIdx()) {
+				_targetImage->setPendingBarrier(outputBarrier);
+			}
+
+			VkPipelineStageFlags targetOps = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+					| VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+
+			auto ops = getQueueOps();
+			switch (ops) {
+			case QueueOperations::Transfer:
+				targetOps = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+				break;
+			case QueueOperations::Compute:
+				targetOps = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+				break;
+			default:
+				break;
+			}
+
+			buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, targetOps, 0, makeSpanView(&outputBarrier, 1));
+		}
+		return true;
 	});
 
-	table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-			0, nullptr,
-			persistentBarriers.size(), persistentBarriers.data(),
-			1, &inputBarrier);
-
-	// copy from temporary buffer
-	if (!copyFromTmp.empty()) {
-		table->vkCmdCopyBufferToImage(buf, _fontAttachment->getTmpBuffer()->getBuffer(), _targetImage->getImage(),
-				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, copyFromTmp.size(), copyFromTmp.data());
+	if (buf) {
+		ret.emplace_back(buf->getBuffer());
 	}
-
-	// copy from persistent buffers
-	for (auto &it : copyFromPersistent) {
-		table->vkCmdCopyBufferToImage(buf, it.first->getBuffer(), _targetImage->getImage(),
-				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, it.second.size(), it.second.data());
-	}
-
-	if (!copyToPersistent.empty()) {
-		table->vkCmdCopyBuffer(buf, _fontAttachment->getTmpBuffer()->getBuffer(), _fontAttachment->getPersistentTargetBuffer()->getBuffer(),
-				copyToPersistent.size(), copyToPersistent.data());
-		_fontAttachment->getPersistentTargetBuffer()->setPendingBarrier(VkBufferMemoryBarrier({
-			VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
-			VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
-			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-			_fontAttachment->getPersistentTargetBuffer()->getBuffer(), 0, _fontAttachment->getPersistentTargetBuffer()->getReservedSize()
-		}));
-	}
-
-	auto sourceLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	if (auto q = dev->getQueueFamily(getQueueOperations(info.type))) {
-		uint32_t srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		uint32_t dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-		if (q->index != _pool->getFamilyIdx()) {
-			srcQueueFamilyIndex = _pool->getFamilyIdx();
-			dstQueueFamilyIndex = q->index;
-		}
-
-		if (input->output) {
-			auto extent = _targetImage->getInfo().extent;
-			auto &frame = static_cast<DeviceFrameHandle &>(handle);
-			auto memPool = frame.getMemPool(&handle);
-
-			_outBuffer = memPool->spawn(AllocationUsage::HostTransitionDestination, gl::BufferInfo(
-				gl::ForceBufferUsage(gl::BufferUsage::TransferDst),
-				size_t(extent.width * extent.height * extent.depth),
-				gl::RenderPassType::Transfer
-			));
-
-			VkImageMemoryBarrier reverseBarrier({
-				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
-				VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
-				sourceLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-				VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-				_targetImage->getImage(), VkImageSubresourceRange({
-					VK_IMAGE_ASPECT_COLOR_BIT,
-					0, 1, 0, 1
-				})
-			});
-
-			table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-					0, nullptr,
-					0, nullptr,
-					1, &reverseBarrier);
-
-			sourceLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-
-			VkBufferImageCopy reverseRegion({
-				VkDeviceSize(0), uint32_t(0), uint32_t(0),
-				VkImageSubresourceLayers({
-					VK_IMAGE_ASPECT_COLOR_BIT,
-					0, 0, 1
-				}),
-				VkOffset3D({0, 0, 0}),
-				VkExtent3D({extent.width, extent.height, extent.depth})
-			});
-
-			table->vkCmdCopyImageToBuffer(buf, _targetImage->getImage(), sourceLayout, _outBuffer->getBuffer(), 1, &reverseRegion);
-
-			VkBufferMemoryBarrier bufferOutBarrier({
-				VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
-				VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_HOST_READ_BIT,
-				VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-				_outBuffer->getBuffer(), 0, VK_WHOLE_SIZE
-			});
-
-			table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0,
-					0, nullptr,
-					1, &bufferOutBarrier,
-					0, nullptr);
-		}
-
-		VkImageMemoryBarrier outputBarrier({
-			VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
-			VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-			sourceLayout, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			srcQueueFamilyIndex, dstQueueFamilyIndex,
-			_targetImage->getImage(), VkImageSubresourceRange({
-				VK_IMAGE_ASPECT_COLOR_BIT,
-				0, 1, 0, 1
-			})
-		});
-
-		if (q->index != _pool->getFamilyIdx()) {
-			_targetImage->setPendingBarrier(outputBarrier);
-		}
-
-		VkPipelineStageFlags targetOps = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-				| VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-
-		auto ops = getQueueOps();
-		switch (ops) {
-		case QueueOperations::Transfer:
-			targetOps = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-			break;
-		case QueueOperations::Compute:
-			targetOps = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-			break;
-		default:
-			break;
-		}
-
-		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-			targetOps, 0,
-			0, nullptr,
-			0, nullptr,
-			1, &outputBarrier);
-	}
-
-	if (table->vkEndCommandBuffer(buf) != VK_SUCCESS) {
-		return Vector<VkCommandBuffer>();
-	}
-
-	ret.emplace_back(buf);
 	return ret;
 }
 

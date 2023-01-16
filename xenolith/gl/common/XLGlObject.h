@@ -127,11 +127,13 @@ public:
 	virtual StringView getName() const override { return _name; }
 
 	uint64_t getIndex() const { return _index; }
+	RenderPassType getType() const { return _type; }
 
 protected:
 	String _name;
 
 	uint64_t _index = 1; // 0 stays as special value
+	RenderPassType _type = RenderPassType::Generic;
 };
 
 class Framebuffer : public Object {

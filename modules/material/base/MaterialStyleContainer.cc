@@ -26,9 +26,7 @@
 
 namespace stappler::xenolith::material {
 
-XL_DECLARE_EVENT_CLASS(StyleContainer, onAttached)
-XL_DECLARE_EVENT_CLASS(StyleContainer, onPrimaryColorSchemeUpdate)
-XL_DECLARE_EVENT_CLASS(StyleContainer, onExtraColorSchemeUpdate)
+XL_DECLARE_EVENT_CLASS(StyleContainer, onColorSchemeUpdate)
 
 uint64_t StyleContainer::ComponentFrameTag = Component::GetNextComponentId();
 
@@ -38,88 +36,80 @@ bool StyleContainer::init() {
 	}
 
 	_frameTag = ComponentFrameTag;
+
+	_schemes.emplace(PrimarySchemeTag, ColorScheme(ThemeType::LightTheme, ColorHCT(292, 100, 50, 1.0f), false));
+
 	return true;
 }
 
 void StyleContainer::onEnter(Scene *scene) {
 	Component::onEnter(scene);
 	_scene = scene;
-	onAttached(this, true);
 }
 
 void StyleContainer::onExit() {
-	onAttached(this, false);
 	_scene = nullptr;
 	Component::onExit();
 }
 
 void StyleContainer::setPrimaryScheme(ThemeType type, const CorePalette &palette) {
-	_primaryScheme.set(type, palette);
-	if (_running) {
-		onPrimaryColorSchemeUpdate(this);
-	}
+	setScheme(PrimarySchemeTag, type, palette);
 }
 
 void StyleContainer::setPrimaryScheme(ThemeType type, const Color4F &color, bool isContent) {
-	_primaryScheme.set(type, color, isContent);
-	if (_running) {
-		onPrimaryColorSchemeUpdate(this);
-	}
+	setScheme(PrimarySchemeTag, type, color, isContent);
 }
 
 void StyleContainer::setPrimaryScheme(ThemeType type, const ColorHCT &color, bool isContent) {
-	_primaryScheme.set(type, color, isContent);
-	if (_running) {
-		onPrimaryColorSchemeUpdate(this);
-	}
+	setScheme(PrimarySchemeTag, type, color, isContent);
 }
 
 const ColorScheme &StyleContainer::getPrimaryScheme() const {
-	return _primaryScheme;
+	return *getScheme(PrimarySchemeTag);
 }
 
-const ColorScheme *StyleContainer::setExtraScheme(StringView name, ThemeType type, const CorePalette &palette) {
-	auto it = _extraSchemes.find(name);
-	if (it != _extraSchemes.end()) {
+const ColorScheme *StyleContainer::setScheme(uint32_t tag, ThemeType type, const CorePalette &palette) {
+	auto it = _schemes.find(tag);
+	if (it != _schemes.end()) {
 		it->second.set(type, palette);
 	} else {
-		it = _extraSchemes.emplace(name.str<Interface>(), ColorScheme(type, palette)).first;
+		it = _schemes.emplace(tag, ColorScheme(type, palette)).first;
 	}
 	if (_running) {
-		onExtraColorSchemeUpdate(this, name);
+		onColorSchemeUpdate(this, int64_t(tag));
 	}
 	return &it->second;
 }
 
-const ColorScheme *StyleContainer::setExtraScheme(StringView name, ThemeType type, const Color4F &color, bool isContent) {
-	auto it = _extraSchemes.find(name);
-	if (it != _extraSchemes.end()) {
+const ColorScheme *StyleContainer::setScheme(uint32_t tag, ThemeType type, const Color4F &color, bool isContent) {
+	auto it = _schemes.find(tag);
+	if (it != _schemes.end()) {
 		it->second.set(type, color, isContent);
 	} else {
-		it = _extraSchemes.emplace(name.str<Interface>(), ColorScheme(type, color, isContent)).first;
+		it = _schemes.emplace(tag, ColorScheme(type, color, isContent)).first;
 	}
 	if (_running) {
-		onExtraColorSchemeUpdate(this, name);
+		onColorSchemeUpdate(this, int64_t(tag));
 	}
 	return &it->second;
 }
 
-const ColorScheme *StyleContainer::setExtraScheme(StringView name, ThemeType type, const ColorHCT &color, bool isContent) {
-	auto it = _extraSchemes.find(name);
-	if (it != _extraSchemes.end()) {
+const ColorScheme *StyleContainer::setScheme(uint32_t tag, ThemeType type, const ColorHCT &color, bool isContent) {
+	auto it = _schemes.find(tag);
+	if (it != _schemes.end()) {
 		it->second.set(type, color, isContent);
 	} else {
-		it = _extraSchemes.emplace(name.str<Interface>(), ColorScheme(type, color, isContent)).first;
+		it = _schemes.emplace(tag, ColorScheme(type, color, isContent)).first;
 	}
 	if (_running) {
-		onExtraColorSchemeUpdate(this, name);
+		onColorSchemeUpdate(this, int64_t(tag));
 	}
 	return &it->second;
 }
 
-const ColorScheme *StyleContainer::getExtraScheme(StringView name) const {
-	auto it = _extraSchemes.find(name);
-	if (it != _extraSchemes.end()) {
+const ColorScheme *StyleContainer::getScheme(uint32_t tag) const {
+	auto it = _schemes.find(tag);
+	if (it != _schemes.end()) {
 		return &it->second;
 	}
 	return nullptr;

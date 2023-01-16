@@ -20,35 +20,37 @@
  THE SOFTWARE.
  **/
 
-#ifndef MODULES_MATERIAL_MATERIALLABEL_H_
-#define MODULES_MATERIAL_MATERIALLABEL_H_
+#ifndef MODULES_MATERIAL_BASE_MATERIALSURFACEINTERIOR_H_
+#define MODULES_MATERIAL_BASE_MATERIALSURFACEINTERIOR_H_
 
-#include "Material.h"
-#include "XLLabel.h"
+#include "MaterialSurfaceStyle.h"
+#include "XLComponent.h"
 
 namespace stappler::xenolith::material {
 
-class MaterialLabel : public Label {
+class SurfaceInterior : public Component {
 public:
-	virtual ~MaterialLabel() { }
+	static uint64_t ComponentFrameTag;
 
-	virtual bool init(TypescaleRole);
-	virtual bool init(TypescaleRole, StringView);
-	virtual bool init(TypescaleRole, StringView, float w, Alignment = Alignment::Left);
+	virtual ~SurfaceInterior() { }
 
-	virtual TypescaleRole getRole() const { return _role; }
-	virtual void setRole(TypescaleRole);
+	virtual bool init() override;
+	virtual bool init(SurfaceStyle &&style);
+
+	virtual void onAdded(Node *owner) override;
+	virtual void visit(RenderFrameInfo &, NodeFlags parentFlags) override;
+
+	virtual void setStyle(SurfaceStyleData &&style) { _interiorStyle = move(style); }
+	virtual const SurfaceStyleData &getStyle() const { return _interiorStyle; }
+
+	virtual bool isOwnedByMaterialNode() const { return _ownerIsMaterialNode; }
 
 protected:
-	virtual bool visitDraw(RenderFrameInfo &, NodeFlags parentFlags) override;
-	virtual void specializeStyle(DescriptionStyle &style, float density) const override;
-
-	using Label::init;
-
-	TypescaleRole _role = TypescaleRole::Unknown;
-	ThemeType _themeType = ThemeType::LightTheme;
+	bool _ownerIsMaterialNode = false;
+	SurfaceStyle _assignedStyle;
+	SurfaceStyleData _interiorStyle;
 };
 
 }
 
-#endif /* MODULES_MATERIAL_MATERIALLABEL_H_ */
+#endif /* MODULES_MATERIAL_BASE_MATERIALSURFACEINTERIOR_H_ */

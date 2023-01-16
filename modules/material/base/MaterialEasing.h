@@ -1,5 +1,4 @@
 /**
- Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
  Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,15 +20,24 @@
  THE SOFTWARE.
  **/
 
-#include "XLDefine.h"
+#ifndef MODULES_MATERIAL_BASE_MATERIALEASING_H_
+#define MODULES_MATERIAL_BASE_MATERIALEASING_H_
 
-#include "base/MaterialCam16.cc"
-#include "base/MaterialColorScheme.cc"
-#include "base/MaterialStyleContainer.cc"
-#include "base/MaterialEasing.cc"
-#include "base/MaterialSurface.cc"
-#include "base/MaterialLabel.cc"
-#include "base/MaterialSurfaceInterior.cc"
-#include "base/MaterialSurfaceStyle.cc"
+#include "XLActionEase.h"
 
-#include "components/MaterialButton.cc"
+namespace stappler::xenolith::material {
+
+enum class EasingType {
+	Standard,
+	StandardAccelerate,
+	StandardDecelerate,
+	Emphasized,
+	EmphasizedAccelerate,
+	EmphasizedDecelerate,
+};
+
+Rc<ActionEase> makeEasing(Rc<ActionInterval> &&, EasingType = EasingType::Standard);
+
+}
+
+#endif /* MODULES_MATERIAL_BASE_MATERIALEASING_H_ */

@@ -1,0 +1,150 @@
+/**
+ Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+ **/
+
+#ifndef MODULES_MATERIAL_BASE_MATERIALSURFACESTYLE_H_
+#define MODULES_MATERIAL_BASE_MATERIALSURFACESTYLE_H_
+
+#include "MaterialColorScheme.h"
+
+namespace stappler::xenolith::material {
+
+class StyleContainer;
+
+enum class Elevation {
+	Level0,	// 0dp
+	Level1, // 1dp 5%
+	Level2, // 3dp 8%
+	Level3, // 6dp 11%
+	Level4, // 8dp 12%
+	Level5, // 12dp 14%
+};
+
+enum class ShapeFamily {
+	RoundedCorners,
+	CutCorners,
+};
+
+enum class ShapeStyle {
+	None, // 0dp
+	ExtraSmall, // 4dp
+	Small, // 8dp
+	Medium, // 12dp
+	Large, // 16dp
+	ExtraLarge, // 28dp
+	Full // .
+};
+
+enum class NodeStyle {
+	SurfaceTonal,
+	SurfaceTonalElevated,
+	Elevated,
+	Filled,
+	FilledElevated,
+	FilledTonal,
+	FilledTonalElevated,
+	Outlined,
+	Text
+};
+
+enum class ActivityState {
+	Enabled,
+	Disabled,
+	Hovered,
+	Focused,
+	Pressed
+};
+
+struct SurfaceStyleData;
+
+struct SurfaceStyle {
+	static SurfaceStyle Background;
+	static constexpr uint32_t PrimarySchemeTag = maxOf<uint32_t>();
+
+	SurfaceStyle() = default;
+
+	template<typename ... Args>
+	SurfaceStyle(Args && ... args) {
+		define(std::forward<Args>(args)...);
+	}
+
+	void setup(const SurfaceStyle &value) { *this = value; }
+	void setup(uint32_t value) { schemeTag = value; }
+	void setup(ColorRole value) { colorRule = value; }
+	void setup(Elevation value) { elevation = value; }
+	void setup(ShapeFamily value) { shapeFamily = value; }
+	void setup(ShapeStyle value) { shapeStyle = value; }
+	void setup(NodeStyle value) { nodeStyle = value; }
+	void setup(ActivityState value) { activityState = value; }
+
+	template <typename T>
+	void define(T && t) {
+		setup(std::forward<T>(t));
+	}
+
+	template <typename T, typename ... Args>
+	void define(T && t, Args && ... args) {
+		define(std::forward<T>(t));
+		define(std::forward<Args>(args)...);
+	}
+
+	bool apply(SurfaceStyleData &data, const Size2 &contentSize, const StyleContainer *);
+
+	bool operator==(const SurfaceStyle &) const = default;
+	bool operator!=(const SurfaceStyle &) const = default;
+
+	uint32_t schemeTag = PrimarySchemeTag;
+	ColorRole colorRule = ColorRole::Primary;
+	Elevation elevation = Elevation::Level0;
+	ShapeFamily shapeFamily = ShapeFamily::RoundedCorners;
+	ShapeStyle shapeStyle = ShapeStyle::None;
+	NodeStyle nodeStyle = NodeStyle::SurfaceTonal;
+	ActivityState activityState = ActivityState::Enabled;
+};
+
+struct SurfaceStyleData {
+	static SurfaceStyleData progress(const SurfaceStyleData &, const SurfaceStyleData &, float p);
+
+	ShapeFamily shapeFamily = ShapeFamily::RoundedCorners;
+	ThemeType themeType = ThemeType::LightTheme;
+	Color4F colorScheme;
+	Color4F colorElevation;
+	ColorHCT colorHCT;
+	ColorHCT colorBackground;
+	ColorHCT colorOn;
+	float cornerRadius = 0.0f;
+	float elevationValue = 0.0f;
+	float shadowValue = 0.0f;
+	float outlineValue = 0.0f;
+};
+
+}
+
+namespace stappler {
+
+inline auto progress(const xenolith::material::SurfaceStyleData &l, const xenolith::material::SurfaceStyleData &r, float p) {
+	return xenolith::material::SurfaceStyleData::progress(l, r, p);
+}
+
+}
+
+#endif /* MODULES_MATERIAL_BASE_MATERIALSURFACESTYLE_H_ */

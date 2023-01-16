@@ -1,5 +1,4 @@
 /**
- Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
  Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,42 +20,32 @@
  THE SOFTWARE.
  **/
 
-#ifndef MODULES_MATERIAL_STYLE_MATERIALSTYLEDATA_H_
-#define MODULES_MATERIAL_STYLE_MATERIALSTYLEDATA_H_
-
-#include "MaterialColorScheme.h"
+#include "MaterialEasing.h"
 
 namespace stappler::xenolith::material {
 
-class StyleContainer;
-
-struct StyleData {
-	static StyleData progress(const StyleData &, const StyleData &, float p);
-	static StyleData Background;
-
-	bool apply(const Size2 &contentSize, const StyleContainer *);
-
-	bool operator==(const StyleData &) const = default;
-	bool operator!=(const StyleData &) const = default;
-
-	String schemeName;
-	ColorRole colorRule = ColorRole::Primary;
-	Elevation elevation = Elevation::Level0;
-	ShapeFamily shapeFamily = ShapeFamily::RoundedCorners;
-	ShapeStyle shapeStyle = ShapeStyle::None;
-	NodeStyle nodeStyle = NodeStyle::Tonal;
-
-	ThemeType themeType = ThemeType::LightTheme;
-	Color4F colorScheme;
-	Color4F colorElevation;
-	ColorHCT colorHCT;
-	ColorHCT colorBackground;
-	ColorHCT colorOn;
-	float cornerRadius = 0.0f;
-	float elevationValue = 0.0f;
-	float shadowValue = 0.0f;
-};
-
+Rc<ActionEase> makeEasing(Rc<ActionInterval> &&action, EasingType type) {
+	switch (type) {
+	case EasingType::Standard:
+		return Rc<EaseBezierAction>::create(move(action), 0.2f, 0.0f, 0.0f, 1.0f);
+		break;
+	case EasingType::StandardAccelerate:
+		return Rc<EaseBezierAction>::create(move(action), 0.3f, 0.0f, 1.0f, 1.0f);
+		break;
+	case EasingType::StandardDecelerate:
+		return Rc<EaseBezierAction>::create(move(action), 0.0f, 0.0f, 0.0f, 1.0f);
+		break;
+	case EasingType::Emphasized:
+		return Rc<EaseBezierAction>::create(move(action), 0.2f, 0.0f, 0.0f, 1.0f);
+		break;
+	case EasingType::EmphasizedAccelerate:
+		return Rc<EaseBezierAction>::create(move(action), 0.3f, 0.0f, 0.8f, 0.15f);
+		break;
+	case EasingType::EmphasizedDecelerate:
+		return Rc<EaseBezierAction>::create(move(action), 0.05f, 0.7f, 0.1f, 1.0f);
+		break;
+	}
+	return nullptr;
 }
 
-#endif /* MODULES_MATERIAL_STYLE_MATERIALSTYLEDATA_H_ */
+}

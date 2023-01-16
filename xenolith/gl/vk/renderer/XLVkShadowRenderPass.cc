@@ -83,14 +83,13 @@ void ShadowLightDataAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame
 	}
 
 	if (isnan(_input->luminosity)) {
-		float l = 0.0f;
+		float l = _input->globalColor.a;
 		for (uint32_t i = 0; i < _input->ambientLightCount; ++ i) {
 			l += _input->ambientLights[i].color.a;
 		}
 		for (uint32_t i = 0; i < _input->directLightCount; ++ i) {
 			l += _input->directLights[i].color.a;
 		}
-
 		data->luminosity = l;
 	} else {
 		data->luminosity = _input->luminosity;
@@ -651,153 +650,93 @@ bool ShadowPassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
 }
 
 Vector<VkCommandBuffer> ShadowPassHandle::doPrepareCommands(FrameHandle &h) {
-	auto table = _device->getTable();
-	auto buf = _pool->allocBuffer(*_device);
+	auto buf = _pool->recordBuffer(*_device, [&] (CommandBuffer &buf) {
+		auto pass = (RenderPassImpl *)_data->impl.get();
 
-	auto pass = (RenderPassImpl *)_data->impl.get();
+		pass->perform(*this, buf, [&] {
+			auto arrayImage = (Image *)_arrayAttachment->getImage()->getImage().get();
+			auto targetLayout = (_vertexBuffer && _vertexBuffer->getTrianglesCount()) ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			ImageMemoryBarrier inImageBarriers[] = {
+				ImageMemoryBarrier(arrayImage, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, targetLayout)
+			};
 
-	VkCommandBufferBeginInfo beginInfo { };
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	beginInfo.pInheritanceInfo = nullptr;
+			if (!_vertexBuffer || _vertexBuffer->getTrianglesCount() == 0) {
+				buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, inImageBarriers);
+				buf.cmdClearColorImage(arrayImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, Color4F::BLACK);
 
-	if (table->vkBeginCommandBuffer(buf, &beginInfo) != VK_SUCCESS) {
-		return Vector<VkCommandBuffer>();
-	}
+				auto gIdx = _device->getQueueFamily(QueueOperations::Graphics)->index;
 
-	_data->impl.cast<RenderPassImpl>()->perform(*this, buf, [&] {
-		auto arrayImage = (Image *)_arrayAttachment->getImage()->getImage().get();
-		VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, VK_REMAINING_ARRAY_LAYERS};
-		VkImageMemoryBarrier inImageBarriers[] = {
-			VkImageMemoryBarrier{
-				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
-				0, VK_ACCESS_SHADER_WRITE_BIT,
-				VK_IMAGE_LAYOUT_UNDEFINED,
-				(_vertexBuffer && _vertexBuffer->getTrianglesCount()) ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-				arrayImage->getImage(), range
+				if (_pool->getFamilyIdx() != gIdx) {
+					BufferMemoryBarrier transferBufferBarrier(_lightsBuffer->getBuffer(),
+						VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
+						QueueFamilyTransfer{_pool->getFamilyIdx(), gIdx}, 0, VK_WHOLE_SIZE);
+
+					ImageMemoryBarrier transferImageBarrier(arrayImage,
+						VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+						VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+						QueueFamilyTransfer{_pool->getFamilyIdx(), gIdx});
+					arrayImage->setPendingBarrier(transferImageBarrier);
+
+					buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
+							makeSpanView(&transferBufferBarrier, 1), makeSpanView(&transferImageBarrier, 1));
+				}
+				return;
 			}
-		};
 
-		if (!_vertexBuffer || _vertexBuffer->getTrianglesCount() == 0) {
-			table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
-					0, nullptr,
-					0, nullptr,
-					1, inImageBarriers);
-			VkClearColorValue clearColor{ 0.0f, 0.0f, 0.0f, 1.0f };
-			table->vkCmdClearColorImage(buf, arrayImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &range);
+			ComputePipeline *pipeline = nullptr;
+			buf.cmdBindDescriptorSets(pass);
+			buf.cmdFillBuffer(_trianglesBuffer->getGridSize(), 0);
 
+			pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(StringView(ShadowPass::SdfTrianglesComp))->pipeline.get();
+			buf.cmdBindPipeline(pipeline);
+
+			BufferMemoryBarrier bufferBarrier(_trianglesBuffer->getGridSize(),
+				VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT
+			);
+
+			buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, makeSpanView(&bufferBarrier, 1));
+
+			buf.cmdDispatch((_vertexBuffer->getTrianglesCount() - 1) / pipeline->getLocalX() + 1);
+
+			BufferMemoryBarrier bufferBarriers[] = {
+				BufferMemoryBarrier(_trianglesBuffer->getTriangles(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
+				BufferMemoryBarrier(_trianglesBuffer->getGridSize(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
+				BufferMemoryBarrier(_trianglesBuffer->getGridIndex(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT)
+			};
+
+			buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+					bufferBarriers, inImageBarriers);
+
+			pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(StringView(ShadowPass::SdfImageComp))->pipeline.get();
+			buf.cmdBindPipeline(pipeline);
+
+			buf.cmdDispatch(
+					(arrayImage->getInfo().extent.width - 1) / pipeline->getLocalX() + 1,
+					(arrayImage->getInfo().extent.height - 1) / pipeline->getLocalY() + 1);
+
+			// transfer image and buffer to transfer queue
 			auto gIdx = _device->getQueueFamily(QueueOperations::Graphics)->index;
 
 			if (_pool->getFamilyIdx() != gIdx) {
-				VkBufferMemoryBarrier transferBufferBarrier({
-					VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+				BufferMemoryBarrier transferBufferBarrier(_lightsBuffer->getBuffer(),
 					VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
-					_pool->getFamilyIdx(), gIdx,
-					_lightsBuffer->getBuffer()->getBuffer(), 0, VK_WHOLE_SIZE,
-				});
+					QueueFamilyTransfer{_pool->getFamilyIdx(), gIdx}, 0, VK_WHOLE_SIZE);
 
-				VkImageMemoryBarrier transferImageBarrier({
-					VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
+				ImageMemoryBarrier transferImageBarrier(arrayImage,
 					VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-					VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-					_pool->getFamilyIdx(), gIdx,
-					arrayImage->getImage(), range
-				});
+					VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+					QueueFamilyTransfer{_pool->getFamilyIdx(), gIdx});
 				arrayImage->setPendingBarrier(transferImageBarrier);
 
-				table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
-						0, nullptr,
-						1, &transferBufferBarrier,
-						1, &transferImageBarrier);
+				buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
+						makeSpanView(&transferBufferBarrier, 1), makeSpanView(&transferImageBarrier, 1));
 			}
-			return;
-		}
-
-		ComputePipeline *pipeline = nullptr;
-		table->vkCmdBindDescriptorSets(buf, VK_PIPELINE_BIND_POINT_COMPUTE, pass->getPipelineLayout(), 0,
-				pass->getDescriptorSets().size(), pass->getDescriptorSets().data(), 0, nullptr);
-
-		table->vkCmdFillBuffer(buf, _trianglesBuffer->getGridSize()->getBuffer(), 0, VK_WHOLE_SIZE, 0);
-
-		pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(StringView(ShadowPass::SdfTrianglesComp))->pipeline.get();
-		table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->getPipeline());
-
-		VkBufferMemoryBarrier bufferBarrier({
-			VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
-			VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
-			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-			_trianglesBuffer->getGridSize()->getBuffer(), 0, VK_WHOLE_SIZE,
 		});
-
-		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
-				0, nullptr,
-				1, &bufferBarrier,
-				0, nullptr);
-
-		table->vkCmdDispatch(buf, (_vertexBuffer->getTrianglesCount() - 1) / pipeline->getLocalX() + 1, 1, 1);
-
-		VkBufferMemoryBarrier bufferBarriers[] = {
-			VkBufferMemoryBarrier{
-				VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
-				VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-				VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-				_trianglesBuffer->getTriangles()->getBuffer(), 0, VK_WHOLE_SIZE
-			}, VkBufferMemoryBarrier{
-				VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
-				VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-				VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-				_trianglesBuffer->getGridSize()->getBuffer(), 0, VK_WHOLE_SIZE
-			}, VkBufferMemoryBarrier{
-				VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
-				VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-				VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-				_trianglesBuffer->getGridIndex()->getBuffer(), 0, VK_WHOLE_SIZE
-			}
-		};
-
-		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
-				0, nullptr,
-				3, bufferBarriers,
-				1, inImageBarriers);
-
-		pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(StringView(ShadowPass::SdfImageComp))->pipeline.get();
-		table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->getPipeline());
-		table->vkCmdDispatch(buf,
-				(arrayImage->getInfo().extent.width - 1) / pipeline->getLocalX() + 1,
-				(arrayImage->getInfo().extent.height - 1) / pipeline->getLocalY() + 1,
-				1);
-
-		// transfer image and buffer to transfer queue
-		auto gIdx = _device->getQueueFamily(QueueOperations::Graphics)->index;
-
-		if (_pool->getFamilyIdx() != gIdx) {
-			VkBufferMemoryBarrier transferBufferBarrier({
-				VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
-				VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
-				_pool->getFamilyIdx(), gIdx,
-				_lightsBuffer->getBuffer()->getBuffer(), 0, VK_WHOLE_SIZE,
-			});
-
-			VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, VK_REMAINING_ARRAY_LAYERS};
-			VkImageMemoryBarrier transferImageBarrier({
-				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
-				VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-				VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				_pool->getFamilyIdx(), gIdx,
-				arrayImage->getImage(), range
-			});
-			arrayImage->setPendingBarrier(transferImageBarrier);
-
-			table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
-					0, nullptr,
-					1, &transferBufferBarrier,
-					1, &transferImageBarrier);
-		}
+		return true;
 	});
 
-	if (table->vkEndCommandBuffer(buf) == VK_SUCCESS) {
-		return Vector<VkCommandBuffer>{buf};
+	if (buf) {
+		return Vector<VkCommandBuffer>{buf->getBuffer()};
 	}
 	return Vector<VkCommandBuffer>();
 }

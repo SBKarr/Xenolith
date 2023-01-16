@@ -365,6 +365,10 @@ struct DrawStat {
 	uint32_t cachedFramebuffers;
 	uint32_t cachedImageViews;
 	uint32_t materials;
+
+	uint32_t solidCmds;
+	uint32_t surfaceCmds;
+	uint32_t transparentCmds;
 };
 
 struct VertexSpan {

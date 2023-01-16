@@ -22,7 +22,10 @@
  **/
 
 #include "AppMaterialColorPickerTest.h"
-#include "MaterialNode.h"
+
+#include "MaterialSurfaceInterior.h"
+#include "MaterialStyleContainer.h"
+#include "MaterialSurface.h"
 #include "MaterialLabel.h"
 
 namespace stappler::xenolith::app {
@@ -147,7 +150,7 @@ bool MaterialColorPickerSprite::init(Type type, const material::ColorHCT &color,
 	case Type::Tone: _value = _targetColor.data.tone / 100.0f; break;
 	}
 
-	_label = addChild(Rc<material::MaterialLabel>::create(material::TypescaleRole::TitleLarge), 1);
+	_label = addChild(Rc<material::TypescaleLabel>::create(material::TypescaleRole::TitleLarge), 1);
 	_label->setFontSize(20);
 	_label->setAnchorPoint(Anchor::MiddleLeft);
 	_label->setString(makeString());
@@ -289,17 +292,21 @@ bool MaterialColorPickerTest::init() {
 
 	_colorHct = material::ColorHCT(Color::Purple_500);
 
-	_background = addChild(Rc<Layer>::create(Color::Black), -2);
+	_style = addComponent(Rc<material::StyleContainer>::create());
+	_style->setPrimaryScheme(material::ThemeType::LightTheme, _colorHct, false);
+
+	addComponent(Rc<material::SurfaceInterior>::create(material::SurfaceStyle{
+		material::ColorRole::Primary
+	}));
+
+	_background = addChild(Rc<material::Surface>::create(material::SurfaceStyle::Background), -1);
 	_background->setAnchorPoint(Anchor::Middle);
-	_background->setVisible(false);
 
 	_lightCheckbox = addChild(Rc<AppCheckboxWithLabel>::create("Dark theme", false, [this] (bool value) {
 		if (value) {
 			_themeType = material::ThemeType::DarkTheme;
-			_background->setVisible(true);
 		} else {
 			_themeType = material::ThemeType::LightTheme;
-			_background->setVisible(false);
 		}
 		updateColor(material::ColorHCT(_colorHct));
 	}));
@@ -395,6 +402,7 @@ void MaterialColorPickerTest::updateColor(material::ColorHCT &&color) {
 	_tonePicker->setTargetColor(_colorHct);
 
 	_colorScheme = material::ColorScheme(_themeType, _colorHct, _isContentColor);
+	_style->setPrimaryScheme(_themeType, _colorHct, _isContentColor);
 
 	for (auto i = toInt(material::ColorRole::Primary); i < toInt(material::ColorRole::Max); ++ i) {
 		_nodes[i]->setSchemeColor(_themeType, _colorScheme.get(material::ColorRole(i)), _colorScheme.on(material::ColorRole(i)));

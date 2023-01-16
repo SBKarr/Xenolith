@@ -28,90 +28,6 @@
 
 namespace stappler::xenolith::vk {
 
-void View_writeImageTransfer(Device &dev, VkCommandBuffer buf, const Rc<Image> &sourceImage, const Rc<Image> &targetImage,
-		VkImageLayout sourceLayout, VkFilter filter) {
-	auto table = dev.getTable();
-
-	VkCommandBufferBeginInfo beginInfo { };
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	beginInfo.pInheritanceInfo = nullptr;
-
-	if (table->vkBeginCommandBuffer(buf, &beginInfo) != VK_SUCCESS) {
-		return;
-	}
-
-	auto sourceExtent = sourceImage->getInfo().extent;
-	auto targetExtent = targetImage->getInfo().extent;
-
-	Vector<VkImageMemoryBarrier> inputImageBarriers;
-	inputImageBarriers.emplace_back(VkImageMemoryBarrier{
-		VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
-		VK_ACCESS_MEMORY_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		targetImage->getImage(), VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
-	});
-
-	Vector<VkImageMemoryBarrier> outputImageBarriers;
-	outputImageBarriers.emplace_back(VkImageMemoryBarrier{
-		VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
-		VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		targetImage->getImage(), VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
-	});
-
-	if (sourceLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
-		inputImageBarriers.emplace_back(VkImageMemoryBarrier{
-			VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
-			VK_ACCESS_MEMORY_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-			sourceLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-			targetImage->getImage(), VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
-		});
-	}
-
-	if (!inputImageBarriers.empty()) {
-		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-			0, nullptr,
-			0, nullptr,
-			inputImageBarriers.size(), inputImageBarriers.data());
-	}
-
-	if (sourceExtent == targetExtent) {
-		VkImageCopy copy{
-			VkImageSubresourceLayers{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-			VkOffset3D{0, 0, 0},
-			VkImageSubresourceLayers{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-			VkOffset3D{0, 0, 0},
-			VkExtent3D{targetExtent.width, targetExtent.height, targetExtent.depth}
-		};
-
-		table->vkCmdCopyImage(buf, sourceImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-				targetImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
-	} else {
-		VkImageBlit blit{
-			VkImageSubresourceLayers{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-			{ VkOffset3D{0, 0, 0}, VkOffset3D{int32_t(sourceExtent.width), int32_t(sourceExtent.height), int32_t(sourceExtent.depth)} },
-			VkImageSubresourceLayers{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-			{ VkOffset3D{0, 0, 0}, VkOffset3D{int32_t(targetExtent.width), int32_t(targetExtent.height), int32_t(targetExtent.depth)} },
-		};
-
-		table->vkCmdBlitImage(buf, sourceImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-				targetImage->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, filter);
-	}
-
-	if (!outputImageBarriers.empty()) {
-		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
-			0, nullptr,
-			0, nullptr,
-			outputImageBarriers.size(), outputImageBarriers.data());
-	}
-
-	table->vkEndCommandBuffer(buf);
-}
-
 View::~View() {
 	//_thread.join();
 }
@@ -436,11 +352,40 @@ bool View::presentImmediate(Rc<ImageStorage> &&object, Function<void(bool)> &&sc
 
 	pool = dev->acquireCommandPool(ops);
 
-	auto buf = pool->allocBuffer(*dev);
+	auto buf = pool->recordBuffer(*dev, [&] (CommandBuffer &buf) {
+		auto targetImageObj = (Image *)targetImage->getImage().get();
+		auto sourceLayout = VkImageLayout(object->getLayout());
 
-	View_writeImageTransfer(*dev, buf, sourceImage, targetImage->getImage().cast<Image>(), VkImageLayout(object->getLayout()), filter);
+		Vector<ImageMemoryBarrier> inputImageBarriers;
+		inputImageBarriers.emplace_back(ImageMemoryBarrier(targetImageObj,
+			VK_ACCESS_MEMORY_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL));
 
-	buffers.emplace_back(buf);
+		Vector<ImageMemoryBarrier> outputImageBarriers;
+		outputImageBarriers.emplace_back(ImageMemoryBarrier(targetImageObj,
+			VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR));
+
+		if (sourceLayout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+			inputImageBarriers.emplace_back(ImageMemoryBarrier(sourceImage,
+				VK_ACCESS_MEMORY_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+				sourceLayout, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL));
+		}
+
+		if (!inputImageBarriers.empty()) {
+			buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, inputImageBarriers);
+		}
+
+		buf.cmdCopyImage(sourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, targetImageObj, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, filter);
+
+		if (!outputImageBarriers.empty()) {
+			buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, outputImageBarriers);
+		}
+
+		return true;
+	});
+
+	buffers.emplace_back(buf->getBuffer());
 
 	renderqueue::FrameSync frameSync;
 	object->rearmSemaphores(*loop);

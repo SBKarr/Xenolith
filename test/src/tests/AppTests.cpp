@@ -48,6 +48,7 @@
 #include "material/AppMaterialColorPickerTest.cc"
 #include "material/AppMaterialDynamicFontTest.cc"
 #include "material/AppMaterialNodeTest.cc"
+#include "material/AppMaterialButtonTest.cc"
 #include "config/AppConfigMenu.cc"
 #include "config/AppConfigPresentModeSwitcher.cc"
 
@@ -100,6 +101,7 @@ Vector<MenuData> s_materialTestsMenu({
 	MenuData{LayoutName::MaterialColorPickerTest, "Color picker test"},
 	MenuData{LayoutName::MaterialDynamicFontTest, "Dynamic font"},
 	MenuData{LayoutName::MaterialNodeTest, "Node test"},
+	MenuData{LayoutName::MaterialButtonTest, "Button test"},
 });
 
 LayoutName getRootLayoutForLayout(LayoutName name) {
@@ -151,6 +153,7 @@ LayoutName getRootLayoutForLayout(LayoutName name) {
 	case LayoutName::MaterialColorPickerTest:
 	case LayoutName::MaterialDynamicFontTest:
 	case LayoutName::MaterialNodeTest:
+	case LayoutName::MaterialButtonTest:
 		return LayoutName::MaterialTests;
 		break;
 	}
@@ -194,6 +197,7 @@ StringView getLayoutNameId(LayoutName name) {
 	case LayoutName::MaterialColorPickerTest: return "org.stappler.xenolith.test.MaterialColorPickerTest"; break;
 	case LayoutName::MaterialDynamicFontTest: return "org.stappler.xenolith.test.MaterialDynamicFontTest"; break;
 	case LayoutName::MaterialNodeTest: return "org.stappler.xenolith.test.MaterialNodeTest"; break;
+	case LayoutName::MaterialButtonTest: return "org.stappler.xenolith.test.MaterialButtonTest"; break;
 	}
 	return StringView();
 }
@@ -234,6 +238,7 @@ LayoutName getLayoutNameById(StringView name) {
 	else if (name == "org.stappler.xenolith.test.MaterialColorPickerTest") { return LayoutName::MaterialColorPickerTest; }
 	else if (name == "org.stappler.xenolith.test.MaterialDynamicFontTest") { return LayoutName::MaterialDynamicFontTest; }
 	else if (name == "org.stappler.xenolith.test.MaterialNodeTest") { return LayoutName::MaterialNodeTest; }
+	else if (name == "org.stappler.xenolith.test.MaterialButtonTest") { return LayoutName::MaterialButtonTest; }
 
 	return LayoutName::Root;
 }
@@ -275,6 +280,7 @@ Rc<Node> makeLayoutNode(LayoutName name) {
 	case LayoutName::MaterialColorPickerTest: return Rc<MaterialColorPickerTest>::create(); break;
 	case LayoutName::MaterialDynamicFontTest: return Rc<MaterialDynamicFontTest>::create(); break;
 	case LayoutName::MaterialNodeTest: return Rc<MaterialNodeTest>::create(); break;
+	case LayoutName::MaterialButtonTest: return Rc<MaterialButtonTest>::create(); break;
 	}
 	return nullptr;
 }

@@ -1,5 +1,4 @@
 /**
- Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
  Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,15 +20,52 @@
  THE SOFTWARE.
  **/
 
-#include "XLDefine.h"
+#include "MaterialSurfaceInterior.h"
 
-#include "base/MaterialCam16.cc"
-#include "base/MaterialColorScheme.cc"
-#include "base/MaterialStyleContainer.cc"
-#include "base/MaterialEasing.cc"
-#include "base/MaterialSurface.cc"
-#include "base/MaterialLabel.cc"
-#include "base/MaterialSurfaceInterior.cc"
-#include "base/MaterialSurfaceStyle.cc"
+#include "MaterialStyleContainer.h"
+#include "MaterialSurface.h"
+#include "XLRenderFrameInfo.h"
 
-#include "components/MaterialButton.cc"
+namespace stappler::xenolith::material {
+
+uint64_t SurfaceInterior::ComponentFrameTag = Component::GetNextComponentId();
+
+bool SurfaceInterior::init() {
+	if (!Component::init()) {
+		return false;
+	}
+
+	_frameTag = ComponentFrameTag;
+	return true;
+}
+
+bool SurfaceInterior::init(SurfaceStyle &&style) {
+	if (!Component::init()) {
+		return false;
+	}
+
+	_frameTag = ComponentFrameTag;
+	_assignedStyle = move(style);
+	return true;
+}
+
+void SurfaceInterior::onAdded(Node *owner) {
+	Component::onAdded(owner);
+
+	_ownerIsMaterialNode = (dynamic_cast<Surface *>(_owner) != nullptr);
+}
+
+void SurfaceInterior::visit(RenderFrameInfo &info, NodeFlags parentFlags) {
+	Component::visit(info, parentFlags);
+
+	if (!_ownerIsMaterialNode) {
+		auto style = info.getComponent<StyleContainer>(StyleContainer::ComponentFrameTag);
+		if (!style) {
+			return;
+		}
+
+		_assignedStyle.apply(_interiorStyle, _owner->getContentSize(), style);
+	}
+}
+
+}

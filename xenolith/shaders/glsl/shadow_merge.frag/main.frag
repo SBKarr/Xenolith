@@ -26,7 +26,7 @@ layout (location = 0) out vec4 outColor;
 layout (location = 1) in vec2 fragTexCoord;
 
 void main() {
-	vec4 textureColor = shadowData.globalColor;
+	vec4 textureColor = shadowData.globalColor / shadowData.luminosity;
 
 	uint layerIdx = 0;
 

@@ -88,6 +88,7 @@ void Scene::renderRequest(const Rc<FrameRequest> &req) {
 	info.lights = Rc<gl::ShadowLightInput>::alloc();
 	info.lights->sceneDensity = _density;
 	info.lights->shadowDensity = _shadowDensity;
+	info.lights->globalColor = _globalColor;
 
 	for (auto &it : _lights) {
 		switch (it->getType()) {
@@ -506,6 +507,14 @@ void Scene::removeAllLightsByType(SceneLightType type) {
 			++ it;
 		}
 	}
+}
+
+void Scene::setGlobalColor(const Color4F &color) {
+	_globalColor = color;
+}
+
+const Color4F & Scene::getGlobalColor() const {
+	return _globalColor;
 }
 
 auto Scene::makeQueue(RenderQueue::Builder &&builder) -> Rc<RenderQueue> {

@@ -295,8 +295,6 @@ void MaterialCompilationRenderPassHandle::finalize(FrameQueue &handle, bool succ
 }
 
 Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(FrameHandle &handle) {
-	auto table = _device->getTable();
-	auto buf = _pool->allocBuffer(*_device);
 	auto layout = _device->getTextureSetLayout();
 
 	auto &inputData = _materialAttachment->getInputData();
@@ -316,23 +314,6 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(F
 		return Vector<VkCommandBuffer>();
 	}
 
-	// transition images and build buffer
-	VkCommandBufferBeginInfo beginInfo { };
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	beginInfo.pInheritanceInfo = nullptr;
-
-	if (table->vkBeginCommandBuffer(buf, &beginInfo) != VK_SUCCESS) {
-		return Vector<VkCommandBuffer>();
-	}
-
-	VkBufferCopy indexesCopy;
-	indexesCopy.srcOffset = 0;
-	indexesCopy.dstOffset = 0;
-	indexesCopy.size = buffers.stagingBuffer->getSize();
-
-	table->vkCmdCopyBuffer(buf, buffers.stagingBuffer->getBuffer(), buffers.targetBuffer->getBuffer(), 1, &indexesCopy);
-
 	VkPipelineStageFlags targetStages = 0;
 	if ((_pool->getClass() & QueueOperations::Graphics) != QueueOperations::None) {
 		targetStages |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
@@ -344,37 +325,22 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(F
 		targetStages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 	}
 
-	if (q->index == _pool->getFamilyIdx()) {
-		VkBufferMemoryBarrier bufferBarrier({
-			VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
-			VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-			buffers.targetBuffer->getBuffer(), 0, VK_WHOLE_SIZE
-		});
+	auto buf = _pool->recordBuffer(*_device, [&] (CommandBuffer &buf) {
+		buf.cmdCopyBuffer(buffers.stagingBuffer, buffers.targetBuffer);
 
-		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-				targetStages, 0,
-				0, nullptr,
-				1, &bufferBarrier,
-				0, nullptr);
-	} else {
-		VkBufferMemoryBarrier bufferBarrier({
-			VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
-			VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-			_pool->getFamilyIdx(), q->index,
-			buffers.targetBuffer->getBuffer(), 0, VK_WHOLE_SIZE
-		});
+		if (q->index == _pool->getFamilyIdx()) {
+			BufferMemoryBarrier bufferBarrier(buffers.targetBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+			buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, targetStages, 0, makeSpanView(&bufferBarrier, 1));
+		} else {
+			BufferMemoryBarrier bufferBarrier(buffers.targetBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+					QueueFamilyTransfer{_pool->getFamilyIdx(), q->index}, 0, VK_WHOLE_SIZE);
+			buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, targetStages, 0, makeSpanView(&bufferBarrier, 1));
+			buffers.targetBuffer->setPendingBarrier(bufferBarrier);
+		}
+		return true;
+	});
 
-		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-				targetStages, 0,
-				0, nullptr,
-				1, &bufferBarrier,
-				0, nullptr);
-
-		buffers.targetBuffer->setPendingBarrier(bufferBarrier);
-	}
-
-	if (table->vkEndCommandBuffer(buf) == VK_SUCCESS) {
+	if (buf) {
 		auto tmpBuffer = new Rc<Buffer>(move(buffers.targetBuffer));
 		auto tmpOrder = new std::unordered_map<gl::MaterialId, uint32_t>(move(buffers.ordering));
 		handle.performOnGlThread([data = _outputData, tmpBuffer, tmpOrder] (FrameHandle &) {
@@ -382,7 +348,7 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(F
 			delete tmpBuffer;
 			delete tmpOrder;
 		}, nullptr, true, "MaterialCompilationRenderPassHandle::doPrepareCommands");
-		return Vector<VkCommandBuffer>{buf};
+		return Vector<VkCommandBuffer>{buf->getBuffer()};
 	}
 	return Vector<VkCommandBuffer>();
 }

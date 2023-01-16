@@ -24,6 +24,7 @@
 #ifndef TEST_SRC_TESTS_MATERIAL_APPMATERIALCOLORPICKERTEST_H_
 #define TEST_SRC_TESTS_MATERIAL_APPMATERIALCOLORPICKERTEST_H_
 
+#include "MaterialSurface.h"
 #include "MaterialColorScheme.h"
 #include "AppLayoutTest.h"
 #include "AppCheckbox.h"
@@ -107,7 +108,8 @@ protected:
 
 	void updateColor(material::ColorHCT &&);
 
-	Layer *_background = nullptr;
+	material::StyleContainer *_style = nullptr;
+	material::Surface *_background = nullptr;
 	AppCheckboxWithLabel *_lightCheckbox = nullptr;
 	AppCheckboxWithLabel *_contentCheckbox = nullptr;
 

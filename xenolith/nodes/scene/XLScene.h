@@ -92,6 +92,9 @@ public:
 	virtual void removeAllLights();
 	virtual void removeAllLightsByType(SceneLightType);
 
+	virtual void setGlobalColor(const Color4F &);
+	virtual const Color4F & getGlobalColor() const;
+
 protected:
 	using Node::init;
 
@@ -159,6 +162,8 @@ protected:
 	Vector<Rc<SceneLight>> _lights;
 	Map<uint64_t, SceneLight *> _lightsByTag;
 	Map<StringView, SceneLight *> _lightsByName;
+
+	Color4F _globalColor = Color4F(0.0f, 0.0f, 0.0f, 0.0f);
 };
 
 }

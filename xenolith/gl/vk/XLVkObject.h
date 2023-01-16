@@ -59,16 +59,18 @@ public:
 
 	VkImage getImage() const { return _image; }
 
-	void setPendingBarrier(const VkImageMemoryBarrier &);
-	const VkImageMemoryBarrier *getPendingBarrier() const;
+	void setPendingBarrier(const ImageMemoryBarrier &);
+	const ImageMemoryBarrier *getPendingBarrier() const;
 	void dropPendingBarrier();
+
+	VkImageAspectFlags getAspectMask() const;
 
 protected:
 	using gl::ImageObject::init;
 
 	Rc<DeviceMemory> _memory;
 	VkImage _image = VK_NULL_HANDLE;
-	std::optional<VkImageMemoryBarrier> _barrier;
+	std::optional<ImageMemoryBarrier> _barrier;
 };
 
 class Buffer : public gl::BufferObject {
@@ -79,8 +81,8 @@ public:
 
 	VkBuffer getBuffer() const { return _buffer; }
 
-	void setPendingBarrier(const VkBufferMemoryBarrier &);
-	const VkBufferMemoryBarrier *getPendingBarrier() const;
+	void setPendingBarrier(const BufferMemoryBarrier &);
+	const BufferMemoryBarrier *getPendingBarrier() const;
 	void dropPendingBarrier();
 
 protected:
@@ -88,7 +90,7 @@ protected:
 
 	Rc<DeviceMemory> _memory;
 	VkBuffer _buffer = VK_NULL_HANDLE;
-	std::optional<VkBufferMemoryBarrier> _barrier;
+	std::optional<BufferMemoryBarrier> _barrier;
 };
 
 class ImageView : public gl::ImageView {

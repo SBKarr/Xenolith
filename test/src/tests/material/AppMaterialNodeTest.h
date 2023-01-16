@@ -24,10 +24,10 @@
 #ifndef TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_
 #define TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_
 
+#include "MaterialSurface.h"
 #include "AppLayoutTest.h"
 #include "AppCheckbox.h"
 #include "AppSlider.h"
-#include "MaterialNode.h"
 #include "MaterialStyleContainer.h"
 
 namespace stappler::xenolith::app {
@@ -44,11 +44,12 @@ public:
 protected:
 	material::StyleContainer *_style = nullptr;
 
-	material::MaterialNode *_background = nullptr;
-	material::MaterialNode *_nodeElevation = nullptr;
-	material::MaterialNode *_nodeCornerRounded = nullptr;
-	material::MaterialNode *_nodeCornerCut = nullptr;
-	material::MaterialNode *_nodeShadow = nullptr;
+	material::Surface *_background = nullptr;
+	material::Surface *_nodeElevation = nullptr;
+	material::Surface *_nodeCornerRounded = nullptr;
+	material::Surface *_nodeCornerCut = nullptr;
+	material::Surface *_nodeShadow = nullptr;
+	material::Surface *_nodeStyle = nullptr;
 
 	MaterialColorPickerSprite *_huePicker = nullptr;
 	AppCheckboxWithLabel *_lightCheckbox = nullptr;

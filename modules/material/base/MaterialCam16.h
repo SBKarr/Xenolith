@@ -1,5 +1,4 @@
 /**
- Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
  Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,14 +20,13 @@
  THE SOFTWARE.
  **/
 
-#ifndef MODULES_MATERIAL_STYLE_MATERIALCOLORSCHEME_H_
-#define MODULES_MATERIAL_STYLE_MATERIALCOLORSCHEME_H_
+#ifndef MODULES_MATERIAL_BASE_MATERIALCAM16_H_
+#define MODULES_MATERIAL_BASE_MATERIALCAM16_H_
 
-#include "Material.h"
+#include "XLDefine.h"
+#include "MaterialConfig.h"
 
 namespace stappler::xenolith::material {
-
-using Cam16Float = float;
 
 struct ViewingConditions {
 	static const ViewingConditions DEFAULT;
@@ -47,45 +45,45 @@ struct ViewingConditions {
 
 	static constexpr ViewingConditions create(const Float white_point[3], const Float adapting_luminance, const Float background_lstar,
 			const Float surround, const bool discounting_illuminant) {
-		Float background_lstar_corrected = (background_lstar < 30.0) ? 30.0 : background_lstar;
-		Float rgb_w[3] = {
+		const Float background_lstar_corrected = (background_lstar < 30.0) ? 30.0 : background_lstar;
+		const Float rgb_w[3] = {
 				Float(0.401288 * white_point[0] + 0.650173 * white_point[1] - 0.051461 * white_point[2]),
 				Float(-0.250268 * white_point[0] + 1.204414 * white_point[1] + 0.045854 * white_point[2]),
 				Float(-0.002079 * white_point[0] + 0.048952 * white_point[1] + 0.953127 * white_point[2])
 		};
-		Float f = 0.8 + (surround / 10.0);
-		Float c = f >= 0.9
+		const Float f = 0.8 + (surround / 10.0);
+		const Float c = f >= 0.9
 				? std::lerp(Float(0.59), Float(0.69), Float((f - 0.9) * 10.0))
 				: std::lerp(Float(0.525), Float(0.59), Float((f - 0.8) * 10.0));
 		Float d = discounting_illuminant ? 1.0 : f * (1.0 - ((1.0 / 3.6) * std::exp(Float((-adapting_luminance - 42.0) / 92.0))));
 		d = d > 1.0 ? 1.0 : d < 0.0 ? 0.0 : d;
-		Float nc = f;
-		Float rgb_d[3] = {
+		const Float nc = f;
+		const Float rgb_d[3] = {
 			Float(d * (100.0 / rgb_w[0]) + 1.0 - d),
 			Float(d * (100.0 / rgb_w[1]) + 1.0 - d),
 			Float(d * (100.0 / rgb_w[2]) + 1.0 - d)
 		};
 
-		Float k = 1.0 / (5.0 * adapting_luminance + 1.0);
-		Float k4 = k * k * k * k;
-		Float k4f = 1.0 - k4;
-		Float fl = (k4 * adapting_luminance) + (0.1 * k4f * k4f * std::pow(Float(5.0 * adapting_luminance), Float(1.0 / 3.0)));
-		Float fl_root = std::pow(Float(fl), Float(0.25));
-		Float n = YFromLstar(background_lstar_corrected) / white_point[1];
-		Float z = 1.48 + std::sqrt(Float(n));
-		Float nbb = 0.725 / std::pow(Float(n), Float(0.2));
-		Float ncb = nbb;
-		Float rgb_a_factors[3] = {
+		const Float k = 1.0 / (5.0 * adapting_luminance + 1.0);
+		const Float k4 = k * k * k * k;
+		const Float k4f = 1.0 - k4;
+		const Float fl = (k4 * adapting_luminance) + (0.1 * k4f * k4f * std::pow(Float(5.0 * adapting_luminance), Float(1.0 / 3.0)));
+		const Float fl_root = std::pow(Float(fl), Float(0.25));
+		const Float n = YFromLstar(background_lstar_corrected) / white_point[1];
+		const Float z = 1.48 + std::sqrt(Float(n));
+		const Float nbb = 0.725 / std::pow(Float(n), Float(0.2));
+		const Float ncb = nbb;
+		const Float rgb_a_factors[3] = {
 			std::pow(Float(fl * rgb_d[0] * rgb_w[0] / 100.0), Float(0.42)),
 			std::pow(Float(fl * rgb_d[1] * rgb_w[1] / 100.0), Float(0.42)),
 			std::pow(Float(fl * rgb_d[2] * rgb_w[2] / 100.0), Float(0.42))
 		};
-		Float rgb_a[3] = {
+		const Float rgb_a[3] = {
 			Float(400.0 * rgb_a_factors[0] / (rgb_a_factors[0] + 27.13)),
 			Float(400.0 * rgb_a_factors[1] / (rgb_a_factors[1] + 27.13)),
 			Float(400.0 * rgb_a_factors[2] / (rgb_a_factors[2] + 27.13))
 		};
-		Float aw = (40.0 * rgb_a[0] + 20.0 * rgb_a[1] + rgb_a[2]) / 20.0 * nbb;
+		const Float aw = (40.0 * rgb_a[0] + 20.0 * rgb_a[1] + rgb_a[2]) / 20.0 * nbb;
 		return ViewingConditions{
 			adapting_luminance, background_lstar_corrected, surround, discounting_illuminant,
 			n, aw, nbb, ncb, c, nc, fl, fl_root, z,
@@ -226,10 +224,10 @@ struct Cam16 {
 	}
 
 	static constexpr Float LstarFromColor4F(const Color4F &color) {
-		Float red_l = linearized(color.r);
-		Float green_l = linearized(color.g);
-		Float blue_l = linearized(color.b);
-		Float y = 0.2126 * red_l + 0.7152 * green_l + 0.0722 * blue_l;
+		const Float red_l = linearized(color.r);
+		const Float green_l = linearized(color.g);
+		const Float blue_l = linearized(color.b);
+		const Float y = 0.2126 * red_l + 0.7152 * green_l + 0.0722 * blue_l;
 		return LstarFromY(y);
 	}
 
@@ -305,140 +303,6 @@ struct Cam16 {
 	Float bstar = 0.0;
 };
 
-struct alignas(16) ColorHCT {
-	struct alignas(16) Values {
-		float hue;
-		float chroma;
-		float tone;
-		float alpha;
-
-		bool operator==(const Values& right) const = default;
-		bool operator!=(const Values& right) const = default;
-	};
-
-	static ColorHCT progress(const ColorHCT &a, const ColorHCT &b, float p);
-
-	// returns closest possible HCT, that can be represented in sRGB by given HCT
-	static ColorHCT solveColorHCT(Cam16Float h, Cam16Float c, Cam16Float t, float a);
-	static Color4F solveColor4F(Cam16Float h, Cam16Float c, Cam16Float t, float a);
-
-	constexpr ColorHCT() : data({0.0f, 50.0f, 0.0f, 1.0f}), color(Color4F::BLACK) { }
-
-	ColorHCT(float h, float c, float t, float a)
-	: data({Cam16::sanitizeDegrees(h), c, t, a}), color(solveColor4F(Cam16::sanitizeDegrees(h), c, t, a)) { }
-
-	ColorHCT(const Values &d)
-	: data(d), color(solveColor4F(Cam16::sanitizeDegrees(data.hue), data.chroma, data.tone, data.alpha)) { }
-
-	explicit ColorHCT(const Color4F& c) {
-		auto cam = Cam16::create(c);
-		data.hue = cam.hue;
-		data.chroma = cam.chroma;
-		data.tone = Cam16::LstarFromColor4F(c);
-		data.alpha = c.a;
-		color = c;
-	}
-
-	Color4F asColor4F() const { return color; }
-
-	ColorHCT &operator=(const Color4F &color) { *this = ColorHCT(color); return *this; }
-	ColorHCT &operator=(const ColorHCT &color) = default;
-
-	inline operator Color4F () const {
-		return asColor4F();
-	}
-
-	bool operator==(const ColorHCT& right) const = default;
-	bool operator!=(const ColorHCT& right) const = default;
-
-	Values data;
-	Color4F color;
-};
-
-struct TonalPalette {
-	TonalPalette() = default;
-
-	explicit TonalPalette(const Color4F &color)
-	: TonalPalette(Cam16::create(color)) { }
-
-	explicit TonalPalette(const Cam16 &cam)
-	: hue(cam.hue), chroma(cam.chroma) { }
-
-	TonalPalette(Cam16Float hue, Cam16Float chroma)
-	: hue(hue), chroma(chroma) { }
-
-	Color4F get(Cam16Float tone, float alpha = 1.0f) const {
-		return ColorHCT::solveColor4F(hue, chroma, tone, alpha);
-	}
-
-	ColorHCT hct(Cam16Float tone, float alpha = 1.0f) const {
-		return ColorHCT(hue, chroma, tone, alpha);
-	}
-
-	ColorHCT::Values values(Cam16Float tone, float alpha = 1.0f) const {
-		return ColorHCT::Values{hue, chroma, tone, alpha};
-	}
-
-	Cam16Float hue = Cam16Float(0.0);
-	Cam16Float chroma = Cam16Float(0.5);
-};
-
-/**
- * An intermediate concept between the key color for a UI theme, and a full
- * color scheme. 5 tonal palettes are generated, all except one use the same
- * hue as the key color, and all vary in chroma.
- */
-struct CorePalette {
-	CorePalette() = default;
-	CorePalette(const Color4F &, bool isContentColor);
-	CorePalette(const Cam16 &, bool isContentColor);
-	CorePalette(Cam16Float hue, Cam16Float chroma, bool isContentColor);
-
-	TonalPalette primary;
-	TonalPalette secondary;
-	TonalPalette tertiary;
-	TonalPalette neutral;
-	TonalPalette neutralVariant;
-	TonalPalette error;
-};
-
-struct ColorScheme {
-	ColorScheme() = default;
-	ColorScheme(ThemeType, const CorePalette &);
-	ColorScheme(ThemeType, const Color4F &, bool isContent);
-	ColorScheme(ThemeType, const ColorHCT &, bool isContent);
-
-	void set(ThemeType, const CorePalette &);
-	void set(ThemeType, const Color4F &, bool isContent);
-	void set(ThemeType, const ColorHCT &, bool isContent);
-
-	Color4F get(ColorRole name) const {
-		return colors[toInt(name)];
-	}
-
-	Color4F on(ColorRole name) const {
-		return colors[toInt(getColorRoleOn(name, type))];
-	}
-
-	ColorHCT hct(ColorRole name) const;
-
-	// faster then complete color
-	ColorHCT::Values values(ColorRole name) const;
-
-	ThemeType type = ThemeType::LightTheme;
-	std::array<Color4F, toInt(ColorRole::Max)> colors;
-	CorePalette palette;
-};
-
 }
 
-namespace stappler {
-
-template <> inline
-xenolith::material::ColorHCT progress<xenolith::material::ColorHCT>(const xenolith::material::ColorHCT &a, const xenolith::material::ColorHCT &b, float p) {
-	return xenolith::material::ColorHCT::progress(a, b, p);
-}
-
-}
-
-#endif /* MODULES_MATERIAL_STYLE_MATERIALCOLORSCHEME_H_ */
+#endif /* MODULES_MATERIAL_BASE_MATERIALCAM16_H_ */

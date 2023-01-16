@@ -245,6 +245,10 @@ struct VertexMaterialDrawPlan {
 	uint32_t materialIndexes = 0;
 	uint32_t transformIdx = 0;
 
+	uint32_t solidCmds = 0;
+	uint32_t surfaceCmds = 0;
+	uint32_t transparentCmds = 0;
+
 	VertexMaterialDrawPlan(Extent2 surfaceExtent) : surfaceExtent{surfaceExtent} { }
 
 	void emplaceWritePlan(const gl::Material *material, std::unordered_map<gl::MaterialId, MaterialWritePlan> &writePlan,
@@ -511,12 +515,22 @@ struct VertexMaterialDrawPlan {
 	void pushAll(Vector<gl::VertexSpan> &spans, WriteTarget &writeTarget) {
 		pushInitial(writeTarget);
 
+		uint32_t counter = 0;
 		drawWritePlan(spans, writeTarget, solidWritePlan);
+
+		solidCmds = spans.size() - counter;
+		counter = spans.size();
+
 		drawWritePlan(spans, writeTarget, surfaceWritePlan);
+
+		surfaceCmds = spans.size() - counter;
+		counter = spans.size();
 
 		for (auto &it : transparentWritePlan) {
 			drawWritePlan(spans, writeTarget, it.second);
 		}
+
+		transparentCmds = spans.size() - counter;
 	}
 };
 
@@ -612,6 +626,9 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 	_drawStat.zPaths = plan.paths.size();
 	_drawStat.drawCalls = _spans.size();
 	_drawStat.materials = _materialSet->getMaterials().size();
+	_drawStat.solidCmds = plan.solidCmds;
+	_drawStat.surfaceCmds = plan.surfaceCmds;
+	_drawStat.transparentCmds = plan.transparentCmds;
 
 	commands->sendStat(_drawStat);
 
@@ -718,13 +735,13 @@ static void MaterialPass_makePresentPass(MaterialPass_Data &data, renderqueue::Q
 	auto transparentPipeline = builder.addGraphicPipeline(pass, 0, "Transparent", shaderSpecInfo, PipelineMaterialInfo({
 		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
 				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
-		DepthInfo(false, true, gl::CompareOp::Less)
+		DepthInfo(false, true, gl::CompareOp::LessOrEqual)
 	}));
-	auto surfacePipeline = builder.addGraphicPipeline(pass, 0, "Surface", shaderSpecInfo, PipelineMaterialInfo(
+	/*auto surfacePipeline = builder.addGraphicPipeline(pass, 0, "Surface", shaderSpecInfo, PipelineMaterialInfo(
 		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
 				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
 		DepthInfo(false, true, gl::CompareOp::LessOrEqual)
-	));
+	));*/
 
 	// pipeline for debugging - draw lines instead of triangles
 	builder.addGraphicPipeline(pass, 0, "DebugTriangles", shaderSpecInfo, PipelineMaterialInfo(
@@ -777,8 +794,8 @@ static void MaterialPass_makePresentPass(MaterialPass_Data &data, renderqueue::Q
 			Rc<gl::Material>::create(gl::Material::MaterialIdInitial, materialPipeline, cache->getSolidImage(), ColorMode::IntensityChannel),
 			Rc<gl::Material>::create(gl::Material::MaterialIdInitial, transparentPipeline, cache->getEmptyImage(), ColorMode()),
 			Rc<gl::Material>::create(gl::Material::MaterialIdInitial, transparentPipeline, cache->getSolidImage(), ColorMode()),
-			Rc<gl::Material>::create(gl::Material::MaterialIdInitial, surfacePipeline, cache->getEmptyImage(), ColorMode()),
-			Rc<gl::Material>::create(gl::Material::MaterialIdInitial, surfacePipeline, cache->getSolidImage(), ColorMode())
+			//Rc<gl::Material>::create(gl::Material::MaterialIdInitial, surfacePipeline, cache->getEmptyImage(), ColorMode()),
+			//Rc<gl::Material>::create(gl::Material::MaterialIdInitial, surfacePipeline, cache->getSolidImage(), ColorMode())
 		})
 	);
 
@@ -918,109 +935,84 @@ bool MaterialPassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
 }
 
 Vector<VkCommandBuffer> MaterialPassHandle::doPrepareCommands(FrameHandle &handle) {
-	auto table = _device->getTable();
-	auto buf = _pool->allocBuffer(*_device);
+	auto buf = _pool->recordBuffer(*_device, [&] (CommandBuffer &buf) {
+		auto materials = _materialBuffer->getSet().get();
 
-	auto materials = _materialBuffer->getSet().get();
+		Vector<ImageMemoryBarrier> outputImageBarriers;
+		Vector<BufferMemoryBarrier> outputBufferBarriers;
 
-	VkCommandBufferBeginInfo beginInfo { };
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	beginInfo.pInheritanceInfo = nullptr;
+		doFinalizeTransfer(materials, outputImageBarriers, outputBufferBarriers);
 
-	if (table->vkBeginCommandBuffer(buf, &beginInfo) != VK_SUCCESS) {
-		return Vector<VkCommandBuffer>();
-	}
-
-	Vector<VkImageMemoryBarrier> outputImageBarriers;
-	Vector<VkBufferMemoryBarrier> outputBufferBarriers;
-
-	doFinalizeTransfer(materials, buf, outputImageBarriers, outputBufferBarriers);
-
-	if (!outputBufferBarriers.empty() && !outputImageBarriers.empty()) {
-		table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
+		if (!outputBufferBarriers.empty() && !outputImageBarriers.empty()) {
+			buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
 				VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
-			0, nullptr,
-			outputBufferBarriers.size(), outputBufferBarriers.data(),
-			outputImageBarriers.size(), outputImageBarriers.data());
-	}
-
-	if (_lightsBuffer->getLightsCount() && _lightsBuffer->getBuffer()) {
-		auto cIdx = _device->getQueueFamily(QueueOperations::Compute)->index;
-		if (cIdx != _pool->getFamilyIdx()) {
-			VkBufferMemoryBarrier transferBufferBarrier({
-				VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
-				VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
-				cIdx, _pool->getFamilyIdx(),
-				_lightsBuffer->getBuffer()->getBuffer(), 0, VK_WHOLE_SIZE,
-			});
-
-			auto image = (Image *)_arrayImage->getImage()->getImage().get();
-
-			table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-					0, nullptr,
-					1, &transferBufferBarrier,
-					1, image->getPendingBarrier());
-		} else {
-			// no need for buffer barrier, only switch image layout
-
-			auto image = (Image *)_arrayImage->getImage()->getImage().get();
-			VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, VK_REMAINING_ARRAY_LAYERS};
-			VkImageMemoryBarrier transferImageBarrier({
-				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
-				VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-				VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-				VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-				image->getImage(), range
-			});
-			image->setPendingBarrier(transferImageBarrier);
-
-			table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-					0, nullptr,
-					0, nullptr,
-					1, &transferImageBarrier);
+				outputBufferBarriers, outputImageBarriers);
 		}
-	}
 
-	_data->impl.cast<RenderPassImpl>()->perform(*this, buf, [&] {
-		prepareMaterialCommands(materials, buf);
+		if (_lightsBuffer->getLightsCount() && _lightsBuffer->getBuffer()) {
+			auto cIdx = _device->getQueueFamily(QueueOperations::Compute)->index;
+			if (cIdx != _pool->getFamilyIdx()) {
+				BufferMemoryBarrier transferBufferBarrier(_lightsBuffer->getBuffer(),
+					VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
+					QueueFamilyTransfer{cIdx, _pool->getFamilyIdx()}, 0, VK_WHOLE_SIZE);
+
+				auto image = (Image *)_arrayImage->getImage()->getImage().get();
+
+				SpanView<ImageMemoryBarrier> imageBarriers;
+				if (auto b = image->getPendingBarrier()) {
+					imageBarriers = makeSpanView(b, 1);
+				}
+
+				buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+						makeSpanView(&transferBufferBarrier, 1), imageBarriers);
+			} else {
+				// no need for buffer barrier, only switch image layout
+
+				auto image = (Image *)_arrayImage->getImage()->getImage().get();
+				ImageMemoryBarrier transferImageBarrier(image,
+					VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+					VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+				buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+						makeSpanView(&transferImageBarrier, 1));
+			}
+		}
+
+		_data->impl.cast<RenderPassImpl>()->perform(*this, buf, [&] {
+			prepareMaterialCommands(materials, buf);
+		});
+
+		return true;
 	});
 
-	if (table->vkEndCommandBuffer(buf) == VK_SUCCESS) {
-		return Vector<VkCommandBuffer>{buf};
+	if (buf) {
+		return Vector<VkCommandBuffer>{buf->getBuffer()};
 	}
 	return Vector<VkCommandBuffer>();
 }
 
-void MaterialPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, VkCommandBuffer &buf) {
+void MaterialPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, CommandBuffer &buf) {
 	auto &fb = getFramebuffer();
 	auto currentExtent = fb->getExtent();
-	auto table = _device->getTable();
 	auto commands = _vertexBuffer->popCommands();
-
-	VkViewport viewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
-	table->vkCmdSetViewport(buf, 0, 1, &viewport);
-
-	VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
-	table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
+	auto pass = (RenderPassImpl *)_data->impl.get();
 
 	if (_vertexBuffer->empty() || !_vertexBuffer->getIndexes() || !_vertexBuffer->getVertexes()) {
 		return;
 	}
 
-	auto pass = (RenderPassImpl *)_data->impl.get();
+	VkViewport viewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
+	buf.cmdSetViewport(0, makeSpanView(&viewport, 1));
+
+	VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
+	buf.cmdSetScissor(0, makeSpanView(&scissorRect, 1));
 
 	// bind primary descriptors
 	// default texture set comes with other sets
-	table->vkCmdBindDescriptorSets(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, pass->getPipelineLayout(),
-		0, // first set
-		pass->getDescriptorSets().size(), pass->getDescriptorSets().data(), // sets
-		0, nullptr // dynamic offsets
-	);
+	buf.cmdBindDescriptorSets(pass);
 
 	// bind global indexes
-	auto idx = _vertexBuffer->getIndexes()->getBuffer();
-	table->vkCmdBindIndexBuffer(buf, idx, 0, VK_INDEX_TYPE_UINT32);
+	buf.cmdBindIndexBuffer(_vertexBuffer->getIndexes(), 0, VK_INDEX_TYPE_UINT32);
 
 	uint32_t boundTextureSetIndex = maxOf<uint32_t>();
 	gl::GraphicPipeline *boundPipeline = nullptr;
@@ -1043,21 +1035,21 @@ void MaterialPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, Vk
 				if (dynamicState.scissor != state->scissor) {
 					VkRect2D scissorRect{ { int32_t(state->scissor.x), int32_t(state->scissor.y) },
 						{ state->scissor.width, state->scissor.height } };
-					table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
+					buf.cmdSetScissor(0, makeSpanView(&scissorRect, 1));
 					dynamicState.scissor = state->scissor;
 				}
 			} else {
 				dynamicState.enabled |= renderqueue::DynamicState::Scissor;
 				VkRect2D scissorRect{ { int32_t(state->scissor.x), int32_t(state->scissor.y) },
 					{ state->scissor.width, state->scissor.height } };
-				table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
+				buf.cmdSetScissor(0, makeSpanView(&scissorRect, 1));
 				dynamicState.scissor = state->scissor;
 			}
 		} else {
 			if (dynamicState.isScissorEnabled()) {
 				dynamicState.enabled &= ~(renderqueue::DynamicState::Scissor);
 				VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
-				table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
+				buf.cmdSetScissor(0, makeSpanView(&scissorRect, 1));
 			}
 		}
 
@@ -1075,7 +1067,7 @@ void MaterialPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, Vk
 		auto textureSetIndex =  material->getLayoutIndex();
 
 		if (pipeline != boundPipeline) {
-			table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, ((GraphicPipeline *)pipeline.get())->getPipeline());
+			buf.cmdBindPipeline((GraphicPipeline *)pipeline.get());
 			boundPipeline = pipeline;
 		}
 
@@ -1084,12 +1076,9 @@ void MaterialPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, Vk
 			if (l && l->set) {
 				auto s = (TextureSet *)l->set.get();
 				auto set = s->getSet();
+
 				// rebind texture set at last index
-				table->vkCmdBindDescriptorSets(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, pass->getPipelineLayout(),
-					1,
-					1, &set, // sets
-					0, nullptr // dynamic offsets
-				);
+				buf.cmdBindDescriptorSets((RenderPassImpl *)_data->impl.get(), makeSpanView(&set, 1), 1);
 				boundTextureSetIndex = textureSetIndex;
 			} else {
 				stappler::log::vtext("MaterialRenderPassHandle", "Invalid textureSetlayout: ", textureSetIndex);
@@ -1099,10 +1088,10 @@ void MaterialPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, Vk
 
 		enableState(materialVertexSpan.state);
 
-		table->vkCmdPushConstants(buf, pass->getPipelineLayout(),
-				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(uint32_t), &materialOrderIdx);
+		buf.cmdPushConstants(pass->getPipelineLayout(),
+				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, BytesView((const uint8_t *)&materialOrderIdx, sizeof(uint32_t)));
 
-		table->vkCmdDrawIndexed(buf,
+		buf.cmdDrawIndexed(
 			materialVertexSpan.indexCount, // indexCount
 			materialVertexSpan.instanceCount, // instanceCount
 			materialVertexSpan.firstIndex, // firstIndex
@@ -1114,25 +1103,24 @@ void MaterialPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, Vk
 	if (_lightsBuffer->getLightsCount() && _lightsBuffer->getBuffer()) {
 		auto pipeline = (GraphicPipeline *)_data->subpasses[0].graphicPipelines.get(StringView(MaterialPass::ShadowPipeline))->pipeline.get();
 
-		table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->getPipeline());
+		buf.cmdBindPipeline(pipeline);
 	} else {
 		auto pipeline = (GraphicPipeline *)_data->subpasses[0].graphicPipelines.get(StringView(MaterialPass::ShadowPipelineNull))->pipeline.get();
 
-		table->vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->getPipeline());
+		buf.cmdBindPipeline(pipeline);
 	}
 
 	viewport = VkViewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
-	table->vkCmdSetViewport(buf, 0, 1, &viewport);
+	buf.cmdSetViewport(0, makeSpanView(&viewport, 1));
 
 	scissorRect = VkRect2D{ { 0, 0}, { currentExtent.width, currentExtent.height } };
-	table->vkCmdSetScissor(buf, 0, 1, &scissorRect);
+	buf.cmdSetScissor(0, makeSpanView(&scissorRect, 1));
 
 	uint32_t samplerIndex = 1; // linear filtering
-	table->vkCmdPushConstants(buf, pass->getPipelineLayout(),
-			VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(uint32_t), &samplerIndex);
+	buf.cmdPushConstants(pass->getPipelineLayout(),
+			VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, BytesView((const uint8_t *)&samplerIndex, sizeof(uint32_t)));
 
-
-	table->vkCmdDrawIndexed(buf,
+	buf.cmdDrawIndexed(
 		6, // indexCount
 		1, // instanceCount
 		0, // firstIndex
@@ -1141,8 +1129,8 @@ void MaterialPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, Vk
 	);
 }
 
-void MaterialPassHandle::doFinalizeTransfer(gl::MaterialSet * materials, VkCommandBuffer buf,
-		Vector<VkImageMemoryBarrier> &outputImageBarriers, Vector<VkBufferMemoryBarrier> &outputBufferBarriers) {
+void MaterialPassHandle::doFinalizeTransfer(gl::MaterialSet * materials,
+		Vector<ImageMemoryBarrier> &outputImageBarriers, Vector<BufferMemoryBarrier> &outputBufferBarriers) {
 	if (!materials) {
 		return;
 	}

@@ -21,77 +21,26 @@
  THE SOFTWARE.
  **/
 
-#include "MaterialNode.h"
-#include "XLAction.h"
+#include "MaterialSurface.h"
+#include "MaterialEasing.h"
+#include "MaterialSurfaceInterior.h"
 #include "XLRenderFrameInfo.h"
 
 namespace stappler::xenolith::material {
 
-uint64_t MaterialNodeInterior::ComponentFrameTag = Component::GetNextComponentId();
-
-bool MaterialNodeInterior::init() {
-	if (!Component::init()) {
-		return false;
-	}
-
-	_frameTag = ComponentFrameTag;
-	return true;
-}
-
-bool MaterialNodeInterior::init(StyleData &&style) {
-	if (!Component::init()) {
-		return false;
-	}
-
-	_frameTag = ComponentFrameTag;
-	_interiorStyle = move(style);
-	return true;
-}
-
-void MaterialNodeInterior::onAdded(Node *owner) {
-	Component::onAdded(owner);
-
-	_ownerIsMaterialNode = (dynamic_cast<MaterialNode *>(_owner) != nullptr);
-}
-
-void MaterialNodeInterior::visit(RenderFrameInfo &info, NodeFlags parentFlags) {
-	Component::visit(info, parentFlags);
-
-	if (!_ownerIsMaterialNode) {
-		auto style = info.getComponent<StyleContainer>(StyleContainer::ComponentFrameTag);
-		if (!style) {
-			return;
-		}
-
-		_interiorStyle.apply(_owner->getContentSize(), style);
-	}
-}
-
-bool MaterialNode::init(StyleData &&style) {
+bool Surface::init(const SurfaceStyle &style) {
 	if (!VectorSprite::init(Size2(8.0f, 8.0f))) {
 		return false;
 	}
 
-	_interior = addComponent(Rc<MaterialNodeInterior>::create());
+	_interior = addComponent(Rc<SurfaceInterior>::create());
 
-	_styleOrigin = _styleTarget = move(style);
+	_styleOrigin = _styleTarget = style;
 	_styleDirty = true;
 	return true;
 }
 
-bool MaterialNode::init(const StyleData &style) {
-	if (!VectorSprite::init(Size2(8.0f, 8.0f))) {
-		return false;
-	}
-
-	_interior = addComponent(Rc<MaterialNodeInterior>::create());
-
-	_styleOrigin = _styleTarget = move(style);
-	_styleDirty = true;
-	return true;
-}
-
-void MaterialNode::setStyle(StyleData &&style) {
+void Surface::setStyle(const SurfaceStyle &style) {
 	if (_inTransition) {
 		_styleDirty = true;
 		stopAllActionsByTag(TransitionActionTag);
@@ -105,7 +54,12 @@ void MaterialNode::setStyle(StyleData &&style) {
 	}
 }
 
-void MaterialNode::setStyle(StyleData &&style, float duration) {
+void Surface::setStyle(const SurfaceStyle &style, float duration) {
+	if (duration <= 0.0f || !_running) {
+		setStyle(style);
+		return;
+	}
+
 	if (_inTransition) {
 		_styleDirty = true;
 		stopAllActionsByTag(TransitionActionTag);
@@ -130,7 +84,7 @@ void MaterialNode::setStyle(StyleData &&style, float duration) {
 	}
 }
 
-bool MaterialNode::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
+bool Surface::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 	if (!_visible) {
 		return false;
 	}
@@ -141,31 +95,32 @@ bool MaterialNode::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 	}
 
 	if (style) {
-		if (_styleTarget.apply(_contentSize, style)) {
+		if (_styleTarget.apply(_styleDataTarget, _contentSize, style)) {
 			_styleDirty = true;
 		}
-		if (_styleOrigin.apply(_contentSize, style)) {
+		if (_styleOrigin.apply(_styleDataOrigin, _contentSize, style)) {
 			_styleDirty = true;
 		}
 	}
 
 	if (_styleDirty || _contentSizeDirty) {
 		if (_styleProgress > 0.0f) {
-			_styleCurrent = StyleData::progress(_styleOrigin, _styleTarget, _styleProgress);
+			_styleDataCurrent = progress(_styleDataOrigin, _styleDataTarget, _styleProgress);
 		} else {
-			_styleCurrent = _styleOrigin;
+			_styleDataCurrent = _styleDataOrigin;
 		}
-		applyStyle(_styleCurrent);
-		_interior->setStyle(StyleData(_styleCurrent));
+		applyStyle(_styleDataCurrent);
+		_interior->setStyle(SurfaceStyleData(_styleDataCurrent));
 	}
 
 	return VectorSprite::visitDraw(frame, parentFlags);
 }
 
-void MaterialNode::applyStyle(const StyleData &style) {
+void Surface::applyStyle(const SurfaceStyleData &style) {
 	auto radius = std::min(std::min(_contentSize.width / 2.0f, _contentSize.height / 2.0f), style.cornerRadius);
 
-	if (radius != _realCornerRadius || _contentSize != _image->getImageSize()) {
+	if (radius != _realCornerRadius || _contentSize != _image->getImageSize()
+			|| _outlineValue != style.outlineValue || _fillValue != style.colorElevation.a) {
 		auto img = Rc<VectorImage>::create(_contentSize);
 		auto path = img->addPath();
 		if (radius > 0.0f) {
@@ -179,10 +134,7 @@ void MaterialNode::applyStyle(const StyleData &style) {
 					.arcTo(radius, radius, 0.0f, false, true, _contentSize.width - radius, _contentSize.height)
 					.lineTo(radius, _contentSize.height)
 					.arcTo(radius, radius, 0.0f, false, true, 0.0f, _contentSize.height - radius)
-					.closePath()
-					.setAntialiased(false)
-					.setFillColor(Color::White)
-					.setStyle(vg::DrawStyle::Fill);
+					.closePath();
 				break;
 			case ShapeFamily::CutCorners:
 				path->moveTo(0.0f, radius)
@@ -193,10 +145,7 @@ void MaterialNode::applyStyle(const StyleData &style) {
 					.lineTo(_contentSize.width - radius, _contentSize.height)
 					.lineTo(radius, _contentSize.height)
 					.lineTo(0.0f, _contentSize.height - radius)
-					.closePath()
-					.setAntialiased(false)
-					.setFillColor(Color::White)
-					.setStyle(vg::DrawStyle::Fill);
+					.closePath();
 				break;
 			}
 		} else {
@@ -204,18 +153,44 @@ void MaterialNode::applyStyle(const StyleData &style) {
 				.lineTo(_contentSize.width, 0.0f)
 				.lineTo(_contentSize.width, _contentSize.height)
 				.lineTo(0.0f, _contentSize.height)
-				.closePath()
-				.setAntialiased(false)
-				.setFillColor(Color::White)
-				.setStyle(vg::DrawStyle::Fill);
+				.closePath();
 		}
+
+		path->setAntialiased(false)
+			.setFillColor(Color::White)
+			.setFillOpacity(uint8_t(style.colorElevation.a * 255.0f))
+			.setStyle(vg::DrawStyle::None);
+
+		if (style.colorElevation.a > 0.0f) {
+			path->setStyle(path->getStyle() | vg::DrawStyle::Fill);
+		}
+
+		if (style.outlineValue > 0.0f) {
+			path->setStrokeWidth(1.0f)
+				.setStyle(path->getStyle() | vg::DrawStyle::Stroke)
+				.setStrokeColor(Color::White)
+				.setStrokeOpacity(uint8_t(style.outlineValue * 255.0f))
+				.setAntialiased(true);
+		}
+
 		_realCornerRadius = radius;
+		_outlineValue = style.outlineValue;
+		_fillValue = style.colorElevation.a;
 
 		setImage(move(img));
 	}
 
-	setColor(style.colorElevation);
+	setColor(style.colorElevation, false);
 	setShadowIndex(style.shadowValue);
+	_styleDirty = false;
+}
+
+RenderingLevel Surface::getRealRenderingLevel() const {
+	auto l = VectorSprite::getRealRenderingLevel();
+	if (l == RenderingLevel::Transparent) {
+		l = RenderingLevel::Surface;
+	}
+	return l;
 }
 
 }

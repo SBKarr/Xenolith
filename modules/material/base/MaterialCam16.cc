@@ -1,5 +1,4 @@
 /**
- Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
  Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,7 +20,8 @@
  THE SOFTWARE.
  **/
 
-#include "MaterialColorScheme.h"
+#include "MaterialCam16.h"
+#include "MaterialColorHCT.h"
 
 namespace stappler::xenolith::material {
 
@@ -506,11 +506,37 @@ static Color4F Color4FFromLstar(const Cam16Float lstar) {
 	return Color4F(component, component, component, 1.0f);
 }
 
+static float logn(float x, float k) {
+   float answer;
+   answer = std::log10(x) / std::log10(k);
+   return answer;
+}
+
+static void fixTone(Cam16Float &h, Cam16Float &c, Cam16Float &t, Color4F &color) {
+	const Cam16Float hueOffset = 109.0f;
+	const Cam16Float hueRange = 30.0f;
+	const Cam16Float toneOffset = 97.0f;
+
+	if (h >= hueOffset && h <= hueOffset + hueRange && t > toneOffset) {
+		const float tone = (t - toneOffset) / (100.0f - toneOffset);
+		const float val = (h - hueOffset) / hueRange * 5.0;
+		const float log = logn(val, 2.0f);
+		const float p = std::pow(2.0f, - (log * log));
+		const float q = (p * 0.95f * std::sqrt(tone));
+
+		color.r = std::pow(color.r, 1.0f - q);
+		color.g = std::pow(color.g, 1.0f - q);
+		color.b = std::pow(color.b, 1.0f - q);
+	}
+}
+
 static Color4F SolveToColor4F(Cam16Float hue_degrees, Cam16Float chroma, Cam16Float lstar) {
 	if (chroma < 0.0001 || lstar < 0.0001 || lstar > 99.9999) {
 		return Color4FFromLstar(lstar);
 	}
+
 	hue_degrees = Cam16::sanitizeDegrees(hue_degrees);
+	//fixTone(hue_degrees, chroma, lstar);
 	Cam16Float hue_radians = hue_degrees / 180 * std::numbers::pi;
 	Cam16Float y = ViewingConditions::YFromLstar(lstar);
 	Color4F exact_answer = FindResultByJ(hue_radians, chroma, y);
@@ -518,7 +544,9 @@ static Color4F SolveToColor4F(Cam16Float hue_degrees, Cam16Float chroma, Cam16Fl
 		return exact_answer;
 	}
 	Cam16Vec3 linrgb = BisectToLimit(y, hue_radians);
-	return Color4FFromLinrgb(linrgb);
+	auto ret = Color4FFromLinrgb(linrgb);
+	fixTone(hue_degrees, chroma, lstar, ret);
+	return ret;
 }
 
 ColorHCT ColorHCT::progress(const ColorHCT &a, const ColorHCT &b, float p) {
@@ -542,254 +570,9 @@ Color4F ColorHCT::solveColor4F(Cam16Float h, Cam16Float c, Cam16Float t, float a
 	return tmp;
 }
 
-CorePalette::CorePalette(const Color4F &color, bool isContentColor)
-: CorePalette(Cam16::create(color), isContentColor) { }
-
-CorePalette::CorePalette(const Cam16 &cam, bool isContentColor)
-: CorePalette(cam.hue, cam.chroma, isContentColor) { }
-
-CorePalette::CorePalette(Cam16Float hue, Cam16Float chroma, bool is_content)
-: primary(hue, is_content ? chroma : std::fmax(chroma, Cam16Float(48)))
-, secondary(hue, is_content ? chroma / 3 : 16)
-, tertiary(hue + 60, is_content ? chroma / 2 : 24)
-, neutral(hue, is_content ? std::fmin(chroma / Cam16Float(12), Cam16Float(4)) : 4)
-, neutralVariant(hue, is_content ? std::fmin(chroma / Cam16Float(6), Cam16Float(8)) : 8)
-, error(25, 84) { }
-
-ColorScheme::ColorScheme(ThemeType type, const CorePalette &palette) : type(type), palette(palette) {
-	set(type, palette);
-}
-
-ColorScheme::ColorScheme(ThemeType type, const Color4F &color, bool isContent)
-: ColorScheme(type, CorePalette(color, isContent)) { }
-
-ColorScheme::ColorScheme(ThemeType type, const ColorHCT &color, bool isContent)
-: ColorScheme(type, CorePalette(color.data.hue, color.data.chroma, isContent)) { }
-
-void ColorScheme::set(ThemeType t, const CorePalette &palette) {
-	type = t;
-	switch (type) {
-	case ThemeType::LightTheme:
-		colors[toInt(ColorRole::Primary)] = Color4F(palette.primary.get(40));
-		colors[toInt(ColorRole::OnPrimary)] = Color4F(palette.primary.get(100));
-		colors[toInt(ColorRole::PrimaryContainer)] = Color4F(palette.primary.get(90));
-		colors[toInt(ColorRole::OnPrimaryContainer)] = Color4F(palette.primary.get(10));
-		colors[toInt(ColorRole::Secondary)] = Color4F(palette.secondary.get(40));
-		colors[toInt(ColorRole::OnSecondary)] = Color4F(palette.secondary.get(100));
-		colors[toInt(ColorRole::SecondaryContainer)] = Color4F(palette.secondary.get(90));
-		colors[toInt(ColorRole::OnSecondaryContainer)] = Color4F(palette.secondary.get(10));
-		colors[toInt(ColorRole::Tertiary)] = Color4F(palette.tertiary.get(40));
-		colors[toInt(ColorRole::OnTertiary)] = Color4F(palette.tertiary.get(100));
-		colors[toInt(ColorRole::TertiaryContainer)] = Color4F(palette.tertiary.get(90));
-		colors[toInt(ColorRole::OnTertiaryContainer)] = Color4F(palette.tertiary.get(10));
-		colors[toInt(ColorRole::Error)] = Color4F(palette.error.get(40));
-		colors[toInt(ColorRole::OnError)] = Color4F(palette.error.get(100));
-		colors[toInt(ColorRole::ErrorContainer)] = Color4F(palette.error.get(90));
-		colors[toInt(ColorRole::OnErrorContainer)] = Color4F(palette.error.get(10));
-		colors[toInt(ColorRole::Background)] = Color4F(palette.neutral.get(99));
-		colors[toInt(ColorRole::OnBackground)] = Color4F(palette.neutral.get(10));
-		colors[toInt(ColorRole::Surface)] = Color4F(palette.neutral.get(99));
-		colors[toInt(ColorRole::OnSurface)] = Color4F(palette.neutral.get(10));
-		colors[toInt(ColorRole::SurfaceVariant)] = Color4F(palette.neutralVariant.get(90));
-		colors[toInt(ColorRole::OnSurfaceVariant)] = Color4F(palette.neutralVariant.get(30));
-		colors[toInt(ColorRole::Outline)] = Color4F(palette.neutralVariant.get(50));
-		colors[toInt(ColorRole::OutlineVariant)] = Color4F(palette.neutralVariant.get(80));
-		colors[toInt(ColorRole::Shadow)] = Color4F(palette.neutral.get(0));
-		colors[toInt(ColorRole::Scrim)] = Color4F(palette.neutral.get(0));
-		colors[toInt(ColorRole::InverseSurface)] = Color4F(palette.neutral.get(20));
-		colors[toInt(ColorRole::InverseOnSurface)] = Color4F(palette.neutral.get(95));
-		colors[toInt(ColorRole::InversePrimary)] = Color4F(palette.primary.get(80));
-		break;
-	case ThemeType::DarkTheme:
-		colors[toInt(ColorRole::Primary)] = Color4F(palette.primary.get(80));
-		colors[toInt(ColorRole::OnPrimary)] = Color4F(palette.primary.get(20));
-		colors[toInt(ColorRole::PrimaryContainer)] = Color4F(palette.primary.get(30));
-		colors[toInt(ColorRole::OnPrimaryContainer)] = Color4F(palette.primary.get(90));
-		colors[toInt(ColorRole::Secondary)] = Color4F(palette.secondary.get(80));
-		colors[toInt(ColorRole::OnSecondary)] = Color4F(palette.secondary.get(20));
-		colors[toInt(ColorRole::SecondaryContainer)] = Color4F(palette.secondary.get(30));
-		colors[toInt(ColorRole::OnSecondaryContainer)] = Color4F(palette.secondary.get(90));
-		colors[toInt(ColorRole::Tertiary)] = Color4F(palette.tertiary.get(80));
-		colors[toInt(ColorRole::OnTertiary)] = Color4F(palette.tertiary.get(20));
-		colors[toInt(ColorRole::TertiaryContainer)] = Color4F(palette.tertiary.get(30));
-		colors[toInt(ColorRole::OnTertiaryContainer)] = Color4F(palette.tertiary.get(90));
-		colors[toInt(ColorRole::Error)] = Color4F(palette.error.get(80));
-		colors[toInt(ColorRole::OnError)] = Color4F(palette.error.get(20));
-		colors[toInt(ColorRole::ErrorContainer)] = Color4F(palette.error.get(30));
-		colors[toInt(ColorRole::OnErrorContainer)] = Color4F(palette.error.get(80));
-		colors[toInt(ColorRole::Background)] = Color4F(palette.neutral.get(10));
-		colors[toInt(ColorRole::OnBackground)] = Color4F(palette.neutral.get(90));
-		colors[toInt(ColorRole::Surface)] = Color4F(palette.neutral.get(10));
-		colors[toInt(ColorRole::OnSurface)] = Color4F(palette.neutral.get(90));
-		colors[toInt(ColorRole::SurfaceVariant)] = Color4F(palette.neutralVariant.get(30));
-		colors[toInt(ColorRole::OnSurfaceVariant)] = Color4F(palette.neutralVariant.get(80));
-		colors[toInt(ColorRole::Outline)] = Color4F(palette.neutralVariant.get(60));
-		colors[toInt(ColorRole::OutlineVariant)] = Color4F(palette.neutralVariant.get(30));
-		colors[toInt(ColorRole::Shadow)] = Color4F(palette.neutral.get(0));
-		colors[toInt(ColorRole::Scrim)] = Color4F(palette.neutral.get(0));
-		colors[toInt(ColorRole::InverseSurface)] = Color4F(palette.neutral.get(90));
-		colors[toInt(ColorRole::InverseOnSurface)] = Color4F(palette.neutral.get(20));
-		colors[toInt(ColorRole::InversePrimary)] = Color4F(palette.primary.get(40));
-		break;
-	}
-
-	this->palette = palette;
-}
-
-void ColorScheme::set(ThemeType type, const Color4F &color, bool isContent) {
-	set(type, CorePalette(color, isContent));
-}
-
-void ColorScheme::set(ThemeType type, const ColorHCT &color, bool isContent) {
-	set(type, CorePalette(color.data.hue, color.data.chroma, isContent));
-}
-
-ColorHCT ColorScheme::hct(ColorRole name) const {
-	switch (type) {
-	case ThemeType::LightTheme:
-		switch (name) {
-		case ColorRole::Primary: return palette.primary.hct(40); break;
-		case ColorRole::OnPrimary: return palette.primary.hct(100); break;
-		case ColorRole::PrimaryContainer: return palette.primary.hct(90); break;
-		case ColorRole::OnPrimaryContainer: return palette.primary.hct(10); break;
-		case ColorRole::Secondary: return palette.secondary.hct(40); break;
-		case ColorRole::OnSecondary: return palette.secondary.hct(100); break;
-		case ColorRole::SecondaryContainer: return palette.secondary.hct(90); break;
-		case ColorRole::OnSecondaryContainer: return palette.secondary.hct(10); break;
-		case ColorRole::Tertiary: return palette.tertiary.hct(40); break;
-		case ColorRole::OnTertiary: return palette.tertiary.hct(100); break;
-		case ColorRole::TertiaryContainer: return palette.tertiary.hct(90); break;
-		case ColorRole::OnTertiaryContainer: return palette.tertiary.hct(10); break;
-		case ColorRole::Error: return palette.error.hct(40); break;
-		case ColorRole::OnError: return palette.error.hct(100); break;
-		case ColorRole::ErrorContainer: return palette.error.hct(90); break;
-		case ColorRole::OnErrorContainer: return palette.error.hct(10); break;
-		case ColorRole::Background: return palette.neutral.hct(99); break;
-		case ColorRole::OnBackground: return palette.neutral.hct(10); break;
-		case ColorRole::Surface: return palette.neutral.hct(99); break;
-		case ColorRole::OnSurface: return palette.neutral.hct(10); break;
-		case ColorRole::SurfaceVariant: return palette.neutralVariant.hct(90); break;
-		case ColorRole::OnSurfaceVariant: return palette.neutralVariant.hct(30); break;
-		case ColorRole::Outline: return palette.neutralVariant.hct(50); break;
-		case ColorRole::OutlineVariant: return palette.neutralVariant.hct(80); break;
-		case ColorRole::Shadow: return palette.neutral.hct(0); break;
-		case ColorRole::Scrim: return palette.neutral.hct(0); break;
-		case ColorRole::InverseSurface: return palette.neutral.hct(20); break;
-		case ColorRole::InverseOnSurface: return palette.neutral.hct(95); break;
-		case ColorRole::InversePrimary: return palette.primary.hct(80); break;
-		case ColorRole::Max: break;
-		}
-		break;
-	case ThemeType::DarkTheme:
-		switch (name) {
-		case ColorRole::Primary: return palette.primary.hct(80); break;
-		case ColorRole::OnPrimary: return palette.primary.hct(20); break;
-		case ColorRole::PrimaryContainer: return palette.primary.hct(30); break;
-		case ColorRole::OnPrimaryContainer: return palette.primary.hct(90); break;
-		case ColorRole::Secondary: return palette.secondary.hct(80); break;
-		case ColorRole::OnSecondary: return palette.secondary.hct(20); break;
-		case ColorRole::SecondaryContainer: return palette.secondary.hct(30); break;
-		case ColorRole::OnSecondaryContainer: return palette.secondary.hct(90); break;
-		case ColorRole::Tertiary: return palette.tertiary.hct(80); break;
-		case ColorRole::OnTertiary: return palette.tertiary.hct(20); break;
-		case ColorRole::TertiaryContainer: return palette.tertiary.hct(30); break;
-		case ColorRole::OnTertiaryContainer: return palette.tertiary.hct(90); break;
-		case ColorRole::Error: return palette.error.hct(80); break;
-		case ColorRole::OnError: return palette.error.hct(20); break;
-		case ColorRole::ErrorContainer: return palette.error.hct(30); break;
-		case ColorRole::OnErrorContainer: return palette.error.hct(80); break;
-		case ColorRole::Background: return palette.neutral.hct(10); break;
-		case ColorRole::OnBackground: return palette.neutral.hct(90); break;
-		case ColorRole::Surface: return palette.neutral.hct(10); break;
-		case ColorRole::OnSurface: return palette.neutral.hct(90); break;
-		case ColorRole::SurfaceVariant: return palette.neutralVariant.hct(30); break;
-		case ColorRole::OnSurfaceVariant: return palette.neutralVariant.hct(80); break;
-		case ColorRole::Outline: return palette.neutralVariant.hct(60); break;
-		case ColorRole::OutlineVariant: return palette.neutralVariant.hct(30); break;
-		case ColorRole::Shadow: return palette.neutral.hct(0); break;
-		case ColorRole::Scrim: return palette.neutral.hct(0); break;
-		case ColorRole::InverseSurface: return palette.neutral.hct(90); break;
-		case ColorRole::InverseOnSurface: return palette.neutral.hct(20); break;
-		case ColorRole::InversePrimary: return palette.primary.hct(40); break;
-		case ColorRole::Max: break;
-		}
-		break;
-	}
-	return ColorHCT();
-}
-
-ColorHCT::Values ColorScheme::values(ColorRole name) const {
-	switch (type) {
-	case ThemeType::LightTheme:
-		switch (name) {
-		case ColorRole::Primary: return palette.primary.values(40); break;
-		case ColorRole::OnPrimary: return palette.primary.values(100); break;
-		case ColorRole::PrimaryContainer: return palette.primary.values(90); break;
-		case ColorRole::OnPrimaryContainer: return palette.primary.values(10); break;
-		case ColorRole::Secondary: return palette.secondary.values(40); break;
-		case ColorRole::OnSecondary: return palette.secondary.values(100); break;
-		case ColorRole::SecondaryContainer: return palette.secondary.values(90); break;
-		case ColorRole::OnSecondaryContainer: return palette.secondary.values(10); break;
-		case ColorRole::Tertiary: return palette.tertiary.values(40); break;
-		case ColorRole::OnTertiary: return palette.tertiary.values(100); break;
-		case ColorRole::TertiaryContainer: return palette.tertiary.values(90); break;
-		case ColorRole::OnTertiaryContainer: return palette.tertiary.values(10); break;
-		case ColorRole::Error: return palette.error.values(40); break;
-		case ColorRole::OnError: return palette.error.values(100); break;
-		case ColorRole::ErrorContainer: return palette.error.values(90); break;
-		case ColorRole::OnErrorContainer: return palette.error.values(10); break;
-		case ColorRole::Background: return palette.neutral.values(99); break;
-		case ColorRole::OnBackground: return palette.neutral.values(10); break;
-		case ColorRole::Surface: return palette.neutral.values(99); break;
-		case ColorRole::OnSurface: return palette.neutral.values(10); break;
-		case ColorRole::SurfaceVariant: return palette.neutralVariant.values(90); break;
-		case ColorRole::OnSurfaceVariant: return palette.neutralVariant.values(30); break;
-		case ColorRole::Outline: return palette.neutralVariant.values(50); break;
-		case ColorRole::OutlineVariant: return palette.neutralVariant.values(80); break;
-		case ColorRole::Shadow: return palette.neutral.values(0); break;
-		case ColorRole::Scrim: return palette.neutral.values(0); break;
-		case ColorRole::InverseSurface: return palette.neutral.values(20); break;
-		case ColorRole::InverseOnSurface: return palette.neutral.values(95); break;
-		case ColorRole::InversePrimary: return palette.primary.values(80); break;
-		case ColorRole::Max: break;
-		}
-		break;
-	case ThemeType::DarkTheme:
-		switch (name) {
-		case ColorRole::Primary: return palette.primary.values(80); break;
-		case ColorRole::OnPrimary: return palette.primary.values(20); break;
-		case ColorRole::PrimaryContainer: return palette.primary.values(30); break;
-		case ColorRole::OnPrimaryContainer: return palette.primary.values(90); break;
-		case ColorRole::Secondary: return palette.secondary.values(80); break;
-		case ColorRole::OnSecondary: return palette.secondary.values(20); break;
-		case ColorRole::SecondaryContainer: return palette.secondary.values(30); break;
-		case ColorRole::OnSecondaryContainer: return palette.secondary.values(90); break;
-		case ColorRole::Tertiary: return palette.tertiary.values(80); break;
-		case ColorRole::OnTertiary: return palette.tertiary.values(20); break;
-		case ColorRole::TertiaryContainer: return palette.tertiary.values(30); break;
-		case ColorRole::OnTertiaryContainer: return palette.tertiary.values(90); break;
-		case ColorRole::Error: return palette.error.values(80); break;
-		case ColorRole::OnError: return palette.error.values(20); break;
-		case ColorRole::ErrorContainer: return palette.error.values(30); break;
-		case ColorRole::OnErrorContainer: return palette.error.values(80); break;
-		case ColorRole::Background: return palette.neutral.values(10); break;
-		case ColorRole::OnBackground: return palette.neutral.values(90); break;
-		case ColorRole::Surface: return palette.neutral.values(10); break;
-		case ColorRole::OnSurface: return palette.neutral.values(90); break;
-		case ColorRole::SurfaceVariant: return palette.neutralVariant.values(30); break;
-		case ColorRole::OnSurfaceVariant: return palette.neutralVariant.values(80); break;
-		case ColorRole::Outline: return palette.neutralVariant.values(60); break;
-		case ColorRole::OutlineVariant: return palette.neutralVariant.values(30); break;
-		case ColorRole::Shadow: return palette.neutral.values(0); break;
-		case ColorRole::Scrim: return palette.neutral.values(0); break;
-		case ColorRole::InverseSurface: return palette.neutral.values(90); break;
-		case ColorRole::InverseOnSurface: return palette.neutral.values(20); break;
-		case ColorRole::InversePrimary: return palette.primary.values(40); break;
-		case ColorRole::Max: break;
-		}
-		break;
-	}
-	return ColorHCT::Values{0.0f, 50.0f, 0.0f, 1.0f};
+std::ostream & operator<<(std::ostream & stream, const ColorHCT & obj) {
+	stream << "ColorHCT(h:" << obj.data.hue << " c:" << obj.data.chroma << " t:" << obj.data.tone << " a:" << obj.data.alpha << ");";
+	return stream;
 }
 
 }

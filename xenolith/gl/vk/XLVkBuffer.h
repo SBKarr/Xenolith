@@ -24,10 +24,11 @@
 #define XENOLITH_GL_VK_XLVKBUFFER_H_
 
 #include "XLVkAllocator.h"
+#include "XLVkObject.h"
 
 namespace stappler::xenolith::vk {
 
-class DeviceBuffer : public Ref {
+class DeviceBuffer : public Buffer {
 public:
 	struct MappedRegion {
 		uint8_t *ptr;
@@ -55,19 +56,12 @@ public:
 	uint64_t reserveBlock(uint64_t blockSize, uint64_t alignment);
 	uint64_t getReservedSize() const { return _targetOffset.load(); }
 
-	void setPendingBarrier(const VkBufferMemoryBarrier &);
-	const VkBufferMemoryBarrier *getPendingBarrier() const;
-	void dropPendingBarrier();
-
 protected:
 	std::atomic<uint64_t> _targetOffset = 0;
 	AllocationUsage _usage = AllocationUsage::DeviceLocal;
-	gl::BufferInfo _info;
 	Allocator::MemBlock _memory;
 	DeviceMemoryPool *_pool = nullptr;
-	VkBuffer _buffer;
 	bool _needInvalidate = false;
-	std::optional<VkBufferMemoryBarrier> _barrier;
 };
 
 }

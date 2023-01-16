@@ -23,7 +23,11 @@
 #include "XLVkDeviceQueue.h"
 #include "XLVkDevice.h"
 #include "XLVkSync.h"
+#include "XLVkObject.h"
 #include "XLRenderQueueImageStorage.h"
+#include "XLVkRenderPassImpl.h"
+#include "XLVkFramebuffer.h"
+#include "XLVkPipeline.h"
 
 namespace stappler::xenolith::vk {
 
@@ -132,6 +136,10 @@ bool DeviceQueue::submit(const FrameSync &sync, Fence &fence, CommandPool &comma
 	return false;
 }
 
+bool DeviceQueue::submit(Fence &fence, VkCommandBuffer buffer) {
+	return submit(fence, makeSpanView(&buffer, 1));
+}
+
 bool DeviceQueue::submit(Fence &fence, SpanView<VkCommandBuffer> buffers) {
 	VkSubmitInfo submitInfo{};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -198,6 +206,288 @@ void DeviceQueue::reset() {
 	_frameIdx = 0;
 }
 
+ImageMemoryBarrier::ImageMemoryBarrier(Image *image, VkAccessFlags src, VkAccessFlags dst,
+		VkImageLayout old, VkImageLayout _new)
+: srcAccessMask(src), dstAccessMask(dst), oldLayout(old), newLayout(_new)
+, image(image), subresourceRange(VkImageSubresourceRange{
+	image->getAspectMask(), 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS
+}) { }
+
+ImageMemoryBarrier::ImageMemoryBarrier(Image *image, VkAccessFlags src, VkAccessFlags dst,
+		VkImageLayout old, VkImageLayout _new, VkImageSubresourceRange range)
+: srcAccessMask(src), dstAccessMask(dst), oldLayout(old), newLayout(_new)
+, image(image), subresourceRange(range) { }
+
+ImageMemoryBarrier::ImageMemoryBarrier(Image *image, VkAccessFlags src, VkAccessFlags dst,
+		VkImageLayout old, VkImageLayout _new, QueueFamilyTransfer transfer)
+: srcAccessMask(src), dstAccessMask(dst), oldLayout(old), newLayout(_new), familyTransfer(transfer)
+, image(image), subresourceRange(VkImageSubresourceRange{
+	image->getAspectMask(), 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS
+}) { }
+
+ImageMemoryBarrier::ImageMemoryBarrier(Image *image, VkAccessFlags src, VkAccessFlags dst,
+	 VkImageLayout old, VkImageLayout _new, QueueFamilyTransfer transfer, VkImageSubresourceRange range)
+: srcAccessMask(src), dstAccessMask(dst), oldLayout(old), newLayout(_new), familyTransfer(transfer)
+, image(image), subresourceRange(range) { }
+
+ImageMemoryBarrier::ImageMemoryBarrier(const VkImageMemoryBarrier &barrier)
+: srcAccessMask(barrier.srcAccessMask), dstAccessMask(barrier.dstAccessMask)
+, oldLayout(barrier.oldLayout), newLayout(barrier.newLayout)
+, familyTransfer(QueueFamilyTransfer{barrier.srcQueueFamilyIndex, barrier.dstQueueFamilyIndex})
+, image(nullptr), subresourceRange(barrier.subresourceRange) { }
+
+BufferMemoryBarrier::BufferMemoryBarrier(Buffer *buf, VkAccessFlags src, VkAccessFlags dst)
+: srcAccessMask(src), dstAccessMask(dst), buffer(buf) { }
+
+BufferMemoryBarrier::BufferMemoryBarrier(Buffer *buf, VkAccessFlags src, VkAccessFlags dst,
+		QueueFamilyTransfer transfer, VkDeviceSize offset, VkDeviceSize size)
+: srcAccessMask(src), dstAccessMask(dst), familyTransfer(transfer),
+  buffer(buf), offset(offset), size(size) { }
+
+BufferMemoryBarrier::BufferMemoryBarrier(const VkBufferMemoryBarrier &barrier)
+: srcAccessMask(barrier.srcAccessMask), dstAccessMask(barrier.dstAccessMask)
+, familyTransfer(QueueFamilyTransfer{barrier.srcQueueFamilyIndex, barrier.dstQueueFamilyIndex})
+, buffer(nullptr), offset(barrier.offset), size(barrier.size) { }
+
+bool CommandBuffer::init(const CommandPool *pool, const DeviceTable *table, VkCommandBuffer buffer) {
+	_pool = pool;
+	_table = table;
+	_buffer = buffer;
+	return true;
+}
+
+void CommandBuffer::invalidate() {
+	_buffer = VK_NULL_HANDLE;
+}
+
+void CommandBuffer::cmdPipelineBarrier(VkPipelineStageFlags srcFlags, VkPipelineStageFlags dstFlags, VkDependencyFlags deps,
+		SpanView<ImageMemoryBarrier> imageBarriers) {
+	Vector<VkImageMemoryBarrier> images; images.reserve(imageBarriers.size());
+	for (auto &it : imageBarriers) {
+		images.emplace_back(VkImageMemoryBarrier{
+			VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
+			it.srcAccessMask, it.dstAccessMask,
+			it.oldLayout, it.newLayout,
+			it.familyTransfer.srcQueueFamilyIndex, it.familyTransfer.dstQueueFamilyIndex,
+			it.image->getImage(), it.subresourceRange
+		});
+	}
+
+	_table->vkCmdPipelineBarrier(_buffer, srcFlags, dstFlags, deps, 0, nullptr, 0, nullptr, images.size(), images.data());
+}
+
+void CommandBuffer::cmdPipelineBarrier(VkPipelineStageFlags srcFlags, VkPipelineStageFlags dstFlags, VkDependencyFlags deps,
+		SpanView<BufferMemoryBarrier> bufferBarriers) {
+	Vector<VkBufferMemoryBarrier> buffers; buffers.reserve(bufferBarriers.size());
+	for (auto &it : bufferBarriers) {
+		buffers.emplace_back(VkBufferMemoryBarrier{
+			VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+			it.srcAccessMask, it.dstAccessMask,
+			it.familyTransfer.srcQueueFamilyIndex, it.familyTransfer.dstQueueFamilyIndex,
+			it.buffer->getBuffer(), it.offset, it.size
+		});
+	}
+
+	_table->vkCmdPipelineBarrier(_buffer, srcFlags, dstFlags, deps, 0, nullptr, buffers.size(), buffers.data(), 0, nullptr);
+}
+
+
+void CommandBuffer::cmdPipelineBarrier(VkPipelineStageFlags srcFlags, VkPipelineStageFlags dstFlags, VkDependencyFlags deps,
+		SpanView<BufferMemoryBarrier> bufferBarriers, SpanView<ImageMemoryBarrier> imageBarriers) {
+	Vector<VkBufferMemoryBarrier> buffers; buffers.reserve(bufferBarriers.size());
+	for (auto &it : bufferBarriers) {
+		buffers.emplace_back(VkBufferMemoryBarrier{
+			VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, nullptr,
+			it.srcAccessMask, it.dstAccessMask,
+			it.familyTransfer.srcQueueFamilyIndex, it.familyTransfer.dstQueueFamilyIndex,
+			it.buffer->getBuffer(), it.offset, it.size
+		});
+	}
+
+	Vector<VkImageMemoryBarrier> images; images.reserve(imageBarriers.size());
+	for (auto &it : imageBarriers) {
+		images.emplace_back(VkImageMemoryBarrier{
+			VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr,
+			it.srcAccessMask, it.dstAccessMask,
+			it.oldLayout, it.newLayout,
+			it.familyTransfer.srcQueueFamilyIndex, it.familyTransfer.dstQueueFamilyIndex,
+			it.image->getImage(), it.subresourceRange
+		});
+	}
+
+	_table->vkCmdPipelineBarrier(_buffer, srcFlags, dstFlags, deps, 0, nullptr,
+			buffers.size(), buffers.data(), images.size(), images.data());
+}
+
+void CommandBuffer::cmdCopyBuffer(Buffer *src, Buffer *dst) {
+	VkBufferCopy copy{0, 0, std::min(src->getSize(), dst->getSize())};
+	cmdCopyBuffer(src, dst, makeSpanView(&copy, 1));
+}
+
+void CommandBuffer::cmdCopyBuffer(Buffer *src, Buffer *dst, VkDeviceSize srcOffset, VkDeviceSize dstOffset, VkDeviceSize size) {
+	VkBufferCopy copy{srcOffset, dstOffset, size};
+	cmdCopyBuffer(src, dst, makeSpanView(&copy, 1));
+}
+
+void CommandBuffer::cmdCopyBuffer(Buffer *src, Buffer *dst, SpanView<VkBufferCopy> copy) {
+	_table->vkCmdCopyBuffer(_buffer, src->getBuffer(), dst->getBuffer(), copy.size(), copy.data());
+}
+
+void CommandBuffer::cmdCopyImage(Image *src, VkImageLayout srcLayout, const Image *dst, VkImageLayout dstLayout, VkFilter filter) {
+	auto sourceExtent = src->getInfo().extent;
+	auto targetExtent = dst->getInfo().extent;
+
+	if (sourceExtent == targetExtent) {
+		VkImageCopy copy{
+			VkImageSubresourceLayers{src->getAspectMask(), 0, 0, src->getInfo().arrayLayers.get()},
+			VkOffset3D{0, 0, 0},
+			VkImageSubresourceLayers{dst->getAspectMask(), 0, 0, dst->getInfo().arrayLayers.get()},
+			VkOffset3D{0, 0, 0},
+			VkExtent3D{targetExtent.width, targetExtent.height, targetExtent.depth}
+		};
+
+		_table->vkCmdCopyImage(_buffer, src->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				dst->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+	} else {
+		VkImageBlit blit{
+			VkImageSubresourceLayers{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, src->getInfo().arrayLayers.get()},
+			{ VkOffset3D{0, 0, 0}, VkOffset3D{int32_t(sourceExtent.width), int32_t(sourceExtent.height), int32_t(sourceExtent.depth)} },
+			VkImageSubresourceLayers{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, dst->getInfo().arrayLayers.get()},
+			{ VkOffset3D{0, 0, 0}, VkOffset3D{int32_t(targetExtent.width), int32_t(targetExtent.height), int32_t(targetExtent.depth)} },
+		};
+
+		_table->vkCmdBlitImage(_buffer, src->getImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				dst->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, filter);
+	}
+}
+
+void CommandBuffer::cmdCopyImage(Image *src, VkImageLayout srcLayout, const Image *dst, VkImageLayout dstLayout, const VkImageCopy &copy) {
+	_table->vkCmdCopyImage(_buffer, src->getImage(), srcLayout, dst->getImage(), dstLayout, 1, &copy);
+}
+
+void CommandBuffer::cmdCopyImage(Image *src, VkImageLayout srcLayout, const Image *dst, VkImageLayout dstLayout, SpanView<VkImageCopy> copy) {
+	_table->vkCmdCopyImage(_buffer, src->getImage(), srcLayout, dst->getImage(), dstLayout, copy.size(), copy.data());
+}
+
+void CommandBuffer::cmdCopyBufferToImage(Buffer *buf, Image *img, VkImageLayout layout, VkDeviceSize offset) {
+	auto &extent = img->getInfo().extent;
+	VkImageSubresourceLayers copyLayers({ img->getAspectMask(), 0, 0, img->getInfo().arrayLayers.get() });
+
+	VkBufferImageCopy copyRegion{offset, 0, 0, copyLayers, VkOffset3D{0, 0, 0},
+		VkExtent3D{extent.width, extent.height, extent.depth}};
+
+	cmdCopyBufferToImage(buf, img, layout, makeSpanView(&copyRegion, 1));
+}
+
+void CommandBuffer::cmdCopyBufferToImage(Buffer *buf, Image *img, VkImageLayout layout, SpanView<VkBufferImageCopy> copy) {
+	_table->vkCmdCopyBufferToImage(_buffer, buf->getBuffer(), img->getImage(), layout, copy.size(), copy.data());
+}
+
+void CommandBuffer::cmdCopyImageToBuffer(Image *img, VkImageLayout layout, Buffer *buf, VkDeviceSize offset) {
+	auto &extent = img->getInfo().extent;
+	VkImageSubresourceLayers copyLayers({ img->getAspectMask(), 0, 0, img->getInfo().arrayLayers.get() });
+
+	VkBufferImageCopy copyRegion{offset, 0, 0, copyLayers, VkOffset3D{0, 0, 0},
+		VkExtent3D{extent.width, extent.height, extent.depth}};
+
+	cmdCopyImageToBuffer(img, layout, buf, makeSpanView(&copyRegion, 1));
+}
+
+void CommandBuffer::cmdCopyImageToBuffer(Image *img, VkImageLayout layout, Buffer *buf, SpanView<VkBufferImageCopy> copy) {
+	_table->vkCmdCopyImageToBuffer(_buffer, img->getImage(), layout, buf->getBuffer(), copy.size(), copy.data());
+}
+
+void CommandBuffer::cmdClearColorImage(Image *image, VkImageLayout layout, const Color4F &color) {
+	VkClearColorValue clearColorEmpty;
+	clearColorEmpty.float32[0] = color.r;
+	clearColorEmpty.float32[1] = color.g;
+	clearColorEmpty.float32[2] = color.b;
+	clearColorEmpty.float32[3] = color.a;
+
+	VkImageSubresourceRange range{ image->getAspectMask(), 0, image->getInfo().mipLevels.get(), 0, image->getInfo().arrayLayers.get() };
+
+	_table->vkCmdClearColorImage(_buffer, image->getImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			&clearColorEmpty, 1, &range);
+}
+
+void CommandBuffer::cmdBeginRenderPass(RenderPassImpl *pass, Framebuffer *fb, VkSubpassContents subpass, bool alt) {
+	auto &clearValues = pass->getClearValues();
+	auto currentExtent = fb->getExtent();
+
+	VkRenderPassBeginInfo renderPassInfo {
+		VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, nullptr
+	};
+	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	renderPassInfo.pNext = nullptr;
+	renderPassInfo.renderPass = pass->getRenderPass(alt);
+	renderPassInfo.framebuffer = fb->getFramebuffer();
+	renderPassInfo.renderArea.offset = { 0, 0 };
+	renderPassInfo.renderArea.extent = VkExtent2D{currentExtent.width, currentExtent.height};
+	renderPassInfo.clearValueCount = clearValues.size();
+	renderPassInfo.pClearValues = clearValues.data();
+
+	_table->vkCmdBeginRenderPass(_buffer, &renderPassInfo, subpass);
+}
+
+void CommandBuffer::cmdEndRenderPass() {
+	_table->vkCmdEndRenderPass(_buffer);
+}
+
+void CommandBuffer::cmdSetViewport(uint32_t firstViewport, SpanView<VkViewport> viewports) {
+	_table->vkCmdSetViewport(_buffer, firstViewport, viewports.size(), viewports.data());
+}
+
+void CommandBuffer::cmdSetScissor(uint32_t firstScissor, SpanView<VkRect2D> scissors) {
+	_table->vkCmdSetScissor(_buffer, firstScissor, scissors.size(), scissors.data());
+}
+
+void CommandBuffer::cmdBindPipeline(GraphicPipeline *pipeline) {
+	_table->vkCmdBindPipeline(_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->getPipeline());
+}
+
+void CommandBuffer::cmdBindPipeline(ComputePipeline *pipeline) {
+	_table->vkCmdBindPipeline(_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->getPipeline());
+}
+
+void CommandBuffer::cmdBindIndexBuffer(Buffer *buf, VkDeviceSize offset, VkIndexType indexType) {
+	_table->vkCmdBindIndexBuffer(_buffer, buf->getBuffer(), offset, indexType);
+}
+
+void CommandBuffer::cmdBindDescriptorSets(RenderPassImpl *pass, uint32_t firstSet) {
+	cmdBindDescriptorSets(pass, pass->getDescriptorSets(), firstSet);
+}
+
+void CommandBuffer::cmdBindDescriptorSets(RenderPassImpl *pass, SpanView<VkDescriptorSet> sets, uint32_t firstSet) {
+	auto bindPoint = (pass->getType() == gl::RenderPassType::Compute) ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS;
+
+	_table->vkCmdBindDescriptorSets(_buffer, bindPoint, pass->getPipelineLayout(), firstSet,
+			sets.size(), sets.data(), 0, nullptr);
+}
+
+void CommandBuffer::cmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) {
+	_table->vkCmdDraw(_buffer, vertexCount, instanceCount, firstVertex, firstInstance);
+}
+void CommandBuffer::cmdDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex,
+		int32_t vertexOffset, uint32_t firstInstance) {
+	_table->vkCmdDrawIndexed(_buffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+}
+
+void CommandBuffer::cmdPushConstants(VkPipelineLayout layout, VkShaderStageFlags stageFlags, uint32_t offset, BytesView data) {
+	_table->vkCmdPushConstants(_buffer, layout, stageFlags, offset, data.size(), data.data());
+}
+
+void CommandBuffer::cmdFillBuffer(Buffer *buffer, uint32_t data) {
+	cmdFillBuffer(buffer, 0, VK_WHOLE_SIZE, data);
+}
+
+void CommandBuffer::cmdFillBuffer(Buffer *buffer, VkDeviceSize dstOffset, VkDeviceSize size, uint32_t data) {
+	_table->vkCmdFillBuffer(_buffer, buffer->getBuffer(), dstOffset, size, data);
+}
+
+void CommandBuffer::cmdDispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) {
+	_table->vkCmdDispatch(_buffer, groupCountX, groupCountY, groupCountZ);
+}
+
 CommandPool::~CommandPool() {
 	if (_commandPool) {
 		log::vtext("VK-Error", "CommandPool was not destroyed");
@@ -225,38 +515,52 @@ void CommandPool::invalidate(Device &dev) {
 	}
 }
 
-VkCommandBuffer CommandPool::allocBuffer(Device &dev, Level level) {
-	if (_commandPool) {
-		VkCommandBufferAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.commandPool = _commandPool;
-		allocInfo.level = VkCommandBufferLevel(level);
-		allocInfo.commandBufferCount = 1;
-
-		VkCommandBuffer ret;
-		if (dev.getTable()->vkAllocateCommandBuffers(dev.getDevice(), &allocInfo, &ret) == VK_SUCCESS) {
-			return ret;
-		}
+const CommandBuffer *CommandPool::recordBuffer(Device &dev, const Callback<bool(CommandBuffer &)> &cb,
+		VkCommandBufferUsageFlagBits flags, Level level) {
+	if (!_commandPool) {
+		return nullptr;
 	}
-	return nullptr;
-}
 
-Vector<VkCommandBuffer> CommandPool::allocBuffers(Device &dev, uint32_t count, Level level) {
-	Vector<VkCommandBuffer> vec;
-	if (_commandPool) {
-		VkCommandBufferAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.commandPool = _commandPool;
-		allocInfo.level = VkCommandBufferLevel(level);
-		allocInfo.commandBufferCount = count;
+	VkCommandBufferAllocateInfo allocInfo{};
+	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	allocInfo.commandPool = _commandPool;
+	allocInfo.level = VkCommandBufferLevel(level);
+	allocInfo.commandBufferCount = 1;
 
-		vec.resize(count);
-		if (dev.getTable()->vkAllocateCommandBuffers(dev.getDevice(), &allocInfo, vec.data()) == VK_SUCCESS) {
-			return vec;
-		}
-		vec.clear();
+	VkCommandBuffer buf;
+	if (dev.getTable()->vkAllocateCommandBuffers(dev.getDevice(), &allocInfo, &buf) != VK_SUCCESS) {
+		return nullptr;
 	}
-	return vec;
+
+
+	VkCommandBufferBeginInfo beginInfo { };
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.pNext = nullptr;
+	beginInfo.flags = flags;
+	beginInfo.pInheritanceInfo = nullptr;
+
+	if (dev.getTable()->vkBeginCommandBuffer(buf, &beginInfo) != VK_SUCCESS) {
+		dev.getTable()->vkFreeCommandBuffers(dev.getDevice(), _commandPool, 1, &buf);
+		return nullptr;
+	}
+
+	auto b = Rc<CommandBuffer>::create(this, dev.getTable(), buf);
+	if (!b) {
+		dev.getTable()->vkEndCommandBuffer(buf);
+		dev.getTable()->vkFreeCommandBuffers(dev.getDevice(), _commandPool, 1, &buf);
+		return nullptr;
+	}
+
+	auto result = cb(*b);
+
+	dev.getTable()->vkEndCommandBuffer(buf);
+
+	if (!result) {
+		dev.getTable()->vkFreeCommandBuffers(dev.getDevice(), _commandPool, 1, &buf);
+		return nullptr;
+	}
+
+	return _buffers.emplace_back(move(b)).get();
 }
 
 void CommandPool::freeDefaultBuffers(Device &dev, Vector<VkCommandBuffer> &vec) {

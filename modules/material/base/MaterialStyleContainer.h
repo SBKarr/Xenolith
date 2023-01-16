@@ -21,10 +21,10 @@
  THE SOFTWARE.
  **/
 
-#ifndef MODULES_MATERIAL_STYLE_MATERIALSTYLECONTAINER_H_
-#define MODULES_MATERIAL_STYLE_MATERIALSTYLECONTAINER_H_
+#ifndef MODULES_MATERIAL_BASE_MATERIALSTYLECONTAINER_H_
+#define MODULES_MATERIAL_BASE_MATERIALSTYLECONTAINER_H_
 
-#include "MaterialColorScheme.h"
+#include "MaterialSurfaceStyle.h"
 #include "XLComponent.h"
 #include "XLEventHeader.h"
 
@@ -32,11 +32,9 @@ namespace stappler::xenolith::material {
 
 class StyleContainer : public Component {
 public:
-	static EventHeader onAttached; // sent when container enabled or disabled
-	static EventHeader onPrimaryColorSchemeUpdate;
-	static EventHeader onExtraColorSchemeUpdate;
-
+	static EventHeader onColorSchemeUpdate;
 	static uint64_t ComponentFrameTag;
+	static constexpr uint32_t PrimarySchemeTag = SurfaceStyle::PrimarySchemeTag;
 
 	virtual ~StyleContainer() { }
 
@@ -50,19 +48,18 @@ public:
 	void setPrimaryScheme(ThemeType, const ColorHCT &, bool isContent);
 	const ColorScheme &getPrimaryScheme() const;
 
-	const ColorScheme *setExtraScheme(StringView, ThemeType, const CorePalette &);
-	const ColorScheme *setExtraScheme(StringView, ThemeType, const Color4F &, bool isContent);
-	const ColorScheme *setExtraScheme(StringView, ThemeType, const ColorHCT &, bool isContent);
-	const ColorScheme *getExtraScheme(StringView) const;
+	const ColorScheme *setScheme(uint32_t tag, ThemeType, const CorePalette &);
+	const ColorScheme *setScheme(uint32_t tag, ThemeType, const Color4F &, bool isContent);
+	const ColorScheme *setScheme(uint32_t tag, ThemeType, const ColorHCT &, bool isContent);
+	const ColorScheme *getScheme(uint32_t) const;
 
 	const Scene *getScene() const { return _scene; }
 
 protected:
 	Scene *_scene = nullptr;
-	ColorScheme _primaryScheme = ColorScheme(ThemeType::LightTheme, ColorHCT(292, 100, 50, 1.0f), false);
-	Map<String, ColorScheme> _extraSchemes;
+	Map<uint32_t, ColorScheme> _schemes;
 };
 
 }
 
-#endif /* MODULES_MATERIAL_STYLE_MATERIALSTYLECONTAINER_H_ */
+#endif /* MODULES_MATERIAL_BASE_MATERIALSTYLECONTAINER_H_ */

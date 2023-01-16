@@ -226,20 +226,4 @@ uint64_t DeviceBuffer::reserveBlock(uint64_t blockSize, uint64_t alignment) {
 	return ret;
 }
 
-void DeviceBuffer::setPendingBarrier(const VkBufferMemoryBarrier &barrier) {
-	_barrier = barrier;
-}
-
-const VkBufferMemoryBarrier *DeviceBuffer::getPendingBarrier() const {
-	if (_barrier) {
-		return &_barrier.value();
-	} else {
-		return nullptr;
-	}
-}
-
-void DeviceBuffer::dropPendingBarrier() {
-	_barrier.reset();
-}
-
 }

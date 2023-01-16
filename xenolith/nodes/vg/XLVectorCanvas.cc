@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -24,76 +25,6 @@
 #include "SPTess.h"
 
 namespace stappler::xenolith {
-
-void VectorCanvasResult::updateColor(const Color4F &color) {
-	auto copyData = [] (const gl::VertexData *data) {
-		auto ret = Rc<gl::VertexData>::alloc();
-		ret->data.resize(data->data.size());
-		ret->indexes.resize(data->indexes.size());
-		memcpy(ret->data.data(), data->data.data(), data->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U));
-		memcpy(ret->indexes.data(), data->indexes.data(), data->indexes.size() * sizeof(uint32_t));
-		return ret;
-	};
-
-	mut.clear();
-	mut.reserve(data.size());
-	for (auto &it : data) {
-		auto &iit = mut.emplace_back(it.mat, copyData(it.data));
-		for (auto &vertex : iit.data->data) {
-			vertex.color = vertex.color * color;
-		}
-	}
-
-	targetColor = color;
-}
-
-VectorCanvasDeferredResult::~VectorCanvasDeferredResult() {
-	if (_future) {
-		delete _future;
-		_future = nullptr;
-	}
-}
-
-bool VectorCanvasDeferredResult::init(std::future<Rc<VectorCanvasResult>> &&future) {
-	_future = new std::future<Rc<VectorCanvasResult>>(move(future));
-	return true;
-}
-
-SpanView<gl::TransformedVertexData> VectorCanvasDeferredResult::getData() {
-	std::unique_lock<Mutex> lock(_mutex);
-	if (_future) {
-		_result = _future->get();
-		delete _future;
-		_future = nullptr;
-		DeferredVertexResult::handleReady();
-	}
-	return _result->mut;
-}
-
-void VectorCanvasDeferredResult::handleReady(Rc<VectorCanvasResult> &&res) {
-	std::unique_lock<Mutex> lock(_mutex);
-	if (_future) {
-		delete _future;
-		_future = nullptr;
-	}
-	_result = move(res);
-	DeferredVertexResult::handleReady();
-}
-
-Rc<VectorCanvasResult> VectorCanvasDeferredResult::getResult() const {
-	std::unique_lock<Mutex> lock(_mutex);
-	return _result;
-}
-
-void VectorCanvasDeferredResult::updateColor(const Color4F &color) {
-	getResult(); // ensure rendering was complete
-
-	std::unique_lock<Mutex> lock(_mutex);
-	if (_result) {
-		lock.unlock();
-		_result->updateColor(color);
-	}
-}
 
 struct VectorCanvasPathOutput {
 	Color4F color;
@@ -624,6 +555,76 @@ VectorCanvasCache::~VectorCanvasCache() {
 
 		filesystem::remove(path);
 		data::save(val, path, data::EncodeFormat::Cbor);
+	}
+}
+
+void VectorCanvasResult::updateColor(const Color4F &color) {
+	auto copyData = [] (const gl::VertexData *data) {
+		auto ret = Rc<gl::VertexData>::alloc();
+		ret->data.resize(data->data.size());
+		ret->indexes.resize(data->indexes.size());
+		memcpy(ret->data.data(), data->data.data(), data->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U));
+		memcpy(ret->indexes.data(), data->indexes.data(), data->indexes.size() * sizeof(uint32_t));
+		return ret;
+	};
+
+	mut.clear();
+	mut.reserve(data.size());
+	for (auto &it : data) {
+		auto &iit = mut.emplace_back(it.mat, copyData(it.data));
+		for (auto &vertex : iit.data->data) {
+			vertex.color = vertex.color * color;
+		}
+	}
+
+	targetColor = color;
+}
+
+VectorCanvasDeferredResult::~VectorCanvasDeferredResult() {
+	if (_future) {
+		delete _future;
+		_future = nullptr;
+	}
+}
+
+bool VectorCanvasDeferredResult::init(std::future<Rc<VectorCanvasResult>> &&future) {
+	_future = new std::future<Rc<VectorCanvasResult>>(move(future));
+	return true;
+}
+
+SpanView<gl::TransformedVertexData> VectorCanvasDeferredResult::getData() {
+	std::unique_lock<Mutex> lock(_mutex);
+	if (_future) {
+		_result = _future->get();
+		delete _future;
+		_future = nullptr;
+		DeferredVertexResult::handleReady();
+	}
+	return _result->mut;
+}
+
+void VectorCanvasDeferredResult::handleReady(Rc<VectorCanvasResult> &&res) {
+	std::unique_lock<Mutex> lock(_mutex);
+	if (_future) {
+		delete _future;
+		_future = nullptr;
+	}
+	_result = move(res);
+	DeferredVertexResult::handleReady();
+}
+
+Rc<VectorCanvasResult> VectorCanvasDeferredResult::getResult() const {
+	std::unique_lock<Mutex> lock(_mutex);
+	return _result;
+}
+
+void VectorCanvasDeferredResult::updateColor(const Color4F &color) {
+	getResult(); // ensure rendering was complete
+
+	std::unique_lock<Mutex> lock(_mutex);
+	if (_result) {
+		lock.unlock();
+		_result->updateColor(color);
 	}
 }
 

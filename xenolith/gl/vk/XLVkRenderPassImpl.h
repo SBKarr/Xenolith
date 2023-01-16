@@ -50,6 +50,7 @@ public:
 	VkRenderPass getRenderPass(bool alt = false) const;
 	VkPipelineLayout getPipelineLayout() const { return _data->layout; }
 	const Vector<VkDescriptorSet> &getDescriptorSets() const { return _data->sets; }
+	const Vector<VkClearValue> &getClearValues() const { return _clearValues; }
 
 	VkDescriptorSet getDescriptorSet(uint32_t) const;
 
@@ -57,7 +58,7 @@ public:
 	// 			   false - without updateAfterBindFlag
 	virtual bool writeDescriptors(const QueuePassHandle &, bool async) const;
 
-	virtual void perform(const QueuePassHandle &, VkCommandBuffer buf, const Callback<void()> &);
+	virtual void perform(const QueuePassHandle &, CommandBuffer &buf, const Callback<void()> &);
 
 protected:
 	using gl::RenderPass::init;

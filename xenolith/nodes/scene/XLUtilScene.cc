@@ -96,7 +96,8 @@ void UtilScene::FpsDisplay::update(const UpdateTime &) {
 				break;
 			case Vertexes:
 				str = toString(std::setprecision(3),
-					"V:", stat.vertexes, " T:", stat.triangles, "\nZ:", stat.zPaths, " C:", stat.drawCalls, " M: ", stat.materials,
+					"V:", stat.vertexes, " T:", stat.triangles, "\nZ:", stat.zPaths, " C:", stat.drawCalls, " M: ", stat.materials, "\n",
+					stat.solidCmds, "/", stat.surfaceCmds, "/", stat.transparentCmds,
 					"\nF12 to switch");
 				break;
 			case Cache:
@@ -107,7 +108,8 @@ void UtilScene::FpsDisplay::update(const UpdateTime &) {
 			case Full:
 				str = toString(std::setprecision(3),
 					"FPS: ", fps, "\nSPF: ", spf, "\nLFT: ", local, "\n",
-					"V:", stat.vertexes, " T:", stat.triangles, "\nZ:", stat.zPaths, " C:", stat.drawCalls, " M: ", stat.materials, "\n"
+					"V:", stat.vertexes, " T:", stat.triangles, "\nZ:", stat.zPaths, " C:", stat.drawCalls, " M: ", stat.materials, "\n",
+					stat.solidCmds, "/", stat.surfaceCmds, "/", stat.transparentCmds, "\n",
 					"Cache:", stat.cachedFramebuffers, "/", stat.cachedImages, "/", stat.cachedImageViews,
 					"\nF12 to switch");
 				break;

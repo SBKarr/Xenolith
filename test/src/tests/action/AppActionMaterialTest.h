@@ -27,7 +27,7 @@
 #include "AppLayoutTest.h"
 #include "AppSlider.h"
 #include "AppButton.h"
-#include "Material.h"
+#include "MaterialEasing.h"
 
 namespace stappler::xenolith::app {
 

@@ -165,10 +165,9 @@ public:
 
 protected:
 	virtual Vector<VkCommandBuffer> doPrepareCommands(FrameHandle &) override;
-	virtual void prepareMaterialCommands(gl::MaterialSet * materials, VkCommandBuffer &);
+	virtual void prepareMaterialCommands(gl::MaterialSet * materials, CommandBuffer &);
 
-	virtual void doFinalizeTransfer(gl::MaterialSet * materials, VkCommandBuffer,
-			Vector<VkImageMemoryBarrier> &outputImageBarriers, Vector<VkBufferMemoryBarrier> &outputBufferBarriers);
+	virtual void doFinalizeTransfer(gl::MaterialSet * materials, Vector<ImageMemoryBarrier> &outputImageBarriers, Vector<BufferMemoryBarrier> &outputBufferBarriers);
 
 	const VertexMaterialAttachmentHandle *_vertexBuffer = nullptr;
 	const MaterialVertexAttachmentHandle *_materialBuffer = nullptr;

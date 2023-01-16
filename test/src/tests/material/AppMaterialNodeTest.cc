@@ -22,35 +22,27 @@
  **/
 
 #include "AppMaterialNodeTest.h"
+
 #include "MaterialLabel.h"
 
 namespace stappler::xenolith::app {
 
-class MaterialNodeWithLabel : public material::MaterialNode {
+class MaterialNodeWithLabel : public material::Surface {
 public:
 	virtual ~MaterialNodeWithLabel() { }
 
-	virtual bool init(material::StyleData &&, StringView);
-	virtual bool init(const material::StyleData &, StringView);
+	virtual bool init(const material::SurfaceStyle &, StringView);
 
 	virtual void onContentSizeDirty() override;
 
 protected:
 	bool initialize(StringView);
 
-	material::MaterialLabel *_label = nullptr;
+	Label *_label = nullptr;
 };
 
-bool MaterialNodeWithLabel::init(material::StyleData &&style, StringView str) {
-	if (!MaterialNode::init(move(style))) {
-		return false;
-	}
-
-	return initialize(str);
-}
-
-bool MaterialNodeWithLabel::init(const material::StyleData &style, StringView str) {
-	if (!MaterialNode::init(style)) {
+bool MaterialNodeWithLabel::init(const material::SurfaceStyle &style, StringView str) {
+	if (!Surface::init(style)) {
 		return false;
 	}
 
@@ -58,14 +50,14 @@ bool MaterialNodeWithLabel::init(const material::StyleData &style, StringView st
 }
 
 bool MaterialNodeWithLabel::initialize(StringView str) {
-	_label = addChild(Rc<material::MaterialLabel>::create(material::TypescaleRole::TitleLarge, str));
+	_label = addChild(Rc<material::TypescaleLabel>::create(material::TypescaleRole::TitleLarge, str), 1);
 	_label->setAnchorPoint(Anchor::Middle);
 
 	return true;
 }
 
 void MaterialNodeWithLabel::onContentSizeDirty() {
-	MaterialNode::onContentSizeDirty();
+	Surface::onContentSizeDirty();
 
 	_label->setPosition(_contentSize / 2.0f);
 }
@@ -80,18 +72,17 @@ bool MaterialNodeTest::init() {
 	_style = addComponent(Rc<material::StyleContainer>::create());
 	_style->setPrimaryScheme(material::ThemeType::LightTheme, color.asColor4F(), false);
 
-	addComponent(Rc<material::MaterialNodeInterior>::create(material::StyleData{
-		String(), material::ColorRole::Primary, material::Elevation::Level1,
-		material::ShapeFamily::RoundedCorners, material::ShapeStyle::None, material::NodeStyle::Text
+	addComponent(Rc<material::SurfaceInterior>::create(material::SurfaceStyle{material::ColorRole::Primary,
+		material::Elevation::Level1, material::NodeStyle::Text
 	}));
 
-	_background = addChild(Rc<material::MaterialNode>::create(material::StyleData::Background), -1);
+	_background = addChild(Rc<material::Surface>::create(material::SurfaceStyle::Background), -1);
 	_background->setAnchorPoint(Anchor::Middle);
 
-	_nodeElevation = addChild(Rc<MaterialNodeWithLabel>::create(material::StyleData{
-		String(), material::ColorRole::Primary, material::Elevation::Level1
+	_nodeElevation = addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
+		material::ColorRole::Primary, material::Elevation::Level1
 	}, "Elevation"), 1);
-	_nodeElevation->setContentSize(Size2(160.0f, 160.0f));
+	_nodeElevation->setContentSize(Size2(160.0f, 100.0f));
 	_nodeElevation->setAnchorPoint(Anchor::Middle);
 
 	auto el = _nodeElevation->addInputListener(Rc<InputListener>::create());
@@ -103,11 +94,10 @@ bool MaterialNodeTest::init() {
 	}, InputListener::makeButtonMask({InputMouseButton::Touch}), 1);
 
 
-	_nodeShadow = addChild(Rc<MaterialNodeWithLabel>::create(material::StyleData{
-		String(), material::ColorRole::Primary, material::Elevation::Level1,
-		material::ShapeFamily::RoundedCorners, material::ShapeStyle::None, material::NodeStyle::TonalElevated
+	_nodeShadow = addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
+		material::ColorRole::Primary, material::Elevation::Level1, material::NodeStyle::SurfaceTonalElevated
 	}, "Shadow"), 1);
-	_nodeShadow->setContentSize(Size2(160.0f, 160.0f));
+	_nodeShadow->setContentSize(Size2(160.0f, 100.0f));
 	_nodeShadow->setAnchorPoint(Anchor::Middle);
 
 	el = _nodeShadow->addInputListener(Rc<InputListener>::create());
@@ -119,11 +109,10 @@ bool MaterialNodeTest::init() {
 	}, InputListener::makeButtonMask({InputMouseButton::Touch}), 1);
 
 
-	_nodeCornerRounded = addChild(Rc<MaterialNodeWithLabel>::create(material::StyleData{
-		String(), material::ColorRole::Primary, material::Elevation::Level5,
-		material::ShapeFamily::RoundedCorners, material::ShapeStyle::ExtraSmall
+	_nodeCornerRounded = addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
+		material::Elevation::Level5, material::ShapeFamily::RoundedCorners, material::ShapeStyle::ExtraSmall
 	}, "Rounded"), 1);
-	_nodeCornerRounded->setContentSize(Size2(160.0f, 160.0f));
+	_nodeCornerRounded->setContentSize(Size2(160.0f, 100.0f));
 	_nodeCornerRounded->setAnchorPoint(Anchor::Middle);
 
 	el = _nodeCornerRounded->addInputListener(Rc<InputListener>::create());
@@ -135,11 +124,10 @@ bool MaterialNodeTest::init() {
 	}, InputListener::makeButtonMask({InputMouseButton::Touch}), 1);
 
 
-	_nodeCornerCut = addChild(Rc<MaterialNodeWithLabel>::create(material::StyleData{
-		String(), material::ColorRole::Primary, material::Elevation::Level5,
-		material::ShapeFamily::CutCorners, material::ShapeStyle::ExtraSmall
+	_nodeCornerCut = addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
+		material::Elevation::Level5, material::ShapeFamily::CutCorners, material::ShapeStyle::ExtraSmall
 	}, "Cut"), 1);
-	_nodeCornerCut->setContentSize(Size2(160.0f, 160.0f));
+	_nodeCornerCut->setContentSize(Size2(160.0f, 100.0f));
 	_nodeCornerCut->setAnchorPoint(Anchor::Middle);
 
 	el = _nodeCornerCut->addInputListener(Rc<InputListener>::create());
@@ -149,6 +137,28 @@ bool MaterialNodeTest::init() {
 		_nodeCornerCut->setStyle(move(style), 0.25f);
 		return true;
 	}, InputListener::makeButtonMask({InputMouseButton::Touch}), 1);
+
+
+	_nodeStyle = addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
+		material::Elevation::Level5, material::NodeStyle::Outlined, material::ShapeStyle::Full, material::ActivityState::Enabled
+	}, "Style"), 1);
+	_nodeStyle->setContentSize(Size2(160.0f, 100.0f));
+	_nodeStyle->setAnchorPoint(Anchor::Middle);
+
+	el = _nodeStyle->addInputListener(Rc<InputListener>::create());
+	el->addTapRecognizer([this] (GestureTap tap) {
+		if (tap.input->data.button == InputMouseButton::MouseLeft) {
+			auto style = _nodeStyle->getStyleTarget();
+			 style.nodeStyle = material::NodeStyle((toInt(style.nodeStyle) + 1) % (toInt(material::NodeStyle::Text) + 1));
+			_nodeStyle->setStyle(move(style), 0.25f);
+		} else {
+			auto style = _nodeStyle->getStyleTarget();
+			style.activityState = material::ActivityState((toInt(style.activityState) + 1) % (toInt(material::ActivityState::Pressed) + 1));
+			_nodeStyle->setStyle(move(style), 0.25f);
+		}
+		return true;
+	}, InputListener::makeButtonMask({InputMouseButton::MouseLeft, InputMouseButton::MouseRight}), 1);
+
 
 	_huePicker = addChild(Rc<MaterialColorPickerSprite>::create(MaterialColorPickerSprite::Hue, color, [this] (float val) {
 		auto color = material::ColorHCT(val, 100.0f, 50.0f, 1.0f);
@@ -176,10 +186,11 @@ void MaterialNodeTest::onContentSizeDirty() {
 
 	_background->setContentSize(_contentSize);
 	_background->setPosition(_contentSize / 2.0f);
-	_nodeElevation->setPosition(Vec2(_contentSize / 2.0f) - Vec2(100.0f, 100.0f));
-	_nodeShadow->setPosition(Vec2(_contentSize / 2.0f) - Vec2(-100.0f, 100.0f));
+	_nodeElevation->setPosition(Vec2(_contentSize / 2.0f) - Vec2(100.0f, 20.0f));
+	_nodeShadow->setPosition(Vec2(_contentSize / 2.0f) - Vec2(-100.0f, 20.0f));
 	_nodeCornerRounded->setPosition(Vec2(_contentSize / 2.0f) - Vec2(100.0f, -100.0f));
 	_nodeCornerCut->setPosition(Vec2(_contentSize / 2.0f) - Vec2(-100.0f, -100.0f));
+	_nodeStyle->setPosition(Vec2(_contentSize / 2.0f) - Vec2(100.0f, 140.0f));
 
 	_huePicker->setPosition(Vec2(16.0f, _contentSize.height - 16.0f));
 	_huePicker->setContentSize(Size2(std::min(std::max(160.0f, _contentSize.width - 200.0f - 98.0f - 48.0f), 360.0f), 24.0f));
@@ -192,6 +203,7 @@ void MaterialNodeTest::onEnter(Scene *scene) {
 	auto light = Rc<SceneLight>::create(SceneLightType::Ambient, Vec2(0.0f, 0.3f), 1.5f, Color::White);
 	auto ambient = Rc<SceneLight>::create(SceneLightType::Ambient, Vec2(0.0f, 0.0f), 1.5f, Color::White);
 
+	_scene->setGlobalColor(Color4F::WHITE);
 	_scene->removeAllLights();
 	_scene->addLight(move(light));
 	_scene->addLight(move(ambient));

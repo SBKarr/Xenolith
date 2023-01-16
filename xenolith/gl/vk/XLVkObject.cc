@@ -72,11 +72,12 @@ bool Image::init(Device &dev, uint64_t idx, VkImage image, const gl::ImageInfo &
 	}, gl::ObjectType::Image, _image, idx);
 }
 
-void Image::setPendingBarrier(const VkImageMemoryBarrier &barrier) {
+void Image::setPendingBarrier(const ImageMemoryBarrier &barrier) {
 	_barrier = barrier;
+	_barrier->image = this;
 }
 
-const VkImageMemoryBarrier *Image::getPendingBarrier() const {
+const ImageMemoryBarrier *Image::getPendingBarrier() const {
 	if (_barrier) {
 		return &_barrier.value();
 	} else {
@@ -86,6 +87,16 @@ const VkImageMemoryBarrier *Image::getPendingBarrier() const {
 
 void Image::dropPendingBarrier() {
 	_barrier.reset();
+}
+
+VkImageAspectFlags Image::getAspectMask() const {
+	switch (gl::getImagePixelFormat(_info.format)) {
+	case gl::PixelFormat::D: return VK_IMAGE_ASPECT_DEPTH_BIT; break;
+	case gl::PixelFormat::DS: return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT; break;
+	case gl::PixelFormat::S: return VK_IMAGE_ASPECT_STENCIL_BIT; break;
+	default: return VK_IMAGE_ASPECT_COLOR_BIT; break;
+	}
+	return VK_IMAGE_ASPECT_NONE;
 }
 
 bool Buffer::init(Device &dev, VkBuffer buffer, const gl::BufferInfo &info, Rc<DeviceMemory> &&mem) {
@@ -99,11 +110,12 @@ bool Buffer::init(Device &dev, VkBuffer buffer, const gl::BufferInfo &info, Rc<D
 	}, gl::ObjectType::Buffer, _buffer);
 }
 
-void Buffer::setPendingBarrier(const VkBufferMemoryBarrier &barrier) {
+void Buffer::setPendingBarrier(const BufferMemoryBarrier &barrier) {
 	_barrier = barrier;
+	_barrier->buffer = this;
 }
 
-const VkBufferMemoryBarrier *Buffer::getPendingBarrier() const {
+const BufferMemoryBarrier *Buffer::getPendingBarrier() const {
 	if (_barrier) {
 		return &_barrier.value();
 	} else {

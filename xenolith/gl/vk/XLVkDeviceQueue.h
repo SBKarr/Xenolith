@@ -37,6 +37,12 @@ class CommandPool;
 class Semaphore;
 class Fence;
 class Loop;
+class Image;
+class Buffer;
+class RenderPassImpl;
+class Framebuffer;
+class GraphicPipeline;
+class ComputePipeline;
 
 struct DeviceQueueFamily {
 	using FrameHandle = renderqueue::FrameHandle;
@@ -80,6 +86,7 @@ public:
 	virtual bool init(Device &, VkQueue, uint32_t, QueueOperations);
 
 	bool submit(const FrameSync &, Fence &, CommandPool &, SpanView<VkCommandBuffer>);
+	bool submit(Fence &, VkCommandBuffer);
 	bool submit(Fence &, SpanView<VkCommandBuffer>);
 
 	void waitIdle();
@@ -112,8 +119,115 @@ enum class BufferLevel {
 	Secondary = VK_COMMAND_BUFFER_LEVEL_SECONDARY,
 };
 
+struct QueueFamilyTransfer {
+	uint32_t srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	uint32_t dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+};
+
+struct ImageMemoryBarrier {
+	ImageMemoryBarrier() = default;
+
+	ImageMemoryBarrier(Image *, VkAccessFlags src, VkAccessFlags dst,
+			VkImageLayout old, VkImageLayout _new);
+	ImageMemoryBarrier(Image *, VkAccessFlags src, VkAccessFlags dst,
+			VkImageLayout old, VkImageLayout _new, VkImageSubresourceRange);
+	ImageMemoryBarrier(Image *, VkAccessFlags src, VkAccessFlags dst,
+			VkImageLayout old, VkImageLayout _new, QueueFamilyTransfer);
+	ImageMemoryBarrier(Image *, VkAccessFlags src, VkAccessFlags dst,
+			VkImageLayout old, VkImageLayout _new, QueueFamilyTransfer, VkImageSubresourceRange);
+	ImageMemoryBarrier(const VkImageMemoryBarrier &);
+
+	VkAccessFlags srcAccessMask = 0;
+	VkAccessFlags dstAccessMask = 0;
+	VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	VkImageLayout newLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	QueueFamilyTransfer familyTransfer;
+	Image *image = nullptr;
+	VkImageSubresourceRange subresourceRange;
+};
+
+struct BufferMemoryBarrier {
+	BufferMemoryBarrier() = default;
+	BufferMemoryBarrier(Buffer *, VkAccessFlags src, VkAccessFlags dst);
+	BufferMemoryBarrier(Buffer *, VkAccessFlags src, VkAccessFlags dst,
+			QueueFamilyTransfer, VkDeviceSize, VkDeviceSize);
+	BufferMemoryBarrier(const VkBufferMemoryBarrier &);
+
+	VkAccessFlags srcAccessMask = 0;
+	VkAccessFlags dstAccessMask = 0;
+	QueueFamilyTransfer familyTransfer;
+	Buffer *buffer = nullptr;
+	VkDeviceSize offset = 0;
+	VkDeviceSize size = VK_WHOLE_SIZE;
+};
+
+class CommandBuffer : public Ref {
+public:
+	virtual ~CommandBuffer() { }
+
+	bool init(const CommandPool *, const DeviceTable *, VkCommandBuffer);
+	void invalidate();
+
+	void cmdPipelineBarrier(VkPipelineStageFlags, VkPipelineStageFlags, VkDependencyFlags,
+			SpanView<ImageMemoryBarrier>);
+	void cmdPipelineBarrier(VkPipelineStageFlags, VkPipelineStageFlags, VkDependencyFlags,
+			SpanView<BufferMemoryBarrier>);
+	void cmdPipelineBarrier(VkPipelineStageFlags, VkPipelineStageFlags, VkDependencyFlags,
+			SpanView<BufferMemoryBarrier>, SpanView<ImageMemoryBarrier>);
+
+	void cmdCopyBuffer(Buffer *src, Buffer *dst);
+	void cmdCopyBuffer(Buffer *src, Buffer *dst, VkDeviceSize srcOffset, VkDeviceSize dstOffset, VkDeviceSize size);
+	void cmdCopyBuffer(Buffer *src, Buffer *dst, SpanView<VkBufferCopy>);
+
+	void cmdCopyImage(Image *src, VkImageLayout, const Image *dst, VkImageLayout, VkFilter filter = VK_FILTER_LINEAR);
+	void cmdCopyImage(Image *src, VkImageLayout, const Image *dst, VkImageLayout, const VkImageCopy &copy);
+	void cmdCopyImage(Image *src, VkImageLayout, const Image *dst, VkImageLayout, SpanView<VkImageCopy>);
+
+	void cmdCopyBufferToImage(Buffer *, Image *, VkImageLayout, VkDeviceSize offset);
+	void cmdCopyBufferToImage(Buffer *, Image *, VkImageLayout, SpanView<VkBufferImageCopy>);
+
+	void cmdCopyImageToBuffer(Image *, VkImageLayout, Buffer *buf, VkDeviceSize offset);
+	void cmdCopyImageToBuffer(Image *, VkImageLayout, Buffer *buf, SpanView<VkBufferImageCopy>);
+
+	void cmdClearColorImage(Image *, VkImageLayout, const Color4F &);
+
+	void cmdBeginRenderPass(RenderPassImpl *pass, Framebuffer *fb, VkSubpassContents subpass, bool alt = false);
+	void cmdEndRenderPass();
+
+	void cmdSetViewport(uint32_t firstViewport, SpanView<VkViewport> viewports);
+	void cmdSetScissor(uint32_t firstScissor, SpanView<VkRect2D> scissors);
+
+	void cmdBindPipeline(GraphicPipeline *);
+	void cmdBindPipeline(ComputePipeline *);
+
+	void cmdBindIndexBuffer(Buffer *, VkDeviceSize offset, VkIndexType indexType);
+
+	void cmdBindDescriptorSets(RenderPassImpl *, uint32_t firstSet = 0);
+	void cmdBindDescriptorSets(RenderPassImpl *, SpanView<VkDescriptorSet>, uint32_t firstSet = 0);
+
+	void cmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
+	void cmdDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex,
+			int32_t vertexOffset, uint32_t firstInstance);
+
+	void cmdPushConstants(VkPipelineLayout layout, VkShaderStageFlags stageFlags, uint32_t offset, BytesView);
+
+	void cmdFillBuffer(Buffer *, uint32_t data);
+	void cmdFillBuffer(Buffer *, VkDeviceSize dstOffset, VkDeviceSize size, uint32_t data);
+
+	void cmdDispatch(uint32_t groupCountX, uint32_t groupCountY = 1, uint32_t groupCountZ = 1);
+
+	VkCommandBuffer getBuffer() const { return _buffer; }
+
+protected:
+	const CommandPool *_pool = nullptr;
+	const DeviceTable *_table = nullptr;
+	VkCommandBuffer _buffer = VK_NULL_HANDLE;
+};
+
 class CommandPool : public Ref {
 public:
+	static constexpr VkCommandBufferUsageFlagBits DefaultFlags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
 	using Level = BufferLevel;
 
 	virtual ~CommandPool();
@@ -125,8 +239,9 @@ public:
 	uint32_t getFamilyIdx() const { return _familyIdx; }
 	VkCommandPool getCommandPool() const { return _commandPool; }
 
-	VkCommandBuffer allocBuffer(Device &dev, Level = Level::Primary);
-	Vector<VkCommandBuffer> allocBuffers(Device &dev, uint32_t, Level = Level::Secondary);
+	const CommandBuffer * recordBuffer(Device &dev, const Callback<bool(CommandBuffer &)> &,
+			VkCommandBufferUsageFlagBits = DefaultFlags, Level = Level::Primary);
+
 	void freeDefaultBuffers(Device &dev, Vector<VkCommandBuffer> &);
 	void reset(Device &dev, bool release = false);
 
@@ -139,6 +254,7 @@ protected:
 	QueueOperations _class = QueueOperations::Graphics;
 	VkCommandPool _commandPool = VK_NULL_HANDLE;
 	Vector<Rc<Ref>> _autorelease;
+	Vector<Rc<CommandBuffer>> _buffers;
 };
 
 }

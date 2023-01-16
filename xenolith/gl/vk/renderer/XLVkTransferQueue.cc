@@ -559,31 +559,26 @@ bool TransferResource::prepareCommands(uint32_t idx, VkCommandBuffer buf,
 bool TransferResource::transfer(const Rc<DeviceQueue> &queue, const Rc<CommandPool> &pool, const Rc<Fence> &fence) {
 	auto dev = _alloc->getDevice();
 	auto table = _alloc->getDevice()->getTable();
-	auto buf = pool->allocBuffer(*dev);
+	auto buf = pool->recordBuffer(*dev, [&] (CommandBuffer &buf) {
+		Vector<VkImageMemoryBarrier> outputImageBarriers;
+		Vector<VkBufferMemoryBarrier> outputBufferBarriers;
 
-	VkCommandBufferBeginInfo beginInfo{};
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	table->vkBeginCommandBuffer(buf, &beginInfo);
+		if (!prepareCommands(queue->getIndex(), buf.getBuffer(), outputImageBarriers, outputBufferBarriers)) {
+			return false;
+		}
 
-	Vector<VkImageMemoryBarrier> outputImageBarriers;
-	Vector<VkBufferMemoryBarrier> outputBufferBarriers;
+		table->vkCmdPipelineBarrier(buf.getBuffer(), VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+			0, nullptr,
+			outputBufferBarriers.size(), outputBufferBarriers.data(),
+			outputImageBarriers.size(), outputImageBarriers.data());
+		return true;
+	});
 
-	if (!prepareCommands(queue->getIndex(), buf, outputImageBarriers, outputBufferBarriers)) {
-		return false;
+	if (buf) {
+		return queue->submit(*fence, buf->getBuffer());
 	}
-
-	table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-		VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
-		0, nullptr,
-		outputBufferBarriers.size(), outputBufferBarriers.data(),
-		outputImageBarriers.size(), outputImageBarriers.data());
-
-	if (table->vkEndCommandBuffer(buf) != VK_SUCCESS) {
-		return false;
-	}
-
-	return queue->submit(*fence, makeSpanView(&buf, 1));
+	return false;
 }
 
 void TransferResource::dropStaging(StagingBuffer &buffer) const {
@@ -977,42 +972,38 @@ Vector<VkCommandBuffer> TransferRenderPassHandle::doPrepareCommands(FrameHandle 
 		return Vector<VkCommandBuffer>();
 	}
 
-	auto buf = _pool->allocBuffer(*_device);
 	auto table = _device->getTable();
+	auto buf = _pool->recordBuffer(*_device, [&] (CommandBuffer &buf) {
+		Vector<VkImageMemoryBarrier> outputImageBarriers;
+		Vector<VkBufferMemoryBarrier> outputBufferBarriers;
 
-	VkCommandBufferBeginInfo beginInfo{};
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	table->vkBeginCommandBuffer(buf, &beginInfo);
+		if (!transfer->getResource()->prepareCommands(_pool->getFamilyIdx(), buf.getBuffer(), outputImageBarriers, outputBufferBarriers)) {
+			return false;
+		}
 
-	Vector<VkImageMemoryBarrier> outputImageBarriers;
-	Vector<VkBufferMemoryBarrier> outputBufferBarriers;
+		VkPipelineStageFlags targetMask = 0;
+		if ((_pool->getClass() & QueueOperations::Graphics) != QueueOperations::None) {
+			targetMask |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		}
+		if ((_pool->getClass() & QueueOperations::Compute) != QueueOperations::None) {
+			targetMask |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+		}
+		if (targetMask == 0) {
+			targetMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+		}
 
-	if (!transfer->getResource()->prepareCommands(_pool->getFamilyIdx(), buf, outputImageBarriers, outputBufferBarriers)) {
+		table->vkCmdPipelineBarrier(buf.getBuffer(), VK_PIPELINE_STAGE_TRANSFER_BIT, targetMask, 0,
+			0, nullptr,
+			outputBufferBarriers.size(), outputBufferBarriers.data(),
+			outputImageBarriers.size(), outputImageBarriers.data());
+		return true;
+	});
+
+	if (!buf) {
 		return Vector<VkCommandBuffer>();
 	}
 
-	VkPipelineStageFlags targetMask = 0;
-	if ((_pool->getClass() & QueueOperations::Graphics) != QueueOperations::None) {
-		targetMask |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-	}
-	if ((_pool->getClass() & QueueOperations::Compute) != QueueOperations::None) {
-		targetMask |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-	}
-	if (targetMask == 0) {
-		targetMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-	}
-
-	table->vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_TRANSFER_BIT, targetMask, 0,
-		0, nullptr,
-		outputBufferBarriers.size(), outputBufferBarriers.data(),
-		outputImageBarriers.size(), outputImageBarriers.data());
-
-	if (table->vkEndCommandBuffer(buf) != VK_SUCCESS) {
-		return Vector<VkCommandBuffer>();
-	}
-
-	return Vector<VkCommandBuffer>({buf});
+	return Vector<VkCommandBuffer>{buf->getBuffer()};
 }
 
 void TransferRenderPassHandle::doComplete(FrameQueue &queue, Function<void(bool)> &&func, bool success) {

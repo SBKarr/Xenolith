@@ -65,9 +65,9 @@ public:
 	void readImage(Device &dev, Loop &loop, const Rc<Image> &, AttachmentLayout, Function<void(const gl::ImageInfo &, BytesView)> &&);
 
 protected:
-	void writeDefaults(Device &dev, VkCommandBuffer buf);
-	void writeImageTransfer(Device &dev, VkCommandBuffer buf, uint32_t qidx, const Rc<Buffer> &, const Rc<Image> &);
-	void writeImageRead(Device &dev, VkCommandBuffer buf, uint32_t qidx, const Rc<Image> &,
+	void writeDefaults(CommandBuffer &buf);
+	void writeImageTransfer(Device &dev, CommandBuffer &buf, uint32_t qidx, const Rc<Buffer> &, const Rc<Image> &);
+	void writeImageRead(Device &dev, CommandBuffer &buf, uint32_t qidx, const Rc<Image> &,
 			AttachmentLayout, const Rc<DeviceBuffer> &);
 
 	bool _partiallyBound = false;
@@ -94,7 +94,7 @@ public:
 
 	virtual void write(const gl::MaterialLayout &) override;
 
-	const Vector<VkImageMemoryBarrier> &getPendingBarriers() const { return _pendingBarriers; }
+	const Vector<ImageMemoryBarrier> &getPendingBarriers() const { return _pendingBarriers; }
 	void dropPendingBarriers();
 
 	Device *getDevice() const;
@@ -107,7 +107,7 @@ protected:
 	uint32_t _count = 0;
 	VkDescriptorSet _set = VK_NULL_HANDLE;
 	VkDescriptorPool _pool = VK_NULL_HANDLE;
-	Vector<VkImageMemoryBarrier> _pendingBarriers;
+	Vector<ImageMemoryBarrier> _pendingBarriers;
 };
 
 }
