@@ -1,5 +1,4 @@
 /**
- Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
  Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,34 +20,45 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_
-#define TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_
+#ifndef MODULES_MATERIAL_COMPONENTS_INPUT_MATERIALINPUTTEXTCONTAINER_H_
+#define MODULES_MATERIAL_COMPONENTS_INPUT_MATERIALINPUTTEXTCONTAINER_H_
 
-#include "MaterialSurface.h"
-#include "AppLayoutTest.h"
-#include "AppMaterialBackground.h"
-#include "AppSlider.h"
-#include "MaterialStyleContainer.h"
+#include "MaterialLabel.h"
+#include "XLTextInputManager.h"
 
-namespace stappler::xenolith::app {
+namespace stappler::xenolith::material {
 
-class MaterialNodeTest : public LayoutTest {
+class InputTextContainer : public DynamicStateNode {
 public:
-	virtual ~MaterialNodeTest() { }
+	virtual ~InputTextContainer();
 
-	virtual bool init() override;
-
+	virtual bool init();
 	virtual void onContentSizeDirty() override;
 
+	virtual bool visitDraw(RenderFrameInfo &, NodeFlags parentFlags) override;
+
+	TypescaleLabel *getLabel() const { return _label; }
+
+	virtual void setEnabled(bool);
+	virtual bool isEnabled() const { return _enabled; }
+
+	virtual void setCursor(TextCursor);
+
+	virtual void handleLabelChanged();
+	virtual void handleLabelPositionChanged();
+
 protected:
-	MaterialBackground *_background = nullptr;
-	material::Surface *_nodeElevation = nullptr;
-	material::Surface *_nodeCornerRounded = nullptr;
-	material::Surface *_nodeCornerCut = nullptr;
-	material::Surface *_nodeShadow = nullptr;
-	material::Surface *_nodeStyle = nullptr;
+	virtual void updateCursorPosition();
+	virtual void runAdjustLabel(float pos);
+
+	TypescaleLabel *_label = nullptr;
+	Vec2 _adjustment = Vec2::ZERO;
+	Layer *_caret = nullptr;
+	TextCursor _cursor = TextCursor::InvalidCursor;
+	bool _enabled = false;
+	bool _cursorDirty = false;
 };
 
 }
 
-#endif /* TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_ */
+#endif /* MODULES_MATERIAL_COMPONENTS_INPUT_MATERIALINPUTTEXTCONTAINER_H_ */

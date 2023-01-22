@@ -76,7 +76,6 @@ public:
 	virtual void performInQueue(Function<void()> &&func, Ref *target = nullptr) = 0;
 
 	virtual void performOnGlThread(Function<void()> &&func, Ref *target = nullptr, bool immediate = false) = 0;
-	virtual void performOnGlThread(Rc<thread::Task> &&) = 0;
 
 	virtual bool isOnGlThread() const = 0;
 

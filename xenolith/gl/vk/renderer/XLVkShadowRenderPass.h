@@ -172,8 +172,7 @@ public:
 	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
 			uint32_t, bool isExternal) const override;
 
-	virtual bool writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
-			uint32_t, bool, VkDescriptorBufferInfo &) override;
+	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &) override;
 
 	void allocateBuffer(DeviceFrameHandle *, uint32_t trianglesCount, float value, uint32_t gridCells, Extent2 extent);
 
@@ -197,8 +196,7 @@ public:
 	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
 			uint32_t, bool isExternal) const override;
 
-	virtual bool writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
-			uint32_t, bool, VkDescriptorBufferInfo &) override;
+	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &) override;
 
 	bool empty() const;
 
@@ -225,8 +223,7 @@ public:
 	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
 			uint32_t, bool isExternal) const override;
 
-	virtual bool writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
-			uint32_t, bool, VkDescriptorBufferInfo &) override;
+	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &) override;
 
 	const Rc<DeviceBuffer> &getTriangles() const { return _triangles; }
 	const Rc<DeviceBuffer> &getGridSize() const { return _gridSize; }
@@ -244,8 +241,7 @@ public:
 
 	virtual void submitInput(FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
 	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &, uint32_t, bool isExternal) const override;
-	virtual bool writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
-			uint32_t, bool, VkDescriptorImageInfo &) override;
+	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorImageInfo &) override;
 
 	gl::ImageInfo getImageInfo() const { return _currentImageInfo; }
 	float getShadowDensity() const { return _shadowDensity; }
@@ -264,7 +260,7 @@ public:
 	virtual bool prepare(FrameQueue &, Function<void(bool)> &&) override;
 
 protected:
-	virtual Vector<VkCommandBuffer> doPrepareCommands(FrameHandle &) override;
+	virtual Vector<const CommandBuffer *> doPrepareCommands(FrameHandle &) override;
 
 	const ShadowLightDataAttachmentHandle *_lightsBuffer = nullptr;
 	const ShadowVertexAttachmentHandle *_vertexBuffer = nullptr;

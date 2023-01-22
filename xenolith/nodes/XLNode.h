@@ -364,7 +364,7 @@ protected:
 	Vec3 _position;
 	Vec3 _scale = Vec3(1.0f, 1.0f, 1.0f);
 	Vec3 _rotation;
-	float _density = 1.0f;
+	float _inputDensity = 1.0f;
 
 	// to support HDR, we use float colors;
 	Color4F _displayedColor = Color4F::WHITE;

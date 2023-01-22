@@ -154,6 +154,7 @@ AttachmentHandle *PassHandle::getAttachmentHandle(const Attachment *a) const {
 }
 
 void PassHandle::autorelease(Ref *ref) {
+	std::unique_lock lock(_autoreleaseMutex);
 	_autorelease.emplace_back(ref);
 }
 

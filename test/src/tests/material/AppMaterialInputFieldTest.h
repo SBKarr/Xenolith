@@ -1,5 +1,4 @@
 /**
- Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
  Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,34 +20,32 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_
-#define TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_
+#ifndef TEST_SRC_TESTS_INPUT_APPINPUTFIELDTEST_H_
+#define TEST_SRC_TESTS_INPUT_APPINPUTFIELDTEST_H_
 
-#include "MaterialSurface.h"
 #include "AppLayoutTest.h"
 #include "AppMaterialBackground.h"
-#include "AppSlider.h"
-#include "MaterialStyleContainer.h"
+#include "MaterialInputField.h"
 
 namespace stappler::xenolith::app {
 
-class MaterialNodeTest : public LayoutTest {
+class MaterialColorPickerSprite;
+class AppCheckboxWithLabel;
+
+class MaterialInputFieldTest : public LayoutTest {
 public:
-	virtual ~MaterialNodeTest() { }
+	virtual ~MaterialInputFieldTest() { }
 
 	virtual bool init() override;
 
 	virtual void onContentSizeDirty() override;
 
 protected:
+	using LayoutTest::init;
+
 	MaterialBackground *_background = nullptr;
-	material::Surface *_nodeElevation = nullptr;
-	material::Surface *_nodeCornerRounded = nullptr;
-	material::Surface *_nodeCornerCut = nullptr;
-	material::Surface *_nodeShadow = nullptr;
-	material::Surface *_nodeStyle = nullptr;
+	material::InputField *_field = nullptr;
 };
 
 }
-
-#endif /* TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_ */
+#endif /* TEST_SRC_TESTS_INPUT_APPINPUTFIELDTEST_H_ */

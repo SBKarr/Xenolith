@@ -450,6 +450,8 @@ struct TextCursor {
 	constexpr TextCursor(TextCursorPosition first, TextCursorPosition last)
 	: start(std::min(first.get(), last.get()))
 	, length(((first > last)?(first - last).get():(last - first).get()) + 1) { }
+
+	constexpr bool operator==(const TextCursor &) const = default;
 };
 
 StringView getInputKeyCodeName(InputKeyCode);

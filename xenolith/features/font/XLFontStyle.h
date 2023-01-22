@@ -171,7 +171,7 @@ enum class ListStyleType : EnumSize {
 	UpperRoman
 };
 
-struct FontSize : ValueWrapper<uint16_t, class FontSizeFlag> {
+struct FontSize {
 	static const FontSize XXSmall;
 	static const FontSize XSmall;
 	static const FontSize Small;
@@ -180,7 +180,36 @@ struct FontSize : ValueWrapper<uint16_t, class FontSizeFlag> {
 	static const FontSize XLarge;
 	static const FontSize XXLarge;
 
-	using ValueWrapper::ValueWrapper;
+	static FontSize progress(FontSize source, FontSize target, float p) {
+		auto value = source.val() * (1.0f - p) + target.val() * p;
+		return make(value);
+	}
+
+	static constexpr FontSize make(float value) {
+		FontSize ret;
+		ret.value = static_cast<uint16_t>(std::floor(value * 16.0f));
+		return ret;
+	}
+
+	inline constexpr FontSize() = default;
+	inline constexpr FontSize(const FontSize &) = default;
+
+	inline explicit constexpr FontSize(uint16_t val) : value(val << 4) { }
+
+	constexpr FontSize scale(float density) const { return FontSize::make(val() * density); }
+
+	constexpr FontSize operator*(float v) const { return scale(v); }
+	constexpr FontSize operator/(float v) const { return scale(1.0f / v); }
+
+	constexpr uint16_t get() const { return value >> 4; }
+	constexpr float val() const { return static_cast<float>(value) / 16.0f; }
+
+	constexpr FontSize &operator-=(FontSize v) { value -= v.value; return *this; }
+
+	constexpr bool operator==(const FontSize &) const = default;
+	constexpr bool operator!=(const FontSize &) const = default;
+
+	uint16_t value = 0;
 };
 
 struct TextParameters {
@@ -371,6 +400,14 @@ inline bool operator< (const CharLayout &l, const char16_t &c) { return l.charID
 inline bool operator> (const CharLayout &l, const char16_t &c) { return l.charID > c; }
 inline bool operator<= (const CharLayout &l, const char16_t &c) { return l.charID <= c; }
 inline bool operator>= (const CharLayout &l, const char16_t &c) { return l.charID >= c; }
+
+}
+
+namespace stappler {
+
+inline xenolith::font::FontSize progress(xenolith::font::FontSize source, xenolith::font::FontSize target, float p) {
+	return xenolith::font::FontSize::progress(source, target, p);
+}
 
 }
 

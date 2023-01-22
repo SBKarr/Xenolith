@@ -44,16 +44,16 @@ public:
 	using Cursor = TextCursor;
 
 	virtual ~InputLabelDelegate();
-	virtual bool onInputChar(char16_t);
-	virtual bool onInputString(const WideStringView &str, const Cursor &c);
+	virtual bool handleInputChar(char16_t);
+	virtual bool handleInputString(const WideStringView &str, const Cursor &c);
 
-	virtual void onCursor(const Cursor &);
-	virtual void onInput();
+	virtual void handleCursor(const Cursor &);
+	virtual void handleInput();
 
-	virtual void onActivated(bool);
-	virtual void onError(Error);
+	virtual void handleActivated(bool);
+	virtual void handleError(Error);
 
-	virtual void onPointer(bool);
+	virtual void handlePointer(bool);
 };
 
 class InputLabelContainer : public DynamicStateNode {

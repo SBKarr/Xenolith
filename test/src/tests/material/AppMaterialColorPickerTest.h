@@ -27,7 +27,7 @@
 #include "MaterialSurface.h"
 #include "MaterialColorScheme.h"
 #include "AppLayoutTest.h"
-#include "AppCheckbox.h"
+#include "AppMaterialColorPicker.h"
 #include "AppSlider.h"
 #include "XLGuiLayerRounded.h"
 
@@ -52,46 +52,6 @@ protected:
 	material::ColorRole _name;
 };
 
-class MaterialColorPickerSprite : public Sprite {
-public:
-	enum Type {
-		Hue,
-		Chroma,
-		Tone
-	};
-	static constexpr uint32_t QuadsCount = 60;
-
-	virtual ~MaterialColorPickerSprite() { }
-
-	virtual bool init(Type, const material::ColorHCT &, Function<void(float)> &&cb);
-
-	virtual void onContentSizeDirty() override;
-
-	const material::ColorHCT &getTargetColor() const;
-	void setTargetColor(const material::ColorHCT &color);
-
-	void setValue(float value);
-	float getValue() const;
-
-	void setLabelColor(const Color4F &);
-
-protected:
-	virtual void updateVertexesColor() override;
-	virtual void initVertexes() override;
-	virtual void updateVertexes() override;
-
-	String makeString();
-	void updateValue();
-
-	Type _type;
-	float _value = 0.0f;
-	material::ColorHCT _targetColor;
-	Function<void(float)> _callback;
-	Label *_label = nullptr;
-	Layer *_indicator = nullptr;
-	InputListener *_input = nullptr;
-};
-
 class MaterialColorPickerTest : public LayoutTest {
 public:
 	virtual ~MaterialColorPickerTest() { }
@@ -113,9 +73,9 @@ protected:
 	AppCheckboxWithLabel *_lightCheckbox = nullptr;
 	AppCheckboxWithLabel *_contentCheckbox = nullptr;
 
-	MaterialColorPickerSprite *_huePicker = nullptr;
-	MaterialColorPickerSprite *_chromaPicker = nullptr;
-	MaterialColorPickerSprite *_tonePicker = nullptr;
+	MaterialColorPicker *_huePicker = nullptr;
+	MaterialColorPicker *_chromaPicker = nullptr;
+	MaterialColorPicker *_tonePicker = nullptr;
 
 	LayerRounded *_spriteLayer = nullptr;
 	material::ColorHCT _colorHct;

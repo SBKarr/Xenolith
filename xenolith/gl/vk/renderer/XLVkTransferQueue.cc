@@ -69,7 +69,7 @@ public:
 	virtual ~TransferRenderPassHandle();
 
 protected:
-	virtual Vector<VkCommandBuffer> doPrepareCommands(FrameHandle &) override;
+	virtual Vector<const CommandBuffer *> doPrepareCommands(FrameHandle &) override;
 	virtual void doComplete(FrameQueue &, Function<void(bool)> &&, bool) override;
 };
 
@@ -576,7 +576,7 @@ bool TransferResource::transfer(const Rc<DeviceQueue> &queue, const Rc<CommandPo
 	});
 
 	if (buf) {
-		return queue->submit(*fence, buf->getBuffer());
+		return queue->submit(*fence, buf);
 	}
 	return false;
 }
@@ -959,7 +959,7 @@ void TransferRenderPass::prepare(gl::Device &dev) {
 
 TransferRenderPassHandle::~TransferRenderPassHandle() { }
 
-Vector<VkCommandBuffer> TransferRenderPassHandle::doPrepareCommands(FrameHandle &) {
+Vector<const CommandBuffer *> TransferRenderPassHandle::doPrepareCommands(FrameHandle &) {
 	auto pass = (TransferRenderPass *)_renderPass.get();
 	TransferAttachmentHandle *transfer = nullptr;
 	for (auto &it : _queueData->attachments) {
@@ -969,7 +969,7 @@ Vector<VkCommandBuffer> TransferRenderPassHandle::doPrepareCommands(FrameHandle 
 	}
 
 	if (!transfer) {
-		return Vector<VkCommandBuffer>();
+		return Vector<const CommandBuffer *>();
 	}
 
 	auto table = _device->getTable();
@@ -999,11 +999,7 @@ Vector<VkCommandBuffer> TransferRenderPassHandle::doPrepareCommands(FrameHandle 
 		return true;
 	});
 
-	if (!buf) {
-		return Vector<VkCommandBuffer>();
-	}
-
-	return Vector<VkCommandBuffer>{buf->getBuffer()};
+	return Vector<const CommandBuffer *>{buf};
 }
 
 void TransferRenderPassHandle::doComplete(FrameQueue &queue, Function<void(bool)> &&func, bool success) {

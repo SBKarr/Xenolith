@@ -34,6 +34,7 @@
 #include <xkbcommon/xkbcommon-compose.h>
 #include <xkbcommon/xkbcommon-names.h>
 
+#define XL_X11_DEBUG 1
 #define XL_WAYLAND_DEBUG 0
 
 #if XL_X11_DEBUG

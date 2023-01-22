@@ -78,6 +78,13 @@ void TypescaleLabel::setRole(TypescaleRole role) {
 	}
 }
 
+void TypescaleLabel::setBlendColor(ColorRole rule, float value) {
+	if (_blendColorRule != rule || _blendValue != value) {
+		_blendColorRule = rule;
+		_blendValue = value;
+	}
+}
+
 bool TypescaleLabel::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 	if (!_visible) {
 		return false;
@@ -86,7 +93,24 @@ bool TypescaleLabel::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 	auto style = frame.getComponent<SurfaceInterior>(SurfaceInterior::ComponentFrameTag);
 	if (style) {
 		auto &s = style->getStyle();
+
+		if (_blendValue > 0.0f) {
+			auto styleContainer = frame.getComponent<StyleContainer>(StyleContainer::ComponentFrameTag);
+			if (styleContainer) {
+				if (auto scheme = styleContainer->getScheme(s.schemeTag)) {
+					auto c = scheme->get(_blendColorRule);
+					if (c != _blendColor) {
+						_blendColor = c;
+					}
+				}
+			}
+		}
+
 		auto color = s.colorOn.asColor4F();
+		if (_blendValue > 0.0f) {
+			color = color * (1.0f - _blendValue) + _blendColor * _blendValue;
+		}
+
 		if (color != getColor()) {
 			setColor(color, true);
 		}

@@ -385,7 +385,6 @@ public:
 	using PassHandle = renderqueue::PassHandle;
 	using FrameQueue = renderqueue::FrameQueue;
 	using FrameHandle = renderqueue::FrameHandle;
-	using PipelineDescriptor = renderqueue::PipelineDescriptor;
 	using Attachment = renderqueue::Attachment;
 
 	virtual ~AttachmentHandle() { }

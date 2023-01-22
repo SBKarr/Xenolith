@@ -700,11 +700,11 @@ void Node::onGlobalTransformDirty(const Mat4 &parentTransform) {
 	if (_scale.z != 1.f) { scale.z *= _scale.z; }
 
 	auto density = std::min(std::min(scale.x, scale.y), scale.z);
-	if (density != _density) {
+	if (density != _inputDensity) {
 		for (auto &it : _inputEvents) {
 			it->setDensity(density);
 		}
-		_density = density;
+		_inputDensity = density;
 	}
 }
 

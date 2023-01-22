@@ -24,6 +24,9 @@
 #define TEST_SRC_TESTS_UTILS_APPUTILSSTORAGETEST_H_
 
 #include "AppLayoutTest.h"
+#include "AppMaterialBackground.h"
+#include "MaterialInputField.h"
+#include "MaterialButton.h"
 
 namespace stappler::xenolith::app {
 
@@ -33,15 +36,25 @@ class UtilsStorageTest : public LayoutTest {
 public:
 	virtual ~UtilsStorageTest() { }
 
-	virtual bool init();
+	virtual bool init() override;
 
+	virtual void onContentSizeDirty() override;
 	virtual void onEnter(Scene *) override;
 	virtual void onExit() override;
 
 protected:
 	using LayoutTest::init;
 
+	MaterialBackground *_background = nullptr;
+	material::InputField *_inputKey = nullptr;
+	material::InputField *_inputValue = nullptr;
+	material::Button *_create = nullptr;
+	material::Button *_check = nullptr;
+
+	Label *_result = nullptr;
+
 	Rc<UtilsStorageTestComponentContainer> _container;
+
 };
 
 }

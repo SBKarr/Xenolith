@@ -27,6 +27,26 @@
 
 namespace stappler::xenolith::vk {
 
+DescriptorBinding::~DescriptorBinding() {
+	data.clear();
+}
+
+DescriptorBinding::DescriptorBinding(VkDescriptorType type, uint32_t count) : type(type) {
+	data.resize(count, DescriptorData{nullptr, nullptr});
+}
+
+void DescriptorBinding::write(uint32_t idx, DescriptorBufferInfo &&info) {
+	data[idx] = DescriptorData{info.buffer->getBuffer(), info.buffer};
+}
+
+void DescriptorBinding::write(uint32_t idx, DescriptorImageInfo &&info) {
+	data[idx] = DescriptorData{info.imageView->getImageView(), info.imageView};
+}
+
+void DescriptorBinding::write(uint32_t idx, DescriptorBufferViewInfo &&info) {
+	data[idx] = DescriptorData{info.buffer->getBuffer(), info.buffer};
+}
+
 bool RenderPassImpl::Data::cleanup(Device &dev) {
 	for (VkDescriptorSetLayout &it : layouts) {
 		dev.getTable()->vkDestroyDescriptorSetLayout(dev.getDevice(), it, nullptr);
@@ -78,12 +98,12 @@ VkRenderPass RenderPassImpl::getRenderPass(bool alt) const {
 	return _data->renderPass;
 }
 
-VkDescriptorSet RenderPassImpl::getDescriptorSet(uint32_t idx) const {
+/*VkDescriptorSet RenderPassImpl::getDescriptorSet(uint32_t idx) const {
 	if (idx >= _data->sets.size()) {
 		return VK_NULL_HANDLE;
 	}
 	return _data->sets[idx];
-}
+}*/
 
 bool RenderPassImpl::writeDescriptors(const QueuePassHandle &handle, bool async) const {
 	auto dev = (Device *)_device;
@@ -96,7 +116,7 @@ bool RenderPassImpl::writeDescriptors(const QueuePassHandle &handle, bool async)
 
 	Vector<VkWriteDescriptorSet> writes;
 
-	auto writeDescriptor = [&] (VkDescriptorSet set, const PipelineDescriptor &desc, uint32_t currentDescriptor, bool external) {
+	auto writeDescriptor = [&] (DescriptorSet *set, const PipelineDescriptor &desc, uint32_t currentDescriptor, bool external) {
 		auto a = handle.getAttachmentHandle(desc.attachment);
 		if (!a) {
 			return false;
@@ -109,7 +129,7 @@ bool RenderPassImpl::writeDescriptors(const QueuePassHandle &handle, bool async)
 		VkWriteDescriptorSet writeData;
 		writeData.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		writeData.pNext = nullptr;
-		writeData.dstSet = set;
+		writeData.dstSet = set->set;
 		writeData.dstBinding = currentDescriptor;
 		writeData.dstArrayElement = 0;
 		writeData.descriptorCount = 0;
@@ -131,10 +151,14 @@ bool RenderPassImpl::writeDescriptors(const QueuePassHandle &handle, bool async)
 						localImages = &images.emplace_front(Vector<VkDescriptorImageInfo>());
 					}
 					if (localImages) {
-						auto &dst = localImages->emplace_back(VkDescriptorImageInfo());
 						auto h = (ImageAttachmentHandle *)a;
-						if (!h->writeDescriptor(handle, desc, i, external, dst)) {
+
+						DescriptorImageInfo info(&desc, i, external);
+						if (!h->writeDescriptor(handle, info)) {
 							return false;
+						} else {
+							localImages->emplace_back(VkDescriptorImageInfo{info.sampler, info.imageView->getImageView(), info.layout});
+							set->bindings[currentDescriptor].write(i, move(info));
 						}
 					}
 					break;
@@ -145,8 +169,11 @@ bool RenderPassImpl::writeDescriptors(const QueuePassHandle &handle, bool async)
 					}
 					if (localViews) {
 						auto h = (TexelAttachmentHandle *)a;
-						if (auto v = h->getDescriptor(handle, desc, i, external)) {
-							localViews->emplace_back(v);
+
+						DescriptorBufferViewInfo info(&desc, i, external);
+						if (h->writeDescriptor(handle, info)) {
+							localViews->emplace_back(info.target);
+							set->bindings[currentDescriptor].write(i, move(info));
 						} else {
 							return false;
 						}
@@ -160,10 +187,14 @@ bool RenderPassImpl::writeDescriptors(const QueuePassHandle &handle, bool async)
 						localBuffers = &buffers.emplace_front(Vector<VkDescriptorBufferInfo>());
 					}
 					if (localBuffers) {
-						auto &dst = localBuffers->emplace_back(VkDescriptorBufferInfo());
 						auto h = (BufferAttachmentHandle *)a;
-						if (!h->writeDescriptor(handle, desc, i, external, dst)) {
+
+						DescriptorBufferInfo info(&desc, i, external);
+						if (!h->writeDescriptor(handle, info)) {
 							return false;
+						} else {
+							localBuffers->emplace_back(VkDescriptorBufferInfo{info.buffer->getBuffer(), info.offset, info.range});
+							set->bindings[currentDescriptor].write(i, move(info));
 						}
 					}
 					break;
@@ -188,7 +219,7 @@ bool RenderPassImpl::writeDescriptors(const QueuePassHandle &handle, bool async)
 
 					writeData.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 					writeData.pNext = nullptr;
-					writeData.dstSet = set;
+					writeData.dstSet = set->set;
 					writeData.dstBinding = currentDescriptor;
 					writeData.descriptorCount = 0;
 					writeData.descriptorType = VkDescriptorType(desc.type);
@@ -223,7 +254,7 @@ bool RenderPassImpl::writeDescriptors(const QueuePassHandle &handle, bool async)
 
 	uint32_t currentSet = 0;
 	if (!data->queueDescriptors.empty()) {
-		auto set = getDescriptorSet(currentSet);
+		auto set = _data->sets[currentSet];
 		uint32_t currentDescriptor = 0;
 		for (auto &it : data->queueDescriptors) {
 			if (it->updateAfterBind != async) {
@@ -238,7 +269,7 @@ bool RenderPassImpl::writeDescriptors(const QueuePassHandle &handle, bool async)
 	}
 
 	if (!data->extraDescriptors.empty()) {
-		auto set = getDescriptorSet(currentSet);
+		auto set = _data->sets[currentSet];
 		uint32_t currentDescriptor = 0;
 		for (auto &it : data->extraDescriptors) {
 			if (it.updateAfterBind != async) {
@@ -605,6 +636,8 @@ bool RenderPassImpl::initDescriptors(Device &dev, PassData &data, Data &pass) {
 	if (!data.queueDescriptors.empty()) {
 		++ maxSets;
 
+		auto descriptorSet = Rc<DescriptorSet>::alloc();
+
 		bool hasFlags = false;
 		Vector<VkDescriptorBindingFlags> flags;
 		VkDescriptorSetLayout setLayout = VK_NULL_HANDLE;
@@ -634,6 +667,7 @@ bool RenderPassImpl::initDescriptors(Device &dev, PassData &data, Data &pass) {
 				b.pImmutableSamplers = nullptr;
 			}
 			bindings.emplace_back(b);
+			descriptorSet->bindings.emplace_back(DescriptorBinding(VkDescriptorType(binding->type), binding->count));
 			++ bindingIdx;
 		}
 		VkDescriptorSetLayoutCreateInfo layoutInfo { };
@@ -654,12 +688,14 @@ bool RenderPassImpl::initDescriptors(Device &dev, PassData &data, Data &pass) {
 			layoutInfo.pNext = &bindingFlags;
 
 			if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &setLayout) == VK_SUCCESS) {
+				pass.sets.emplace_back(move(descriptorSet));
 				pass.layouts.emplace_back(setLayout);
 			} else {
 				return pass.cleanup(dev);
 			}
 		} else {
 			if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &setLayout) == VK_SUCCESS) {
+				pass.sets.emplace_back(move(descriptorSet));
 				pass.layouts.emplace_back(setLayout);
 			} else {
 				return pass.cleanup(dev);
@@ -669,6 +705,8 @@ bool RenderPassImpl::initDescriptors(Device &dev, PassData &data, Data &pass) {
 
 	if (!data.extraDescriptors.empty()) {
 		++ maxSets;
+
+		auto descriptorSet = Rc<DescriptorSet>::alloc();
 
 		bool hasFlags = false;
 		Vector<VkDescriptorBindingFlags> flags;
@@ -696,6 +734,7 @@ bool RenderPassImpl::initDescriptors(Device &dev, PassData &data, Data &pass) {
 				b.pImmutableSamplers = nullptr;
 			}
 			bindings.emplace_back(b);
+			descriptorSet->bindings.emplace_back(DescriptorBinding(VkDescriptorType(binding.type), binding.count));
 			++ bindingIdx;
 		}
 		VkDescriptorSetLayoutCreateInfo layoutInfo { };
@@ -716,12 +755,14 @@ bool RenderPassImpl::initDescriptors(Device &dev, PassData &data, Data &pass) {
 			layoutInfo.pNext = &bindingFlags;
 
 			if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &setLayout) == VK_SUCCESS) {
+				pass.sets.emplace_back(move(descriptorSet));
 				pass.layouts.emplace_back(setLayout);
 			} else {
 				return pass.cleanup(dev);
 			}
 		} else {
 			if (dev.getTable()->vkCreateDescriptorSetLayout(dev.getDevice(), &layoutInfo, nullptr, &setLayout) == VK_SUCCESS) {
+				pass.sets.emplace_back(move(descriptorSet));
 				pass.layouts.emplace_back(setLayout);
 			} else {
 				return pass.cleanup(dev);
@@ -752,10 +793,15 @@ bool RenderPassImpl::initDescriptors(Device &dev, PassData &data, Data &pass) {
 	allocInfo.descriptorSetCount = static_cast<uint32_t>(pass.layouts.size());
 	allocInfo.pSetLayouts = pass.layouts.data();
 
-	pass.sets.resize(pass.layouts.size());
-	if (dev.getTable()->vkAllocateDescriptorSets(dev.getDevice(), &allocInfo, pass.sets.data()) != VK_SUCCESS) {
+	Vector<VkDescriptorSet> sets; sets.resize(pass.layouts.size());
+
+	if (dev.getTable()->vkAllocateDescriptorSets(dev.getDevice(), &allocInfo, sets.data()) != VK_SUCCESS) {
 		pass.sets.clear();
 		return pass.cleanup(dev);
+	}
+
+	for (size_t i = 0; i < sets.size(); ++ i) {
+		pass.sets[i]->set = sets[i];
 	}
 
 	VkPushConstantRange range{

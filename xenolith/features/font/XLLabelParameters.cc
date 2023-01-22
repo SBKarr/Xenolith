@@ -302,16 +302,20 @@ LabelParameters::VerticalAlign LabelParameters::getVerticalAlign() const {
 }
 
 void LabelParameters::setFontSize(const uint16_t &value) {
-	if (value != _style.font.fontSize.get()) {
-		_style.font.fontSize = FontSize(value);
+	setFontSize(FontSize(value));
+}
+
+void LabelParameters::setFontSize(const FontSize &value) {
+	auto realTargetValue = value.scale(_labelDensity).get();
+	auto realSourceValue = _style.font.fontSize.scale(_labelDensity).get();
+
+	if (realTargetValue != realSourceValue) {
+		_style.font.fontSize = value;
 		_labelDirty = true;
 	}
 }
-void LabelParameters::setFontSize(const FontSize &size) {
-	setFontSize(size.get());
-}
-uint16_t LabelParameters::getFontSize() const {
-	return _style.font.fontSize.get();
+LabelParameters::FontSize LabelParameters::getFontSize() const {
+	return _style.font.fontSize;
 }
 
 void LabelParameters::setFontStyle(const FontStyle &value) {

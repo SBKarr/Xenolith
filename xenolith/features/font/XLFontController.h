@@ -114,7 +114,7 @@ public:
 	const Rc<gl::DynamicImage> &getImage() const { return _image; }
 	const Rc<Texture> &getTexture() const { return _texture; }
 
-	Rc<FontLayout> getLayout(const FontParameters &f);
+	Rc<FontLayout> getLayout(FontParameters f);
 	Rc<FontLayout> getLayoutForString(const FontParameters &f, const FontCharString &);
 
 	Rc<renderqueue::DependencyEvent> addTextureChars(const Rc<FontLayout> &, SpanView<CharSpec>);

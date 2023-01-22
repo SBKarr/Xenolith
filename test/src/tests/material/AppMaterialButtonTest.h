@@ -25,6 +25,7 @@
 
 #include "MaterialButton.h"
 #include "AppLayoutTest.h"
+#include "AppMaterialBackground.h"
 
 namespace stappler::xenolith::app {
 
@@ -38,17 +39,11 @@ public:
 	virtual bool init() override;
 
 	virtual void onContentSizeDirty() override;
-	virtual void onEnter(Scene *) override;
 
 protected:
-	material::StyleContainer *_style = nullptr;
-
-	material::Surface *_background = nullptr;
+	MaterialBackground *_background = nullptr;
 	material::TypescaleLabel *_label = nullptr;
 	Vector<material::Button *> _buttons;
-
-	MaterialColorPickerSprite *_huePicker = nullptr;
-	AppCheckboxWithLabel *_lightCheckbox = nullptr;
 };
 
 }

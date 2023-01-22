@@ -160,7 +160,7 @@ void TextureSetLayout::initDefault(Device &dev, Loop &loop, Function<void(bool)>
 				return true;
 			});
 
-			if (task->queue->submit(*task->fence, buf->getBuffer())) {
+			if (task->queue->submit(*task->fence, buf)) {
 				return true;
 			}
 			return false;
@@ -244,7 +244,7 @@ void TextureSetLayout::compileImage(Device &dev, Loop &loop, const Rc<gl::Dynami
 						return true;
 					});
 
-					if (task->queue->submit(*task->fence, buf->getBuffer())) {
+					if (task->queue->submit(*task->fence, buf)) {
 						return true;
 					}
 					return false;
@@ -326,7 +326,7 @@ void TextureSetLayout::readImage(Device &dev, Loop &loop, const Rc<Image> &image
 					return true;
 				});
 
-				if (task->queue->submit(*task->fence, buf->getBuffer())) {
+				if (task->queue->submit(*task->fence, buf)) {
 					return true;
 				}
 				return false;

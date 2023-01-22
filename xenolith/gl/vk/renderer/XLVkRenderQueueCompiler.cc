@@ -370,7 +370,7 @@ bool RenderQueuePassHandle::prepare(FrameQueue &frame, Function<void(bool)> &&cb
 			});
 
 			if (buf) {
-				_buffers.emplace_back(buf->getBuffer());
+				_buffers.emplace_back(buf);
 			}
 			return true;
 		}, [this, cb = move(cb)] (FrameHandle &frame, bool success) {

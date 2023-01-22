@@ -867,7 +867,9 @@ void Server::ServerData::addAsyncTask(const db::Callback<db::Function<void(const
 bool Server::ServerData::addComponent(ComponentContainer *comp, const db::Transaction &t) {
 	ServerComponentLoader loader(this, t);
 
+	memory::pool::push(loader.getPool());
 	comp->handleStorageInit(loader);
+	memory::pool::pop();
 
 	return loader.run(comp);
 }

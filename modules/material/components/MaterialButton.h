@@ -24,22 +24,11 @@
 #define MODULES_MATERIAL_COMPONENTS_MATERIALBUTTON_H_
 
 #include "MaterialSurface.h"
-#include "XLIconNames.h"
+#include "MaterialIconSprite.h"
 
 namespace stappler::xenolith::material {
 
 class TypescaleLabel;
-
-struct ButtonData {
-	String text;
-	IconName iconPrefix = IconName::None;
-	IconName iconPostfix = IconName::None;
-	Function<void()> callbackTap;
-	Function<void()> callbackLongPress;
-	Function<void()> callbackDoubleTap;
-	bool followContentSize = true;
-	float activityAnimationDuration = 0.25f;
-};
 
 class Button : public Surface {
 public:
@@ -47,9 +36,9 @@ public:
 
 	virtual ~Button() { }
 
-	virtual bool init(ButtonData &&, NodeStyle = NodeStyle::Filled,
+	virtual bool init(NodeStyle = NodeStyle::Filled,
 			ColorRole = ColorRole::Primary, uint32_t schemeTag = SurfaceStyle::PrimarySchemeTag);
-	virtual bool init(ButtonData &&, const SurfaceStyle &);
+	virtual bool init(const SurfaceStyle &);
 
 	virtual void onContentSizeDirty() override;
 
@@ -59,8 +48,20 @@ public:
 	virtual void setEnabled(bool);
 	virtual bool isEnabled() const { return _enabled; }
 
+	virtual void setText(StringView);
+	virtual StringView getText() const;
+
+	virtual void setLeadingIconName(IconName);
+	virtual IconName getLeadingIconName() const;
+
+	virtual void setTrailingIconName(IconName);
+	virtual IconName getTrailingIconName() const;
+
+	virtual void setTapCallback(Function<void()> &&);
+	virtual void setLongPressCallback(Function<void()> &&);
+	virtual void setDoubleTapCallback(Function<void()> &&);
+
 protected:
-	virtual void updateButtonData();
 	virtual void updateSizeFromContent();
 	virtual void updateActivityState();
 
@@ -68,12 +69,19 @@ protected:
 	virtual void handleLongPress();
 	virtual void handleDoubleTap();
 
+	virtual float getWidthForContent() const;
+
 	InputListener *_inputListener = nullptr;
 	TypescaleLabel *_label = nullptr;
-	VectorSprite *_iconPrefix = nullptr;
-	VectorSprite *_iconPostfix = nullptr;
+	IconSprite *_leadingIcon = nullptr;
+	IconSprite *_trailingIcon = nullptr;
 
-	ButtonData _buttonData;
+	Function<void()> _callbackTap;
+	Function<void()> _callbackLongPress;
+	Function<void()> _callbackDoubleTap;
+	float _activityAnimationDuration = 0.25f;
+
+	bool _followContentSize = true;
 	bool _mouseOver = false;
 	bool _enabled = true;
 	bool _focused = false;

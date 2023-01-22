@@ -41,7 +41,7 @@ bool InputField::init() {
 	_placeholder->setPosition(Vec2(0.0f, 0.0f));
 	_placeholder->setColor(Color::Grey_500);
 	_placeholder->setLocaleEnabled(true);
-	_placeholder->setStandalone(true);
+	_placeholder->setAnchorPoint(Anchor::MiddleLeft);
 
 	/*_menu = Rc<InputMenu>::create(std::bind(&InputField::onMenuCut, this), std::bind(&InputField::onMenuCopy, this),
 			std::bind(&InputField::onMenuPaste, this));
@@ -90,15 +90,23 @@ bool InputField::init() {
 	return true;
 }
 
+void InputField::onContentSizeDirty() {
+	Node::onContentSizeDirty();
+
+	_node->setContentSize(_contentSize);
+	_label->setPosition(Vec2(0.0f, _contentSize.width / 2.0f));
+	_placeholder->setPosition(Vec2(0.0f, _contentSize.width / 2.0f));
+}
+
 bool InputField::visitGeometry(RenderFrameInfo &info, NodeFlags parentFlags) {
 	if (!_visible) {
 		return false;
 	}
 
 	if ((parentFlags & NodeFlags::TransformDirty) != NodeFlags::None) {
-		if (_menu->isVisible()) {
-			setMenuPosition(_menuPosition);
-		}
+		//if (_menu->isVisible()) {
+		//	setMenuPosition(_menuPosition);
+		//}
 	}
 
 	return Node::visitGeometry(info, parentFlags);
@@ -106,12 +114,12 @@ bool InputField::visitGeometry(RenderFrameInfo &info, NodeFlags parentFlags) {
 
 void InputField::onEnter(Scene *scene) {
 	Node::onEnter(scene);
-	_scene->pushFloatNode(_menu, 1);
+	//_scene->pushFloatNode(_menu, 1);
 	_label->setDelegate(this);
 }
 void InputField::onExit() {
 	_label->setDelegate(nullptr);
-	_scene->popFloatNode(_menu);
+	//_scene->popFloatNode(_menu);
 	Node::onExit();
 }
 
@@ -122,24 +130,24 @@ const InputField::Callback &InputField::getInputCallback() const {
 	return _onInput;
 }
 
-bool InputField::onInputChar(char16_t c) {
+bool InputField::handleInputChar(char16_t c) {
 	if (_charFilter) {
 		return _charFilter(c);
 	}
 	return true;
 }
-void InputField::onActivated(bool value) {
+void InputField::handleActivated(bool value) {
 	//_gestureListener->setSwallowTouches(value);
 }
-void InputField::onPointer(bool value) {
+void InputField::handlePointer(bool value) {
 	updateMenu();
 }
-void InputField::onCursor(const Cursor &) {
+void InputField::handleCursor(const Cursor &) {
 	updateMenu();
 }
 
 void InputField::setMenuPosition(const Vec2 &pos) {
-	_menu->updateMenu();
+	/*_menu->updateMenu();
 	_menuPosition = pos;
 	auto width = _menu->getContentSize().width;
 
@@ -162,7 +170,7 @@ void InputField::setMenuPosition(const Vec2 &pos) {
 	} else if (top > sceneSize.height - metrics::horizontalIncrement()) {
 		menuPos.y = sceneSize.height - metrics::horizontalIncrement() - _menu->getContentSize().height + (_menu->getAnchorPoint().y * _menu->getContentSize().height);
 	}
-	_menu->setPosition(menuPos);
+	_menu->setPosition(menuPos);*/
 }
 
 void InputField::setMaxChars(size_t value) {
@@ -172,10 +180,10 @@ size_t InputField::getMaxChars() const {
 	return _label->getMaxChars();
 }
 
-void InputField::setInputType(InputType t) {
+void InputField::setInputType(TextInputType t) {
 	_label->setInputType(t);
 }
-InputField::InputType InputField::getInputType() const {
+TextInputType InputField::getInputType() const {
 	return _label->getInputType();
 }
 
@@ -195,7 +203,6 @@ bool InputField::isAllowAutocorrect() const {
 
 void InputField::setEnabled(bool value) {
 	_label->setEnabled(value);
-	_gestureListener->setEnabled(value);
 }
 bool InputField::isEnabled() const {
 	return _label->isEnabled();
@@ -277,7 +284,7 @@ bool InputField::onLongPress(const Vec2 &vec, const TimeInterval &time, int coun
 bool InputField::onPressEnd(const Vec2 &vec) {
 	if (!_label->isActive()) {
 		if (!_label->onPressEnd(vec)) {
-			if (!_label->isActive() && node::isTouched(this, vec)) {
+			if (!_label->isActive() && isTouched(vec)) {
 				acquireInput();
 				return true;
 			}
@@ -285,19 +292,19 @@ bool InputField::onPressEnd(const Vec2 &vec) {
 		}
 		return true;
 	} else {
-		if (_placeholder->isVisible() && node::isTouched(_placeholder, vec, 8.0f)) {
+		if (_placeholder->isVisible() && _placeholder->isTouched(vec, 8.0f)) {
 			releaseInput();
 			return true;
 		}
 		if (!_label->onPressEnd(vec)) {
-			if (!node::isTouched(_node, vec)) {
+			if (!_node->isTouched(vec)) {
 				releaseInput();
 				return true;
 			} else {
 				_label->setCursor(Cursor(uint32_t(_label->getCharsCount())));
 			}
 			return false;
-		} else if (_label->empty() && !node::isTouched(_node, vec)) {
+		} else if (_label->empty() && !_node->isTouched(vec)) {
 			releaseInput();
 		}
 		return true;
@@ -320,19 +327,19 @@ bool InputField::onSwipeEnd(const Vec2 &vel) {
 }
 
 void InputField::onMenuCut() {
-	Device::getInstance()->copyStringToClipboard(_label->getSelectedString());
+	//Device::getInstance()->copyStringToClipboard(_label->getSelectedString());
 	_label->eraseSelection();
 }
 void InputField::onMenuCopy() {
-	Device::getInstance()->copyStringToClipboard(_label->getSelectedString());
-	_menu->setVisible(false);
+	//Device::getInstance()->copyStringToClipboard(_label->getSelectedString());
+	//_menu->setVisible(false);
 }
 void InputField::onMenuPaste() {
-	_label->pasteString(Device::getInstance()->getStringFromClipboard());
+	//_label->pasteString(Device::getInstance()->getStringFromClipboard());
 }
 
 void InputField::updateMenu() {
-	auto c = _label->getCursor();
+	/*auto c = _label->getCursor();
 	if (!_hasSwipe && _label->isPointerEnabled() && (c.length > 0 || Device::getInstance()->isClipboardAvailable())) {
 		_menu->setCopyMode(c.length > 0);
 		_menu->setVisible(true);
@@ -340,7 +347,7 @@ void InputField::updateMenu() {
 	} else {
 		_menu->setVisible(false);
 		onMenuHidden();
-	}
+	}*/
 }
 
 void InputField::onMenuVisible() {
@@ -354,6 +361,7 @@ Rc<InputLabel> InputField::makeLabel() {
 	auto label = Rc<InputLabel>::create();
 	label->setPosition(Vec2(0.0f, 0.0f));
 	label->setCursorColor(_normalColor);
+	label->setAnchorPoint(Anchor::MiddleLeft);
 	return label;
 }
 

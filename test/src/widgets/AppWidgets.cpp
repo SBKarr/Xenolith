@@ -28,3 +28,5 @@
 #include "AppLayoutMenuItem.cc"
 #include "AppLayoutTest.cc"
 #include "AppSlider.cc"
+#include "AppMaterialColorPicker.cc"
+#include "AppMaterialBackground.cc"

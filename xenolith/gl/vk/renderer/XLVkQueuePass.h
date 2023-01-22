@@ -67,7 +67,7 @@ public:
 	virtual QueueOperations getQueueOps() const;
 
 protected:
-	virtual Vector<VkCommandBuffer> doPrepareCommands(FrameHandle &);
+	virtual Vector<const CommandBuffer *> doPrepareCommands(FrameHandle &);
 	virtual bool doSubmit(FrameHandle &frame, Function<void(bool)> &&onSubmited);
 
 	virtual void doSubmitted(FrameHandle &, Function<void(bool)> &&, bool);
@@ -94,7 +94,7 @@ protected:
 	Rc<Fence> _fence;
 	Rc<CommandPool> _pool;
 	Rc<DeviceQueue> _queue;
-	Vector<VkCommandBuffer> _buffers;
+	Vector<const CommandBuffer *> _buffers;
 	Rc<FrameSync> _sync;
 };
 
@@ -123,7 +123,7 @@ public:
 	virtual bool prepare(FrameQueue &, Function<void(bool)> &&) override;
 
 protected:
-	virtual Vector<VkCommandBuffer> doPrepareCommands(FrameHandle &) override;
+	virtual Vector<const CommandBuffer *> doPrepareCommands(FrameHandle &) override;
 	virtual bool doSubmit(FrameHandle &frame, Function<void(bool)> &&onSubmited) override;
 
 	VertexBufferAttachmentHandle *_mainBuffer;

@@ -1,5 +1,4 @@
 /**
- Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
  Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,34 +20,30 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_
-#define TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_
+#ifndef TEST_SRC_WIDGETS_APPMATERIALBACKGROUND_H_
+#define TEST_SRC_WIDGETS_APPMATERIALBACKGROUND_H_
 
 #include "MaterialSurface.h"
-#include "AppLayoutTest.h"
-#include "AppMaterialBackground.h"
-#include "AppSlider.h"
-#include "MaterialStyleContainer.h"
+#include "AppCheckbox.h"
 
 namespace stappler::xenolith::app {
 
-class MaterialNodeTest : public LayoutTest {
+class MaterialColorPicker;
+
+class MaterialBackground : public material::BackgroundSurface {
 public:
-	virtual ~MaterialNodeTest() { }
+	virtual ~MaterialBackground() { }
 
-	virtual bool init() override;
-
+	virtual bool init(const Color4F &);
 	virtual void onContentSizeDirty() override;
 
+	virtual void onEnter(Scene *) override;
+
 protected:
-	MaterialBackground *_background = nullptr;
-	material::Surface *_nodeElevation = nullptr;
-	material::Surface *_nodeCornerRounded = nullptr;
-	material::Surface *_nodeCornerCut = nullptr;
-	material::Surface *_nodeShadow = nullptr;
-	material::Surface *_nodeStyle = nullptr;
+	MaterialColorPicker *_huePicker = nullptr;
+	AppCheckboxWithLabel *_lightCheckbox = nullptr;
 };
 
 }
 
-#endif /* TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_ */
+#endif /* TEST_SRC_WIDGETS_APPMATERIALBACKGROUND_H_ */

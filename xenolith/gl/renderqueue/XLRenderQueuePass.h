@@ -132,6 +132,8 @@ protected:
 	Rc<Pass> _renderPass;
 	const PassData *_data = nullptr;
 	FramePassData *_queueData = nullptr;
+
+	Mutex _autoreleaseMutex;
 	Vector<Rc<Ref>> _autorelease;
 };
 

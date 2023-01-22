@@ -468,8 +468,8 @@ bool XcbView::poll(bool frameReady) {
 
 			String str;
 			string::utf8Encode(str, event.key.keychar);
-			printf("Key pressed in window %d (%d) %04x '%s' %04x\n", ev->event, (int)ev->time, event.key.keysym,
-				str.data(), event.key.keychar);
+			XL_X11_LOG("Key pressed in window ", ev->event, " (", (int)ev->time, ") ", event.key.keysym,
+					" '", str, "' ", uint32_t(event.key.keychar));
 			break;
 		}
 		case XCB_KEY_RELEASE: {
@@ -516,23 +516,23 @@ bool XcbView::poll(bool frameReady) {
 
 			String str;
 			string::utf8Encode(str, event.key.keychar);
-			printf("Key released in window %d (%d) %04x '%s' %04x\n", ev->event, (int)ev->time, event.key.keysym,
-					str.data(), event.key.keychar);
+			XL_X11_LOG("Key released in window ", ev->event, " (", (int)ev->time, ") ", event.key.keysym,
+					" '", str, "' ", uint32_t(event.key.keychar));
 			break;
 		}
 		case XCB_VISIBILITY_NOTIFY: {
 			xcb_visibility_notify_event_t *ev = (xcb_visibility_notify_event_t*) e;
-			printf("XCB_VISIBILITY_NOTIFY: %d\n", ev->window);
+			XL_X11_LOG("XCB_VISIBILITY_NOTIFY: ", ev->window);
 			break;
 		}
 		case XCB_MAP_NOTIFY: {
 			xcb_map_notify_event_t *ev = (xcb_map_notify_event_t*) e;
-			printf("XCB_MAP_NOTIFY: %d\n", ev->event);
+			XL_X11_LOG("XCB_MAP_NOTIFY: ", ev->event);
 			break;
 		}
 		case XCB_REPARENT_NOTIFY: {
-			xcb_reparent_notify_event_t *ev = (xcb_reparent_notify_event_t*) e;
-			printf("XCB_REPARENT_NOTIFY: %d %d to %d\n", ev->event, ev->window, ev->parent);
+			//xcb_reparent_notify_event_t *ev = (xcb_reparent_notify_event_t*) e;
+			//XL_X11_LOG("XCB_REPARENT_NOTIFY: %d %d to %d\n", ev->event, ev->window, ev->parent);
 			break;
 		}
 		case XCB_CONFIGURE_NOTIFY: {
@@ -548,7 +548,7 @@ bool XcbView::poll(bool frameReady) {
 		}
 		case XCB_CLIENT_MESSAGE: {
 			xcb_client_message_event_t *ev = (xcb_client_message_event_t*) e;
-			printf("XCB_CLIENT_MESSAGE: %d of type %d\n", ev->window, ev->type);
+			XL_X11_LOG("XCB_CLIENT_MESSAGE: ", ev->window, " of type ", ev->type);
 			if (ev->type == _atoms[0] && ev->data.data32[0] == _atoms[1]) {
 				ret = false;
 			}
@@ -564,7 +564,7 @@ bool XcbView::poll(bool frameReady) {
 			if (_keysyms) {
 				_xcb->xcb_refresh_keyboard_mapping(_keysyms, ev);
 			}
-			printf("XCB_MAPPING_NOTIFY: %d %d %d\n", (int) ev->request, (int) ev->first_keycode, (int) ev->count);
+			XL_X11_LOG("XCB_MAPPING_NOTIFY: ", (int) ev->request, " ", (int) ev->first_keycode, " ", (int) ev->count);
 			break;
 		}
 		default:
@@ -585,7 +585,7 @@ bool XcbView::poll(bool frameReady) {
 				}
 			} else {
 				/* Unknown event type, ignore it */
-				printf("Unknown event: %d\n", et);
+				XL_X11_LOG("Unknown event: ", et);
 			}
 			break;
 		}
@@ -898,39 +898,40 @@ xcb_keysym_t XcbView::getKeysym(xcb_keycode_t code, uint16_t state, bool resolve
 }
 
 xkb_keysym_t XcbView::composeSymbol(xkb_keysym_t sym, InputKeyComposeState &compose) const {
-	std::cout << "Compose: " << sym;
 	if (sym == XKB_KEY_NoSymbol || !_xkbCompose) {
-		std::cout << ": " << sym << " (disabled)\n";
+		XL_X11_LOG("Compose: ", sym, " (disabled)");
 		return sym;
 	}
 	if (_xkb->xkb_compose_state_feed(_xkbCompose, sym) != XKB_COMPOSE_FEED_ACCEPTED) {
-		std::cout << ": " << sym << " (not accepted)\n";
+		XL_X11_LOG("Compose: ", sym, " (not accepted)");
 		return sym;
 	}
+	auto composedSym = sym;
 	auto state = _xkb->xkb_compose_state_get_status(_xkbCompose);
 	switch (state) {
 	case XKB_COMPOSE_COMPOSED:
 		compose = InputKeyComposeState::Composed;
-		sym = _xkb->xkb_compose_state_get_one_sym(_xkbCompose);
+		composedSym = _xkb->xkb_compose_state_get_one_sym(_xkbCompose);
 		_xkb->xkb_compose_state_reset(_xkbCompose);
-		std::cout << ": " << sym << " (composed)\n";
-		return sym;
+		XL_X11_LOG("Compose: ", sym, ": ", composedSym, " (composed)");
+		break;
 	case XKB_COMPOSE_COMPOSING:
 		compose = InputKeyComposeState::Composing;
-		std::cout << ": " << sym << " (composing)\n";
-		return sym;
+		XL_X11_LOG("Compose: ", sym, ": ", composedSym, " (composing)");
+		break;
 	case XKB_COMPOSE_CANCELLED:
-		std::cout << ": " << sym << " (cancelled)\n";
 		_xkb->xkb_compose_state_reset(_xkbCompose);
-		return sym;
+		XL_X11_LOG("Compose: ", sym, ": ", composedSym, " (cancelled)");
+		break;
 	case XKB_COMPOSE_NOTHING:
 		_xkb->xkb_compose_state_reset(_xkbCompose);
-		std::cout << ": " << sym << " (nothing)\n";
-		return sym;
+		XL_X11_LOG("Compose: ", sym, ": ", composedSym, " (nothing)");
+		break;
 	default:
-		std::cout << ": " << sym << " (error)\n";
-		return sym;
+		XL_X11_LOG("Compose: ", sym, ": ", composedSym, " (error)");
+		break;
 	}
+	return composedSym;
 }
 
 void XcbView::updateXkbKey(xcb_keycode_t code) {

@@ -53,11 +53,10 @@ bool ShadowLightDataAttachmentHandle::isDescriptorDirty(const PassHandle &, cons
 	return _data;
 }
 
-bool ShadowLightDataAttachmentHandle::writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
-		uint32_t idx, bool, VkDescriptorBufferInfo &info) {
-	switch (idx) {
+bool ShadowLightDataAttachmentHandle::writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &info) {
+	switch (info.index) {
 	case 0:
-		info.buffer = _data->getBuffer();
+		info.buffer = _data;
 		info.offset = 0;
 		info.range = _data->getSize();
 		return true;
@@ -177,23 +176,22 @@ bool ShadowVertexAttachmentHandle::isDescriptorDirty(const PassHandle &, const P
 	return false;
 }
 
-bool ShadowVertexAttachmentHandle::writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
-		uint32_t idx, bool, VkDescriptorBufferInfo &info) {
-	switch (idx) {
+bool ShadowVertexAttachmentHandle::writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &info) {
+	switch (info.index) {
 	case 0:
-		info.buffer = _indexes->getBuffer();
+		info.buffer = _indexes;
 		info.offset = 0;
 		info.range = _indexes->getSize();
 		return true;
 		break;
 	case 1:
-		info.buffer = _vertexes->getBuffer();
+		info.buffer = _vertexes;
 		info.offset = 0;
 		info.range = _vertexes->getSize();
 		return true;
 		break;
 	case 2:
-		info.buffer = _transforms->getBuffer();
+		info.buffer = _transforms;
 		info.offset = 0;
 		info.range = _transforms->getSize();
 		return true;
@@ -431,23 +429,22 @@ bool ShadowTrianglesAttachmentHandle::isDescriptorDirty(const PassHandle &, cons
 	return false;
 }
 
-bool ShadowTrianglesAttachmentHandle::writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
-		uint32_t idx, bool, VkDescriptorBufferInfo &info) {
-	switch (idx) {
+bool ShadowTrianglesAttachmentHandle::writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &info) {
+	switch (info.index) {
 	case 0:
-		info.buffer = _triangles->getBuffer();
+		info.buffer = _triangles;
 		info.offset = 0;
 		info.range = _triangles->getSize();
 		return true;
 		break;
 	case 1:
-		info.buffer = _gridSize->getBuffer();
+		info.buffer = _gridSize;
 		info.offset = 0;
 		info.range = _gridSize->getSize();
 		return true;
 		break;
 	case 2:
-		info.buffer = _gridIndex->getBuffer();
+		info.buffer = _gridIndex;
 		info.offset = 0;
 		info.range = _gridIndex->getSize();
 		return true;
@@ -649,7 +646,7 @@ bool ShadowPassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
 	}
 }
 
-Vector<VkCommandBuffer> ShadowPassHandle::doPrepareCommands(FrameHandle &h) {
+Vector<const CommandBuffer *> ShadowPassHandle::doPrepareCommands(FrameHandle &h) {
 	auto buf = _pool->recordBuffer(*_device, [&] (CommandBuffer &buf) {
 		auto pass = (RenderPassImpl *)_data->impl.get();
 
@@ -735,10 +732,7 @@ Vector<VkCommandBuffer> ShadowPassHandle::doPrepareCommands(FrameHandle &h) {
 		return true;
 	});
 
-	if (buf) {
-		return Vector<VkCommandBuffer>{buf->getBuffer()};
-	}
-	return Vector<VkCommandBuffer>();
+	return Vector<const CommandBuffer *>{buf};
 }
 
 void ShadowImageArrayAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
@@ -767,13 +761,12 @@ bool ShadowImageArrayAttachmentHandle::isDescriptorDirty(const PassHandle &, con
 	return getImage();
 }
 
-bool ShadowImageArrayAttachmentHandle::writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &desc,
-		uint32_t, bool, VkDescriptorImageInfo &target) {
+bool ShadowImageArrayAttachmentHandle::writeDescriptor(const QueuePassHandle &, DescriptorImageInfo &target) {
 	auto &image = _queueData->image;
-	auto viewInfo = gl::ImageViewInfo(*(renderqueue::ImageAttachmentDescriptor *)desc.descriptor, image->getInfo());
+	auto viewInfo = gl::ImageViewInfo(*(renderqueue::ImageAttachmentDescriptor *)target.descriptor->descriptor, image->getInfo());
 	if (auto view = image->getView(viewInfo)) {
-		target.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-		target.imageView = ((ImageView *)view.get())->getImageView();
+		target.layout = VK_IMAGE_LAYOUT_GENERAL;
+		target.imageView = (ImageView *)view.get();
 		return true;
 	}
 	return false;

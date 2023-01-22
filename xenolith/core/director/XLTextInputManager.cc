@@ -254,6 +254,9 @@ void TextInputManager::setInputEnabled(bool enabled) {
 		if (_handler && _handler->onInput) {
 			_handler->onInput(enabled);
 		}
+		if (!_isInputEnabled) {
+			cancel();
+		}
 	}
 }
 
@@ -266,11 +269,8 @@ void TextInputManager::onTextChanged() {
 bool TextInputManager::run(TextInputHandler *h, WideStringView str, TextCursor cursor, TextCursor marked, TextInputType type) {
 	auto oldH = _handler;
 	_handler = h;
-	if (oldH) {
-		if (_running) {
-			oldH->onInput(false);
-		}
-		oldH->onEnded();
+	if (oldH && _running) {
+		oldH->onInput(false);
 	}
 	_cursor = cursor;
 	_marked = marked;
@@ -351,9 +351,6 @@ void TextInputManager::cancel() {
 	if (_running) {
 		_view->cancelTextInput();
 		setInputEnabled(false);
-		if (_handler && _handler->onEnded) {
-			_handler->onEnded();
-		}
 		_handler = nullptr;
 
 		_string = WideString();

@@ -1,5 +1,4 @@
 /**
- Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
  Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,34 +20,34 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_
-#define TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_
+#ifndef MODULES_MATERIAL_BASE_MATERIALICONSPRITE_H_
+#define MODULES_MATERIAL_BASE_MATERIALICONSPRITE_H_
 
-#include "MaterialSurface.h"
-#include "AppLayoutTest.h"
-#include "AppMaterialBackground.h"
-#include "AppSlider.h"
-#include "MaterialStyleContainer.h"
+#include "XLIconNames.h"
+#include "XLVectorSprite.h"
+#include "MaterialSurfaceInterior.h"
 
-namespace stappler::xenolith::app {
+namespace stappler::xenolith::material {
 
-class MaterialNodeTest : public LayoutTest {
+class IconSprite : public VectorSprite {
 public:
-	virtual ~MaterialNodeTest() { }
+	virtual ~IconSprite() { }
 
-	virtual bool init() override;
+	virtual bool init(IconName);
 
-	virtual void onContentSizeDirty() override;
+	virtual IconName getIconName() const { return _iconName; }
+	virtual void setIconName(IconName);
+
+	virtual bool visitDraw(RenderFrameInfo &, NodeFlags parentFlags) override;
 
 protected:
-	MaterialBackground *_background = nullptr;
-	material::Surface *_nodeElevation = nullptr;
-	material::Surface *_nodeCornerRounded = nullptr;
-	material::Surface *_nodeCornerCut = nullptr;
-	material::Surface *_nodeShadow = nullptr;
-	material::Surface *_nodeStyle = nullptr;
+	using VectorSprite::init;
+
+	virtual void updateIcon();
+
+	IconName _iconName = IconName::None;
 };
 
 }
 
-#endif /* TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_ */
+#endif /* MODULES_MATERIAL_BASE_MATERIALICONSPRITE_H_ */

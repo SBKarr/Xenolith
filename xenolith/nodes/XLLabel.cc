@@ -281,7 +281,7 @@ void Label::updateLabel() {
 	if (_string16.empty()) {
 		_format = nullptr;
 		_vertexesDirty = true;
-		setContentSize(Size2(0.0f, getFontHeight() / _density));
+		setContentSize(Size2(0.0f, getFontHeight() / _labelDensity));
 		return;
 	}
 
@@ -292,7 +292,7 @@ void Label::updateLabel() {
 	_style.text.opacity = _displayedColor.getOpacity();
 	_style.text.whiteSpace = font::WhiteSpace::PreWrap;
 
-	if (!updateFormatSpec(spec, _compiledStyles, _density, _adjustValue)) {
+	if (!updateFormatSpec(spec, _compiledStyles, _labelDensity, _adjustValue)) {
 		return;
 	}
 
@@ -300,9 +300,9 @@ void Label::updateLabel() {
 
 	if (_format) {
 		if (_format->chars.empty()) {
-			setContentSize(Size2(0.0f, getFontHeight() / _density));
+			setContentSize(Size2(0.0f, getFontHeight() / _labelDensity));
 		} else {
-			setContentSize(Size2(_format->width / (_density), _format->height / (_density)));
+			setContentSize(Size2(_format->width / _labelDensity, _format->height / _labelDensity));
 		}
 
 		_labelDirty = false;
@@ -388,27 +388,14 @@ void Label::updateLabelScale(const Mat4 &parent) {
 	if (_scale.z != 1.f) { scale.z *= _scale.z; }
 
 	auto density = std::min(std::min(scale.x, scale.y), scale.z);
-	if (density != _density) {
-		_density = density;
+	if (density != _labelDensity) {
+		_labelDensity = density;
 		_labelDirty = true;
 	}
 
 	if (_labelDirty) {
 		updateLabel();
 	}
-}
-
-void Label::setStandalone(bool value) {
-	if (_standalone != value) {
-		_standalone = value;
-		//_standaloneMap.clear();
-		//_standaloneChars.clear();
-		_vertexesDirty = true;
-	}
-}
-
-bool Label::isStandalone() const {
-	return _standalone;
 }
 
 void Label::setAdjustValue(uint8_t val) {
@@ -463,61 +450,31 @@ void Label::updateVertexes() {
 	if (!_format || _format->chars.size() == 0 || _string16.empty()) {
 		_vertexes.clear();
 		_labelDirty = false;
+		_deferredResult = nullptr;
 		return;
 	}
 
-	if (!_standalone) {
-		for (auto &it : _format->ranges) {
-			auto dep = _source->addTextureChars(it.layout, SpanView<font::CharSpec>(_format->chars, it.start, it.count));
-			if (dep) {
-				emplace_ordered(_pendingDependencies, move(dep));
-			}
+	for (auto &it : _format->ranges) {
+		auto dep = _source->addTextureChars(it.layout, SpanView<font::CharSpec>(_format->chars, it.start, it.count));
+		if (dep) {
+			emplace_ordered(_pendingDependencies, move(dep));
 		}
+	}
 
-		if (_deferred) {
-			auto &manager = _director->getApplication()->getDeferredManager();
-			_deferredResult = manager->runLabel(_format, _displayedColor);
-			_vertexes.clear();
-			_vertexColorDirty = false;
-		} else {
-			_deferredResult = nullptr;
-			updateQuadsForeground(_source, _format, _colorMap);
-			_vertexColorDirty = true;
-		}
-	}/* else {
-		bool sourceDirty = false;
-		for (auto &it : _format->ranges) {
-			auto find_it = _standaloneChars.find(it.layout->getName());
-			if (find_it == _standaloneChars.end()) {
-				find_it = _standaloneChars.emplace(it.layout->getName(), Vector<char16_t>()).first;
-			}
-
-			auto &vec = find_it->second;
-			for (uint32_t i = it.start; i < it.count; ++ i) {
-				const char16_t &c = _format->chars[i].charID;
-				auto char_it = std::lower_bound(vec.begin(), vec.end(), c);
-				if (char_it == vec.end() || *char_it != c) {
-					vec.emplace(char_it, c);
-					sourceDirty = true;
-				}
-			}
-		}
-
-		if (sourceDirty) {
-			_standaloneTextures.clear();
-			_standaloneMap = _source->updateTextures(_standaloneChars, _standaloneTextures);
-		}
-
-		if (!_standaloneTextures.empty()) {
-			updateQuadsStandalone(_source, _format);
-		}
-	}*/
+	if (_deferred) {
+		auto &manager = _director->getApplication()->getDeferredManager();
+		_deferredResult = manager->runLabel(_format, _displayedColor);
+		_vertexes.clear();
+		_vertexColorDirty = false;
+	} else {
+		_deferredResult = nullptr;
+		updateQuadsForeground(_source, _format, _colorMap);
+		_vertexColorDirty = true;
+	}
 }
 
 void Label::onFontSourceUpdated() {
-	if (!_standalone) {
-		_vertexesDirty = true;
-	}
+	_vertexesDirty = true;
 }
 
 void Label::onFontSourceLoaded() {
@@ -538,7 +495,7 @@ Vec2 Label::getCursorPosition(uint32_t charIndex, bool front) const {
 			auto &c = _format->chars[charIndex];
 			auto line = _format->getLine(charIndex);
 			if (line) {
-				return Vec2( (front ? c.pos : c.pos + c.advance) / _density, _contentSize.height - line->pos / _density);
+				return Vec2( (front ? c.pos : c.pos + c.advance) / _labelDensity, _contentSize.height - line->pos / _labelDensity);
 			}
 		} else if (charIndex >= _format->chars.size() && charIndex != 0) {
 			auto &c = _format->chars.back();
@@ -546,7 +503,7 @@ Vec2 Label::getCursorPosition(uint32_t charIndex, bool front) const {
 			if (c.charID == char16_t(0x0A)) {
 				return getCursorOrigin();
 			} else {
-				return Vec2( (c.pos + c.advance) / _density, _contentSize.height - l.pos / _density);
+				return Vec2( (c.pos + c.advance) / _labelDensity, _contentSize.height - l.pos / _labelDensity);
 			}
 		}
 	}
@@ -558,20 +515,20 @@ Vec2 Label::getCursorOrigin() const {
 	switch (_alignment) {
 	case Alignment::Left:
 	case Alignment::Justify:
-		return Vec2( 0.0f / _density, _contentSize.height - _format->height / _density);
+		return Vec2( 0.0f / _labelDensity, _contentSize.height - _format->height / _labelDensity);
 		break;
 	case Alignment::Center:
-		return Vec2( _contentSize.width * 0.5f / _density, _contentSize.height - _format->height / _density);
+		return Vec2( _contentSize.width * 0.5f / _labelDensity, _contentSize.height - _format->height / _labelDensity);
 		break;
 	case Alignment::Right:
-		return Vec2( _contentSize.width / _density, _contentSize.height - _format->height / _density);
+		return Vec2( _contentSize.width / _labelDensity, _contentSize.height - _format->height / _labelDensity);
 		break;
 	}
 	return Vec2::ZERO;
 }
 
 Pair<uint32_t, bool> Label::getCharIndex(const Vec2 &pos) const {
-	auto ret = _format->getChar(pos.x * _density, _format->height - pos.y * _density, FormatSpec::Best);
+	auto ret = _format->getChar(pos.x * _labelDensity, _format->height - pos.y * _labelDensity, FormatSpec::Best);
 	if (ret.first == maxOf<uint32_t>()) {
 		return pair(maxOf<uint32_t>(), false);
 	} else if (ret.second == FormatSpec::Prefix) {
@@ -583,7 +540,7 @@ Pair<uint32_t, bool> Label::getCharIndex(const Vec2 &pos) const {
 
 float Label::getMaxLineX() const {
 	if (_format) {
-		return _format->maxLineX / _density;
+		return _format->maxLineX / _labelDensity;
 	}
 	return 0.0f;
 }

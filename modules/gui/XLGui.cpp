@@ -30,3 +30,4 @@
 #include "XLGuiScrollView.cc"
 
 #include "XLGuiInputLabel.cc"
+#include "XLGuiInputField.cc"

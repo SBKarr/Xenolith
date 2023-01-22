@@ -307,7 +307,7 @@ bool View::presentImmediate(Rc<ImageStorage> &&object, Function<void(bool)> &&sc
 	Rc<Image> sourceImage = (Image *)object->getImage().get();
 	Rc<ImageStorage> targetImage;
 
-	Vector<VkCommandBuffer> buffers;
+	Vector<const CommandBuffer *> buffers;
 	Loop *loop = (Loop *)_loop.get();
 
 	auto cleanup = [&] {
@@ -385,7 +385,7 @@ bool View::presentImmediate(Rc<ImageStorage> &&object, Function<void(bool)> &&sc
 		return true;
 	});
 
-	buffers.emplace_back(buf->getBuffer());
+	buffers.emplace_back(buf);
 
 	renderqueue::FrameSync frameSync;
 	object->rearmSemaphores(*loop);

@@ -179,11 +179,11 @@ void FrameHandle::performOnGlThread(Function<void(FrameHandle &)> &&cb, Ref *ref
 		XL_FRAME_PROFILE(cb(*this), tag, 1000);
 	} else {
 		auto linkId = retain();
-		_loop->performOnGlThread(Rc<thread::Task>::create([=, this, cb = move(cb)] (const thread::Task &, bool success) {
-			XL_FRAME_PROFILE(if (success) { cb(*this); }, tag, 1000);
+		_loop->performOnGlThread([=, this, cb = move(cb)] () {
+			XL_FRAME_PROFILE(cb(*this);, tag, 1000);
 			XL_FRAME_LOG(XL_FRAME_LOG_INFO, "thread performed: '", tag, "'");
 			release(linkId);
-		}, ref));
+		}, ref);
 	}
 }
 

@@ -137,7 +137,7 @@ public:
 	virtual void finalize(FrameQueue &, bool successful)  override;
 
 protected:
-	virtual Vector<VkCommandBuffer> doPrepareCommands(FrameHandle &) override;
+	virtual Vector<const CommandBuffer *> doPrepareCommands(FrameHandle &) override;
 
 	virtual void doSubmitted(FrameHandle &, Function<void(bool)> &&, bool) override;
 	virtual void doComplete(FrameQueue &, Function<void(bool)> &&, bool) override;
@@ -598,7 +598,7 @@ void RenderFontRenderPassHandle::finalize(FrameQueue &handle, bool successful) {
 	QueuePassHandle::finalize(handle, successful);
 }
 
-Vector<VkCommandBuffer> RenderFontRenderPassHandle::doPrepareCommands(FrameHandle &handle) {
+Vector<const CommandBuffer *> RenderFontRenderPassHandle::doPrepareCommands(FrameHandle &handle) {
 	Vector<VkCommandBuffer> ret;
 
 	auto &input = _fontAttachment->getInput();
@@ -609,7 +609,7 @@ Vector<VkCommandBuffer> RenderFontRenderPassHandle::doPrepareCommands(FrameHandl
 	auto &masterImage = input->image;
 	auto instance = masterImage->getInstance();
 	if (!instance) {
-		return Vector<VkCommandBuffer>();
+		return Vector<const CommandBuffer *>();
 	}
 
 	gl::ImageInfo info = masterImage->getInfo();
@@ -718,10 +718,7 @@ Vector<VkCommandBuffer> RenderFontRenderPassHandle::doPrepareCommands(FrameHandl
 		return true;
 	});
 
-	if (buf) {
-		ret.emplace_back(buf->getBuffer());
-	}
-	return ret;
+	return Vector<const CommandBuffer *>{buf};
 }
 
 void RenderFontRenderPassHandle::doSubmitted(FrameHandle &frame, Function<void(bool)> &&func, bool success) {

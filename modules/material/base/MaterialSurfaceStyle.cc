@@ -32,6 +32,11 @@ SurfaceStyle SurfaceStyle::Background = SurfaceStyle{SurfaceStyle::PrimaryScheme
 bool SurfaceStyle::apply(SurfaceStyleData &data, const Size2 &contentSize, const StyleContainer *style) {
 	bool dirty = false;
 
+	if (data.schemeTag != schemeTag) {
+		data.schemeTag = schemeTag;
+		dirty = true;
+	}
+
 	// HCT resolve is expensive, compare only HCT values before it
 	ColorHCT::Values targetColorHCT, targetColorBackground, targetColorOn;
 
@@ -392,6 +397,7 @@ bool SurfaceStyle::apply(SurfaceStyleData &data, const Size2 &contentSize, const
 
 SurfaceStyleData SurfaceStyleData::progress(const SurfaceStyleData &l, const SurfaceStyleData &r, float p) {
 	SurfaceStyleData ret(r);
+	ret.schemeTag =  (p < 0.5f) ? l.schemeTag : r.schemeTag;
 	ret.colorHCT = stappler::progress(l.colorHCT, r.colorHCT, p);
 	ret.colorBackground = stappler::progress(l.colorBackground, r.colorBackground, p);
 	ret.colorOn = stappler::progress(l.colorOn, r.colorOn, p);

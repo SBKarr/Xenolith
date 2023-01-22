@@ -76,7 +76,7 @@ public:
 	virtual void finalize(FrameQueue &, bool successful) override;
 
 protected:
-	virtual Vector<VkCommandBuffer> doPrepareCommands(FrameHandle &) override;
+	virtual Vector<const CommandBuffer *> doPrepareCommands(FrameHandle &) override;
 	virtual void doSubmitted(FrameHandle &, Function<void(bool)> &&, bool) override;
 	virtual void doComplete(FrameQueue &, Function<void(bool)> &&, bool) override;
 
@@ -294,14 +294,14 @@ void MaterialCompilationRenderPassHandle::finalize(FrameQueue &handle, bool succ
 	QueuePassHandle::finalize(handle, successful);
 }
 
-Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(FrameHandle &handle) {
+Vector<const CommandBuffer *> MaterialCompilationRenderPassHandle::doPrepareCommands(FrameHandle &handle) {
 	auto layout = _device->getTextureSetLayout();
 
 	auto &inputData = _materialAttachment->getInputData();
 	auto buffers = updateMaterials(handle, _outputData, inputData->materialsToAddOrUpdate,
 			inputData->dynamicMaterialsToUpdate, inputData->materialsToRemove);
 	if (!buffers.targetBuffer) {
-		return Vector<VkCommandBuffer>();
+		return Vector<const CommandBuffer *>();
 	}
 
 	QueueOperations ops = QueueOperations::None;
@@ -311,7 +311,7 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(F
 
 	auto q = _device->getQueueFamily(ops);
 	if (!q) {
-		return Vector<VkCommandBuffer>();
+		return Vector<const CommandBuffer *>();
 	}
 
 	VkPipelineStageFlags targetStages = 0;
@@ -348,9 +348,9 @@ Vector<VkCommandBuffer> MaterialCompilationRenderPassHandle::doPrepareCommands(F
 			delete tmpBuffer;
 			delete tmpOrder;
 		}, nullptr, true, "MaterialCompilationRenderPassHandle::doPrepareCommands");
-		return Vector<VkCommandBuffer>{buf->getBuffer()};
+		return Vector<const CommandBuffer *>{buf};
 	}
-	return Vector<VkCommandBuffer>();
+	return Vector<const CommandBuffer *>();
 }
 
 void MaterialCompilationRenderPassHandle::doSubmitted(FrameHandle &frame, Function<void(bool)> &&func, bool success) {

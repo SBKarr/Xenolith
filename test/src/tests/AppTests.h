@@ -64,7 +64,8 @@ enum class LayoutName {
 	MaterialColorPickerTest = 256 * 6,
 	MaterialDynamicFontTest,
 	MaterialNodeTest,
-	MaterialButtonTest
+	MaterialButtonTest,
+	MaterialInputFieldTest,
 };
 
 struct MenuData {

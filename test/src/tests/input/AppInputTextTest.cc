@@ -25,7 +25,7 @@
 namespace stappler::xenolith::app {
 
 bool InputTextTest::init() {
-	if (!LayoutTest::init(LayoutName::InputTextTest, "Click on node to capture keyboard input")) {
+	if (!LayoutTest::init(LayoutName::MaterialInputFieldTest, "")) {
 		return false;
 	}
 
@@ -39,11 +39,11 @@ bool InputTextTest::init() {
 	_label->setString("Placeholder");
 
 	_inputHandler.onText = [this] (WideStringView str, TextCursor cursor, TextCursor marked) {
-		std::cout << "onText: " << string::toUtf8<Interface>(str) << " " << cursor.start << ":" << cursor.length << "\n";
+		std::cout << "InputTextTest: onText: " << string::toUtf8<Interface>(str) << " " << cursor.start << ":" << cursor.length << "\n";
 		_label->setString(str);
 	};
 	_inputHandler.onKeyboard = [] (bool enabled, const Rect &targetRect, float duration) {
-		std::cout << "onKeyboard: " << enabled << " " << targetRect << " " << duration << "\n";
+		std::cout << "InputTextTest: onKeyboard: " << enabled << " " << targetRect << " " << duration << "\n";
 	};
 	_inputHandler.onInput = [this] (bool enabled) {
 		if (enabled) {
@@ -54,12 +54,9 @@ bool InputTextTest::init() {
 			_background->setColor(Color::Grey_200);
 			_label->setString("Placeholder");
 			_label->setColor(Color::Grey_500);
+			_inputAcquired = false;
 		}
-		std::cout << "onKeyboard: " << enabled << "\n";
-	};
-	_inputHandler.onEnded = [this] () {
-		std::cout << "onEnded\n";
-		_inputAcquired = false;
+		std::cout << "InputTextTest: onKeyboard: " << enabled << "\n";
 	};
 
 	auto l = addInputListener(Rc<InputListener>::create());

@@ -75,9 +75,8 @@ bool VertexBufferAttachmentHandle::isDescriptorDirty(const PassHandle &, const P
 	return true;
 }
 
-bool VertexBufferAttachmentHandle::writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
-		uint32_t, bool, VkDescriptorBufferInfo &info) {
-	info.buffer = _vertexes->getBuffer();
+bool VertexBufferAttachmentHandle::writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &info) {
+	info.buffer = _vertexes;
 	info.offset = 0;
 	info.range = _vertexes->getSize();
 	return true;

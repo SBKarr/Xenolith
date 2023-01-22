@@ -42,7 +42,6 @@ struct TextInputHandler {
 	Function<void(WideStringView, TextCursor, TextCursor)> onText;
 	Function<void(bool, const Rect &, float)> onKeyboard;
 	Function<void(bool)> onInput;
-	Function<void()> onEnded;
 	//Function<bool(const Vec2 &)> onTouchFilter;
 	Rc<TextInputManager> manager;
 

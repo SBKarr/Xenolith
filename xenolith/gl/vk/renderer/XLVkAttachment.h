@@ -51,8 +51,7 @@ class BufferAttachmentHandle : public renderqueue::AttachmentHandle {
 public:
 	virtual ~BufferAttachmentHandle() { }
 
-	virtual bool writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
-			uint32_t, bool, VkDescriptorBufferInfo &) { return false; }
+	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &) { return false; }
 };
 
 class ImageAttachmentHandle : public renderqueue::AttachmentHandle {
@@ -61,16 +60,14 @@ public:
 
 	const Rc<renderqueue::ImageStorage> &getImage() const { return _queueData->image; }
 
-	virtual bool writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
-			uint32_t, bool, VkDescriptorImageInfo &) { return false; }
+	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorImageInfo &) { return false; }
 };
 
 class TexelAttachmentHandle : public renderqueue::AttachmentHandle {
 public:
 	virtual ~TexelAttachmentHandle();
 
-	virtual VkBufferView getDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
-			uint32_t, bool) { return VK_NULL_HANDLE; }
+	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorBufferViewInfo &) { return false; }
 };
 
 class VertexBufferAttachment : public renderqueue::BufferAttachment {
@@ -90,8 +87,7 @@ public:
 	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
 			uint32_t, bool isExternal) const override;
 
-	virtual bool writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
-			uint32_t, bool, VkDescriptorBufferInfo &) override;
+	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &) override;
 
 	const Rc<DeviceBuffer> &getVertexes() const { return _vertexes; }
 	const Rc<DeviceBuffer> &getIndexes() const { return _indexes; }

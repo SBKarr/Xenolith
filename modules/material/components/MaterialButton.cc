@@ -29,28 +29,28 @@ static SurfaceStyle Button_getSurfaceStyle(NodeStyle style, ColorRole role, uint
 	return SurfaceStyle(style, Elevation::Level1, ShapeStyle::Full, role, schemeTag);
 }
 
-bool Button::init(ButtonData &&data, NodeStyle style, ColorRole role, uint32_t schemeTag) {
-	return init(move(data), Button_getSurfaceStyle(style, role, schemeTag));
+bool Button::init(NodeStyle style, ColorRole role, uint32_t schemeTag) {
+	return init(Button_getSurfaceStyle(style, role, schemeTag));
 }
 
-bool Button::init(ButtonData &&data, const SurfaceStyle &style) {
+bool Button::init(const SurfaceStyle &style) {
 	if (!Surface::init(style)) {
 		return false;
 	}
 
 	_label = addChild(Rc<TypescaleLabel>::create(TypescaleRole::LabelLarge), 1);
-	_label->setAnchorPoint(Anchor::Middle);
+	_label->setAnchorPoint(Anchor::MiddleLeft);
 	_label->setOnContentSizeDirtyCallback([this] {
 		updateSizeFromContent();
 	});
 
-	_iconPrefix = addChild(Rc<VectorSprite>::create(Size2(24, 24)), 1);
-	_iconPrefix->setAnchorPoint(Anchor::Middle);
-	_iconPrefix->setVisible(false);
+	_leadingIcon = addChild(Rc<IconSprite>::create(IconName::None), 1);
+	_leadingIcon->setAnchorPoint(Anchor::MiddleLeft);
+	_leadingIcon->setContentSize(Size2(18.0f, 18.0f));
 
-	_iconPostfix = addChild(Rc<VectorSprite>::create(Size2(24, 24)), 1);
-	_iconPrefix->setAnchorPoint(Anchor::Middle);
-	_iconPrefix->setVisible(false);
+	_trailingIcon = addChild(Rc<IconSprite>::create(IconName::None), 1);
+	_trailingIcon->setAnchorPoint(Anchor::MiddleLeft);
+	_trailingIcon->setContentSize(Size2(18.0f, 18.0f));
 
 	_inputListener = addInputListener(Rc<InputListener>::create());
 	_inputListener->addMouseOverRecognizer([this] (const GestureData &data) {
@@ -93,72 +93,112 @@ bool Button::init(ButtonData &&data, const SurfaceStyle &style) {
 		return true;
 	});
 
-	_buttonData = move(data);
-
-	updateButtonData();
-
 	return true;
 }
 
 void Button::onContentSizeDirty() {
 	Surface::onContentSizeDirty();
 
-	_label->setPosition(_contentSize / 2.0f);
+	float contentWidth = ((_styleTarget.nodeStyle == NodeStyle::Text) ? 24.0f : 48.0f) + _label->getContentSize().width;
+	if (_styleTarget.nodeStyle == NodeStyle::Text && (getLeadingIconName() != IconName::None || getTrailingIconName() != IconName::None)) {
+		contentWidth += 16.0f;
+	}
+	if (getLeadingIconName() != IconName::None) {
+		contentWidth += _leadingIcon->getContentSize().width;
+	}
+	if (getTrailingIconName() != IconName::None) {
+		contentWidth += _trailingIcon->getContentSize().width;
+	}
+
+	float offset = (_contentSize.width - contentWidth) / 2.0f;
+
+	Vec2 target(offset + (_styleTarget.nodeStyle == NodeStyle::Text ? 12.0f : 16.0f), _contentSize.height / 2.0f);
+
+	if (getLeadingIconName() != IconName::None) {
+		_leadingIcon->setPosition(target);
+		target.x += 8.0f + _leadingIcon->getContentSize().width;
+	} else {
+		target.x += 8.0f;
+	}
+
+	_label->setPosition(target);
+	target.x += _label->getContentSize().width + 8.0f;
+
+	_trailingIcon->setPosition(target);
 }
 
 void Button::setFollowContentSize(bool value) {
-	if (value != _buttonData.followContentSize) {
-		_buttonData.followContentSize = value;
+	if (value != _followContentSize) {
+		_followContentSize = value;
 		_contentSizeDirty = true;
-		if (_buttonData.followContentSize) {
+		if (_followContentSize) {
 			updateSizeFromContent();
 		}
 	}
 }
 
 bool Button::isFollowContentSize() const {
-	return _buttonData.followContentSize;
+	return _followContentSize;
 }
 
 void Button::setEnabled(bool value) {
 	if (value != _enabled) {
 		_enabled = value;
+		_inputListener->setEnabled(_enabled);
 		updateActivityState();
 	}
 }
 
-void Button::updateButtonData() {
-	_label->setString(_buttonData.text);
+void Button::setText(StringView text) {
+	_label->setString(text);
+}
 
-	/*auto path = _iconPrefix->addPath();
+StringView Button::getText() const {
+	return _label->getString8();
+}
 
-	auto path = image->addPath();
-	getIconData(iconName, [&] (BytesView bytes) {
-		path->getPath()->init(bytes);
-	});
-	path->setWindingRule(vg::Winding::EvenOdd);
-	path->setAntialiased(true);
-	auto t = Mat4::IDENTITY;
-	t.scale(1, -1, 1);
-	t.translate(0, -24, 0);
-	path->setTransform(t);*/
+void Button::setLeadingIconName(IconName name) {
+	if (name != getLeadingIconName()) {
+		_leadingIcon->setIconName(name);
+		updateSizeFromContent();
+	}
+}
 
+IconName Button::getLeadingIconName() const {
+	return _leadingIcon->getIconName();
+}
+
+void Button::setTrailingIconName(IconName name) {
+	if (name != getTrailingIconName()) {
+		_trailingIcon->setIconName(name);
+		updateSizeFromContent();
+	}
+}
+
+IconName Button::getTrailingIconName() const {
+	return _trailingIcon->getIconName();
+}
+
+void Button::setTapCallback(Function<void()> &&cb) {
+	_callbackTap = move(cb);
+}
+
+void Button::setLongPressCallback(Function<void()> &&cb) {
+	_callbackLongPress = move(cb);
+}
+
+void Button::setDoubleTapCallback(Function<void()> &&cb) {
+	_callbackDoubleTap = move(cb);
 }
 
 void Button::updateSizeFromContent() {
-	if (!_buttonData.followContentSize) {
+	if (!_followContentSize) {
+		_contentSizeDirty = true;
 		return;
 	}
 
 	Size2 targetSize = _label->getContentSize();
-	switch (_styleTarget.nodeStyle) {
-	case NodeStyle::Text:
-		targetSize.width += 12.0f * 2;
-		break;
-	default:
-		targetSize.width += 24.0f * 2;
-		break;
-	}
+	targetSize.width = getWidthForContent();
 	targetSize.height += 24.0f;
 
 	setContentSize(targetSize);
@@ -177,25 +217,45 @@ void Button::updateActivityState() {
 	} else {
 		style.activityState = ActivityState::Enabled;
 	}
-	setStyle(style, _buttonData.activityAnimationDuration);
+	setStyle(style, _activityAnimationDuration);
 }
 
 void Button::handleTap() {
-	if (_buttonData.callbackTap) {
-		_buttonData.callbackTap();
+	if (_callbackTap) {
+		auto id = retain();
+		_callbackTap();
+		release(id);
 	}
 }
 
 void Button::handleLongPress() {
-	if (_buttonData.callbackLongPress) {
-		_buttonData.callbackLongPress();
+	if (_callbackLongPress) {
+		auto id = retain();
+		_callbackLongPress();
+		release(id);
 	}
 }
 
 void Button::handleDoubleTap() {
-	if (_buttonData.callbackDoubleTap) {
-		_buttonData.callbackDoubleTap();
+	if (_callbackDoubleTap) {
+		auto id = retain();
+		_callbackDoubleTap();
+		release(id);
 	}
+}
+
+float Button::getWidthForContent() const {
+	float contentWidth = ((_styleTarget.nodeStyle == NodeStyle::Text) ? 24.0f : 48.0f) + _label->getContentSize().width;
+	if (_styleTarget.nodeStyle == NodeStyle::Text && (getLeadingIconName() != IconName::None || getTrailingIconName() != IconName::None)) {
+		contentWidth += 16.0f;
+	}
+	if (getLeadingIconName() != IconName::None) {
+		contentWidth += _leadingIcon->getContentSize().width;
+	}
+	if (getTrailingIconName() != IconName::None) {
+		contentWidth += _trailingIcon->getContentSize().width;
+	}
+	return contentWidth;
 }
 
 }

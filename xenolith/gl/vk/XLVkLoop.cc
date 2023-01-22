@@ -634,18 +634,6 @@ void Loop::performOnGlThread(Function<void()> &&func, Ref *target, bool immediat
 	_internal->queue->onMainThread(move(func), target);
 }
 
-void Loop::performOnGlThread(Rc<thread::Task> &&task) {
-	if (!_internal || !_internal->queue) {
-		auto &tasks = task->getCompleteTasks();
-		for (auto &it : tasks) {
-			it(*task, false);
-		}
-		return;
-	}
-
-	_internal->queue->onMainThread(move(task));
-}
-
 bool Loop::isOnGlThread() const {
 	return _threadId == std::this_thread::get_id();
 }

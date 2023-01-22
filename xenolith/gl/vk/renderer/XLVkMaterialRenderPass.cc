@@ -71,8 +71,7 @@ bool MaterialVertexAttachmentHandle::isDescriptorDirty(const PassHandle &, const
 	return _materials && _materials->getGeneration() != ((gl::MaterialAttachmentDescriptor *)desc.descriptor)->getBoundGeneration();
 }
 
-bool MaterialVertexAttachmentHandle::writeDescriptor(const QueuePassHandle &handle, const PipelineDescriptor &descriptors,
-		uint32_t, bool, VkDescriptorBufferInfo &info) {
+bool MaterialVertexAttachmentHandle::writeDescriptor(const QueuePassHandle &handle, DescriptorBufferInfo &info) {
 	if (!_materials) {
 		return false;
 	}
@@ -81,9 +80,9 @@ bool MaterialVertexAttachmentHandle::writeDescriptor(const QueuePassHandle &hand
 	if (!b) {
 		return false;
 	}
-	info.buffer = ((Buffer *)b.get())->getBuffer();
+	info.buffer = ((Buffer *)b.get());
 	info.offset = 0;
-	info.range = ((Buffer *)b.get())->getSize();
+	info.range = info.buffer->getSize();
 	return true;
 }
 
@@ -164,17 +163,16 @@ bool VertexMaterialAttachmentHandle::isDescriptorDirty(const PassHandle &, const
 	return false;
 }
 
-bool VertexMaterialAttachmentHandle::writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
-		uint32_t idx, bool, VkDescriptorBufferInfo &info) {
-	switch (idx) {
+bool VertexMaterialAttachmentHandle::writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &info) {
+	switch (info.index) {
 	case 0:
-		info.buffer = _vertexes->getBuffer();
+		info.buffer = _vertexes;
 		info.offset = 0;
 		info.range = _vertexes->getSize();
 		return true;
 		break;
 	case 1:
-		info.buffer = _transforms->getBuffer();
+		info.buffer = _transforms;
 		info.offset = 0;
 		info.range = _transforms->getSize();
 		return true;
@@ -426,7 +424,7 @@ struct VertexMaterialDrawPlan {
 					t.pos.y += scaledPos.y;
 					t.tex = d->tex;
 				} else {
-					std::cout << "Not found: " << t.object << " " << string::toUtf8<Interface>(char16_t(t.object)) << "\n";
+					std::cout << "VertexMaterialDrawPlan: Object not found: " << t.object << " " << string::toUtf8<Interface>(char16_t(t.object)) << "\n";
 					auto anchor = font::CharLayout::getAnchorForObject(t.object);
 					switch (anchor) {
 					case font::FontAnchor::BottomLeft:
@@ -934,7 +932,7 @@ bool MaterialPassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
 	return QueuePassHandle::prepare(q, move(cb));
 }
 
-Vector<VkCommandBuffer> MaterialPassHandle::doPrepareCommands(FrameHandle &handle) {
+Vector<const CommandBuffer *> MaterialPassHandle::doPrepareCommands(FrameHandle &handle) {
 	auto buf = _pool->recordBuffer(*_device, [&] (CommandBuffer &buf) {
 		auto materials = _materialBuffer->getSet().get();
 
@@ -985,10 +983,7 @@ Vector<VkCommandBuffer> MaterialPassHandle::doPrepareCommands(FrameHandle &handl
 		return true;
 	});
 
-	if (buf) {
-		return Vector<VkCommandBuffer>{buf->getBuffer()};
-	}
-	return Vector<VkCommandBuffer>();
+	return Vector<const CommandBuffer *>{buf};
 }
 
 void MaterialPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, CommandBuffer &buf) {
@@ -1033,14 +1028,14 @@ void MaterialPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, Co
 		if (state->isScissorEnabled()) {
 			if (dynamicState.isScissorEnabled()) {
 				if (dynamicState.scissor != state->scissor) {
-					VkRect2D scissorRect{ { int32_t(state->scissor.x), int32_t(state->scissor.y) },
+					VkRect2D scissorRect{ { int32_t(state->scissor.x), int32_t(currentExtent.height - state->scissor.y - state->scissor.height) },
 						{ state->scissor.width, state->scissor.height } };
 					buf.cmdSetScissor(0, makeSpanView(&scissorRect, 1));
 					dynamicState.scissor = state->scissor;
 				}
 			} else {
 				dynamicState.enabled |= renderqueue::DynamicState::Scissor;
-				VkRect2D scissorRect{ { int32_t(state->scissor.x), int32_t(state->scissor.y) },
+				VkRect2D scissorRect{ { int32_t(state->scissor.x), int32_t(currentExtent.height - state->scissor.y - state->scissor.height) },
 					{ state->scissor.width, state->scissor.height } };
 				buf.cmdSetScissor(0, makeSpanView(&scissorRect, 1));
 				dynamicState.scissor = state->scissor;

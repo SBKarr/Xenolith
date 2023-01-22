@@ -69,6 +69,8 @@ public:
 
 class ComponentContainer : public Ref {
 public:
+	using TaskCallback = Function<bool(const Server &, const db::Transaction &)>;
+
 	virtual ~ComponentContainer() { }
 
 	virtual bool init(StringView);
@@ -86,12 +88,13 @@ public:
 
 	bool isLoaded() const { return _loaded; }
 
-	bool perform(Function<bool(const Server &, const db::Transaction &)> &&, Ref * = nullptr) const;
+	bool perform(TaskCallback &&, Ref * = nullptr) const;
 
 protected:
 	bool _loaded = false;
 	String _name;
 	const Server *_server = nullptr;
+	mutable Vector<Pair<TaskCallback, Rc<Ref>>> _pendingTasks;
 };
 
 }

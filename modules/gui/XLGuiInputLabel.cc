@@ -29,16 +29,16 @@
 namespace stappler::xenolith {
 
 InputLabelDelegate::~InputLabelDelegate() { }
-bool InputLabelDelegate::onInputChar(char16_t) { return true; }
-bool InputLabelDelegate::onInputString(const WideStringView &str, const Cursor &c) { return true; }
+bool InputLabelDelegate::handleInputChar(char16_t) { return true; }
+bool InputLabelDelegate::handleInputString(const WideStringView &str, const Cursor &c) { return true; }
 
-void InputLabelDelegate::onCursor(const Cursor &) { }
-void InputLabelDelegate::onInput() { }
+void InputLabelDelegate::handleCursor(const Cursor &) { }
+void InputLabelDelegate::handleInput() { }
 
-void InputLabelDelegate::onActivated(bool) { }
-void InputLabelDelegate::onError(Error) { }
+void InputLabelDelegate::handleActivated(bool) { }
+void InputLabelDelegate::handleError(Error) { }
 
-void InputLabelDelegate::onPointer(bool) { }
+void InputLabelDelegate::handlePointer(bool) { }
 
 
 InputLabel::Selection::~Selection() { }
@@ -84,18 +84,15 @@ bool InputLabel::init(font::FontController *controller, const DescriptionStyle &
 		return false;
 	}
 
-	_standalone = true;
 	_emplaceAllChars = true;
 
 	_handler.onText = std::bind(&InputLabel::onText, this, std::placeholders::_1, std::placeholders::_2);
 	_handler.onKeyboard = std::bind(&InputLabel::onKeyboard, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 	_handler.onInput = std::bind(&InputLabel::onInput, this, std::placeholders::_1);
-	_handler.onEnded = std::bind(&InputLabel::onEnded, this);
-
 
 	_cursorLayer = addChild(Rc<Layer>::create(Color::Grey_500));
 	_cursorLayer->setVisible(false);
-	_cursorLayer->setContentSize(Size2(1.0f, getFontHeight() / _density));
+	_cursorLayer->setContentSize(Size2(1.0f, getFontHeight() / _labelDensity));
 	_cursorLayer->setAnchorPoint(Vec2(0.0f, 0.0f));
 	_cursorLayer->setOpacity(1.0f);
 
@@ -157,7 +154,7 @@ bool InputLabel::visitGeometry(RenderFrameInfo &info, NodeFlags parentFlags) {
 	if (_cursorDirty) {
 		_cursorDirty = false;
 		if (_delegate && _inputEnabled) {
-			_delegate->onCursor(_cursor);
+			_delegate->handleCursor(_cursor);
 		}
 	}
 	return Label::visitGeometry(info, parentFlags);
@@ -432,7 +429,7 @@ bool InputLabel::onLongPress(const Vec2 &vec, const TimeInterval &time, int coun
 		_isLongPress = true;
 		auto pos = convertToNodeSpace(vec);
 
-		auto chIdx = _format->selectChar(pos.x * _density, _format->height - pos.y * _density, FormatSpec::Center);
+		auto chIdx = _format->selectChar(pos.x * _labelDensity, _format->height - pos.y * _labelDensity, FormatSpec::Center);
 		if (chIdx != maxOf<uint32_t>()) {
 			auto word = _format->selectWord(chIdx);
 			setCursor(Cursor(Cursor(TextCursorPosition(word.first), TextCursorPosition(word.second))));
@@ -543,14 +540,14 @@ bool InputLabel::onSwipe(const Vec2 &vec, const Vec2 &) {
 				}
 			}
 		} else if (_selectedCursor == _cursorStart) {
-			uint32_t charNumber = _format->selectChar(int32_t(roundf(locInLabel.x * _density)), _format->height - int32_t(roundf(locInLabel.y * _density)), font::FormatSpec::Prefix);
+			uint32_t charNumber = _format->selectChar(int32_t(roundf(locInLabel.x * _labelDensity)), _format->height - int32_t(roundf(locInLabel.y * _labelDensity)), font::FormatSpec::Prefix);
 			if (charNumber != maxOf<uint32_t>()) {
 				if (charNumber != _cursor.start && charNumber < _cursor.start + _cursor.length) {
 					setCursor(Cursor(charNumber, (_cursor.start + _cursor.length) - charNumber));
 				}
 			}
 		} else if (_selectedCursor == _cursorEnd) {
-			uint32_t charNumber = _format->selectChar(int32_t(roundf(locInLabel.x * _density)), _format->height - int32_t(roundf(locInLabel.y * _density)), font::FormatSpec::Suffix);
+			uint32_t charNumber = _format->selectChar(int32_t(roundf(locInLabel.x * _labelDensity)), _format->height - int32_t(roundf(locInLabel.y * _labelDensity)), font::FormatSpec::Suffix);
 			if (charNumber != maxOf<uint32_t>()) {
 				if (charNumber != _cursor.start + _cursor.length - 1 && charNumber >= _cursor.start) {
 					setCursor(Cursor(_cursor.start, charNumber - _cursor.start + 1));
@@ -606,7 +603,7 @@ void InputLabel::onInput(bool value) {
 	_inputEnabled = value;
 	updateFocus();
 	if (_delegate) {
-		_delegate->onActivated(value);
+		_delegate->handleActivated(value);
 	}
 }
 void InputLabel::onEnded() {
@@ -615,7 +612,7 @@ void InputLabel::onEnded() {
 
 void InputLabel::onError(Error err) {
 	if (_delegate) {
-		_delegate->onError(err);
+		_delegate->handleError(err);
 	}
 }
 
@@ -643,7 +640,7 @@ void InputLabel::updateCursor() {
 		_cursorStart->setPosition(getCursorPosition(_cursor.start, true));
 		_cursorEnd->setPosition(getCursorPosition(_cursor.start + _cursor.length - 1, false));
 		_cursorSelection->clear();
-		auto rects = _format->getLabelRects(_cursor.start, _cursor.start + _cursor.length - 1, _density);
+		auto rects = _format->getLabelRects(_cursor.start, _cursor.start + _cursor.length - 1, _labelDensity);
 		for (auto &rect: rects) {
 			_cursorSelection->emplaceRect(rect);
 		}
@@ -652,17 +649,17 @@ void InputLabel::updateCursor() {
 
 	updatePointer();
 	if (_delegate) {
-		_delegate->onCursor(_cursor);
+		_delegate->handleCursor(_cursor);
 	}
 }
 
 bool InputLabel::updateString(const WideStringView &str, const Cursor &c) {
-	if (!_delegate || _delegate->onInputString(str, c)) {
+	if (!_delegate || _delegate->handleInputString(str, c)) {
 		auto maxChars = getMaxChars();
 		if (maxChars > 0) {
 			if (maxChars < str.size()) {
 				if (_delegate) {
-					_delegate->onInput();
+					_delegate->handleInput();
 				}
 				auto tmpString = WideStringView(str, 0, maxChars);
 				_handler.setString(tmpString, c);
@@ -674,9 +671,9 @@ bool InputLabel::updateString(const WideStringView &str, const Cursor &c) {
 
 		if (_delegate) {
 			for (auto &it : str) {
-				if (!_delegate->onInputChar(it)) {
+				if (!_delegate->handleInputChar(it)) {
 					_handler.setString(_inputString, _cursor);
-					_delegate->onInput();
+					_delegate->handleInput();
 					onError(Error::InvalidChar);
 					return false;
 				}
@@ -703,7 +700,7 @@ bool InputLabel::updateString(const WideStringView &str, const Cursor &c) {
 		}
 
 		if (_delegate) {
-			_delegate->onInput();
+			_delegate->handleInput();
 		}
 	}
 
@@ -766,7 +763,7 @@ void InputLabel::setPointerEnabled(bool value) {
 		_pointerEnabled = value;
 		updatePointer();
 		if (_delegate) {
-			_delegate->onPointer(_pointerEnabled);
+			_delegate->handlePointer(_pointerEnabled);
 		}
 	}
 }

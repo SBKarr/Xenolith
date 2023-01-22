@@ -294,7 +294,7 @@ public:
 
 	void setFontSize(const uint16_t &);
 	void setFontSize(const FontSize &);
-	uint16_t getFontSize() const;
+	FontSize getFontSize() const;
 
 	void setFontStyle(const FontStyle &);
 	FontStyle getFontStyle() const;
@@ -349,6 +349,8 @@ protected:
 
 	float _width = 0.0f;
 	float _textIndent = 0.0f;
+	float _labelDensity = 1.0f;
+
 	Alignment _alignment = Alignment::Left;
 
 	bool _localeEnabled = false;

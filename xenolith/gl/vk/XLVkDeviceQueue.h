@@ -38,11 +38,16 @@ class Semaphore;
 class Fence;
 class Loop;
 class Image;
+class ImageView;
 class Buffer;
 class RenderPassImpl;
 class Framebuffer;
 class GraphicPipeline;
 class ComputePipeline;
+class CommandBuffer;
+class DescriptorSet;
+
+using PipelineDescriptor = renderqueue::PipelineDescriptor;
 
 struct DeviceQueueFamily {
 	using FrameHandle = renderqueue::FrameHandle;
@@ -85,9 +90,9 @@ public:
 
 	virtual bool init(Device &, VkQueue, uint32_t, QueueOperations);
 
-	bool submit(const FrameSync &, Fence &, CommandPool &, SpanView<VkCommandBuffer>);
-	bool submit(Fence &, VkCommandBuffer);
-	bool submit(Fence &, SpanView<VkCommandBuffer>);
+	bool submit(const FrameSync &, Fence &, CommandPool &, SpanView<const CommandBuffer *>);
+	bool submit(Fence &, const CommandBuffer *);
+	bool submit(Fence &, SpanView<const CommandBuffer *>);
 
 	void waitIdle();
 
@@ -161,9 +166,44 @@ struct BufferMemoryBarrier {
 	VkDeviceSize size = VK_WHOLE_SIZE;
 };
 
+struct DescriptorInfo {
+	DescriptorInfo(const PipelineDescriptor *desc, uint32_t index, bool external)
+	: descriptor(desc), index(index), external(external) { }
+
+	const PipelineDescriptor *descriptor;
+	uint32_t index;
+	bool external;
+};
+
+struct DescriptorImageInfo : public DescriptorInfo {
+	DescriptorImageInfo(const PipelineDescriptor *desc, uint32_t index, bool external)
+	: DescriptorInfo(desc, index, external) { }
+
+	Rc<ImageView> imageView;
+	VkSampler sampler = VK_NULL_HANDLE;
+	VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+};
+
+struct DescriptorBufferInfo : public DescriptorInfo {
+	DescriptorBufferInfo(const PipelineDescriptor *desc, uint32_t index, bool external)
+	: DescriptorInfo(desc, index, external) { }
+
+	Rc<Buffer> buffer;
+	VkDeviceSize offset = 0;
+	VkDeviceSize range = VK_WHOLE_SIZE;
+};
+
+struct DescriptorBufferViewInfo : public DescriptorInfo {
+	DescriptorBufferViewInfo(const PipelineDescriptor *desc, uint32_t index, bool external)
+	: DescriptorInfo(desc, index, external) { }
+
+	Rc<Buffer> buffer;
+	VkBufferView target = VK_NULL_HANDLE;
+};
+
 class CommandBuffer : public Ref {
 public:
-	virtual ~CommandBuffer() { }
+	virtual ~CommandBuffer();
 
 	bool init(const CommandPool *, const DeviceTable *, VkCommandBuffer);
 	void invalidate();
@@ -179,9 +219,9 @@ public:
 	void cmdCopyBuffer(Buffer *src, Buffer *dst, VkDeviceSize srcOffset, VkDeviceSize dstOffset, VkDeviceSize size);
 	void cmdCopyBuffer(Buffer *src, Buffer *dst, SpanView<VkBufferCopy>);
 
-	void cmdCopyImage(Image *src, VkImageLayout, const Image *dst, VkImageLayout, VkFilter filter = VK_FILTER_LINEAR);
-	void cmdCopyImage(Image *src, VkImageLayout, const Image *dst, VkImageLayout, const VkImageCopy &copy);
-	void cmdCopyImage(Image *src, VkImageLayout, const Image *dst, VkImageLayout, SpanView<VkImageCopy>);
+	void cmdCopyImage(Image *src, VkImageLayout, Image *dst, VkImageLayout, VkFilter filter = VK_FILTER_LINEAR);
+	void cmdCopyImage(Image *src, VkImageLayout, Image *dst, VkImageLayout, const VkImageCopy &copy);
+	void cmdCopyImage(Image *src, VkImageLayout, Image *dst, VkImageLayout, SpanView<VkImageCopy>);
 
 	void cmdCopyBufferToImage(Buffer *, Image *, VkImageLayout, VkDeviceSize offset);
 	void cmdCopyBufferToImage(Buffer *, Image *, VkImageLayout, SpanView<VkBufferImageCopy>);
@@ -222,6 +262,11 @@ protected:
 	const CommandPool *_pool = nullptr;
 	const DeviceTable *_table = nullptr;
 	VkCommandBuffer _buffer = VK_NULL_HANDLE;
+
+	Set<Rc<Buffer>> _buffers;
+	Set<Rc<Image>> _images;
+	Set<Rc<Framebuffer>> _framebuffers;
+	Set<Rc<DescriptorSet>> _descriptorSets;
 };
 
 class CommandPool : public Ref {

@@ -184,7 +184,7 @@ QueueOperations QueuePassHandle::getQueueOps() const {
 	return ((QueuePass *)_renderPass.get())->getQueueOps();
 }
 
-Vector<VkCommandBuffer> QueuePassHandle::doPrepareCommands(FrameHandle &) {
+Vector<const CommandBuffer *> QueuePassHandle::doPrepareCommands(FrameHandle &) {
 	auto buf = _pool->recordBuffer(*_device, [&] (CommandBuffer &buf) {
 		_data->impl.cast<RenderPassImpl>()->perform(*this, buf, [&] {
 			auto currentExtent = getFramebuffer()->getExtent();
@@ -202,11 +202,7 @@ Vector<VkCommandBuffer> QueuePassHandle::doPrepareCommands(FrameHandle &) {
 		});
 		return true;
 	});
-
-	if (buf) {
-		return Vector<VkCommandBuffer>{buf->getBuffer()};
-	}
-	return Vector<VkCommandBuffer>();
+	return Vector<const CommandBuffer *>{buf};
 }
 
 bool QueuePassHandle::doSubmit(FrameHandle &frame, Function<void(bool)> &&onSubmited) {
@@ -340,7 +336,7 @@ bool VertexPassHandle::prepare(FrameQueue &queue, Function<void(bool)> &&cb) {
 	return QueuePassHandle::prepare(queue, move(cb));
 }
 
-Vector<VkCommandBuffer> VertexPassHandle::doPrepareCommands(FrameHandle &handle) {
+Vector<const CommandBuffer *> VertexPassHandle::doPrepareCommands(FrameHandle &handle) {
 	auto pass = (RenderPassImpl *)_data->impl.get();
 	auto buf = _pool->recordBuffer(*_device, [&] (CommandBuffer &buf) {
 		pass->perform(*this, buf, [&] {
@@ -361,10 +357,7 @@ Vector<VkCommandBuffer> VertexPassHandle::doPrepareCommands(FrameHandle &handle)
 		return true;
 	});
 
-	if (buf) {
-		return Vector<VkCommandBuffer>{buf->getBuffer()};
-	}
-	return Vector<VkCommandBuffer>();
+	return Vector<const CommandBuffer *>{buf};
 }
 
 bool VertexPassHandle::doSubmit(FrameHandle &frame, Function<void(bool)> &&onSubmited) {

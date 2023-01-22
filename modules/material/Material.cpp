@@ -29,7 +29,11 @@
 #include "base/MaterialEasing.cc"
 #include "base/MaterialSurface.cc"
 #include "base/MaterialLabel.cc"
+#include "base/MaterialIconSprite.cc"
 #include "base/MaterialSurfaceInterior.cc"
 #include "base/MaterialSurfaceStyle.cc"
 
 #include "components/MaterialButton.cc"
+
+#include "components/input/MaterialInputTextContainer.cc"
+#include "components/input/MaterialInputField.cc"

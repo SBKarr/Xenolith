@@ -30,6 +30,29 @@ namespace stappler::xenolith::vk {
 
 class Device;
 
+struct DescriptorData {
+	void *object;
+	Rc<Ref> data;
+};
+
+struct DescriptorBinding {
+	VkDescriptorType type;
+	Vector<DescriptorData> data;
+
+	~DescriptorBinding();
+
+	DescriptorBinding(VkDescriptorType, uint32_t count);
+
+	void write(uint32_t, DescriptorBufferInfo &&);
+	void write(uint32_t, DescriptorImageInfo &&);
+	void write(uint32_t, DescriptorBufferViewInfo &&);
+};
+
+struct DescriptorSet : public Ref {
+	VkDescriptorSet set;
+	Vector<DescriptorBinding> bindings;
+};
+
 class RenderPassImpl : public gl::RenderPass {
 public:
 	struct Data {
@@ -38,7 +61,7 @@ public:
 		VkRenderPass renderPassAlternative = VK_NULL_HANDLE;
 		VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
 		Vector<VkDescriptorSetLayout> layouts;
-		Vector<VkDescriptorSet> sets;
+		Vector<Rc<DescriptorSet>> sets;
 
 		bool cleanup(Device &dev);
 	};
@@ -49,10 +72,10 @@ public:
 
 	VkRenderPass getRenderPass(bool alt = false) const;
 	VkPipelineLayout getPipelineLayout() const { return _data->layout; }
-	const Vector<VkDescriptorSet> &getDescriptorSets() const { return _data->sets; }
+	const Vector<Rc<DescriptorSet>> &getDescriptorSets() const { return _data->sets; }
 	const Vector<VkClearValue> &getClearValues() const { return _clearValues; }
 
-	VkDescriptorSet getDescriptorSet(uint32_t) const;
+	//VkDescriptorSet getDescriptorSet(uint32_t) const;
 
 	// if async is true - update descriptors with updateAfterBind flag
 	// 			   false - without updateAfterBindFlag

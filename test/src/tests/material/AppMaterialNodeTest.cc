@@ -67,19 +67,10 @@ bool MaterialNodeTest::init() {
 		return false;
 	}
 
-	auto color = material::ColorHCT(Color::Red_500.asColor4F());
-
-	_style = addComponent(Rc<material::StyleContainer>::create());
-	_style->setPrimaryScheme(material::ThemeType::LightTheme, color.asColor4F(), false);
-
-	addComponent(Rc<material::SurfaceInterior>::create(material::SurfaceStyle{material::ColorRole::Primary,
-		material::Elevation::Level1, material::NodeStyle::Text
-	}));
-
-	_background = addChild(Rc<material::Surface>::create(material::SurfaceStyle::Background), -1);
+	_background = addChild(Rc<MaterialBackground>::create(Color::Red_500), -1);
 	_background->setAnchorPoint(Anchor::Middle);
 
-	_nodeElevation = addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
+	_nodeElevation = _background->addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
 		material::ColorRole::Primary, material::Elevation::Level1
 	}, "Elevation"), 1);
 	_nodeElevation->setContentSize(Size2(160.0f, 100.0f));
@@ -94,7 +85,7 @@ bool MaterialNodeTest::init() {
 	}, InputListener::makeButtonMask({InputMouseButton::Touch}), 1);
 
 
-	_nodeShadow = addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
+	_nodeShadow = _background->addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
 		material::ColorRole::Primary, material::Elevation::Level1, material::NodeStyle::SurfaceTonalElevated
 	}, "Shadow"), 1);
 	_nodeShadow->setContentSize(Size2(160.0f, 100.0f));
@@ -109,7 +100,7 @@ bool MaterialNodeTest::init() {
 	}, InputListener::makeButtonMask({InputMouseButton::Touch}), 1);
 
 
-	_nodeCornerRounded = addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
+	_nodeCornerRounded = _background->addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
 		material::Elevation::Level5, material::ShapeFamily::RoundedCorners, material::ShapeStyle::ExtraSmall
 	}, "Rounded"), 1);
 	_nodeCornerRounded->setContentSize(Size2(160.0f, 100.0f));
@@ -124,7 +115,7 @@ bool MaterialNodeTest::init() {
 	}, InputListener::makeButtonMask({InputMouseButton::Touch}), 1);
 
 
-	_nodeCornerCut = addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
+	_nodeCornerCut = _background->addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
 		material::Elevation::Level5, material::ShapeFamily::CutCorners, material::ShapeStyle::ExtraSmall
 	}, "Cut"), 1);
 	_nodeCornerCut->setContentSize(Size2(160.0f, 100.0f));
@@ -139,7 +130,7 @@ bool MaterialNodeTest::init() {
 	}, InputListener::makeButtonMask({InputMouseButton::Touch}), 1);
 
 
-	_nodeStyle = addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
+	_nodeStyle = _background->addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
 		material::Elevation::Level5, material::NodeStyle::Outlined, material::ShapeStyle::Full, material::ActivityState::Enabled
 	}, "Style"), 1);
 	_nodeStyle->setContentSize(Size2(160.0f, 100.0f));
@@ -159,25 +150,6 @@ bool MaterialNodeTest::init() {
 		return true;
 	}, InputListener::makeButtonMask({InputMouseButton::MouseLeft, InputMouseButton::MouseRight}), 1);
 
-
-	_huePicker = addChild(Rc<MaterialColorPickerSprite>::create(MaterialColorPickerSprite::Hue, color, [this] (float val) {
-		auto color = material::ColorHCT(val, 100.0f, 50.0f, 1.0f);
-		_style->setPrimaryScheme(_lightCheckbox->getValue() ? material::ThemeType::DarkTheme : material::ThemeType::LightTheme, color, false);
-		_huePicker->setTargetColor(color);
-	}));
-	_huePicker->setAnchorPoint(Anchor::TopLeft);
-	_huePicker->setContentSize(Size2(240.0f, 24.0f));
-
-	_lightCheckbox = addChild(Rc<AppCheckboxWithLabel>::create("Dark theme", false, [this] (bool value) {
-		if (value) {
-			_style->setPrimaryScheme(material::ThemeType::DarkTheme, _huePicker->getTargetColor(), false);
-		} else {
-			_style->setPrimaryScheme(material::ThemeType::LightTheme, _huePicker->getTargetColor(), false);
-		}
-	}));
-	_lightCheckbox->setAnchorPoint(Anchor::TopLeft);
-	_lightCheckbox->setContentSize(Size2(24.0f, 24.0f));
-
 	return true;
 }
 
@@ -191,22 +163,6 @@ void MaterialNodeTest::onContentSizeDirty() {
 	_nodeCornerRounded->setPosition(Vec2(_contentSize / 2.0f) - Vec2(100.0f, -100.0f));
 	_nodeCornerCut->setPosition(Vec2(_contentSize / 2.0f) - Vec2(-100.0f, -100.0f));
 	_nodeStyle->setPosition(Vec2(_contentSize / 2.0f) - Vec2(100.0f, 140.0f));
-
-	_huePicker->setPosition(Vec2(16.0f, _contentSize.height - 16.0f));
-	_huePicker->setContentSize(Size2(std::min(std::max(160.0f, _contentSize.width - 200.0f - 98.0f - 48.0f), 360.0f), 24.0f));
-	_lightCheckbox->setPosition(Vec2(16.0f, _contentSize.height - 48.0f));
-}
-
-void MaterialNodeTest::onEnter(Scene *scene) {
-	LayoutTest::onEnter(scene);
-
-	auto light = Rc<SceneLight>::create(SceneLightType::Ambient, Vec2(0.0f, 0.3f), 1.5f, Color::White);
-	auto ambient = Rc<SceneLight>::create(SceneLightType::Ambient, Vec2(0.0f, 0.0f), 1.5f, Color::White);
-
-	_scene->setGlobalColor(Color4F::WHITE);
-	_scene->removeAllLights();
-	_scene->addLight(move(light));
-	_scene->addLight(move(ambient));
 }
 
 }

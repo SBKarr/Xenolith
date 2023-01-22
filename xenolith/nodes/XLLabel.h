@@ -81,11 +81,6 @@ public:
 	virtual void onTransformDirty(const Mat4 &) override;
 	virtual void onGlobalTransformDirty(const Mat4 &) override;
 
-	/** Standalone labels use its own textures and char-to-texture maps
-	 * so, they can be rendered without delays */
-	virtual void setStandalone(bool value);
-	virtual bool isStandalone() const;
-
 	virtual void setAdjustValue(uint8_t);
 	virtual uint8_t getAdjustValue() const;
 
@@ -137,10 +132,7 @@ protected:
 	Rc<FormatSpec> _format;
 	Vector<ColorMask> _colorMap;
 
-	bool _standalone = false;
 	bool _deferred = true;
-
-	float _density = 1.0f;
 
 	uint8_t _adjustValue = 0;
 	size_t _updateCount = 0;

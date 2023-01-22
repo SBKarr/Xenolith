@@ -295,11 +295,12 @@ bool FontController::addAlias(StringView newAlias, StringView familyName) {
 	}
 }
 
-Rc<FontLayout> FontController::getLayout(const FontParameters &style) {
+Rc<FontLayout> FontController::getLayout(FontParameters style) {
 	Rc<FontLayout> ret;
 
 	FontLayout *face = nullptr;
-	auto family = style.fontFamily;
+
+	style.fontSize = style.fontSize * style.density;
 
 	// check if layout already loaded
 	std::shared_lock sharedLock(_layoutSharedMutex);
@@ -307,22 +308,22 @@ Rc<FontLayout> FontController::getLayout(const FontParameters &style) {
 		return nullptr;
 	}
 
-	if (family.empty()) {
-		family = StringView(_defaultFontFamily);
+	if (style.fontFamily.empty()) {
+		style.fontFamily = StringView(_defaultFontFamily);
 	}
 
-	auto a_it = _aliases.find(family);
+	auto a_it = _aliases.find(style.fontFamily);
 	if (a_it != _aliases.end()) {
-		family = a_it->second;
+		style.fontFamily = a_it->second;
 	}
 
-	auto familyIt = _families.find(family);
+	auto familyIt = _families.find(style.fontFamily);
 	if (familyIt == _families.end()) {
 		return nullptr;
 	}
 
 	// search for exact match
-	auto cfgName = FontLayout::constructName(family, style);
+	auto cfgName = FontLayout::constructName(style.fontFamily, style);
 	auto it = _layouts.find(cfgName);
 	if (it != _layouts.end()) {
 		face = it->second.get();
@@ -332,7 +333,7 @@ Rc<FontLayout> FontController::getLayout(const FontParameters &style) {
 	if (!face) {
 		// find best possible config
 		spec = findSpecialization(familyIt->second, style, nullptr);
-		cfgName = FontLayout::constructName(family, spec);
+		cfgName = FontLayout::constructName(style.fontFamily, spec);
 		auto it = _layouts.find(cfgName);
 		if (it != _layouts.end()) {
 			face = it->second.get();
@@ -352,7 +353,7 @@ Rc<FontLayout> FontController::getLayout(const FontParameters &style) {
 
 	// update best match (if fonts was updated)
 	spec = findSpecialization(familyIt->second, style, &data);
-	cfgName = FontLayout::constructName(family, spec);
+	cfgName = FontLayout::constructName(style.fontFamily, spec);
 
 	// check if somebody already created layout for us in another thread
 	it = _layouts.find(cfgName);
@@ -362,7 +363,7 @@ Rc<FontLayout> FontController::getLayout(const FontParameters &style) {
 	}
 
 	// create layout
-	ret = Rc<FontLayout>::create(move(cfgName), family, move(spec), move(data), _library);
+	ret = Rc<FontLayout>::create(move(cfgName), style.fontFamily, move(spec), move(data), _library);
 	_layouts.emplace(ret->getName(), ret);
 	ret->touch(_clock, style.persistent);
 	return ret;

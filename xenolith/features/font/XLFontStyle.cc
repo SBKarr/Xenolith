@@ -53,7 +53,7 @@ String getFontConfigName(const StringView &fontFamily, FontSize fontSize, FontSt
 	name += fontFamily.str<Interface>();
 
 	if (caps && fontVariant == FontVariant::SmallCaps) {
-		size -= FontSize(size.get() / 5);
+		size -= size / 5.0f;
 	}
 
 	name += "." + toString(size.get());
@@ -126,7 +126,7 @@ String FontParameters::getConfigName(bool caps) const {
 
 FontParameters FontParameters::getSmallCaps() const {
 	FontParameters ret = *this;
-	ret.fontSize -= FontSize(ret.fontSize.get() / 5);
+	ret.fontSize -= ret.fontSize / 5.0f;
 	return ret;
 }
 

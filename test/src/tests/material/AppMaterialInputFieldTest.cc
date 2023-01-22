@@ -1,5 +1,4 @@
 /**
- Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
  Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,34 +20,36 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_
-#define TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_
-
-#include "MaterialSurface.h"
-#include "AppLayoutTest.h"
-#include "AppMaterialBackground.h"
-#include "AppSlider.h"
+#include "AppMaterialInputFieldTest.h"
 #include "MaterialStyleContainer.h"
 
 namespace stappler::xenolith::app {
 
-class MaterialNodeTest : public LayoutTest {
-public:
-	virtual ~MaterialNodeTest() { }
+bool MaterialInputFieldTest::init() {
+	if (!LayoutTest::init(LayoutName::MaterialInputFieldTest, "")) {
+		return false;
+	}
 
-	virtual bool init() override;
+	_background = addChild(Rc<MaterialBackground>::create(Color::Red_500), -1);
+	_background->setAnchorPoint(Anchor::Middle);
 
-	virtual void onContentSizeDirty() override;
+	_field = _background->addChild(Rc<material::InputField>::create());
+	_field->setLabelText("Label text");
+	_field->setSupportingText("Supporting text");
+	_field->setLeadingIconName(IconName::Action_search_solid);
+	_field->setTrailingIconName(IconName::Alert_error_solid);
+	_field->setContentSize(Size2(300.0f, 56.0f));
+	_field->setAnchorPoint(Anchor::Middle);
 
-protected:
-	MaterialBackground *_background = nullptr;
-	material::Surface *_nodeElevation = nullptr;
-	material::Surface *_nodeCornerRounded = nullptr;
-	material::Surface *_nodeCornerCut = nullptr;
-	material::Surface *_nodeShadow = nullptr;
-	material::Surface *_nodeStyle = nullptr;
-};
-
+	return true;
 }
 
-#endif /* TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_ */
+void MaterialInputFieldTest::onContentSizeDirty() {
+	LayoutTest::onContentSizeDirty();
+
+	_background->setContentSize(_contentSize);
+	_background->setPosition(_contentSize / 2.0f);
+	_field->setPosition(Vec2(_contentSize / 2.0f) - Vec2(0.0f, 100.0f));
+}
+
+}

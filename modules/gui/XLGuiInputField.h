@@ -36,8 +36,9 @@ public:
 	using Callback = Function<void()>;
 	using CharFilter = Function<bool(char16_t)>;
 
-	virtual bool init();
-	virtual bool visitGeometry(RenderFrameInfo &, NodeFlags parentFlags);
+	virtual bool init() override;
+	virtual void onContentSizeDirty() override;
+	virtual bool visitGeometry(RenderFrameInfo &, NodeFlags parentFlags) override;
 
 	virtual void onEnter(Scene *) override;
 	virtual void onExit() override;
@@ -101,10 +102,10 @@ public:
 	virtual void onMenuPaste();
 
 protected:
-	virtual bool onInputChar(char16_t) override;
-	virtual void onActivated(bool) override;
-	virtual void onPointer(bool) override;
-	virtual void onCursor(const Cursor &) override;
+	virtual bool handleInputChar(char16_t) override;
+	virtual void handleActivated(bool) override;
+	virtual void handlePointer(bool) override;
+	virtual void handleCursor(const Cursor &) override;
 
 	virtual void setMenuPosition(const Vec2 &);
 
@@ -122,7 +123,7 @@ protected:
 	InputLabelContainer *_node = nullptr;
 	InputLabel *_label = nullptr;
 	Label *_placeholder = nullptr;
-	Rc<InputMenu> _menu;
+	//Rc<InputMenu> _menu;
 	Callback _onInput;
 	CharFilter _charFilter;
 

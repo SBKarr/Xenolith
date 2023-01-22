@@ -58,11 +58,20 @@ public:
 	virtual TypescaleRole getRole() const { return _role; }
 	virtual void setRole(TypescaleRole);
 
-protected:
+	virtual void setBlendColor(ColorRole, float value);
+	virtual ColorRole getBlendColorRule() const { return _blendColorRule; }
+	virtual float getBlendColorValue() const { return _blendValue; }
+
 	virtual bool visitDraw(RenderFrameInfo &, NodeFlags parentFlags) override;
+
+protected:
 	virtual void specializeStyle(DescriptionStyle &style, float density) const override;
 
 	using Label::init;
+
+	float _blendValue = 0.0f;
+	Color4F _blendColor = Color4F::WHITE;
+	ColorRole _blendColorRule = ColorRole::Primary;
 
 	TypescaleRole _role = TypescaleRole::Unknown;
 	ThemeType _themeType = ThemeType::LightTheme;

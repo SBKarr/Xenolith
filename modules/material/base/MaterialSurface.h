@@ -30,6 +30,7 @@
 namespace stappler::xenolith::material {
 
 class SurfaceInterior;
+class StyleContainer;
 
 class Surface : public VectorSprite {
 public:
@@ -52,6 +53,7 @@ public:
 protected:
 	virtual void applyStyle(const SurfaceStyleData &);
 
+	virtual StyleContainer *getStyleContainerForFrame(RenderFrameInfo &) const;
 	virtual RenderingLevel getRealRenderingLevel() const override;
 
 	SurfaceInterior *_interior = nullptr;
@@ -69,6 +71,21 @@ protected:
 	float _realCornerRadius = nan();
 	bool _styleDirty = true;
 	bool _inTransition = false;
+};
+
+class BackgroundSurface : public Surface {
+public:
+	virtual ~BackgroundSurface() { }
+
+	virtual bool init() override;
+	virtual bool init(const SurfaceStyle &) override;
+
+	virtual StyleContainer *getStyleContainer() const { return _styleContainer; }
+
+protected:
+	virtual StyleContainer *getStyleContainerForFrame(RenderFrameInfo &) const;
+
+	StyleContainer *_styleContainer = nullptr;
 };
 
 }

@@ -60,7 +60,7 @@ void Surface::setStyle(const SurfaceStyle &style, float duration) {
 		return;
 	}
 
-	if (_inTransition) {
+	if (_inTransition || getActionByTag(TransitionActionTag)) {
 		_styleDirty = true;
 		stopAllActionsByTag(TransitionActionTag);
 		_inTransition = false;
@@ -89,7 +89,7 @@ bool Surface::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 		return false;
 	}
 
-	auto style = frame.getComponent<StyleContainer>(StyleContainer::ComponentFrameTag);
+	auto style = getStyleContainerForFrame(frame);
 	if (!style) {
 		return false;
 	}
@@ -185,12 +185,34 @@ void Surface::applyStyle(const SurfaceStyleData &style) {
 	_styleDirty = false;
 }
 
+StyleContainer *Surface::getStyleContainerForFrame(RenderFrameInfo &frame) const {
+	return frame.getComponent<StyleContainer>(StyleContainer::ComponentFrameTag);
+}
+
 RenderingLevel Surface::getRealRenderingLevel() const {
 	auto l = VectorSprite::getRealRenderingLevel();
 	if (l == RenderingLevel::Transparent) {
 		l = RenderingLevel::Surface;
 	}
 	return l;
+}
+
+bool BackgroundSurface::init() {
+	return init(material::SurfaceStyle::Background);
+}
+
+bool BackgroundSurface::init(const SurfaceStyle &style) {
+	if (!Surface::init(style)) {
+		return false;
+	}
+
+	_styleContainer = addComponent(Rc<StyleContainer>::create());
+
+	return true;
+}
+
+StyleContainer *BackgroundSurface::getStyleContainerForFrame(RenderFrameInfo &frame) const {
+	return _styleContainer;
 }
 
 }

@@ -58,6 +58,13 @@ void ComponentContainer::handleStorageDisposed(const db::Transaction &t) {
 void ComponentContainer::handleComponentsLoaded(const Server &serv) {
 	_loaded = true;
 	_server = &serv;
+
+	if (!_pendingTasks.empty()) {
+		for (auto &it : _pendingTasks) {
+			perform(move(it.first), it.second);
+		}
+		_pendingTasks.clear();
+	}
 }
 
 void ComponentContainer::handleComponentsUnloaded(const Server &serv) {
@@ -67,6 +74,7 @@ void ComponentContainer::handleComponentsUnloaded(const Server &serv) {
 
 bool ComponentContainer::perform(Function<bool(const Server &, const db::Transaction &)> &&cb, Ref *ref) const {
 	if (!_server || !_loaded) {
+		_pendingTasks.emplace_back(pair(move(cb), Rc<Ref>(ref)));
 		return false;
 	}
 

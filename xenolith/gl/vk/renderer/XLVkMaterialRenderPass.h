@@ -51,8 +51,7 @@ public:
 	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
 			uint32_t, bool isExternal) const override;
 
-	virtual bool writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
-			uint32_t, bool, VkDescriptorBufferInfo &) override;
+	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &) override;
 
 	const MaterialVertexAttachment *getMaterialAttachment() const;
 
@@ -91,8 +90,7 @@ public:
 	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
 			uint32_t, bool isExternal) const override;
 
-	virtual bool writeDescriptor(const QueuePassHandle &, const PipelineDescriptor &,
-			uint32_t, bool, VkDescriptorBufferInfo &) override;
+	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &) override;
 
 	const Vector<gl::VertexSpan> &getVertexData() const { return _spans; }
 	const Rc<DeviceBuffer> &getVertexes() const { return _vertexes; }
@@ -164,7 +162,7 @@ public:
 	virtual bool prepare(FrameQueue &, Function<void(bool)> &&) override;
 
 protected:
-	virtual Vector<VkCommandBuffer> doPrepareCommands(FrameHandle &) override;
+	virtual Vector<const CommandBuffer *> doPrepareCommands(FrameHandle &) override;
 	virtual void prepareMaterialCommands(gl::MaterialSet * materials, CommandBuffer &);
 
 	virtual void doFinalizeTransfer(gl::MaterialSet * materials, Vector<ImageMemoryBarrier> &outputImageBarriers, Vector<BufferMemoryBarrier> &outputBufferBarriers);

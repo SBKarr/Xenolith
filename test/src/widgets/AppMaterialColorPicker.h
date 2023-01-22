@@ -1,5 +1,4 @@
 /**
- Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
  Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,34 +20,54 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_
-#define TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_
+#ifndef TEST_SRC_WIDGETS_APPMATERIALCOLORPICKER_H_
+#define TEST_SRC_WIDGETS_APPMATERIALCOLORPICKER_H_
 
-#include "MaterialSurface.h"
-#include "AppLayoutTest.h"
-#include "AppMaterialBackground.h"
-#include "AppSlider.h"
-#include "MaterialStyleContainer.h"
+#include "MaterialColorHCT.h"
+#include "XLSprite.h"
 
 namespace stappler::xenolith::app {
 
-class MaterialNodeTest : public LayoutTest {
+class MaterialColorPicker : public Sprite {
 public:
-	virtual ~MaterialNodeTest() { }
+	enum Type {
+		Hue,
+		Chroma,
+		Tone
+	};
+	static constexpr uint32_t QuadsCount = 60;
 
-	virtual bool init() override;
+	virtual ~MaterialColorPicker() { }
+
+	virtual bool init(Type, const material::ColorHCT &, Function<void(float)> &&cb);
 
 	virtual void onContentSizeDirty() override;
 
+	const material::ColorHCT &getTargetColor() const;
+	void setTargetColor(const material::ColorHCT &color);
+
+	void setValue(float value);
+	float getValue() const;
+
+	void setLabelColor(const Color4F &);
+
 protected:
-	MaterialBackground *_background = nullptr;
-	material::Surface *_nodeElevation = nullptr;
-	material::Surface *_nodeCornerRounded = nullptr;
-	material::Surface *_nodeCornerCut = nullptr;
-	material::Surface *_nodeShadow = nullptr;
-	material::Surface *_nodeStyle = nullptr;
+	virtual void updateVertexesColor() override;
+	virtual void initVertexes() override;
+	virtual void updateVertexes() override;
+
+	String makeString();
+	void updateValue();
+
+	Type _type;
+	float _value = 0.0f;
+	material::ColorHCT _targetColor;
+	Function<void(float)> _callback;
+	Label *_label = nullptr;
+	Layer *_indicator = nullptr;
+	InputListener *_input = nullptr;
 };
 
 }
 
-#endif /* TEST_SRC_TESTS_MATERIAL_APPMATERIALNODETEST_H_ */
+#endif /* TEST_SRC_WIDGETS_APPMATERIALCOLORPICKER_H_ */

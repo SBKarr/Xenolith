@@ -124,6 +124,7 @@ struct SurfaceStyle {
 struct SurfaceStyleData {
 	static SurfaceStyleData progress(const SurfaceStyleData &, const SurfaceStyleData &, float p);
 
+	uint32_t schemeTag = SurfaceStyle::PrimarySchemeTag;
 	ShapeFamily shapeFamily = ShapeFamily::RoundedCorners;
 	ThemeType themeType = ThemeType::LightTheme;
 	Color4F colorScheme;

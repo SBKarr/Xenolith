@@ -49,6 +49,7 @@
 #include "material/AppMaterialDynamicFontTest.cc"
 #include "material/AppMaterialNodeTest.cc"
 #include "material/AppMaterialButtonTest.cc"
+#include "material/AppMaterialInputFieldTest.cc"
 #include "config/AppConfigMenu.cc"
 #include "config/AppConfigPresentModeSwitcher.cc"
 
@@ -102,6 +103,7 @@ Vector<MenuData> s_materialTestsMenu({
 	MenuData{LayoutName::MaterialDynamicFontTest, "Dynamic font"},
 	MenuData{LayoutName::MaterialNodeTest, "Node test"},
 	MenuData{LayoutName::MaterialButtonTest, "Button test"},
+	MenuData{LayoutName::MaterialInputFieldTest, "Input field test"},
 });
 
 LayoutName getRootLayoutForLayout(LayoutName name) {
@@ -154,6 +156,7 @@ LayoutName getRootLayoutForLayout(LayoutName name) {
 	case LayoutName::MaterialDynamicFontTest:
 	case LayoutName::MaterialNodeTest:
 	case LayoutName::MaterialButtonTest:
+	case LayoutName::MaterialInputFieldTest:
 		return LayoutName::MaterialTests;
 		break;
 	}
@@ -198,6 +201,7 @@ StringView getLayoutNameId(LayoutName name) {
 	case LayoutName::MaterialDynamicFontTest: return "org.stappler.xenolith.test.MaterialDynamicFontTest"; break;
 	case LayoutName::MaterialNodeTest: return "org.stappler.xenolith.test.MaterialNodeTest"; break;
 	case LayoutName::MaterialButtonTest: return "org.stappler.xenolith.test.MaterialButtonTest"; break;
+	case LayoutName::MaterialInputFieldTest: return "org.stappler.xenolith.test.MaterialInputFieldTest"; break;
 	}
 	return StringView();
 }
@@ -239,6 +243,7 @@ LayoutName getLayoutNameById(StringView name) {
 	else if (name == "org.stappler.xenolith.test.MaterialDynamicFontTest") { return LayoutName::MaterialDynamicFontTest; }
 	else if (name == "org.stappler.xenolith.test.MaterialNodeTest") { return LayoutName::MaterialNodeTest; }
 	else if (name == "org.stappler.xenolith.test.MaterialButtonTest") { return LayoutName::MaterialButtonTest; }
+	else if (name == "org.stappler.xenolith.test.MaterialInputFieldTest") { return LayoutName::MaterialInputFieldTest; }
 
 	return LayoutName::Root;
 }
@@ -281,6 +286,7 @@ Rc<Node> makeLayoutNode(LayoutName name) {
 	case LayoutName::MaterialDynamicFontTest: return Rc<MaterialDynamicFontTest>::create(); break;
 	case LayoutName::MaterialNodeTest: return Rc<MaterialNodeTest>::create(); break;
 	case LayoutName::MaterialButtonTest: return Rc<MaterialButtonTest>::create(); break;
+	case LayoutName::MaterialInputFieldTest: return Rc<MaterialInputFieldTest>::create(); break;
 	}
 	return nullptr;
 }
