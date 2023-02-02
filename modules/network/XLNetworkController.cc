@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -21,107 +22,121 @@
  **/
 
 #include "XLNetworkController.h"
-#include "XLNetworkHandle.h"
 #include "XLApplication.h"
 
-#include <curl/curl.h>
+#include "SPNetworkContext.h"
+#include "XLNetworkRequest.h"
 
 namespace stappler::xenolith::network {
 
-Controller::Controller(Application *app, StringView name) : _application(app), _name(name.str()) {
-	_shouldQuit.test_and_set();
-	_thread = StdThread(ThreadHandlerInterface::workerThread, this, nullptr);
+struct ControllerHandle {
+	using Context = stappler::network::Context<Interface>;
 
-	_pending.setQueueLocking(_mutexQueue);
-	_pending.setFreeLocking(_mutexFree);
-}
+	Rc<Request> request;
+	Handle *handle;
+	Context context;
+};
 
-Controller::~Controller() {
-	_shouldQuit.clear();
-	curl_multi_wakeup((CURLM *)_handle);
-	_thread.join();
-}
+struct Controller::Data final : thread::ThreadInterface<Interface> {
+	using Context = stappler::network::Context<Interface>;
 
-void Controller::onUploadProgress(const Rc<Handle> &handle, int64_t total, int64_t now) {
-	_application->performOnMainThread([handle, total, now] {
-		handle->notifyOnUploadProgress(total, now);
-	});
-}
+	Application *_application = nullptr;
+	String _name;
+	Bytes _signKey;
 
-void Controller::onDownloadProgress(const Rc<Handle> &handle, int64_t total, int64_t now) {
-	_application->performOnMainThread([handle, total, now] {
-		handle->notifyOnDownloadProgress(total, now);
-	});
-}
+	std::thread _thread;
 
-bool Controller::onComplete(const Rc<Handle> &handle) {
-	_application->performOnMainThread([handle] {
-		handle->notifyOnComplete();
-	});
+	Mutex _mutexQueue;
+	Mutex _mutexFree;
+
+	CURLM *_handle = nullptr;
+
+	memory::PriorityQueue<Rc<Request>> _pending;
+
+	std::atomic_flag _shouldQuit;
+	Map<String, void *> _sharegroups;
+
+	Map<CURL *, ControllerHandle> _handles;
+
+	Data(Application *app, StringView name, Bytes &&signKey);
+	virtual ~Data();
+
+	bool init();
+
+	virtual void threadInit() override;
+	virtual bool worker() override;
+	virtual void threadDispose() override;
+
+	void *getSharegroup(StringView);
+
+	void onUploadProgress(Handle *, int64_t total, int64_t now);
+	void onDownloadProgress(Handle *, int64_t total, int64_t now);
+	bool onComplete(Handle *);
+
+	void sign(NetworkHandle &, Context &) const;
+
+	void pushTask(Rc<Request> &&handle);
+	void wakeup();
+
+	bool prepare(Handle &handle, Context *ctx, const Callback<bool(CURL *)> &onBeforePerform);
+	bool finalize(Handle &handle, Context *ctx, const Callback<bool(CURL *)> &onAfterPerform);
+};
+
+Controller::Data::Data(Application *app, StringView name, Bytes &&signKey)
+: _application(app), _name(name.str<Interface>()), _signKey(move(signKey)) { }
+
+Controller::Data::~Data() { }
+
+bool Controller::Data::init() {
+	_thread = std::thread(Controller::Data::workerThread, this, nullptr);
 	return true;
 }
 
-void Controller::threadInit() {
+void Controller::Data::threadInit() {
+	_shouldQuit.test_and_set();
+	_pending.setQueueLocking(_mutexQueue);
+	_pending.setFreeLocking(_mutexFree);
+
+	thread::ThreadInfo::setThreadInfo(_name);
+
 	_handle = curl_multi_init();
 }
 
-void Controller::threadDispose() {
-	if (_handle) {
-		for (auto &it : _handles) {
-			curl_multi_remove_handle((CURLM *)_handle, it.first);
-			it.second.second.code = CURLE_FAILED_INIT;
-			it.second.first->finalize(&it.second.second, nullptr);
-			curl_easy_cleanup(it.first);
-		}
-
-		curl_multi_cleanup((CURLM *)_handle);
-
-		for (auto &it : _sharegroups) {
-			curl_share_cleanup((CURLSH *)it.second);
-		}
-
-		_handles.clear();
-		_sharegroups.clear();
-
-		_handle = nullptr;
-	}
-}
-
-bool Controller::worker() {
+bool Controller::Data::worker() {
 	if (!_shouldQuit.test_and_set()) {
 		return false;
 	}
 
 	do {
-		if (!_pending.pop_direct([&] (memory::PriorityQueue<Rc<Handle>>::PriorityType type, Rc<Handle> &&it) {
-			auto handle = it.get();
+		if (!_pending.pop_direct([&] (memory::PriorityQueue<Rc<Handle>>::PriorityType type, Rc<Request> &&it) {
 			auto h = curl_easy_init();
-			auto i = _handles.emplace(h, pair(move(it), NetworkHandle::Context())).first;
+			auto networkHandle = const_cast<Handle *>(&it->getHandle());
+			auto i = _handles.emplace(h, ControllerHandle{move(it), networkHandle}).first;
 
-			auto sg = i->second.first->getSharegroup();
+			auto sg = i->second.handle->getSharegroup();
 			if (!sg.empty()) {
-				i->second.second.share = getSharegroup(sg);
+				i->second.context.share = getSharegroup(sg);
 			}
 
-			i->second.second.userdata = this;
-			i->second.second.curl = h;
-			i->second.second.handle = handle;
+			i->second.context.userdata = this;
+			i->second.context.curl = h;
+			i->second.context.origHandle = networkHandle;
 
-			i->second.second.handle->setDownloadProgress([this, h = handle] (int64_t total, int64_t now) -> int {
+			i->second.context.origHandle->setDownloadProgress([this, h = networkHandle] (int64_t total, int64_t now) -> int {
 				onDownloadProgress(h, total, now);
 				return 0;
 			});
 
-			i->second.second.handle->setUploadProgress([this,  h = handle] (int64_t total, int64_t now) -> int {
+			i->second.context.origHandle->setUploadProgress([this,  h = networkHandle] (int64_t total, int64_t now) -> int {
 				onUploadProgress(h, total, now);
 				return 0;
 			});
 
-			if (i->second.first->shouldSignRequest()) {
-				sign(*i->second.first, i->second.second);
+			if (i->second.handle->shouldSignRequest()) {
+				sign(*networkHandle, i->second.context);
 			}
 
-			i->second.first->prepare(&i->second.second, nullptr);
+			prepare(*networkHandle, &i->second.context, nullptr);
 
 			curl_multi_add_handle((CURLM *)_handle, h);
 		})) {
@@ -157,9 +172,9 @@ bool Controller::worker() {
 
 			auto it = _handles.find(e);
 			if (it != _handles.end()) {
-				it->second.second.code = msg->data.result;
-				it->second.first->finalize(&it->second.second, nullptr);
-				if (!onComplete(it->second.first)) {
+				it->second.context.code = msg->data.result;
+				finalize(*it->second.handle, &it->second.context, nullptr);
+				if (!onComplete(it->second.handle)) {
 					_handles.erase(it);
 					return false;
 				}
@@ -173,7 +188,29 @@ bool Controller::worker() {
 	return true;
 }
 
-void *Controller::getSharegroup(StringView name) {
+void Controller::Data::threadDispose() {
+	if (_handle) {
+		for (auto &it : _handles) {
+			curl_multi_remove_handle((CURLM *)_handle, it.first);
+			it.second.context.code = CURLE_FAILED_INIT;
+			finalize(*it.second.handle, &it.second.context, nullptr);
+			curl_easy_cleanup(it.first);
+		}
+
+		curl_multi_cleanup((CURLM *)_handle);
+
+		for (auto &it : _sharegroups) {
+			curl_share_cleanup((CURLSH *)it.second);
+		}
+
+		_handles.clear();
+		_sharegroups.clear();
+
+		_handle = nullptr;
+	}
+}
+
+void *Controller::Data::getSharegroup(StringView name) {
 	auto it = _sharegroups.find(name);
 	if (it != _sharegroups.end()) {
 		return it->second;
@@ -184,12 +221,34 @@ void *Controller::getSharegroup(StringView name) {
 	curl_share_setopt((CURLSH *)sharegroup, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
 	curl_share_setopt((CURLSH *)sharegroup, CURLSHOPT_SHARE, CURL_LOCK_DATA_PSL);
 
-	_sharegroups.emplace(name.str(), sharegroup);
+	_sharegroups.emplace(name.str<Interface>(), sharegroup);
 	return sharegroup;
 }
 
-void Controller::sign(Handle &handle, NetworkHandle::Context &ctx) const {
-	String date = Time::now().toHttp();
+void Controller::Data::onUploadProgress(Handle *handle, int64_t total, int64_t now) {
+	_application->performOnMainThread([handle, total, now] {
+		auto req = handle->getReqeust();
+		req->notifyOnUploadProgress(total, now);
+	});
+}
+
+void Controller::Data::onDownloadProgress(Handle *handle, int64_t total, int64_t now) {
+	_application->performOnMainThread([handle, total, now] {
+		auto req = handle->getReqeust();
+		req->notifyOnDownloadProgress(total, now);
+	});
+}
+
+bool Controller::Data::onComplete(Handle *handle) {
+	_application->performOnMainThread([handle] {
+		auto req = handle->getReqeust();
+		req->notifyOnComplete();
+	});
+	return true;
+}
+
+void Controller::Data::sign(NetworkHandle &handle, Context &ctx) const {
+	String date = Time::now().toHttp<Interface>();
 	StringStream message;
 
 	message << handle.getUrl() << "\r\n";
@@ -202,14 +261,55 @@ void Controller::sign(Handle &handle, NetworkHandle::Context &ctx) const {
 	auto sig = string::Sha512::hmac(msg, _signKey);
 
 	ctx.headers = curl_slist_append(ctx.headers, toString("X-ClientDate: ", date).data());
-	ctx.headers = curl_slist_append(ctx.headers, toString("X-Stappler-Sign: ", base64url::encode(sig)).data());
+	ctx.headers = curl_slist_append(ctx.headers, toString("X-Stappler-Sign: ", base64url::encode<Interface>(sig)).data());
 
 	handle.setUserAgent(_application->getUserAgent());
 }
 
-void Controller::run(const Rc<Handle> &handle) {
-	_pending.push(0, false, handle);
-	curl_multi_wakeup((CURLM *)_handle);
+void Controller::Data::pushTask(Rc<Request> &&handle) {
+	_pending.push(0, false, move(handle));
+	curl_multi_wakeup(_handle);
+}
+
+void Controller::Data::wakeup() {
+	curl_multi_wakeup(_handle);
+}
+
+bool Controller::Data::prepare(Handle &handle, Context *ctx, const Callback<bool(CURL *)> &onBeforePerform) {
+	if (!handle.prepare(ctx)) {
+		return false;
+	}
+
+	return stappler::network::prepare(*handle.getData(), ctx, onBeforePerform);
+}
+
+bool Controller::Data::finalize(Handle &handle, Context *ctx, const Callback<bool(CURL *)> &onAfterPerform) {
+	auto ret = stappler::network::finalize(*handle.getData(), ctx, onAfterPerform);
+	return handle.finalize(ctx, ret);
+}
+
+Controller::Controller(Application *app, StringView name, Bytes &&signKey) {
+	_data = new Data(app, name, move(signKey));
+	_data->init();
+}
+
+Controller::~Controller() {
+	_data->_shouldQuit.clear();
+	curl_multi_wakeup(_data->_handle);
+	_data->_thread.join();
+	delete _data;
+}
+
+Application *Controller::getApplication() const {
+	return _data->_application;
+}
+
+StringView Controller::getName() const {
+	return _data->_name;
+}
+
+void Controller::run(Rc<Request> &&handle) {
+	_data->pushTask(move(handle));
 }
 
 }

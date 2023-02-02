@@ -1,5 +1,5 @@
 /**
-Copyright (c) 2020-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2020-2022 Roman Katuntsev <sbkarr@stappler.org>
  Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -29,6 +29,10 @@ THE SOFTWARE.
 #include "XLGlInstance.h"
 #include "XLGlLoop.h"
 #include "XLDeferredManager.h"
+
+#if MODULE_XENOLITH_NETWORK
+#include "XLNetworkController.h"
+#endif
 
 namespace stappler::log {
 
@@ -149,7 +153,7 @@ void Application::onMemoryWarning() {
 
 }
 
-int Application::run(Value &&data) {
+int Application::run(Value &&data, const Callback<void(Application *)> &onStarted) {
 	_updatePool = memory::pool::create(memory::pool::acquire());
 	memory::pool::push(_updatePool);
 
@@ -213,6 +217,12 @@ int Application::run(Value &&data) {
 #if MODULE_XENOLITH_STORAGE
 	db::setStorageRoot(&_storageRoot);
 
+	if (_dbParams.getString("driver") == "sqlite") {
+		auto path = _dbParams.getString("dbname");
+		filesystem::mkdir(filepath::root(filepath::root(path)));
+		filesystem::mkdir(filepath::root(path));
+	}
+
 	_storageServer = Rc<storage::Server>::create(this, _dbParams);
 
 	if (!_storageServer) {
@@ -250,8 +260,16 @@ int Application::run(Value &&data) {
 
 		_fontController = _fontLibrary->acquireController(move(builder));
 
+		if (onStarted) {
+			onStarted(this);
+		}
+
+		_running = true;
+		_shouldEndLoop = false;
+
 		ret = onMainLoop();
 
+		_fontController->invalidate();
 		_fontController = nullptr;
 
 		_deferred->cancel();
@@ -288,6 +306,8 @@ int Application::run(Value &&data) {
 		log::text("Application", "Fail to launch gl loop: onFinishLaunching failed");
 	}
 
+	std::unique_lock lock(_endMutex);
+
 	if (_queue) {
 		_queue->cancelWorkers();
 		_queue = nullptr;
@@ -320,6 +340,18 @@ int Application::run(Value &&data) {
 		_instance = nullptr;
 	}
 
+#if MODULE_XENOLITH_STORAGE
+	_storageServer = nullptr;
+#endif
+
+#if MODULE_XENOLITH_NETWORK
+	_networkController = nullptr;
+#endif
+	_running = false;
+
+	_endCond.notify_all();
+	lock.unlock();
+
 	memory::pool::pop();
 	memory::pool::destroy(_updatePool);
 	_updatePool = nullptr;
@@ -332,6 +364,10 @@ bool Application::openURL(const StringView &url) {
 
 void Application::addView(gl::ViewInfo &&view) {
 	_glLoop->addView(move(view));
+}
+
+void Application::updateConfig(Value &&config) {
+
 }
 
 void Application::runLoop(TimeInterval iv) {
@@ -361,10 +397,23 @@ void Application::runLoop(TimeInterval iv) {
 	} while (!_shouldEndLoop);
 }
 
-void Application::end() {
-	performOnMainThread([&] {
-		_shouldEndLoop = true;
-	}, this);
+void Application::end(bool sync) {
+	if (sync) {
+		std::unique_lock lock(_endMutex);
+
+		performOnMainThread([&] {
+			_shouldEndLoop = true;
+		}, this);
+
+		_endCond.wait(lock, [&] {
+			return !_running;
+		});
+
+	} else {
+		performOnMainThread([&] {
+			_shouldEndLoop = true;
+		}, this);
+	}
 }
 
 void Application::update(uint64_t clock, uint64_t dt) {

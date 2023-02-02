@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -68,8 +69,8 @@ public:
 	};
 
 	struct StagingCopy {
-		size_t sourceOffet;
-		size_t sourceSize;
+		VkDeviceSize sourceOffet;
+		VkDeviceSize sourceSize;
 		ImageAllocInfo *targetImage = nullptr;
 		BufferAllocInfo *targetBuffer = nullptr;
 	};

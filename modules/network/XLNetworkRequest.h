@@ -1,5 +1,6 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -26,27 +27,36 @@
 #include "XLDefine.h"
 #include "SPNetworkHandle.h"
 
+namespace stappler::network {
+
+template <typename Interface>
+struct Context;
+
+}
+
 namespace stappler::xenolith::network {
 
 class Controller;
+class Request;
 
-using Method = NetworkHandle::Method;
+using Method = stappler::network::Method;
 
-class Handle : public NetworkHandle, public Ref {
+class Handle final : public NetworkHandle {
 public:
-	using CompleteCallback = Function<void(Handle &)>;
-	using ProgressCallback = Function<void(Handle &, int64_t total, int64_t now)>;
+	using Context = stappler::network::Context<Interface>;
+	using CompleteCallback = Function<void(const Handle &)>;
+	using ProgressCallback = Function<void(const Handle &, int64_t total, int64_t now)>;
 
 	virtual ~Handle() { }
 
 	// just GET url, actions with data defined with setSend*/setReceive*
-	virtual bool init(StringView url);
+	bool init(StringView url);
 
 	// download to file with GET
-	virtual bool init(StringView url, FilePath fileName);
+	bool init(StringView url, FilePath fileName);
 
 	// perform query with specific method, actions with data defined with setSend*/setReceive*
-	virtual bool init(Method method, StringView url);
+	bool init(Method method, StringView url);
 
 	bool isSuccess() const { return _success; }
 	int64_t getMTime() const { return _mtime; }
@@ -54,32 +64,20 @@ public:
 	StringView getSharegroup() const { return _sharegroup; }
 
 	void setMTime(int64_t val) { _mtime = val; }
-	void setETag(StringView val) { _etag = val.str(); }
-	void setSharegroup(StringView val) { _sharegroup = val.str(); }
-
-	float getUploadProgress() const { return (float)(_uploadProgress.second) / (float)(_uploadProgress.first); }
-	float getDownloadProgress() const { return (float)(_downloadProgress.second) / (float)(_downloadProgress.first); }
-
-	Pair<int64_t, int64_t> getUploadProgressCounters() const { return _uploadProgress; }
-	Pair<int64_t, int64_t> getDownloadProgressCounters() const { return _downloadProgress; }
-
-	virtual void setUploadProgress(ProgressCallback &&);
-	virtual void setDownloadProgress(ProgressCallback &&);
+	void setETag(StringView val) { _etag = val.str<Interface>(); }
+	void setSharegroup(StringView val) { _sharegroup = val.str<Interface>(); }
 
 	void setSignRequest(bool value) { _signRequest = value; }
 	bool shouldSignRequest() const { return _signRequest; }
 
-	virtual void perform(Application *, CompleteCallback &&cb);
+	const Rc<Request> &getReqeust() const { return _request; }
 
 protected:
 	friend class Controller;
+	friend class Request;
 
-	virtual void notifyOnComplete();
-    virtual void notifyOnUploadProgress(int64_t total, int64_t now);
-    virtual void notifyOnDownloadProgress(int64_t total, int64_t now);
-
-	virtual bool prepare(Context *, const Callback<bool(CURL *)> &onBeforePerform) override;
-	virtual bool finalize(Context *, const Callback<bool(CURL *)> &onAfterPerform) override;
+    bool prepare(Context *ctx);
+    bool finalize(Context *ctx, bool success);
 
 	bool _success = false;
 	bool _signRequest = false;
@@ -89,14 +87,66 @@ protected:
 	String _etag;
 	String _sharegroup;
 
+	const Controller *_controller = nullptr;
+	Rc<Request> _request;
+};
+
+class Request : public Ref {
+public:
+	using CompleteCallback = Function<void(const Request &)>;
+	using ProgressCallback = Function<void(const Request &, int64_t total, int64_t now)>;
+
+	virtual ~Request();
+
+	virtual bool init(const Callback<bool(Handle &)> &setupCallback, Rc<Ref> && = nullptr);
+
+	virtual void perform(Application *, CompleteCallback &&cb);
+
+	void setIgnoreResponseData(bool);
+	bool isIgnoreResponseData() const { return _ignoreResponseData; }
+
+	bool isRunning() const { return _running; }
+
+	const Handle &getHandle() const { return _handle; }
+
+	float getUploadProgress() const { return float(_uploadProgress.second) / float(_uploadProgress.first); }
+	float getDownloadProgress() const { return float(_downloadProgress.second) / float(_downloadProgress.first); }
+
+	Pair<int64_t, int64_t> getUploadProgressCounters() const { return _uploadProgress; }
+	Pair<int64_t, int64_t> getDownloadProgressCounters() const { return _downloadProgress; }
+
+	void setUploadProgress(ProgressCallback &&);
+	void setDownloadProgress(ProgressCallback &&);
+
+	BytesView getData() const { return _data; }
+
+protected:
+	friend class Controller;
+
+	void handleHeader(StringView, StringView);
+	size_t handleReceive(char *, size_t);
+
+	void notifyOnComplete();
+	void notifyOnUploadProgress(int64_t total, int64_t now);
+	void notifyOnDownloadProgress(int64_t total, int64_t now);
+
+	bool _running = false;
+	bool _ignoreResponseData = false;
+	bool _setupInput = false;
+	Function<void(StringView, StringView)> _targetHeaderCallback;
+	Pair<int64_t, int64_t> _uploadProgress = pair(0, 0); // total, now
+	Pair<int64_t, int64_t> _downloadProgress = pair(0, 0); // total, now
 	ProgressCallback _onDownloadProgress;
 	ProgressCallback _onUploadProgress;
 	CompleteCallback _onComplete;
-	Pair<int64_t, int64_t> _uploadProgress; // total, now
-	Pair<int64_t, int64_t> _downloadProgress; // total, now
+	Handle _handle;
+	Rc<Ref> _owner;
+
+	size_t _nbytes = 0;
+	Bytes _data;
 };
 
-class DataHandle : public Handle {
+/*class DataHandle : public Handle {
 public:
 	using DataCompleteCallback = Function<void(Handle &, data::Value &)>;
 
@@ -125,7 +175,7 @@ public:
 
 protected:
 	Rc<storage::Asset> _asset;
-};
+};*/
 
 }
 

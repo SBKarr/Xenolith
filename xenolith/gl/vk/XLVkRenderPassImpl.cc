@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -32,19 +33,19 @@ DescriptorBinding::~DescriptorBinding() {
 }
 
 DescriptorBinding::DescriptorBinding(VkDescriptorType type, uint32_t count) : type(type) {
-	data.resize(count, DescriptorData{nullptr, nullptr});
+	data.resize(count, DescriptorData{gl::ObjectHandle::zero(), nullptr});
 }
 
 void DescriptorBinding::write(uint32_t idx, DescriptorBufferInfo &&info) {
-	data[idx] = DescriptorData{info.buffer->getBuffer(), info.buffer};
+	data[idx] = DescriptorData{gl::ObjectHandle(info.buffer->getBuffer()), info.buffer};
 }
 
 void DescriptorBinding::write(uint32_t idx, DescriptorImageInfo &&info) {
-	data[idx] = DescriptorData{info.imageView->getImageView(), info.imageView};
+	data[idx] = DescriptorData{gl::ObjectHandle(info.imageView->getImageView()), info.imageView};
 }
 
 void DescriptorBinding::write(uint32_t idx, DescriptorBufferViewInfo &&info) {
-	data[idx] = DescriptorData{info.buffer->getBuffer(), info.buffer};
+	data[idx] = DescriptorData{gl::ObjectHandle(info.buffer->getBuffer()), info.buffer};
 }
 
 bool RenderPassImpl::Data::cleanup(Device &dev) {
@@ -563,12 +564,12 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, PassData &data) {
 	if (initDescriptors(dev, data, pass)) {
 		auto l = new Data(move(pass));
 		_data = l;
-		return gl::RenderPass::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+		return gl::RenderPass::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 			auto d = ((Device *)dev);
-			auto l = (Data *)ptr;
+			auto l = (Data *)ptr.get();
 			l->cleanup(*d);
 			delete l;
-		}, gl::ObjectType::RenderPass, l);
+		}, gl::ObjectType::RenderPass, ObjectHandle(ObjectHandle::Type(uintptr_t(l))));
 	}
 
 	return pass.cleanup(dev);
@@ -579,12 +580,12 @@ bool RenderPassImpl::initComputePass(Device &dev, PassData &data) {
 	if (initDescriptors(dev, data, pass)) {
 		auto l = new Data(move(pass));
 		_data = l;
-		return gl::RenderPass::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+		return gl::RenderPass::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 			auto d = ((Device *)dev);
-			auto l = (Data *)ptr;
+			auto l = (Data *)ptr.get();
 			l->cleanup(*d);
 			delete l;
-		}, gl::ObjectType::RenderPass, l);
+		}, gl::ObjectType::RenderPass, ObjectHandle(ObjectHandle::Type(uintptr_t(l))));
 	}
 
 	return pass.cleanup(dev);
@@ -594,24 +595,24 @@ bool RenderPassImpl::initTransferPass(Device &dev, PassData &) {
 	// init nothing - no descriptors or render pass implementation needed
 	auto l = new Data();
 	_data = l;
-	return gl::RenderPass::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+	return gl::RenderPass::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 		auto d = ((Device *)dev);
-		auto l = (Data *)ptr;
+		auto l = (Data *)ptr.get();
 		l->cleanup(*d);
 		delete l;
-	}, gl::ObjectType::RenderPass, l);
+	}, gl::ObjectType::RenderPass, ObjectHandle(ObjectHandle::Type(uintptr_t(l))));
 }
 
 bool RenderPassImpl::initGenericPass(Device &dev, PassData &) {
 	// init nothing - no descriptors or render pass implementation needed
 	auto l = new Data();
 	_data = l;
-	return gl::RenderPass::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+	return gl::RenderPass::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 		auto d = ((Device *)dev);
-		auto l = (Data *)ptr;
+		auto l = (Data *)ptr.get();
 		l->cleanup(*d);
 		delete l;
-	}, gl::ObjectType::RenderPass, l);
+	}, gl::ObjectType::RenderPass, ObjectHandle(ObjectHandle::Type(uintptr_t(l))));
 }
 
 bool RenderPassImpl::initDescriptors(Device &dev, PassData &data, Data &pass) {

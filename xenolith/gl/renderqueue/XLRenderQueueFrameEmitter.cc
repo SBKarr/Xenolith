@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -34,23 +35,23 @@ FrameRequest::~FrameRequest() {
 	_pool = nullptr;
 }
 
-bool FrameRequest::init(const Rc<FrameEmitter> &emitter, Rc<ImageStorage> &&target, float density) {
+bool FrameRequest::init(const Rc<FrameEmitter> &emitter, Rc<ImageStorage> &&target, const gl::FrameContraints &constraints) {
 	auto e = target->getInfo().extent;
 	_pool = Rc<PoolRef>::alloc();
 	_emitter = emitter;
-	_specialization.extent = _extent = Extent2(e.width, e.height);
+	_constraints = constraints;
+	_specialization.extent = _constraints.extent = Extent2(e.width, e.height);
 	_readyForSubmit = false;
 	_renderTarget = move(target);
-	_density = density;
 	return true;
 }
 
-bool FrameRequest::init(const Rc<FrameEmitter> &emitter, Extent2 e, float density) {
+bool FrameRequest::init(const Rc<FrameEmitter> &emitter, const gl::FrameContraints &constraints) {
 	_pool = Rc<PoolRef>::alloc();
 	_emitter = emitter;
-	_specialization.extent = _extent = Extent2(e.width, e.height);
+	_constraints = constraints;
+	_specialization.extent = _constraints.extent;
 	_readyForSubmit = false;
-	_density = density;
 	return true;
 }
 
@@ -61,20 +62,20 @@ bool FrameRequest::init(const Rc<Queue> &q) {
 	return true;
 }
 
-bool FrameRequest::init(const Rc<Queue> &q, Extent2 extent, float density) {
+bool FrameRequest::init(const Rc<Queue> &q, const gl::FrameContraints &constraints) {
 	_pool = Rc<PoolRef>::alloc();
 	_queue = q;
 	_queue->beginFrame(*this);
-	_specialization.extent = _extent = extent;
-	_density = density;
+	_constraints = constraints;
+	_specialization.extent = _constraints.extent;
 	return true;
 }
 
-bool FrameRequest::init(const Rc<Queue> &q, const Rc<FrameEmitter> &emitter, Extent2 extent, float density) {
+bool FrameRequest::init(const Rc<Queue> &q, const Rc<FrameEmitter> &emitter, const gl::FrameContraints &constraints) {
 	if (init(q)) {
 		_emitter = emitter;
-		_specialization.extent = _extent = extent;
-		_density = density;
+		_constraints = constraints;
+		_specialization.extent = _constraints.extent;
 		_readyForSubmit = emitter->isReadyForSubmit();
 		return true;
 	}
@@ -222,7 +223,7 @@ bool FrameRequest::bindSwapchainCallback(Function<bool(FrameAttachmentData &, bo
 }
 
 bool FrameRequest::bindSwapchain(const Rc<gl::View> &swapchain) {
-	_density = swapchain->getDensity();
+	_constraints = swapchain->getFrameContraints();
 	for (auto &it : _queue->getOutputAttachments()) {
 		if (it->getType() == AttachmentType::Image && it->isCompatible(swapchain->getSwapchainImageInfo())) {
 			_swapchainAttachment = it;
@@ -491,14 +492,14 @@ void FrameEmitter::scheduleFrameTimeout() {
 	}
 }
 
-Rc<FrameRequest> FrameEmitter::makeRequest(Rc<ImageStorage> &&storage, float density) {
+Rc<FrameRequest> FrameEmitter::makeRequest(Rc<ImageStorage> &&storage, const gl::FrameContraints &constraints) {
 	_frame = platform::device::_clock();
-	return Rc<FrameRequest>::create(this, move(storage), density);
+	return Rc<FrameRequest>::create(this, move(storage), constraints);
 }
 
-Rc<FrameRequest> FrameEmitter::makeRequest(Extent2 extent, float density) {
+Rc<FrameRequest> FrameEmitter::makeRequest(const gl::FrameContraints &constraints) {
 	_frame = platform::device::_clock();
-	return Rc<FrameRequest>::create(this, extent, density);
+	return Rc<FrameRequest>::create(this, constraints);
 }
 
 Rc<FrameHandle> FrameEmitter::submitNextFrame(Rc<FrameRequest> &&req) {

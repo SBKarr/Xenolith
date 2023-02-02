@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -28,9 +29,7 @@
 
 namespace stappler::xenolith::vk {
 
-View::~View() {
-	//_thread.join();
-}
+View::~View() { }
 
 bool View::init(Loop &loop, Device &dev, gl::ViewInfo &&info) {
 	if (!gl::View::init(loop, move(info))) {
@@ -61,50 +60,25 @@ void View::threadInit() {
 	_shouldQuit.test_and_set();
 
 	auto info = getSurfaceOptions();
-
 	auto cfg = _selectConfig(info);
 
 	if (info.surfaceDensity != 1.0f) {
-		_density = _loop->getApplication()->getData().density * info.surfaceDensity;
+		_constraints.density = _loop->getApplication()->getData().density * info.surfaceDensity;
 	}
 
 	createSwapchain(move(cfg), cfg.presentMode);
 
-	if (_initImage) {
+	if (_initImage && !_options.followDisplayLink) {
 		presentImmediate(move(_initImage), nullptr);
 		_initImage = nullptr;
 	}
 
 	mapWindow();
-
-	scheduleNextImage(_frameInterval, false);
 }
 
 void View::threadDispose() {
-	_mutex.lock();
+	clearImages();
 	_running = false;
-
-	auto loop = (Loop *)_loop.get();
-	for (auto &it : _fences) {
-		it->check(*loop, false);
-	}
-	_fences.clear();
-	_mutex.unlock();
-
-	for (auto &it :_fenceImages) {
-		it->invalidateSwapchain();
-	}
-	_fenceImages.clear();
-
-	for (auto &it :_scheduledImages) {
-		it->invalidateSwapchain();
-	}
-	_scheduledImages.clear();
-
-	for (auto &it :_scheduledPresent) {
-		it->invalidateSwapchain();
-	}
-	_scheduledPresent.clear();
 
 	if (_options.renderImageOffscreen) {
 		// offscreen does not need swapchain outside of view thread
@@ -180,7 +154,7 @@ void View::run() {
 }
 
 void View::runWithQueue(const Rc<RenderQueue> &queue) {
-	auto req = Rc<FrameRequest>::create(queue, _frameEmitter, _screenExtent, _density);
+	auto req = Rc<FrameRequest>::create(queue, _frameEmitter, _constraints);
 	req->bindSwapchainCallback([this] (renderqueue::FrameAttachmentData &attachment, bool success) {
 		if (success) {
 			_initImage = move(attachment.image);
@@ -238,6 +212,19 @@ bool View::present(Rc<ImageStorage> &&object) {
 		}
 		auto img = (SwapchainImage *)object.get();
 		if (!img->getPresentWindow() || img->getPresentWindow() < platform::device::_clock(platform::device::ClockType::Monotonic)) {
+			if (_options.presentImmediate) {
+				performOnThread([this, object = move(object)] () mutable {
+					auto queue = _device->tryAcquireQueueSync(QueueOperations::Present, true);
+					auto img = (SwapchainImage *)object.get();
+					if (img->getSwapchain() == _swapchain && img->isSubmitted()) {
+						presentWithQueue(*queue, move(object));
+					}
+					_loop->performOnGlThread([this,  queue = move(queue)] () mutable {
+						_device->releaseQueue(move(queue));
+					}, this);
+				}, this);
+				return false;
+			}
 			auto queue = _device->tryAcquireQueueSync(QueueOperations::Present, false);
 			if (queue) {
 				performOnThread([this, queue = move(queue), object = move(object)] () mutable {
@@ -533,7 +520,7 @@ void View::scheduleFence(Rc<Fence> &&fence) {
 }
 
 void View::mapWindow() {
-
+	scheduleNextImage(_frameInterval, false);
 }
 
 bool View::pollInput(bool frameReady) {
@@ -566,7 +553,7 @@ void View::scheduleSwapchainImage(uint64_t windowOffset, ScheduleImageMode mode)
 	Rc<SwapchainImage> swapchainImage;
 	Rc<FrameRequest> newFrameRequest;
 	if (mode == ScheduleImageMode::AcquireOffscreenImage) {
-		newFrameRequest = _frameEmitter->makeRequest(_screenExtent, _density);
+		newFrameRequest = _frameEmitter->makeRequest(_constraints);
 	} else {
 		auto fullOffset = getUpdateInterval() + windowOffset;
 		if (fullOffset > _frameInterval) {
@@ -577,7 +564,7 @@ void View::scheduleSwapchainImage(uint64_t windowOffset, ScheduleImageMode mode)
 		}
 
 		swapchainImage->setReady(false);
-		newFrameRequest = _frameEmitter->makeRequest(move(swapchainImage), _density);
+		newFrameRequest = _frameEmitter->makeRequest(move(swapchainImage), _constraints);
 	}
 
 	// make new frame request immediately
@@ -815,7 +802,7 @@ void View::runFrameWithSwapchainImage(Rc<ImageStorage> &&image) {
 	image->setReady(false);
 
 	_frameEmitter->setEnableBarrier(_options.enableFrameEmitterBarrier);
-	auto req = _frameEmitter->makeRequest(move(image), _density);
+	auto req = _frameEmitter->makeRequest(move(image), _constraints);
 	_loop->getApplication()->performOnMainThread([this, req = move(req)] () mutable {
 		if (_director->acquireFrame(req)) {
 			_loop->performOnGlThread([this, req = move(req)] () mutable {
@@ -833,25 +820,35 @@ void View::runFrameWithSwapchainImage(Rc<ImageStorage> &&image) {
 }
 
 void View::runScheduledPresent(Rc<SwapchainImage> &&object) {
-	_loop->performOnGlThread([this, object = move(object)] () mutable {
-		if (!_loop->isRunning()) {
-			return;
+	if (_options.presentImmediate) {
+		auto queue = _device->tryAcquireQueueSync(QueueOperations::Present, true);
+		if (object->getSwapchain() == _swapchain && object->isSubmitted()) {
+			presentWithQueue(*queue, move(object));
 		}
-
-		_device->acquireQueue(QueueOperations::Present, *(Loop *)_loop.get(),
-				[this, object = move(object)] (Loop &, const Rc<DeviceQueue> &queue) mutable {
-			performOnThread([this, queue, object = move(object)] () mutable {
-				if (object->getSwapchain() == _swapchain && object->isSubmitted()) {
-					presentWithQueue(*queue, move(object));
-				}
-				_loop->performOnGlThread([this,  queue = move(queue)] () mutable {
-					_device->releaseQueue(move(queue));
-				}, this);
-			}, this);
-		}, [this] (Loop &) {
-			invalidate();
+		_loop->performOnGlThread([this, queue = move(queue)] () mutable {
+			_device->releaseQueue(move(queue));
 		}, this);
-	}, this);
+	} else {
+		_loop->performOnGlThread([this, object = move(object)] () mutable {
+			if (!_loop->isRunning()) {
+				return;
+			}
+
+			_device->acquireQueue(QueueOperations::Present, *(Loop *)_loop.get(),
+				  [this, object = move(object)] (Loop &, const Rc<DeviceQueue> &queue) mutable {
+					  performOnThread([this, queue, object = move(object)] () mutable {
+						  if (object->getSwapchain() == _swapchain && object->isSubmitted()) {
+							  presentWithQueue(*queue, move(object));
+						  }
+						  _loop->performOnGlThread([this, queue = move(queue)] () mutable {
+							  _device->releaseQueue(move(queue));
+						  }, this);
+					  }, this);
+				  }, [this] (Loop &) {
+						invalidate();
+					}, this);
+		}, this);
+	}
 }
 
 void View::presentWithQueue(DeviceQueue &queue, Rc<ImageStorage> &&image) {
@@ -961,6 +958,32 @@ void View::updateFences() {
 	} while (0);
 
 	_fenceOrder = fenceOrder;
+}
+
+void View::clearImages() {
+	_mutex.lock();
+
+	auto loop = (Loop *)_loop.get();
+	for (auto &it : _fences) {
+		it->check(*loop, false);
+	}
+	_fences.clear();
+	_mutex.unlock();
+
+	for (auto &it :_fenceImages) {
+		it->invalidateSwapchain();
+	}
+	_fenceImages.clear();
+
+	for (auto &it :_scheduledImages) {
+		it->invalidateSwapchain();
+	}
+	_scheduledImages.clear();
+
+	for (auto &it :_scheduledPresent) {
+		it->invalidateSwapchain();
+	}
+	_scheduledPresent.clear();
 }
 
 }

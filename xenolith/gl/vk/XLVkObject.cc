@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -27,21 +28,21 @@ namespace stappler::xenolith::vk {
 bool DeviceMemory::init(Device &dev, VkDeviceMemory memory) {
 	_memory = memory;
 
-	return gl::Object::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+	return gl::Object::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 		auto d = ((Device *)dev);
 		d->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
-			table.vkFreeMemory(device, (VkDeviceMemory)ptr, nullptr);
+			table.vkFreeMemory(device, (VkDeviceMemory)ptr.get(), nullptr);
 		});
-	}, gl::ObjectType::DeviceMemory, _memory);
+	}, gl::ObjectType::DeviceMemory, ObjectHandle(_memory));
 }
 
 bool Image::init(Device &dev, VkImage image, const gl::ImageInfo &info, uint32_t idx) {
 	_info = info;
 	_image = image;
 
-	auto ret = gl::ImageObject::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+	auto ret = gl::ImageObject::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 		// do nothing
-	}, gl::ObjectType::Image, _image);
+	}, gl::ObjectType::Image, ObjectHandle(_image));
 	if (ret) {
 		_index = idx;
 	}
@@ -54,10 +55,10 @@ bool Image::init(Device &dev, VkImage image, const gl::ImageInfo &info, Rc<Devic
 	_atlas = atlas;
 	_memory = move(mem);
 
-	return gl::ImageObject::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+	return gl::ImageObject::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 		auto d = ((Device *)dev);
-		d->getTable()->vkDestroyImage(d->getDevice(), (VkImage)ptr, nullptr);
-	}, gl::ObjectType::Image, _image);
+		d->getTable()->vkDestroyImage(d->getDevice(), (VkImage)ptr.get(), nullptr);
+	}, gl::ObjectType::Image, ObjectHandle(_image));
 }
 
 bool Image::init(Device &dev, uint64_t idx, VkImage image, const gl::ImageInfo &info, Rc<DeviceMemory> &&mem, Rc<gl::ImageAtlas> &&atlas) {
@@ -66,10 +67,10 @@ bool Image::init(Device &dev, uint64_t idx, VkImage image, const gl::ImageInfo &
 	_atlas = atlas;
 	_memory = move(mem);
 
-	return gl::ImageObject::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+	return gl::ImageObject::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 		auto d = ((Device *)dev);
-		d->getTable()->vkDestroyImage(d->getDevice(), (VkImage)ptr, nullptr);
-	}, gl::ObjectType::Image, _image, idx);
+		d->getTable()->vkDestroyImage(d->getDevice(), (VkImage)ptr.get(), nullptr);
+	}, gl::ObjectType::Image, ObjectHandle(_image), idx);
 }
 
 void Image::setPendingBarrier(const ImageMemoryBarrier &barrier) {
@@ -96,7 +97,7 @@ VkImageAspectFlags Image::getAspectMask() const {
 	case gl::PixelFormat::S: return VK_IMAGE_ASPECT_STENCIL_BIT; break;
 	default: return VK_IMAGE_ASPECT_COLOR_BIT; break;
 	}
-	return VK_IMAGE_ASPECT_NONE;
+	return VK_IMAGE_ASPECT_NONE_KHR;
 }
 
 bool Buffer::init(Device &dev, VkBuffer buffer, const gl::BufferInfo &info, Rc<DeviceMemory> &&mem) {
@@ -104,10 +105,10 @@ bool Buffer::init(Device &dev, VkBuffer buffer, const gl::BufferInfo &info, Rc<D
 	_buffer = buffer;
 	_memory = move(mem);
 
-	return gl::BufferObject::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+	return gl::BufferObject::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 		auto d = ((Device *)dev);
-		d->getTable()->vkDestroyBuffer(d->getDevice(), (VkBuffer)ptr, nullptr);
-	}, gl::ObjectType::Buffer, _buffer);
+		d->getTable()->vkDestroyBuffer(d->getDevice(), (VkBuffer)ptr.get(), nullptr);
+	}, gl::ObjectType::Buffer, ObjectHandle(_buffer));
 }
 
 void Buffer::setPendingBarrier(const BufferMemoryBarrier &barrier) {
@@ -144,10 +145,10 @@ bool ImageView::init(Device &dev, VkImage image, VkFormat format) {
 	createInfo.subresourceRange.layerCount = 1;
 
 	if (dev.getTable()->vkCreateImageView(dev.getDevice(), &createInfo, nullptr, &_imageView) == VK_SUCCESS) {
-		return gl::ImageView::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+		return gl::ImageView::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 			auto d = ((Device *)dev);
-			d->getTable()->vkDestroyImageView(d->getDevice(), (VkImageView)ptr, nullptr);
-		}, gl::ObjectType::ImageView, _imageView);
+			d->getTable()->vkDestroyImageView(d->getDevice(), (VkImageView)ptr.get(), nullptr);
+		}, gl::ObjectType::ImageView, ObjectHandle(_imageView));
 	}
 	return false;
 }
@@ -198,10 +199,10 @@ bool ImageView::init(Device &dev, const renderqueue::ImageAttachmentDescriptor &
 	if (dev.getTable()->vkCreateImageView(dev.getDevice(), &createInfo, nullptr, &_imageView) == VK_SUCCESS) {
 		_info = move(info);
 		_image = image;
-		return gl::ImageView::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+		return gl::ImageView::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 			auto d = ((Device *)dev);
-			d->getTable()->vkDestroyImageView(d->getDevice(), (VkImageView)ptr, nullptr);
-		}, gl::ObjectType::ImageView, _imageView);
+			d->getTable()->vkDestroyImageView(d->getDevice(), (VkImageView)ptr.get(), nullptr);
+		}, gl::ObjectType::ImageView, ObjectHandle(_imageView));
 	}
 	return false;
 }
@@ -316,10 +317,10 @@ bool ImageView::init(Device &dev, Image *image, const gl::ImageViewInfo &info) {
 		_info.layerCount = gl::ArrayLayers(createInfo.subresourceRange.layerCount);
 
 		_image = image;
-		return gl::ImageView::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+		return gl::ImageView::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 			auto d = ((Device *)dev);
-			d->getTable()->vkDestroyImageView(d->getDevice(), (VkImageView)ptr, nullptr);
-		}, gl::ObjectType::ImageView, _imageView);
+			d->getTable()->vkDestroyImageView(d->getDevice(), (VkImageView)ptr.get(), nullptr);
+		}, gl::ObjectType::ImageView, ObjectHandle(_imageView));
 	}
 	return false;
 }
@@ -347,10 +348,10 @@ bool Sampler::init(Device &dev, const gl::SamplerInfo &info) {
 
 	if (dev.getTable()->vkCreateSampler(dev.getDevice(), &createInfo, nullptr, &_sampler) == VK_SUCCESS) {
 		_info = info;
-		return gl::Object::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+		return gl::Object::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 			auto d = ((Device *)dev);
-			d->getTable()->vkDestroySampler(d->getDevice(), (VkSampler)ptr, nullptr);
-		}, gl::ObjectType::Sampler, _sampler);
+			d->getTable()->vkDestroySampler(d->getDevice(), (VkSampler)ptr.get(), nullptr);
+		}, gl::ObjectType::Sampler, ObjectHandle(_sampler));
 	}
 	return false;
 }

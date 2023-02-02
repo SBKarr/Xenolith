@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -131,18 +132,8 @@ void UtilScene::FpsDisplay::incrementMode() {
 	setVisible(_mode != Disabled);
 }
 
-bool UtilScene::init(Application *app, RenderQueue::Builder &&builder) {
-	if (!Scene::init(app, move(builder))) {
-		return false;
-	}
-
-	initialize(app);
-
-	return true;
-}
-
-bool UtilScene::init(Application *app, RenderQueue::Builder &&builder, Size2 size, float density) {
-	if (!Scene::init(app, move(builder), size, density)) {
+bool UtilScene::init(Application *app, RenderQueue::Builder &&builder, const gl::FrameContraints &constraints) {
+	if (!Scene::init(app, move(builder), constraints)) {
 		return false;
 	}
 

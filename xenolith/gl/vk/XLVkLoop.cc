@@ -379,7 +379,9 @@ void Loop::threadDispose() {
 
 	memory::pool::push(pool);
 
-	_frameCache->invalidate();
+	if (_frameCache) {
+		_frameCache->invalidate();
+	}
 
 	_internal->waitIdle();
 

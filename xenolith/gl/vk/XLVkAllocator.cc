@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -71,7 +72,12 @@ static uint32_t Allocator_getTypeScoreInternal(const Allocator::MemHeap &heap, c
 			return 0;
 			break;
 		case Allocator::MemHeapType::DeviceLocal:
+			return 0;
+			break;
 		case Allocator::MemHeapType::HostLocal:
+			if (type.isHostVisible()) {
+				return 1;
+			}
 			return 0;
 			break;
 		}
@@ -512,7 +518,7 @@ Allocator::MemType * Allocator::findMemoryType(uint32_t typeFilter, AllocationUs
 	return nullptr;
 }
 
-MemoryRequirements Allocator::getMemoryRequirements(VkBuffer target) {
+MemoryRequirements Allocator::getBufferMemoryRequirements(VkBuffer target) {
 	MemoryRequirements ret;
 	VkMemoryRequirements2 memRequirements = { VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2, nullptr };
 
@@ -532,7 +538,7 @@ MemoryRequirements Allocator::getMemoryRequirements(VkBuffer target) {
 	return ret;
 }
 
-MemoryRequirements Allocator::getMemoryRequirements(VkImage target) {
+MemoryRequirements Allocator::getImageMemoryRequirements(VkImage target) {
 	MemoryRequirements ret;
 	VkMemoryRequirements2 memRequirements = { VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2, nullptr };
 
@@ -565,7 +571,7 @@ Rc<Buffer> Allocator::spawnPersistent(AllocationUsage usage, const gl::BufferInf
 		return nullptr;
 	}
 
-	auto req = getMemoryRequirements(target);
+	auto req = getBufferMemoryRequirements(target);
 	auto type = findMemoryType(req.requirements.memoryTypeBits, usage);
 	if (!type) {
 		return nullptr;
@@ -656,7 +662,7 @@ Rc<Image> Allocator::spawnPersistent(AllocationUsage usage, const gl::ImageInfo 
 		return nullptr;
 	}
 
-	auto req = getMemoryRequirements(target);
+	auto req = getImageMemoryRequirements(target);
 	auto type = findMemoryType(req.requirements.memoryTypeBits, usage);
 	if (!type) {
 		log::text("vk::Allocator", "Image: spawnPersistent: Fail to find memory type");
@@ -747,7 +753,7 @@ Rc<DeviceBuffer> DeviceMemoryPool::spawn(AllocationUsage type, const gl::BufferI
 		return nullptr;
 	}
 
-	auto requirements = _allocator->getMemoryRequirements(target);
+	auto requirements = _allocator->getBufferMemoryRequirements(target);
 
 	if (requirements.requiresDedicated) {
 		// TODO: deal with dedicated allocations

@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -134,7 +135,7 @@ bool SwapchainHandle::init(Device &dev, const gl::SwapchainConfig &cfg, gl::Imag
 		_config = move(cfg);
 		_surface = surface;
 
-		return gl::Object::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+		return gl::Object::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 			auto d = ((Device *)dev);
 			d->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
 #if XL_VKAPI_DEBUG
@@ -142,11 +143,11 @@ bool SwapchainHandle::init(Device &dev, const gl::SwapchainConfig &cfg, gl::Imag
 				table.vkDestroySwapchainKHR(device, (VkSwapchainKHR)ptr, nullptr);
 				XL_VKAPI_LOG("vkDestroySwapchainKHR: [", platform::device::_clock(platform::device::Monotonic) - t, "]");
 #else
-				table.vkDestroySwapchainKHR(device, (VkSwapchainKHR)ptr, nullptr);
+				table.vkDestroySwapchainKHR(device, (VkSwapchainKHR)ptr.get(), nullptr);
 #endif
 
 			});
-		}, gl::ObjectType::Swapchain, _swapchain);
+		}, gl::ObjectType::Swapchain, ObjectHandle(_swapchain));
 	}
 	return false;
 }

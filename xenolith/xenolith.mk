@@ -1,4 +1,5 @@
 # Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+# Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 # 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -59,7 +60,7 @@ XENOLITH_SRCS_DIRS += \
 	$(XENOLITH_MAKEFILE_DIR)/core \
 	$(XENOLITH_MAKEFILE_DIR)/gl \
 	$(XENOLITH_MAKEFILE_DIR)/features \
-	$(XENOLITH_MAKEFILE_DIR)/nodes \
+	$(XENOLITH_MAKEFILE_DIR)/nodes
 
 # extra sources: platrom deps and shaders
 XENOLITH_SRCS_OBJS += \
@@ -70,7 +71,12 @@ XENOLITH_SRCS_OBJS += \
 # recursive includes
 XENOLITH_INCLUDES_DIRS += \
 	common \
-	$(XENOLITH_MAKEFILE_DIR) \
+	$(XENOLITH_MAKEFILE_DIR)/core \
+	$(XENOLITH_MAKEFILE_DIR)/features \
+	$(XENOLITH_MAKEFILE_DIR)/gl \
+	$(XENOLITH_MAKEFILE_DIR)/nodes \
+	$(XENOLITH_MAKEFILE_DIR)/platform \
+	$(XENOLITH_MAKEFILE_DIR)/thirdparty
 
 # non-recursive includes
 XENOLITH_INCLUDES_OBJS += \
@@ -185,7 +191,8 @@ LOCAL_MODULES += \
 	common_zip \
 	common_brotli_lib \
 	common_filesystem \
-	common_backtrace
+	common_backtrace \
+	common_zip
 
 include $(GLOBAL_ROOT)/make/utils/resolve-modules.mk
 
@@ -196,7 +203,7 @@ include $(GLOBAL_ROOT)/make/utils/make-toolkit.mk
 $(XENOLITH_MAKEFILE_DIR)/shaders/XLDefaultShaders.cpp : $(XENOLITH_SHADERS_EMBEDDED) 
 
 $(XENOLITH_EMBEDDER) :
-	$(MAKE) -C $(XENOLITH_EMBEDDER_DIR) install
+	$(MAKE) -C $(XENOLITH_EMBEDDER_DIR) STAPPLER_TARGET= install
 
 $(XENOLITH_MAKEFILE_DIR)/shaders/embedded/% : $(XENOLITH_MAKEFILE_DIR)/shaders/linked/% | $(XENOLITH_EMBEDDER)
 	@$(GLOBAL_MKDIR) $(dir $@)
@@ -215,5 +222,8 @@ $(XENOLITH_OUTPUT_STATIC) : $(XENOLITH_H_GCH) $(XENOLITH_GCH) $(XENOLITH_OBJS)
 	$(GLOBAL_QUIET_LINK) $(GLOBAL_AR) $(XENOLITH_OUTPUT_STATIC) $(XENOLITH_OBJS)
 
 libxenolith: $(XENOLITH_OUTPUT_STATIC)
+
+$(info $(XENOLITH_SHADERS_EMBEDDED))
+android-export : $(XENOLITH_MAKEFILE_DIR)/shaders/XLDefaultShaders.cpp $(XENOLITH_SHADERS_COMPILED)
 
 .PHONY: libxenolith

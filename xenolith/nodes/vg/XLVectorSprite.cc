@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -320,7 +321,7 @@ void VectorSprite::updateVertexes() {
 
 		if (_deferred) {
 			auto &manager = _director->getApplication()->getDeferredManager();
-			_deferredResult = manager->runVectorCavas(move(imageData), targetViewSpaceSize, _displayedColor, _quality);
+			_deferredResult = manager->runVectorCavas(move(imageData), targetViewSpaceSize, _displayedColor, _quality, _waitDeferred);
 			_result = nullptr;
 		} else {
 			auto canvas = VectorCanvas::getInstance();

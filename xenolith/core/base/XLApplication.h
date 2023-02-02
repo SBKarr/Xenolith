@@ -1,5 +1,6 @@
 /**
-Copyright (c) 2020-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2020-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -45,7 +46,6 @@ public:
 	static EventHeader onUrlOpened;
 	static EventHeader onError;
 
-	using Callback = Function<void()>;
 	using ExecuteCallback = Function<bool(const Task &)>;
 	using CompleteCallback = Function<void(const Task &, bool)>;
 
@@ -97,16 +97,18 @@ public:
 	virtual void update(uint64_t clock, uint64_t dt);
 
 	// Run application with parsed command line data
-	virtual int run(Value &&);
+	virtual int run(Value &&, const Callback<void(Application *)> &onStarted = nullptr);
 
 	virtual void runLoop(TimeInterval timeout);
 
-	virtual void end();
+	virtual void end(bool sync = false);
 
 	// Open external URL from within application
 	virtual bool openURL(const StringView &url);
 
 	virtual void addView(gl::ViewInfo &&);
+
+	virtual void updateConfig(Value &&);
 
 	void scheduleUpdate();
 
@@ -206,6 +208,9 @@ public:
 	const Rc<font::FontLibrary> &getFontLibrary() const { return _fontLibrary; }
 	const Rc<font::FontController> &getFontController() const { return _fontController; }
 
+	void setNativeHandle(void *handle) { _nativeHandle = handle; }
+	void *getNativeHandle() const { return _nativeHandle; }
+
 protected:
 	virtual void updateDefaultFontController(font::FontController::Builder &);
 
@@ -222,10 +227,13 @@ protected:
 	bool _singleThreaded = false;
 	bool _shouldEndLoop = false;
 	bool _immediateUpdate = false;
+	bool _running = false;
 
 	Rc<thread::TaskQueue> _queue;
 	Rc<DeferredManager> _deferred;
 	std::thread::id _threadId;
+	std::mutex _endMutex;
+	std::condition_variable _endCond;
 
 	std::unordered_map<EventHeader::EventID, std::unordered_set<const EventHandlerNode *>> _eventListeners;
 
@@ -236,6 +244,8 @@ protected:
 	log::CustomLog _appLog;
 
 	memory::pool_t *_updatePool = nullptr;
+
+	void *_nativeHandle = nullptr;
 
 #if MODULE_XENOLITH_STORAGE
 public:

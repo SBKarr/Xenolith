@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -316,6 +317,12 @@ struct VertexMaterialDrawPlan {
 			return;
 		}
 
+		if (!cmd->deferred->isWaitOnReady()) {
+			if (!cmd->deferred->isReady()) {
+				return;
+			}
+		}
+
 		auto &vertexes = deferredTmp.emplace_front(cmd->deferred->getData().vec<Interface>());
 		//auto vertexes = cmd->deferred->getData().pdup(handle->getPool()->getPool());
 
@@ -538,7 +545,7 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 		return false;
 	}
 
-	VertexMaterialDrawPlan plan(fhandle.getExtent());
+	VertexMaterialDrawPlan plan(fhandle.getFrameConstraints().extent);
 
 	auto cmd = commands->getFirst();
 	while (cmd) {
@@ -1099,29 +1106,29 @@ void MaterialPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, Co
 		auto pipeline = (GraphicPipeline *)_data->subpasses[0].graphicPipelines.get(StringView(MaterialPass::ShadowPipeline))->pipeline.get();
 
 		buf.cmdBindPipeline(pipeline);
+
+		viewport = VkViewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
+		buf.cmdSetViewport(0, makeSpanView(&viewport, 1));
+
+		scissorRect = VkRect2D{ { 0, 0}, { currentExtent.width, currentExtent.height } };
+		buf.cmdSetScissor(0, makeSpanView(&scissorRect, 1));
+
+		uint32_t samplerIndex = 1; // linear filtering
+		buf.cmdPushConstants(pass->getPipelineLayout(),
+				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, BytesView((const uint8_t *)&samplerIndex, sizeof(uint32_t)));
+
+		buf.cmdDrawIndexed(
+			6, // indexCount
+			1, // instanceCount
+			0, // firstIndex
+			0, // int32_t   vertexOffset
+			0  // uint32_t  firstInstance
+		);
 	} else {
 		auto pipeline = (GraphicPipeline *)_data->subpasses[0].graphicPipelines.get(StringView(MaterialPass::ShadowPipelineNull))->pipeline.get();
 
 		buf.cmdBindPipeline(pipeline);
 	}
-
-	viewport = VkViewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
-	buf.cmdSetViewport(0, makeSpanView(&viewport, 1));
-
-	scissorRect = VkRect2D{ { 0, 0}, { currentExtent.width, currentExtent.height } };
-	buf.cmdSetScissor(0, makeSpanView(&scissorRect, 1));
-
-	uint32_t samplerIndex = 1; // linear filtering
-	buf.cmdPushConstants(pass->getPipelineLayout(),
-			VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, BytesView((const uint8_t *)&samplerIndex, sizeof(uint32_t)));
-
-	buf.cmdDrawIndexed(
-		6, // indexCount
-		1, // instanceCount
-		0, // firstIndex
-		0, // int32_t   vertexOffset
-		0  // uint32_t  firstInstance
-	);
 }
 
 void MaterialPassHandle::doFinalizeTransfer(gl::MaterialSet * materials,

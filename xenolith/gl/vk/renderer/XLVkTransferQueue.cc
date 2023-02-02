@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -218,7 +219,7 @@ bool TransferResource::initialize() {
 			return cleanup("Fail to create buffer");
 		}
 
-		it.req = _alloc->getMemoryRequirements(it.buffer);
+		it.req = _alloc->getBufferMemoryRequirements(it.buffer);
 		if (!it.req.prefersDedicated && !it.req.requiresDedicated) {
 			mask &= it.req.requirements.memoryTypeBits;
 		}
@@ -232,7 +233,7 @@ bool TransferResource::initialize() {
 			return cleanup("Fail to create image");
 		}
 
-		it.req = _alloc->getMemoryRequirements(it.image);
+		it.req = _alloc->getImageMemoryRequirements(it.image);
 		if (!it.req.prefersDedicated && !it.req.requiresDedicated) {
 			mask &= it.req.requirements.memoryTypeBits;
 		}
@@ -799,7 +800,7 @@ bool TransferResource::createStagingBuffer(StagingBuffer &buffer, size_t staging
 	}
 
 	auto mask = _alloc->getInitialTypeMask();
-	buffer.buffer.req = _alloc->getMemoryRequirements(buffer.buffer.buffer);
+	buffer.buffer.req = _alloc->getBufferMemoryRequirements(buffer.buffer.buffer);
 
 	mask &= buffer.buffer.req.requirements.memoryTypeBits;
 
@@ -875,14 +876,14 @@ bool TransferResource::writeStaging(StagingBuffer &buffer) {
 	for (auto &it : _images) {
 		if (it.useStaging) {
 			auto size = writeData(stagingMem + it.stagingOffset, it);
-			buffer.copyData.emplace_back(StagingCopy({it.stagingOffset, size, &it, VK_NULL_HANDLE}));
+			buffer.copyData.emplace_back(StagingCopy({it.stagingOffset, size, &it, nullptr}));
 		}
 	}
 
 	for (auto &it : _buffers) {
 		if (it.useStaging) {
 			auto size = writeData(stagingMem + it.stagingOffset, it);
-			buffer.copyData.emplace_back(StagingCopy({it.stagingOffset, size, VK_NULL_HANDLE, &it}));
+			buffer.copyData.emplace_back(StagingCopy({it.stagingOffset, size, nullptr, &it}));
 		}
 	}
 

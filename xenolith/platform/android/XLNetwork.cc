@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,22 +20,21 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_TESTS_NETWORK_XLTESTNETWORKSPRITE_H_
-#define TEST_TESTS_NETWORK_XLTESTNETWORKSPRITE_H_
+#include "XLPlatform.h"
 
-#include "XLSprite.h"
+#if ANDROID
 
-namespace stappler::xenolith::test {
+namespace stappler::xenolith::platform::network {
 
-class NetworkTestSprite : public Sprite {
-public:
-	virtual bool init() override;
+static Function<void(bool isOnline)> _callback;
 
-	virtual void onEnter(Scene *) override;
-
-protected:
-};
+void _setNetworkCallback(const Function<void(bool isOnline)> &callback) {
+	_callback = callback;
+}
+bool _isNetworkOnline() {
+	return true;
+}
 
 }
 
-#endif /* TEST_TESTS_NETWORK_XLTESTNETWORKSPRITE_H_ */
+#endif

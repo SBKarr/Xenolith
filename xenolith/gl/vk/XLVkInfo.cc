@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -506,10 +507,11 @@ DeviceInfo::DeviceInfo(VkPhysicalDevice dev, QueueFamilyInfo gr, QueueFamilyInfo
 
 bool DeviceInfo::supportsPresentation() const {
 	// transferFamily and computeFamily can be same as graphicsFamily
-	if ((graphicsFamily.ops & QueueOperations::Graphics) != QueueOperations::None
-			&& (presentFamily.ops & QueueOperations::Present) != QueueOperations::None
-			&& (transferFamily.ops & QueueOperations::Transfer) != QueueOperations::None
-			&& (computeFamily.ops & QueueOperations::Compute) != QueueOperations::None
+	bool supportsGraphics = (graphicsFamily.ops & QueueOperations::Graphics) != QueueOperations::None;
+	bool supportsPresent = (presentFamily.ops & QueueOperations::Present) != QueueOperations::None;
+	bool supportsTransfer = (transferFamily.ops & QueueOperations::Transfer) != QueueOperations::None;
+	bool supportsCompute = (computeFamily.ops & QueueOperations::Compute) != QueueOperations::None;
+	if (supportsGraphics && supportsPresent && supportsTransfer && supportsCompute
 			&& requiredFeaturesExists && requiredExtensionsExists) {
 		return true;
 	}

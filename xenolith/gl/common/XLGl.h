@@ -387,6 +387,10 @@ struct VertexData : public AttachmentInputData {
 struct alignas(16) TransformedVertexData {
 	Mat4 mat;
 	Rc<VertexData> data;
+
+	TransformedVertexData() = default;
+	TransformedVertexData(const Mat4 &mat, Rc<VertexData> &&data)
+	: mat(mat), data(move(data)) { }
 };
 
 struct TransformObject {
@@ -402,10 +406,12 @@ public:
 	virtual SpanView<TransformedVertexData> getData() = 0;
 
 	bool isReady() const { return _isReady.load(); }
+	bool isWaitOnReady() const { return _waitOnReady; }
 
 	virtual void handleReady() { _isReady.store(true); }
 
 protected:
+	bool _waitOnReady = true;
 	std::atomic<bool> _isReady;
 };
 
@@ -461,6 +467,7 @@ struct ViewInfo {
 	String name;
 	URect rect;
 	uint64_t frameInterval = 0; // in microseconds ( 1'000'000 / 60 for 60 fps)
+	float density = 0.0f;
 	Function<SwapchainConfig (const SurfaceInfo &)> config;
 
 	Function<void(const Rc<Director> &)> onCreated;
@@ -506,6 +513,14 @@ struct DrawStateValues {
 
 	bool isScissorEnabled() const { return (enabled & renderqueue::DynamicState::Scissor) != renderqueue::DynamicState::None; }
 	bool isViewportEnabled() const { return (enabled & renderqueue::DynamicState::Viewport) != renderqueue::DynamicState::None; }
+};
+
+struct FrameContraints {
+	Extent2 extent;
+	Padding contentPadding;
+	float density = 1.0f;
+
+	bool operator==(const FrameContraints &) const = default;
 };
 
 String getBufferFlagsDescription(BufferFlags fmt);

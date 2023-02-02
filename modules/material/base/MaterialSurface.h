@@ -83,7 +83,7 @@ public:
 	virtual StyleContainer *getStyleContainer() const { return _styleContainer; }
 
 protected:
-	virtual StyleContainer *getStyleContainerForFrame(RenderFrameInfo &) const;
+	virtual StyleContainer *getStyleContainerForFrame(RenderFrameInfo &) const override;
 
 	StyleContainer *_styleContainer = nullptr;
 };

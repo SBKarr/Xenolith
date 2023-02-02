@@ -1,5 +1,6 @@
 /**
-Copyright (c) 2020 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2020-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -256,6 +257,7 @@ Vector<DeviceInfo> Instance::getDeviceInfo(VkSurfaceKHR surface, const Vector<Pa
 		// fallback when Transfer or Compute is not defined
 		if (transferFamily == maxOf<uint32_t>()) {
 			transferFamily = graphicsFamily;
+			queueInfo[transferFamily].ops |= QueueOperations::Transfer;
 		}
 
 		if (computeFamily == maxOf<uint32_t>()) {
@@ -649,6 +651,7 @@ DeviceInfo Instance::getDeviceInfo(VkPhysicalDevice device) const {
 	// fallback when Transfer or Compute is not defined
 	if (transferFamily == maxOf<uint32_t>()) {
 		transferFamily = graphicsFamily;
+		queueInfo[transferFamily].ops |= QueueOperations::Transfer;
 	}
 
 	if (computeFamily == maxOf<uint32_t>()) {

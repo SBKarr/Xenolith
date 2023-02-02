@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -46,8 +47,9 @@ bool AppDelegate::onFinishLaunching() {
 bool AppDelegate::onMainLoop() {
 	addView(gl::ViewInfo{
 		"View-test",
-		URect{0, 0, 1024, 768},
+		URect{0, 0, uint32_t(_data.screenSize.width), uint32_t(_data.screenSize.height)},
 		0,
+		_data.density,
 		[this] (const gl::SurfaceInfo &info) -> gl::SwapchainConfig {
 			return selectConfig(info);
 		},
@@ -97,8 +99,6 @@ gl::SwapchainConfig AppDelegate::selectConfig(const gl::SurfaceInfo &info) {
 		ret.presentModeFast = gl::PresentMode::Immediate;
 	}
 
-	// ret.presentMode = gl::PresentMode::Immediate;
-
 	auto it = info.formats.begin();
 	while (it != info.formats.end()) {
 		if (it->first != platform::graphic::getCommonFormat()) {
@@ -133,7 +133,7 @@ gl::SwapchainConfig AppDelegate::selectConfig(const gl::SurfaceInfo &info) {
 }
 
 void AppDelegate::onViewCreated(const Rc<Director> &dir) {
-	auto scene = Rc<AppScene>::create(this, dir->getScreenExtent(), dir->getDensity());
+	auto scene = Rc<AppScene>::create(this, dir->getFrameConstraints());
 	dir->runScene(move(scene));
 }
 

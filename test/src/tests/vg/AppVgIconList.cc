@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -54,7 +55,7 @@ bool VgIconListNode::init(IconName iconName, Function<void(IconName)> &&cb) {
 		path->getPath()->init(bytes);
 	});
 	path->setWindingRule(vg::Winding::EvenOdd);
-	path->setAntialiased(true);
+	path->setAntialiased(false);
 	auto t = Mat4::IDENTITY;
 	t.scale(1, -1, 1);
 	t.translate(0, -24, 0);
@@ -65,6 +66,7 @@ bool VgIconListNode::init(IconName iconName, Function<void(IconName)> &&cb) {
 	_image->setAutofit(Sprite::Autofit::Contain);
 	_image->setContentSize(Size2(64.0f, 64.0f));
 	_image->setAnchorPoint(Anchor::Middle);
+	_image->setWaitDeferred(false);
 	//_image->setDeferred(true);
 	_iconName = iconName;
 

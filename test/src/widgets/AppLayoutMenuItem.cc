@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -73,8 +74,6 @@ bool LayoutMenuItem::init(StringView str, Function<void()> &&cb) {
 	});
 
 	_callback = move(cb);
-
-	setShadowIndex(0.5f);
 
 	return true;
 }

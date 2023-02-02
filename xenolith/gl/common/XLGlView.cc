@@ -1,5 +1,6 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -30,7 +31,6 @@
 
 namespace stappler::xenolith::gl {
 
-XL_DECLARE_EVENT_CLASS(View, onScreenSize);
 XL_DECLARE_EVENT_CLASS(View, onFrameRate);
 
 View::View() { }
@@ -39,7 +39,10 @@ View::~View() { }
 
 bool View::init(Loop &loop, ViewInfo &&info) {
 	_loop = &loop;
-	_screenExtent = Extent2(info.rect.width, info.rect.height);
+	_constraints.extent = Extent2(info.rect.width, info.rect.height);
+	if (info.density != 0.0f) {
+		_constraints.density = info.density;
+	}
 	_frameEmitter = Rc<FrameEmitter>::create(_loop, info.frameInterval);
 	_selectConfig = move(info.config);
 	_onCreated = move(info.onCreated);
@@ -91,19 +94,15 @@ void View::performOnThread(Function<void()> &&func, Ref *target, bool immediate)
 }
 
 void View::setScreenExtent(Extent2 e) {
-	if (e != _screenExtent) {
-		_screenExtent = e;
-		onScreenSize(this, Value({
-			pair("size", Value({ Value(_screenExtent.width), Value(_screenExtent.height) })),
-			pair("density", Value(_density))
-		}));
+	if (e != _constraints.extent) {
+		_constraints.extent = e;
 	}
 }
 
 void View::handleInputEvent(const InputEventData &event) {
 	_loop->getApplication()->performOnMainThread([this, event = event] () mutable {
 		if (event.isPointEvent()) {
-			event.point.density = getDensity();
+			event.point.density = _constraints.density;
 		}
 
 		switch (event.event) {
@@ -127,7 +126,7 @@ void View::handleInputEvents(Vector<InputEventData> &&events) {
 	_loop->getApplication()->performOnMainThread([this, events = move(events)] () mutable {
 		for (auto &event : events) {
 			if (event.isPointEvent()) {
-				event.point.density = getDensity();
+				event.point.density = _constraints.density;
 			}
 
 			switch (event.event) {
@@ -148,8 +147,8 @@ void View::handleInputEvents(Vector<InputEventData> &&events) {
 	}, this);
 }
 
-void View::runFrame(const Rc<RenderQueue> &queue, Extent2 extent) {
-	auto req = Rc<FrameRequest>::create(queue, _frameEmitter, extent);
+void View::runFrame(const Rc<RenderQueue> &queue) {
+	auto req = Rc<FrameRequest>::create(queue, _frameEmitter, _constraints);
 	req->bindSwapchain(this);
 	_frameEmitter->submitNextFrame(move(req));
 }
@@ -217,6 +216,12 @@ void View::setFrameInterval(uint64_t value) {
 		std::unique_lock<Mutex> lock(_frameIntervalMutex);
 		_frameInterval = value;
 		onFrameRate(this, int64_t(_frameInterval));
+	}, this, true);
+}
+
+void View::setNavigationEmpty(bool value) {
+	performOnThread([this, value] {
+		_navigationEmpty = value;
 	}, this, true);
 }
 

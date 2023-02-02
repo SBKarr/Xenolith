@@ -1,0 +1,78 @@
+/**
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+ **/
+
+#ifndef XENOLITH_PLATFORM_ANDROID_XLJNI_H_
+#define XENOLITH_PLATFORM_ANDROID_XLJNI_H_
+
+#include "XLDefine.h"
+
+#if ANDROID
+
+#include <jni.h>
+
+namespace stappler::xenolith::platform {
+
+struct JObjectRef {
+	enum Type {
+		Local,
+		Global,
+		WeakGlobal,
+	};
+
+	static jobject newRef(JNIEnv *env, jobject obj, Type);
+
+	JObjectRef();
+	JObjectRef(JNIEnv *env, jobject obj, Type = Local);
+	JObjectRef(jobject obj, Type = Local);
+	~JObjectRef();
+	JObjectRef(const JObjectRef & other, Type);
+	JObjectRef(const JObjectRef & other);
+	JObjectRef(JObjectRef && other);
+
+	JObjectRef & operator = (const JObjectRef & other);
+	JObjectRef & operator = (JObjectRef && other);
+	JObjectRef & operator = (const nullptr_t &);
+
+	void clear();
+	void raw_clear();
+	bool empty() const;
+
+	const Time & time() const;
+
+	operator bool () const;
+	operator jobject () const;
+
+	JNIEnv *_env = nullptr;
+	jobject _obj = nullptr;
+	Type _type = Local;
+	Time _time;
+};
+
+jclass getClassID(JNIEnv *pEnv, jobject obj);
+jmethodID getMethodID(JNIEnv *pEnv, jclass classID, StringView methodName, StringView paramCode);
+jmethodID getStaticMethodID(JNIEnv *pEnv, jclass classID, StringView methodName, StringView paramCode);
+
+}
+
+#endif
+
+#endif /* XENOLITH_PLATFORM_ANDROID_XLJNI_H_ */

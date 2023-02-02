@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -27,22 +28,22 @@
 
 namespace stappler::xenolith::gl {
 
-bool ObjectInterface::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr) {
+bool ObjectInterface::init(Device &dev, ClearCallback cb, ObjectType type, ObjectHandle ptr) {
 	_device = &dev;
 	_callback = cb;
 	_type = type;
-	_ptr = ptr;
+	_handle = ptr;
 	_device->addObject(this);
 	return true;
 }
 
 void ObjectInterface::invalidate() {
 	if (_callback) {
-		_callback(_device, _type, _ptr);
+		_callback(_device, _type, _handle);
 		_device->removeObject(this);
 		_callback = nullptr;
 		_device = nullptr;
-		_ptr = nullptr;
+		_handle = ObjectHandle::zero();
 	}
 }
 
@@ -56,7 +57,7 @@ Object::~Object() {
 
 static std::atomic<uint64_t> s_RenderPassImplCurrentIndex = 1;
 
-bool RenderPass::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr) {
+bool RenderPass::init(Device &dev, ClearCallback cb, ObjectType type, ObjectHandle ptr) {
 	if (NamedObject::init(dev, cb, type, ptr)) {
 		_index = s_RenderPassImplCurrentIndex.fetch_add(1);
 		return true;
@@ -115,14 +116,14 @@ void ImageAtlas::addObject(uint32_t id, void *data) {
 	_names.emplace(id, off / _objectSize);
 }
 
-bool ImageObject::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr) {
+bool ImageObject::init(Device &dev, ClearCallback cb, ObjectType type, ObjectHandle ptr) {
 	if (Object::init(dev, cb, type, ptr)) {
 		_index = s_ImageViewCurrentIndex.fetch_add(1);
 		return true;
 	}
 	return false;
 }
-bool ImageObject::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr, uint64_t idx) {
+bool ImageObject::init(Device &dev, ClearCallback cb, ObjectType type, ObjectHandle ptr, uint64_t idx) {
 	if (Object::init(dev, cb, type, ptr)) {
 		_index = idx;
 		return true;
@@ -141,7 +142,7 @@ ImageView::~ImageView() {
 	}
 }
 
-bool ImageView::init(Device &dev, ClearCallback cb, ObjectType type, void *ptr) {
+bool ImageView::init(Device &dev, ClearCallback cb, ObjectType type, ObjectHandle ptr) {
 	if (Object::init(dev, cb, type, ptr)) {
 		_index = s_ImageViewCurrentIndex.fetch_add(1);
 		return true;

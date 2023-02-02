@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -765,6 +766,13 @@ void Server::ServerData::threadInit() {
 	memory::pool::initialize();
 	memory::pool::push(serverPool);
 	handle = driver->connect(params);
+	if (!handle.get()) {
+		StringStream out;
+		for (auto &it : params) {
+			out << "\n\t" << it.first << ": " << it.second;
+		}
+		log::vtext("StorageServer", "Fail to initialize DB with params: ", out.str());
+	}
 	memory::pool::pop();
 
 	threadPool = memory::pool::create();

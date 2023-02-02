@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -75,6 +76,9 @@ public:
 	virtual void setDeferred(bool);
 	virtual bool isDeferred() const { return _deferred; }
 
+	virtual void setWaitDeferred(bool value) { _waitDeferred = value; }
+	virtual bool isWaitDeferred() const { return _waitDeferred; }
+
 protected:
 	using Sprite::init;
 
@@ -87,6 +91,7 @@ protected:
 	virtual RenderingLevel getRealRenderingLevel() const override;
 
 	bool _deferred = true;
+	bool _waitDeferred = true;
 	bool _imageIsSolid = false;
 	uint64_t _asyncJobId = 0;
 	Size2 _targetSize;

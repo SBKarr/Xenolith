@@ -1,5 +1,6 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -26,26 +27,42 @@
 #include "XLGl.h"
 #include "XLRenderQueue.h"
 
+// check if 64-bit ointer is available for Vulkan
+#ifndef XL_USE_64_BIT_PTR_DEFINES
+#if defined(__LP64__) || defined(_WIN64) || (defined(__x86_64__) && !defined(__ILP32__) ) || defined(_M_X64) || defined(__ia64) || defined (_M_IA64) || defined(__aarch64__) || defined(__powerpc64__)
+	#define XL_USE_64_BIT_PTR_DEFINES 1
+#else
+	#define XL_USE_64_BIT_PTR_DEFINES 0
+#endif
+#endif
+
 namespace stappler::xenolith::gl {
+
+#if (XL_USE_64_BIT_PTR_DEFINES == 1)
+using ObjectHandle = ValueWrapper<void *, class ObjectHandleFlag>;
+#else
+using ObjectHandle = ValueWrapper<uint64_t, class ObjectHandleFlag>;
+#endif
 
 class TextureSet;
 
 class ObjectInterface {
 public:
-	using ClearCallback = void (*) (Device *, ObjectType, void *);
+	using ObjectHandle = stappler::xenolith::gl::ObjectHandle;
+	using ClearCallback = void (*) (Device *, ObjectType, ObjectHandle);
 
 	virtual ~ObjectInterface() { }
-	virtual bool init(Device &, ClearCallback, ObjectType, void *ptr);
+	virtual bool init(Device &, ClearCallback, ObjectType, ObjectHandle ptr);
 	virtual void invalidate();
 
 	ObjectType getType() const { return _type; }
-	void *getObject() const { return _ptr; }
+	ObjectHandle getObject() const { return _handle; }
 
 protected:
 	ObjectType _type;
 	Device *_device = nullptr;
 	ClearCallback _callback = nullptr;
-	void *_ptr = nullptr;
+	ObjectHandle _handle;
 };
 
 
@@ -122,7 +139,7 @@ public:
 
 	virtual ~RenderPass() { }
 
-	virtual bool init(Device &, ClearCallback, ObjectType, void *ptr) override;
+	virtual bool init(Device &, ClearCallback, ObjectType, ObjectHandle) override;
 
 	virtual StringView getName() const override { return _name; }
 
@@ -181,8 +198,8 @@ class ImageObject : public Object {
 public:
 	virtual ~ImageObject() { }
 
-	virtual bool init(Device &, ClearCallback, ObjectType, void *ptr) override;
-	virtual bool init(Device &, ClearCallback, ObjectType, void *ptr, uint64_t idx);
+	virtual bool init(Device &, ClearCallback, ObjectType, ObjectHandle ptr) override;
+	virtual bool init(Device &, ClearCallback, ObjectType, ObjectHandle ptr, uint64_t idx);
 
 	const ImageInfo &getInfo() const { return _info; }
 	uint64_t getIndex() const { return _index; }
@@ -201,7 +218,7 @@ class ImageView : public Object {
 public:
 	virtual ~ImageView();
 
-	virtual bool init(Device &, ClearCallback, ObjectType, void *ptr) override;
+	virtual bool init(Device &, ClearCallback, ObjectType, ObjectHandle ptr) override;
 	virtual void invalidate() override;
 
 	void setReleaseCallback(Function<void()> &&);

@@ -1,4 +1,5 @@
 # Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+# Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -27,10 +28,10 @@ LOCAL_TOOLKIT := $(abspath ../xenolith/xenolith.mk)
 
 LOCAL_ROOT = .
 
-LOCAL_SRCS_DIRS :=  src tests
+LOCAL_SRCS_DIRS :=  src
 LOCAL_SRCS_OBJS := shaders/XLAppShaders.cpp
 
-LOCAL_INCLUDES_DIRS := src tests
+LOCAL_INCLUDES_DIRS := src
 LOCAL_INCLUDES_OBJS := shaders ../resources/fonts
 
 LOCAL_SHADERS := $(wildcard $(LOCAL_ROOT)/shaders/glsl/*)
@@ -39,15 +40,20 @@ LOCAL_MODULES ?= \
 	xenolith_icons \
 	xenolith_gui \
 	xenolith_storage \
+	xenolith_network \
 	xenolith_material
+
+# Android config
+LOCAL_ANDROID_MK := proj.android/app/Android.mk # path to root Android.mk
+LOCAL_APPLICATION_MK := proj.android/app/Application.mk # path to Application.mk
+LOCAL_ANDROID_TARGET := application # target to build
+LOCAL_ANDROID_PLATFORM := android-24 # android platform version
 
 include $(STAPPLER_ROOT)/make/universal.mk
 
-$(abspath $(LOCAL_ROOT)/shaders/XLAppShaders.cpp) : $(subst /glsl/,/compiled/shader_,$(LOCAL_SHADERS))
-
-$(LOCAL_ROOT)/shaders/compiled/shader_% : $(LOCAL_ROOT)/shaders/glsl/%
-	@$(GLOBAL_MKDIR) $(LOCAL_ROOT)/shaders/compiled
-	${GLSLC} -V -o $(LOCAL_ROOT)/shaders/compiled/shader_$* $(LOCAL_ROOT)/shaders/glsl/$* --vn $(subst .,_,$*)
+prepare-android:
+	@mkdir -p proj.android/app/assets
+	rsync -ar resources proj.android/app/assets
 
 ifdef STAPPLER_TARGET
 
@@ -58,12 +64,8 @@ ifdef MACOS_ARCH
 $(BUILD_EXECUTABLE): xenolith-install-loader
 endif
 
+android-export: prepare-android
+
 endif
 
-host-install:
-host-debug:
-host-release:
-
-clean: local-shaders-clean
-
-.PHONY: prepare-linux local-shaders-clean
+.PHONY: prepare-linux prepare-android

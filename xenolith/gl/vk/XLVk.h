@@ -1,5 +1,6 @@
 /**
-Copyright (c) 2020-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2020-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -34,6 +35,10 @@ THE SOFTWARE.
 #if MACOS
 #define VK_USE_PLATFORM_METAL_EXT 1
 #define VK_ENABLE_BETA_EXTENSIONS 1
+#endif
+
+#if ANDROID
+#define VK_USE_PLATFORM_ANDROID_KHR 1
 #endif
 
 #include <vulkan/vulkan.h>

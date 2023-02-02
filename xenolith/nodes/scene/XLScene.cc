@@ -37,7 +37,7 @@ Scene::~Scene() {
 	_queue = nullptr;
 }
 
-bool Scene::init(Application *app, RenderQueue::Builder &&builder) {
+bool Scene::init(Application *app, RenderQueue::Builder &&builder, const gl::FrameContraints &constraints) {
 	if (!Node::init()) {
 		return false;
 	}
@@ -47,26 +47,11 @@ bool Scene::init(Application *app, RenderQueue::Builder &&builder) {
 	_application = app;
 	_queue = makeQueue(move(builder));
 
-	if (!isnan(app->getData().density)) {
-		setDensity(app->getData().density);
-	}
+	auto content = Rc<DynamicStateNode>::create();
+	Node::addChildNode(content, 0, content->getTag());
+	_content = content;
 
-	return true;
-}
-
-bool Scene::init(Application *app, RenderQueue::Builder &&builder, Size2 size, float density) {
-	if (!Node::init()) {
-		return false;
-	}
-
-	_application = app;
-	_queue = makeQueue(move(builder));
-
-	if (!isnan(density)) {
-		setDensity(density);
-	}
-
-	setContentSize(size / _density);
+	setFrameConstraints(_constraints);
 
 	return true;
 }
@@ -86,9 +71,9 @@ void Scene::renderRequest(const Rc<FrameRequest> &req) {
 		});
 	});
 	info.lights = Rc<gl::ShadowLightInput>::alloc();
-	info.lights->sceneDensity = _density;
+	info.lights->sceneDensity = _constraints.density;
 	info.lights->shadowDensity = _shadowDensity;
-	info.lights->globalColor = _globalColor;
+	info.lights->globalColor = _globalLight;
 
 	for (auto &it : _lights) {
 		switch (it->getType()) {
@@ -190,15 +175,20 @@ void Scene::onContentSizeDirty() {
 	Node::onContentSizeDirty();
 
 	setAnchorPoint(Anchor::Middle);
-	setPosition(Vec2((_contentSize * _density) / 2.0f));
+	setPosition(Vec2((_contentSize * _constraints.density) / 2.0f));
 
-	log::vtext("Scene", "ContentSize: ", _contentSize, " density: ", _density);
+	_content->setPosition(Vec2(_constraints.contentPadding.left, _constraints.contentPadding.bottom) / _constraints.density);
+	_content->setContentSize(Size2(_contentSize.width - _constraints.contentPadding.horizontal() / _constraints.density,
+			_contentSize.height - _constraints.contentPadding.vertical() / _constraints.density));
+	_content->setAnchorPoint(Anchor::BottomLeft);
+
+	log::vtext("Scene", "ContentSize: ", _contentSize, " density: ", _constraints.density);
 }
 
 void Scene::onPresented(Director *dir) {
 	_director = dir;
 	if (getContentSize() == Size2::ZERO) {
-		setContentSize(dir->getScreenSize() / _density);
+		setContentSize(dir->getScreenSize() / _constraints.density);
 	}
 
 	if (auto res = _queue->getInternalResource()) {
@@ -214,11 +204,6 @@ void Scene::onPresented(Director *dir) {
 			}
 		}
 	}
-
-	auto l1 = Vec4(Vec3(_director->getGeneralProjection() * Vec2(0.0f, 0.0f), 1.0f).normalize(), 1.0f);
-
-	removeAllLights();
-	addLight(Rc<SceneLight>::create(SceneLightType::Ambient, l1));
 
 	onEnter(this);
 }
@@ -302,15 +287,22 @@ uint64_t Scene::acquireMaterial(const MaterialInfo &info, Vector<gl::MaterialIma
 	return 0;
 }
 
-void Scene::setDensity(float density) {
-	if (_density != density) {
-		_density = density;
-		setScale(_density);
+void Scene::setFrameConstraints(const gl::FrameContraints &constraints) {
+	if (_constraints != constraints) {
+		_constraints = constraints;
+		setContentSize(Size2(_constraints.extent) / _constraints.density);
+		setScale(_constraints.density);
 		_contentSizeDirty = true;
 
-		auto diff = _contentSize / _density;
+		setPosition(Vec2((_contentSize * _constraints.density) / 2.0f));
 
-		setPosition(Vec2(diff / 2.0f));
+		auto contentPos = Vec2(_constraints.contentPadding.left, _constraints.contentPadding.bottom) / _constraints.density;
+		auto contentSize = Size2(_contentSize.width - _constraints.contentPadding.horizontal() / _constraints.density,
+				_contentSize.height - _constraints.contentPadding.vertical() / _constraints.density);
+
+		_content->setPosition(contentPos);
+		_content->setContentSize(contentSize);
+		_content->setAnchorPoint(Anchor::BottomLeft);
 	}
 }
 
@@ -375,8 +367,8 @@ void Scene::specializeRequest(const Rc<FrameRequest> &req) {
 	if (auto a = _queue->getInputAttachment<vk::ShadowImageArrayAttachment>()) {
 		gl::ImageInfoData info = a->getImageInfo();
 		info.arrayLayers = gl::ArrayLayers(_lightsAmbientCount + _lightsDirectCount);
-		info.extent =  Extent2(std::floor(req->getExtent().width * _shadowDensity),
-				std::floor(req->getExtent().height * _shadowDensity));
+		info.extent =  Extent2(std::floor(req->getFrameConstraints().extent.width * _shadowDensity),
+				std::floor(req->getFrameConstraints().extent.height * _shadowDensity));
 		req->addImageSpecialization(a, move(info));
 
 		auto spec = req->getFrameSpecialization();
@@ -386,6 +378,22 @@ void Scene::specializeRequest(const Rc<FrameRequest> &req) {
 	}
 
 	req->setQueue(_queue);
+}
+
+void Scene::addChildNode(Node *child) {
+	_content->addChildNode(child);
+}
+
+void Scene::addChildNode(Node *child, int16_t localZOrder) {
+	_content->addChildNode(child, localZOrder);
+}
+
+void Scene::addChildNode(Node *child, int16_t localZOrder, uint64_t tag) {
+	_content->addChildNode(child, localZOrder, tag);
+}
+
+const Size2& Scene::getContentSize() const {
+	return _content->getContentSize();
 }
 
 bool Scene::addLight(SceneLight *light, uint64_t tag, StringView name) {
@@ -509,12 +517,26 @@ void Scene::removeAllLightsByType(SceneLightType type) {
 	}
 }
 
-void Scene::setGlobalColor(const Color4F &color) {
-	_globalColor = color;
+void Scene::setGlobalLight(const Color4F &color) {
+	_globalLight = color;
 }
 
-const Color4F & Scene::getGlobalColor() const {
-	return _globalColor;
+const Color4F & Scene::getGlobalLight() const {
+	return _globalLight;
+}
+
+void Scene::setClipContent(bool value) {
+	if (isClipContent() != value) {
+		if (value) {
+			_content->enableScissor();
+		} else {
+			_content->disableScissor();
+		}
+	}
+}
+
+bool Scene::isClipContent() const {
+	return _content->isScissorEnabled();
 }
 
 auto Scene::makeQueue(RenderQueue::Builder &&builder) -> Rc<RenderQueue> {

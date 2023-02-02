@@ -32,7 +32,7 @@ class InputTextContainer : public DynamicStateNode {
 public:
 	virtual ~InputTextContainer();
 
-	virtual bool init();
+	virtual bool init() override;
 	virtual void onContentSizeDirty() override;
 
 	virtual bool visitDraw(RenderFrameInfo &, NodeFlags parentFlags) override;

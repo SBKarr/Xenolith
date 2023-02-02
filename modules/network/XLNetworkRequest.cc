@@ -1,5 +1,6 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,11 +21,10 @@
  THE SOFTWARE.
  **/
 
-#include "XLNetworkHandle.h"
 #include "XLNetworkController.h"
 #include "XLApplication.h"
-
-#include <curl/curl.h>
+#include "SPNetworkContext.h"
+#include "XLNetworkRequest.h"
 
 namespace stappler::xenolith::network {
 
@@ -47,15 +47,7 @@ bool Handle::init(Method method, StringView url) {
 	return NetworkHandle::init(method, url);
 }
 
-void Handle::setUploadProgress(ProgressCallback &&cb) {
-	_onUploadProgress = move(cb);
-}
-
-void Handle::setDownloadProgress(ProgressCallback &&cb) {
-	_onDownloadProgress = move(cb);
-}
-
-void Handle::perform(Application *app, CompleteCallback &&cb) {
+/*void Handle::perform(Application *app, CompleteCallback &&cb) {
 	if (cb) {
 		_onComplete = move(cb);
 	}
@@ -64,69 +56,138 @@ void Handle::perform(Application *app, CompleteCallback &&cb) {
 	}
 	auto c = app->getNetworkController();
 	c->run(this);
-}
+}*/
 
-void Handle::notifyOnComplete() {
-	if (_onComplete) {
-		_onComplete(*this);
-	}
-}
-
-void Handle::notifyOnUploadProgress(int64_t total, int64_t now) {
-	_uploadProgress = pair(total, std::max(now, _uploadProgress.second)); // prevent out-of-order updates
-	if (_onUploadProgress && _uploadProgress.second == now) {
-		_onUploadProgress(*this, total, now);
-	}
-}
-
-void Handle::notifyOnDownloadProgress(int64_t total, int64_t now) {
-	_downloadProgress = pair(total, std::max(now, _downloadProgress.second)); // prevent out-of-order updates
-	if (_onDownloadProgress && _downloadProgress.second == now) {
-		_onDownloadProgress(*this, total, now);
-	}
-}
-
-bool Handle::prepare(Context *ctx, const Callback<bool(CURL *)> &onBeforePerform) {
-	auto controller = (Controller *)ctx->userdata;
+bool Handle::prepare(Context *ctx) {
 	if (_mtime > 0) {
-		ctx->headers = curl_slist_append(ctx->headers, toString("If-Modified-Since: ", Time::microseconds(_mtime).toHttp()).data());
+		ctx->headers = curl_slist_append(ctx->headers, toString("If-Modified-Since: ", Time::microseconds(_mtime).toHttp<Interface>()).data());
 	}
 	if (!_etag.empty()) {
 		ctx->headers = curl_slist_append(ctx->headers, toString("If-None-Match: ", _etag).data());
 	}
 
 	if (!_sharegroup.empty() && ctx->share) {
-		_cookieFile = filesystem::writablePath(toString("network.", controller->getName(), ".", _sharegroup, ".cookies"));
+		setCookieFile(filesystem::writablePath<Interface>(toString("network.", _controller->getName(), ".", _sharegroup, ".cookies")));
 	}
 
-	setUserAgent(controller->getApplication()->getUserAgent());
+	setUserAgent(_controller->getApplication()->getUserAgent());
 
-	_uploadProgress = pair(0, 0);
-	_downloadProgress = pair(0, 0);
-
-	return NetworkHandle::prepare(ctx, onBeforePerform);
+	return true;
 }
 
-bool Handle::finalize(Context *ctx, const Callback<bool(CURL *)> &onAfterPerform) {
-	auto ret = NetworkHandle::finalize(ctx, onAfterPerform);
-
+bool Handle::finalize(Context *ctx, bool ret) {
 	_success = ctx->success;
 
-	if (_responseCode < 300) {
+	if (getResponseCode() < 300) {
 		_mtime = Time::fromHttp(getReceivedHeaderString("Last-Modified")).toMicroseconds();
-		_etag = getReceivedHeaderString("ETag").str();
+		_etag = getReceivedHeaderString("ETag").str<Interface>();
 	} else {
-		auto f = getReceiveFile();
-		if (!f.empty()) {
-			filesystem::remove(f);
+		auto &f = getReceiveDataSource();
+		if (auto str = std::get_if<String>(&f)) {
+			filesystem::remove(*str);
 		}
 	}
 
 	return ret;
 }
 
+Request::~Request() { }
 
-bool DataHandle::init(StringView url, const data::Value &data, data::EncodeFormat format) {
+bool Request::init(const Callback<bool(Handle &)> &setupCallback, Rc<Ref> &&ref) {
+	_owner = move(ref);
+	return setupCallback(_handle);
+}
+
+void Request::perform(Application *app, CompleteCallback &&cb) {
+	if (cb) {
+		_onComplete = move(cb);
+	}
+	if (!app) {
+		app = Application::getInstance();
+	}
+
+	auto &c = app->getNetworkController();
+	_handle._request = this;
+	_handle._controller = c;
+
+	_uploadProgress = pair(0, 0);
+	_downloadProgress = pair(0, 0);
+
+	auto &source = _handle.getReceiveDataSource();
+	if (std::holds_alternative<std::monostate>(source)) {
+		if (!_ignoreResponseData) {
+			_targetHeaderCallback = _handle.getHeaderCallback();
+
+			_handle.setHeaderCallback([this] (StringView key, StringView value) {
+				handleHeader(key, value);
+			});
+
+			_handle.setReceiveCallback([this] (char *buf, size_t size) -> size_t {
+				return handleReceive(buf, size);
+			});
+		}
+	}
+	c->run(this);
+}
+
+void Request::setIgnoreResponseData(bool value) {
+	if (!_running) {
+		_ignoreResponseData = value;
+	}
+}
+
+void Request::setUploadProgress(ProgressCallback &&cb) {
+	_onUploadProgress = move(cb);
+}
+
+void Request::setDownloadProgress(ProgressCallback &&cb) {
+	_onDownloadProgress = move(cb);
+}
+
+void Request::handleHeader(StringView key, StringView value) {
+	if (!_ignoreResponseData) {
+		if (key == "content-length") {
+			auto length = value.readInteger(10).get(0);
+			_data.resize(size_t(length));
+		}
+	}
+	if (_targetHeaderCallback) {
+		_targetHeaderCallback(key, value);
+	}
+}
+
+size_t Request::handleReceive(char *buf, size_t nbytes) {
+	if (_data.size() < (nbytes + _nbytes)) {
+		_data.resize(nbytes + _nbytes);
+	}
+	memcpy(_data.data() + _nbytes, buf, nbytes);
+	_nbytes += nbytes;
+	return nbytes;
+}
+
+void Request::notifyOnComplete() {
+	if (_onComplete) {
+		_onComplete(*this);
+	}
+	_running = false;
+	_handle._request = nullptr;
+}
+
+void Request::notifyOnUploadProgress(int64_t total, int64_t now) {
+	_uploadProgress = pair(total, std::max(now, _uploadProgress.second)); // prevent out-of-order updates
+	if (_onUploadProgress && _uploadProgress.second == now) {
+		_onUploadProgress(*this, total, now);
+	}
+}
+
+void Request::notifyOnDownloadProgress(int64_t total, int64_t now) {
+	_downloadProgress = pair(total, std::max(now, _downloadProgress.second)); // prevent out-of-order updates
+	if (_onDownloadProgress && _downloadProgress.second == now) {
+		_onDownloadProgress(*this, total, now);
+	}
+}
+
+/*bool DataHandle::init(StringView url, const data::Value &data, data::EncodeFormat format) {
 	if (data.empty()) {
 		return init(Method::Get, url);
 	} else {
@@ -213,6 +274,6 @@ bool AssetHandle::init(Rc<storage::Asset> &&, StringView tmp) {
 
 Rc<storage::Asset> AssetHandle::getAsset() const {
 	return _asset;
-}
+}*/
 
 }

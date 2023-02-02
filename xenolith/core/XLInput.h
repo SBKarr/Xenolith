@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -77,7 +78,21 @@ enum class InputModifier : uint32_t {
 	// Linux-only, experimental
 	LayoutAlternative = 1 << 13,
 
-	Command = Mod3,
+	ShiftL = 1 << 14,
+	ShiftR = 1 << 15,
+	CtrlL = 1 << 16,
+	CtrlR = 1 << 17,
+	AltL = 1 << 18,
+	AltR = 1 << 19,
+	Mod3L = 1 << 20,
+	Mod3R = 1 << 21,
+
+	ScrollLock = 1 << 22,
+
+	Command = Mod3, // MacOS Command
+	Meta = Mod3, // Android Meta
+	Function = Mod4, // Android Function
+	Sym = Mod5, // Android Sym
 
 	// boolean value for switch event (background/focus)
 	ValueFalse = None,

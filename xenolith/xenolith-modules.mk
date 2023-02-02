@@ -1,4 +1,5 @@
 # Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+# Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 # 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -24,4 +25,5 @@ XENOLITH_MODULE_DIR := $(realpath $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 include $(XENOLITH_MODULE_DIR)/icons/icons.mk
 include $(XENOLITH_MODULE_DIR)/gui/gui.mk
 include $(XENOLITH_MODULE_DIR)/storage/storage.mk
+include $(XENOLITH_MODULE_DIR)/network/network.mk
 include $(XENOLITH_MODULE_DIR)/material/material.mk

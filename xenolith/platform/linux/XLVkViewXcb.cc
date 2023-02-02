@@ -1,5 +1,6 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -276,7 +277,7 @@ bool XcbView::poll(bool frameReady) {
 					lastInputTime = ev->time;
 				}
 
-				auto ext = _view->getScreenExtent();
+				auto ext = _view->getFrameContraints().extent;
 				auto mod = getModifiers(ev->state);
 				auto btn = getButton(ev->detail);
 
@@ -321,7 +322,7 @@ bool XcbView::poll(bool frameReady) {
 					lastInputTime = ev->time;
 				}
 
-				auto ext = _view->getScreenExtent();
+				auto ext = _view->getFrameContraints().extent;
 				auto mod = getModifiers(ev->state);
 				auto btn = getButton(ev->detail);
 
@@ -354,7 +355,7 @@ bool XcbView::poll(bool frameReady) {
 					lastInputTime = ev->time;
 				}
 
-				auto ext = _view->getScreenExtent();
+				auto ext = _view->getFrameContraints().extent;
 				auto mod = getModifiers(ev->state);
 
 				InputEventData event({
@@ -376,7 +377,7 @@ bool XcbView::poll(bool frameReady) {
 				lastInputTime = ev->time;
 			}
 
-			auto ext = _view->getScreenExtent();
+			auto ext = _view->getFrameContraints().extent;
 			inputEvents.emplace_back(InputEventData::BoolEvent(InputEventName::PointerEnter, true,
 					Vec2(float(ev->event_x), float(ext.height - ev->event_y))));
 			// printf("Mouse entered window %d, at coordinates (%d,%d)\n", ev->event, ev->event_x, ev->event_y);
@@ -389,7 +390,7 @@ bool XcbView::poll(bool frameReady) {
 				lastInputTime = ev->time;
 			}
 
-			auto ext = _view->getScreenExtent();
+			auto ext = _view->getFrameContraints().extent;
 			inputEvents.emplace_back(InputEventData::BoolEvent(InputEventName::PointerEnter, false,
 					Vec2(float(ev->event_x), float(ext.height - ev->event_y))));
 			// printf("Mouse left window %d, at coordinates (%d,%d)\n", ev->event, ev->event_x, ev->event_y);
@@ -414,7 +415,7 @@ bool XcbView::poll(bool frameReady) {
 			}
 
 			auto mod = getModifiers(ev->state);
-			auto ext = _view->getScreenExtent();
+			auto ext = _view->getFrameContraints().extent;
 
 			// in case of key autorepeat, ev->time will match
 			// just replace event name from previous InputEventName::KeyReleased to InputEventName::KeyRepeated
@@ -480,7 +481,7 @@ bool XcbView::poll(bool frameReady) {
 			}
 
 			auto mod = getModifiers(ev->state);
-			auto ext = _view->getScreenExtent();
+			auto ext = _view->getFrameContraints().extent;
 
 			InputEventData event({
 				ev->time,

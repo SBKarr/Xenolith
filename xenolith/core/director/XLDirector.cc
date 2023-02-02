@@ -1,5 +1,6 @@
 /**
- Copyright (c) 2020 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2020-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -48,22 +49,8 @@ bool Director::init(Application *app, gl::View *view) {
 	_time.app = 0;
 	_time.delta = 0;
 
-	_sizeChangedEvent = onEventWithObject(gl::View::onScreenSize, view, [&] (const Event &ev) {
-		auto s = ev.getDataValue().getValue("size");
-		_screenSize = _screenExtent = Extent2(s.getInteger(0), s.getInteger(1));
-		_density = ev.getDataValue().getDouble("density");
-
-		if (_scene) {
-			_scene->setDensity(_density);
-			_scene->setContentSize(_screenSize / _scene->getDensity());
-
-			updateGeneralTransform();
-		}
-	});
-
-	_screenExtent = _view->getScreenExtent();
-	_screenSize = _view->getScreenExtent();
-	_density = _view->getDensity();
+	_constraints = _view->getFrameContraints();
+	_screenSize = _constraints.extent;
 
 	updateGeneralTransform();
 
@@ -79,16 +66,12 @@ const Rc<ResourceCache> &Director::getResourceCache() const {
 }
 
 bool Director::acquireFrame(const Rc<FrameRequest> &req) {
-	float density = 1.0f;
-	if (_scene) {
-		density = _scene->getDensity();
-	}
-	if (_screenExtent != req->getExtent() || density != req->getDensity()) {
-		_screenSize = _screenExtent = req->getExtent();
+	if (_constraints != req->getFrameConstraints()) {
+		_constraints = req->getFrameConstraints();
+		_screenSize = _constraints.extent;
 
 		if (_scene) {
-			_scene->setDensity(req->getDensity());
-			_scene->setContentSize(_screenSize / _scene->getDensity());
+			_scene->setFrameConstraints(_constraints);
 		}
 		updateGeneralTransform();
 	}
@@ -130,7 +113,7 @@ void Director::update() {
 		}
 		_scene = _nextScene;
 
-		_scene->setContentSize(_screenSize / _scene->getDensity());
+		_scene->setFrameConstraints(_constraints);
 		_scene->onPresented(this);
 		_nextScene = nullptr;
 	}
@@ -171,7 +154,7 @@ void Director::runScene(Rc<Scene> &&scene) {
 				if (!_scene) {
 					_scene = _nextScene;
 					_nextScene = nullptr;
-					_scene->setContentSize(_screenSize / _scene->getDensity());
+					_scene->setFrameConstraints(_constraints);
 					updateGeneralTransform();
 					_scene->onPresented(this);
 					_view->getLoop()->performOnGlThread([view = _view, scene = _scene] {

@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -50,7 +51,7 @@ public:
 	gl::Device *getDevice() const { return _device; }
 	const Rc<FrameEmitter> &getEmitter() const { return _request->getEmitter(); }
 	const Rc<Queue> &getQueue() const { return _request->getQueue(); }
-	Extent2 getExtent() const { return _request->getExtent(); }
+	const gl::FrameContraints &getFrameConstraints() const { return _request->getFrameConstraints(); }
 	const FrameAttachmentSpecialization &getFrameSpecialization() const { return _request->getFrameSpecialization(); }
 	const Rc<PoolRef> &getPool() const { return _pool; }
 	const Rc<gl::View> &getSwapchain() const { return _request->getSwapchain(); }

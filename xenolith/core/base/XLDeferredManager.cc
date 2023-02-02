@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -53,9 +54,9 @@ void DeferredManager::update() {
 	thread::TaskQueue::update();
 }
 
-Rc<VectorCanvasDeferredResult> DeferredManager::runVectorCavas(Rc<VectorImageData> &&image, Size2 targetSize, Color4F color, float quality) {
+Rc<VectorCanvasDeferredResult> DeferredManager::runVectorCavas(Rc<VectorImageData> &&image, Size2 targetSize, Color4F color, float quality, bool waitOnReady) {
 	auto result = new std::promise<Rc<VectorCanvasResult>>;
-	Rc<VectorCanvasDeferredResult> ret = Rc<VectorCanvasDeferredResult>::create(result->get_future());
+	Rc<VectorCanvasDeferredResult> ret = Rc<VectorCanvasDeferredResult>::create(result->get_future(), waitOnReady);
 	perform([this, image = move(image), targetSize, color, quality, ret, result] () mutable {
 		auto canvas = VectorCanvas::getInstance();
 		canvas->setColor(color);

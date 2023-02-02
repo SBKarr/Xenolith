@@ -37,6 +37,9 @@ bool Surface::init(const SurfaceStyle &style) {
 
 	_styleOrigin = _styleTarget = style;
 	_styleDirty = true;
+
+	setQuality(QualityHigh);
+
 	return true;
 }
 

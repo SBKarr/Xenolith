@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -43,11 +44,11 @@ class FrameRequest final : public Ref {
 public:
 	virtual ~FrameRequest();
 
-	bool init(const Rc<FrameEmitter> &, Rc<ImageStorage> &&target, float = 1.0f);
-	bool init(const Rc<FrameEmitter> &, Extent2, float = 1.0f);
+	bool init(const Rc<FrameEmitter> &, Rc<ImageStorage> &&target, const gl::FrameContraints &);
+	bool init(const Rc<FrameEmitter> &, const gl::FrameContraints &);
 	bool init(const Rc<Queue> &q);
-	bool init(const Rc<Queue> &q, Extent2, float = 1.0f);
-	bool init(const Rc<Queue> &q, const Rc<FrameEmitter> &, Extent2, float = 1.0f);
+	bool init(const Rc<Queue> &q, const gl::FrameContraints &);
+	bool init(const Rc<Queue> &q, const Rc<FrameEmitter> &, const gl::FrameContraints &);
 
 	void addSignalDependency(Rc<DependencyEvent> &&);
 	void addSignalDependencies(Vector<Rc<DependencyEvent>> &&);
@@ -82,8 +83,7 @@ public:
 
 	Set<Rc<Queue>> getQueueList() const;
 
-	Extent2 getExtent() const { return _extent; }
-	float getDensity() const { return _density; }
+	const gl::FrameContraints & getFrameConstraints() const { return _constraints; }
 
 	void setReadyForSubmit(bool value) { _readyForSubmit = value; }
 	bool isReadyForSubmit() const { return _readyForSubmit; }
@@ -111,8 +111,7 @@ protected:
 	Rc<PoolRef> _pool;
 	Rc<FrameEmitter> _emitter;
 	Rc<Queue> _queue;
-	Extent2 _extent;
-	float _density = 1.0f;
+	gl::FrameContraints _constraints;
 	Map<const Attachment *, Rc<AttachmentInputData>> _input;
 	bool _readyForSubmit = true; // if true, do not wait synchronization with other active frames in emitter
 	bool _persistentMappings = true; // true; // true; // try to map per-frame GPU memory persistently
@@ -174,8 +173,8 @@ public:
 
 	void setEnableBarrier(bool value);
 
-	Rc<FrameRequest> makeRequest(Rc<ImageStorage> &&, float density = 1.0f);
-	Rc<FrameRequest> makeRequest(Extent2, float density = 1.0f);
+	Rc<FrameRequest> makeRequest(Rc<ImageStorage> &&, const gl::FrameContraints &);
+	Rc<FrameRequest> makeRequest(const gl::FrameContraints &);
 	Rc<FrameHandle> submitNextFrame(Rc<FrameRequest> &&);
 
 protected:

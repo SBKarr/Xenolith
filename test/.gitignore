@@ -1,2 +1,7 @@
 stappler-build/
 shaders/compiled/**
+proj.android/.gradle/**
+proj.android/gradle/**
+proj.android/build/**
+proj.android/app/build/**
+proj.android/app/assets/**

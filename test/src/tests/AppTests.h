@@ -60,6 +60,7 @@ enum class LayoutName {
 	VgIconList,
 
 	UtilsStorageTest = 256 * 5,
+	UtilsNetworkTest,
 
 	MaterialColorPickerTest = 256 * 6,
 	MaterialDynamicFontTest,

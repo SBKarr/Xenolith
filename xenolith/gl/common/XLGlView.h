@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -54,7 +55,6 @@ public:
 	using FrameRequest = renderqueue::FrameRequest;
 	using RenderQueue = renderqueue::Queue;
 
-	static EventHeader onScreenSize;
 	static EventHeader onFrameRate;
 
 	View();
@@ -93,10 +93,6 @@ public:
 	const Rc<Director> &getDirector() const { return _director; }
 	const Rc<Loop> &getLoop() const { return _loop; }
 
-	// returns current screen extent, non thread-safe, used in view's thread
-	// for main thread, use Director::getScreenExtent
-	virtual const Extent2 & getScreenExtent() const { return _screenExtent; }
-
 	// update screen extent, non thread-safe
 	// only updates field, view is not resized
 	virtual void setScreenExtent(Extent2);
@@ -105,7 +101,7 @@ public:
 	void handleInputEvent(const InputEventData &);
 	void handleInputEvents(Vector<InputEventData> &&);
 
-	virtual void runFrame(const Rc<RenderQueue> &, Extent2);
+	virtual void runFrame(const Rc<RenderQueue> &);
 
 	virtual ImageInfo getSwapchainImageInfo() const;
 	virtual ImageInfo getSwapchainImageInfo(const SwapchainConfig &cfg) const;
@@ -121,10 +117,9 @@ public:
 
 	uint64_t getAvgFenceTime() const;
 
-	float getDensity() const { return _density; }
+	const FrameContraints & getFrameContraints() const { return _constraints; }
 	ScreenOrientation getScreenOrientation() const { return _orientation; }
 
-	bool isTouchDevice() const { return _isTouchDevice; }
 	bool hasFocus() const { return _hasFocus; }
 	bool isInBackground() const { return _inBackground; }
 	bool isPointerWithinWindow() const { return _pointerInWindow; }
@@ -132,19 +127,21 @@ public:
 	uint64_t getFrameInterval() const;
 	void setFrameInterval(uint64_t);
 
+	void setNavigationEmpty(bool);
+	bool isNavigationEmpty() const { return _navigationEmpty; }
+
 protected:
 	virtual void wakeup() = 0;
 
-	Extent2 _screenExtent;
-
-	float _density = 1.0f;
-
+	FrameContraints _constraints;
 	ScreenOrientation _orientation = ScreenOrientation::Landscape;
 
-	bool _isTouchDevice = false;
 	bool _inBackground = false;
 	bool _hasFocus = true;
 	bool _pointerInWindow = false;
+	bool _threadStarted = false;
+	bool _navigationEmpty = true;
+
 	std::atomic<bool> _running = false;
 
 	Rc<Director> _director;
@@ -158,7 +155,6 @@ protected:
 	uint64_t _gen = 1;
 	gl::SwapchainConfig _config;
 
-	bool _threadStarted = false;
 	std::thread _thread;
 	std::thread::id _threadId;
 	std::atomic_flag _shouldQuit;

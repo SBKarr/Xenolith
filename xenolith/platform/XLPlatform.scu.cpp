@@ -1,5 +1,6 @@
 /**
-Copyright (c) 2020 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2020-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -39,6 +40,15 @@ THE SOFTWARE.
 #include "mac/XLNetwork.cc"
 #include "mac/XLVulkan.cc"
 #include "mac/XLVkViewImpl.cc"
+
+#include "android/XLJni.cc"
+#include "android/XLDevice.cc"
+#include "android/XLInteraction.cc"
+#include "android/XLNetwork.cc"
+#include "android/XLVulkan.cc"
+#include "android/XLNativeActivity.cc"
+#include "android/XLVkViewImpl.cc"
+
 /*#include "win32/XLDevice.cc"
 #include "win32/XLInteraction.cc"
 #include "win32/XLNetwork.cc"

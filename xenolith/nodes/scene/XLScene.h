@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include "XLRenderQueueQueue.h"
 #include "XLGlMaterial.h"
 #include "XLSceneLight.h"
+#include "XLDynamicStateNode.h"
 
 namespace stappler::xenolith {
 
@@ -45,8 +46,7 @@ public:
 
 	virtual ~Scene();
 
-	virtual bool init(Application *, RenderQueue::Builder &&);
-	virtual bool init(Application *, RenderQueue::Builder &&, Size2, float density);
+	virtual bool init(Application *, RenderQueue::Builder &&, const gl::FrameContraints &);
 
 	virtual void renderRequest(const Rc<FrameRequest> &);
 	virtual void render(RenderFrameInfo &info);
@@ -73,12 +73,18 @@ public:
 	// virtual uint64_t acquireMaterial(const MaterialInfo &, const Vector<const gl::ImageData *> &images);
 	virtual uint64_t acquireMaterial(const MaterialInfo &, Vector<gl::MaterialImage> &&images, bool revokable);
 
-	virtual void setDensity(float);
-	float getDensity() const { return _density; }
+	virtual void setFrameConstraints(const gl::FrameContraints &);
+	const gl::FrameContraints & getFrameConstraints() const { return _constraints; }
 
 	virtual void revokeImages(const Vector<uint64_t> &);
 
 	virtual void specializeRequest(const Rc<FrameRequest> &req);
+
+	virtual void addChildNode(Node *child) override;
+	virtual void addChildNode(Node *child, int16_t localZOrder) override;
+	virtual void addChildNode(Node *child, int16_t localZOrder, uint64_t tag) override;
+
+	virtual const Size2& getContentSize() const override;
 
 	virtual bool addLight(SceneLight *, uint64_t tag = InvalidTag, StringView name = StringView());
 
@@ -92,8 +98,11 @@ public:
 	virtual void removeAllLights();
 	virtual void removeAllLightsByType(SceneLightType);
 
-	virtual void setGlobalColor(const Color4F &);
-	virtual const Color4F & getGlobalColor() const;
+	virtual void setGlobalLight(const Color4F &);
+	virtual const Color4F & getGlobalLight() const;
+
+	virtual void setClipContent(bool);
+	virtual bool isClipContent() const;
 
 protected:
 	using Node::init;
@@ -141,6 +150,8 @@ protected:
 
 	Application *_application = nullptr;
 	Director *_director = nullptr;
+	DynamicStateNode *_content = nullptr;
+
 	Rc<RenderQueue> _queue;
 
 	Map<gl::MaterialType, AttachmentData> _attachmentsByType;
@@ -154,7 +165,6 @@ protected:
 	// отозванные ид могут быть выданы новым отзываемым материалам, чтобы не засорять биндинги
 	Vector<gl::MaterialId> _revokedIds;
 
-	float _density = 1.0f;
 	float _shadowDensity = 1.0f;
 
 	uint32_t _lightsAmbientCount = 0;
@@ -163,7 +173,8 @@ protected:
 	Map<uint64_t, SceneLight *> _lightsByTag;
 	Map<StringView, SceneLight *> _lightsByName;
 
-	Color4F _globalColor = Color4F(0.0f, 0.0f, 0.0f, 0.0f);
+	Color4F _globalLight = Color4F(1.0f, 1.0f, 1.0f, 1.0f);
+	gl::FrameContraints _constraints;
 };
 
 }

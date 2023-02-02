@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -50,10 +51,10 @@ bool Shader::setup(Device &dev, const ProgramData &programData, SpanView<uint32_
 	createInfo.pCode = data.data();
 
 	if (dev.getTable()->vkCreateShaderModule(dev.getDevice(), &createInfo, nullptr, &_shaderModule) == VK_SUCCESS) {
-		return gl::Shader::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+		return gl::Shader::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 			auto d = ((Device *)dev);
-			d->getTable()->vkDestroyShaderModule(d->getDevice(), (VkShaderModule)ptr, nullptr);
-		}, gl::ObjectType::ShaderModule, _shaderModule);
+			d->getTable()->vkDestroyShaderModule(d->getDevice(), (VkShaderModule)ptr.get(), nullptr);
+		}, gl::ObjectType::ShaderModule, ObjectHandle(_shaderModule));
 	}
 	return false;
 }
@@ -343,10 +344,10 @@ bool GraphicPipeline::init(Device &dev, const PipelineData &params, const Subpas
 
 	if (dev.getTable()->vkCreateGraphicsPipelines(dev.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_pipeline) == VK_SUCCESS) {
 		_name = params.key.str<Interface>();
-		return gl::GraphicPipeline::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+		return gl::GraphicPipeline::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 			auto d = ((Device *)dev);
-			d->getTable()->vkDestroyPipeline(d->getDevice(), (VkPipeline)ptr, nullptr);
-		}, gl::ObjectType::Pipeline, _pipeline);
+			d->getTable()->vkDestroyPipeline(d->getDevice(), (VkPipeline)ptr.get(), nullptr);
+		}, gl::ObjectType::Pipeline, ObjectHandle(_pipeline));
 	}
 	return false;
 }
@@ -416,10 +417,10 @@ bool ComputePipeline::init(Device &dev, const PipelineData &params, const Subpas
 
 	if (dev.getTable()->vkCreateComputePipelines(dev.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_pipeline) == VK_SUCCESS) {
 		_name = params.key.str<Interface>();
-		return gl::ComputePipeline::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+		return gl::ComputePipeline::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 			auto d = ((Device *)dev);
-			d->getTable()->vkDestroyPipeline(d->getDevice(), (VkPipeline)ptr, nullptr);
-		}, gl::ObjectType::Pipeline, _pipeline);
+			d->getTable()->vkDestroyPipeline(d->getDevice(), (VkPipeline)ptr.get(), nullptr);
+		}, gl::ObjectType::Pipeline, ObjectHandle(_pipeline));
 	}
 	return false;
 }

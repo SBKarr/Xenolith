@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -301,81 +302,51 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 		if (_textInput->canHandleInputEvent(event)) {
 			// forward to text input
 			if (_textInput->handleInputEvent(event)) {
-				auto v = _activeKeys.find(event.key.keycode);
-				if (v != _activeKeys.end()) {
-					v->second.clear(true);
-					_activeKeys.erase(v);
-				}
+				clearKey(event);
 				return;
 			}
 		}
 
-		auto v = _activeKeys.find(event.key.keycode);
-		if (v == _activeKeys.end()) {
-			v = _activeKeys.emplace(event.key.keycode, EventHandlersInfo{getEventInfo(event), Vector<Rc<InputListener>>()}).first;
-		} else {
-			v->second.clear(true);
-			v->second.event = getEventInfo(event);
-		}
+		auto v = resetKey(event);
 
 		_events->foreach([&] (InputListener *l) {
-			if (l->canHandleEvent(v->second.event)) {
-				v->second.listeners.emplace_back(l);
-				if (l->shouldSwallowEvent(v->second.event)) {
-					v->second.listeners.clear();
-					v->second.listeners.emplace_back(l);
+			if (l->canHandleEvent(v->event)) {
+				v->listeners.emplace_back(l);
+				if (l->shouldSwallowEvent(v->event)) {
+					v->listeners.clear();
+					v->listeners.emplace_back(l);
 					return false;
 				}
 			}
 			return true;
 		});
-		v->second.handle();
+		v->handle();
 		break;
 	}
-	case InputEventName::KeyRepeated: {
+	case InputEventName::KeyRepeated:
 		if (_textInput->canHandleInputEvent(event)) {
 			// forward to text input
 			if (_textInput->handleInputEvent(event)) {
-				auto v = _activeKeys.find(event.key.keycode);
-				if (v != _activeKeys.end()) {
-					v->second.clear(true);
-					_activeKeys.erase(v);
-				}
+				clearKey(event);
 				return;
 			}
 		}
 
-		auto v = _activeKeys.find(event.key.keycode);
-		if (v != _activeKeys.end()) {
-			updateEventInfo(v->second.event, event);
-			v->second.handle();
-		}
+		handleKey(event, false);
 		break;
-	}
+
 	case InputEventName::KeyReleased:
-	case InputEventName::KeyCanceled: {
+	case InputEventName::KeyCanceled:
 		if (_textInput->canHandleInputEvent(event)) {
 			// forward to text input
 			if (_textInput->handleInputEvent(event)) {
-				auto v = _activeKeys.find(event.key.keycode);
-				if (v != _activeKeys.end()) {
-					v->second.clear(true);
-					_activeKeys.erase(v);
-				}
+				clearKey(event);
 				return;
 			}
 		}
 
-		auto v = _activeKeys.find(event.key.keycode);
-		if (v != _activeKeys.end()) {
-			updateEventInfo(v->second.event, event);
-			v->second.handle();
-			v->second.clear(false);
-			_activeKeys.erase(v);
-		}
-
+		handleKey(event, true);
 		break;
-	}
 	}
 }
 
@@ -495,6 +466,68 @@ void InputDispatcher::setListenerExclusive(EventHandlersInfo &info, const InputL
 			}
 		}
 		info.listeners.clear();
+	}
+}
+
+void InputDispatcher::clearKey(const InputEventData &event) {
+	if (event.key.keycode == InputKeyCode::Unknown) {
+		auto v = _activeKeySyms.find(event.key.keysym);
+		if (v != _activeKeySyms.end()) {
+			v->second.clear(true);
+			_activeKeySyms.erase(v);
+		}
+	} else {
+		auto v = _activeKeys.find(event.key.keycode);
+		if (v != _activeKeys.end()) {
+			v->second.clear(true);
+			_activeKeys.erase(v);
+		}
+	}
+}
+
+InputDispatcher::EventHandlersInfo *InputDispatcher::resetKey(const InputEventData &event) {
+	if (event.key.keycode == InputKeyCode::Unknown) {
+		auto v = _activeKeySyms.find(event.key.keysym);
+		if (v == _activeKeySyms.end()) {
+			v = _activeKeySyms.emplace(event.key.keysym, EventHandlersInfo{getEventInfo(event), Vector<Rc<InputListener>>()}).first;
+		} else {
+			v->second.clear(true);
+			v->second.event = getEventInfo(event);
+		}
+		return &v->second;
+	} else {
+		auto v = _activeKeys.find(event.key.keycode);
+		if (v == _activeKeys.end()) {
+			v = _activeKeys.emplace(event.key.keycode, EventHandlersInfo{getEventInfo(event), Vector<Rc<InputListener>>()}).first;
+		} else {
+			v->second.clear(true);
+			v->second.event = getEventInfo(event);
+		}
+		return &v->second;
+	}
+}
+
+void InputDispatcher::handleKey(const InputEventData &event, bool clear) {
+	if (event.key.keycode == InputKeyCode::Unknown) {
+		auto v = _activeKeySyms.find(event.key.keysym);
+		if (v != _activeKeySyms.end()) {
+			updateEventInfo(v->second.event, event);
+			v->second.handle();
+			if (clear) {
+				v->second.clear(false);
+				_activeKeySyms.erase(v);
+			}
+		}
+	} else {
+		auto v = _activeKeys.find(event.key.keycode);
+		if (v != _activeKeys.end()) {
+			updateEventInfo(v->second.event, event);
+			v->second.handle();
+			if (clear) {
+				v->second.clear(false);
+				_activeKeys.erase(v);
+			}
+		}
 	}
 }
 

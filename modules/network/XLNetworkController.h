@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -30,45 +31,24 @@
 
 namespace stappler::xenolith::network {
 
-class Handle;
+class Request;
 
-class Controller final : public thread::ThreadInterface {
+class Controller final : public Ref {
 public:
-	Controller(Application *, StringView);
+	Controller(Application *, StringView, Bytes &&signKey = Bytes());
 	virtual ~Controller();
 
-	Application *getApplication() const { return _application; }
-	StringView getName() const { return _name; }
+	Application *getApplication() const;
+	StringView getName() const;
 
-	void run(const Rc<Handle> &);
+	void run(Rc<Request> &&);
 
-	void setSignKey(Bytes &&value) { _signKey = move(value); }
+	void setSignKey(Bytes &&value);
 
 protected:
-	void onUploadProgress(const Rc<Handle> &, int64_t total, int64_t now);
-	void onDownloadProgress(const Rc<Handle> &, int64_t total, int64_t now);
-	bool onComplete(const Rc<Handle> &);
+	struct Data;
 
-	virtual void threadInit() override;
-	virtual void threadDispose() override;
-	virtual bool worker() override;
-
-	virtual void *getSharegroup(StringView);
-
-	void sign(Handle &, NetworkHandle &) const;
-
-	Application *_application = nullptr;
-	String _name;
-	void *_handle = nullptr;
-	std::thread _thread;
-
-	Mutex _mutexQueue;
-	Mutex _mutexFree;
-	std::atomic_flag _shouldQuit;
-	Map<void *, Pair<Rc<Handle>, NetworkHandle::Context>> _handles;
-	Map<String, void *> _sharegroups;
-	memory::PriorityQueue<Rc<Handle>> _pending;
-	Bytes _signKey;
+	Data *_data;
 };
 
 }

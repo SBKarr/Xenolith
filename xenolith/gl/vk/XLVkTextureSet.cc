@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -462,10 +463,10 @@ bool TextureSet::init(Device &dev, const TextureSetLayout &layout) {
 
 	_layout = &layout;
 	_partiallyBound = layout.isPartiallyBound();
-	return gl::Object::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+	return gl::Object::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 		auto d = ((Device *)dev);
-		d->getTable()->vkDestroyDescriptorPool(d->getDevice(), (VkDescriptorPool)ptr, nullptr);
-	}, gl::ObjectType::DescriptorPool, _pool);
+		d->getTable()->vkDestroyDescriptorPool(d->getDevice(), (VkDescriptorPool)ptr.get(), nullptr);
+	}, gl::ObjectType::DescriptorPool, ObjectHandle(_pool));
 }
 
 void TextureSet::write(const gl::MaterialLayout &set) {

@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -294,7 +295,7 @@ void FrameHandle::setCompleteCallback(Function<void(FrameHandle &)> &&cb) {
 bool FrameHandle::setup() {
 
 	_pool->perform([&] {
-		auto q = Rc<FrameQueue>::create(_pool, _request->getQueue(), *this, _request->getExtent());
+		auto q = Rc<FrameQueue>::create(_pool, _request->getQueue(), *this, _request->getFrameConstraints().extent);
 		q->setup();
 
 		_queues.emplace_back(move(q));

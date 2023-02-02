@@ -1,5 +1,6 @@
 /**
- Copyright (c) 2020 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2020-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -65,9 +66,8 @@ public:
 	const Rc<ResourceCache> &getResourceCache() const;
 	const Mat4 &getGeneralProjection() const { return _generalProjection; }
 
-	Extent2 getScreenExtent() const { return _screenExtent; }
+	const gl::FrameContraints & getFrameConstraints() const { return _constraints; }
 	Size2 getScreenSize() const { return _screenSize; }
-	float getDensity() const { return _density; }
 
 	void pushDrawStat(const gl::DrawStat &);
 
@@ -86,9 +86,8 @@ protected:
 
 	void updateGeneralTransform();
 
-	Extent2 _screenExtent;
+	gl::FrameContraints _constraints;
 	Size2 _screenSize;
-	float _density = 1.0f;
 
 	uint64_t _startTime = 0;
 	UpdateTime _time;
@@ -103,7 +102,6 @@ protected:
 	Rc<Scene> _nextScene;
 
 	Mat4 _generalProjection;
-	EventHandlerNode *_sizeChangedEvent = nullptr;
 
 	Rc<PoolRef> _pool;
 	Rc<Scheduler> _scheduler;

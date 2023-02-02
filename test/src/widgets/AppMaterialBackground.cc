@@ -69,7 +69,7 @@ void MaterialBackground::onEnter(Scene *scene) {
 	auto light = Rc<SceneLight>::create(SceneLightType::Ambient, Vec2(0.0f, 0.3f), 1.5f, Color::White);
 	auto ambient = Rc<SceneLight>::create(SceneLightType::Ambient, Vec2(0.0f, 0.0f), 1.5f, Color::White);
 
-	_scene->setGlobalColor(Color4F::WHITE);
+	_scene->setGlobalLight(Color4F::WHITE);
 	_scene->removeAllLights();
 	_scene->addLight(move(light));
 	_scene->addLight(move(ambient));

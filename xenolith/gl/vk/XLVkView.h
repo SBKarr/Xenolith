@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -63,6 +64,9 @@ public:
 		// Использовать внеэкранный рендеринг для подготовки изображений. В этом режиме презентация нового изображения выполняется
 		// строго синхронно (см. presentImmediate)
 		bool renderImageOffscreen = false;
+
+		// Не использовать переключение потоков для вывода изображения. Вместо этого, блокироваться на ожидании очереди в текущем потоке
+		bool presentImmediate = false;
 	};
 
 	virtual ~View();
@@ -152,6 +156,8 @@ protected:
 	virtual void finalize();
 
 	void updateFences();
+
+	void clearImages();
 
 	EngineOptions _options;
 

@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,38 +20,39 @@
  THE SOFTWARE.
  **/
 
-#include "XLTestNetworkSprite.h"
-#include "XLScene.h"
-#include "XLDirector.h"
-#include "XLApplication.h"
+#include "XLPlatform.h"
 
-namespace stappler::xenolith::test {
+#if ANDROID
 
-bool NetworkTestSprite::init() {
-	if (!Sprite::init()) {
-		return false;
-	}
+namespace stappler::xenolith::platform::interaction {
 
-	setColor(Color::Orange_500);
+bool _goToUrl(const StringView &url, bool external) {
+	log::format("Interaction", "GoTo url: %s", url.data());
 	return true;
 }
+void _makePhoneCall(const StringView &str) {
+	log::format("Interaction", "phone: %s", str.data());
+}
+void _mailTo(const StringView &address) {
+	log::format("Interaction", "MailTo: %s", address.data());
+}
 
-void NetworkTestSprite::onEnter(Scene *scene) {
-	Sprite::onEnter(scene);
+void _backKey() { }
 
-	/*auto app = scene->getDirector()->getApplication();
+void _notification(const StringView &title, const StringView &text) {
 
-	auto h = Rc<network::DataHandle>::create("https://geobase.stappler.org/proxy/getHeaders");
-	// h->addHeader("X-Test", "123");
-	h->perform(app, [] (network::Handle &handle, data::Value &data) {
-		auto url = handle.getUrl();
-		auto code = handle.getErrorCode();
-		auto err = handle.getError();
-		auto resp = handle.getResponseCode();
+}
 
-		log::vtext("NetworkTest", "[", resp, "] ", url, ": ", code, " - ", err);
-		std::cout << data::EncodeFormat::Pretty << data << "\n";
-	});*/
+void _rateApplication() {
+	log::text("Interaction", "Rate app");
+}
+
+void _openFileDialog(const String &path, const Function<void(const String &)> &func) {
+	if (func) {
+		func("");
+	}
 }
 
 }
+
+#endif

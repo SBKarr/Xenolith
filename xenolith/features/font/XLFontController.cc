@@ -214,13 +214,20 @@ void FontController::Builder::addSources(FamilyQuery *query, Vector<const FontSo
 }
 
 FontController::~FontController() {
-	// image need to be finalized to remove cycled refs
-	_image->finalize();
+	invalidate();
 }
 
 bool FontController::init(const Rc<FontLibrary> &lib) {
 	_library = lib;
 	return true;
+}
+
+void FontController::invalidate() {
+	if (_image) {
+		// image need to be finalized to remove cycled refs
+		_image->finalize();
+		_image = nullptr;
+	}
 }
 
 void FontController::addFont(StringView family, Rc<FontFaceData> &&data, bool front) {

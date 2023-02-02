@@ -45,6 +45,7 @@
 #include "vg/AppVgIconTest.cc"
 #include "vg/AppVgIconList.cc"
 #include "utils/AppUtilsStorageTest.cc"
+#include "utils/AppUtilsNetworkTest.cc"
 #include "material/AppMaterialColorPickerTest.cc"
 #include "material/AppMaterialDynamicFontTest.cc"
 #include "material/AppMaterialNodeTest.cc"
@@ -96,6 +97,7 @@ Vector<MenuData> s_vgTestsMenu({
 
 Vector<MenuData> s_utilsTestsMenu({
 	MenuData{LayoutName::UtilsStorageTest, "Storage test"},
+	MenuData{LayoutName::UtilsNetworkTest, "Network test"},
 });
 
 Vector<MenuData> s_materialTestsMenu({
@@ -149,6 +151,7 @@ LayoutName getRootLayoutForLayout(LayoutName name) {
 		break;
 
 	case LayoutName::UtilsStorageTest:
+	case LayoutName::UtilsNetworkTest:
 		return LayoutName::UtilsTests;
 		break;
 
@@ -196,6 +199,7 @@ StringView getLayoutNameId(LayoutName name) {
 	case LayoutName::VgIconList: return "org.stappler.xenolith.test.VgIconList"; break;
 
 	case LayoutName::UtilsStorageTest: return "org.stappler.xenolith.test.UtilsStorageTest"; break;
+	case LayoutName::UtilsNetworkTest: return "org.stappler.xenolith.test.UtilsNetworkTest"; break;
 
 	case LayoutName::MaterialColorPickerTest: return "org.stappler.xenolith.test.MaterialColorPickerTest"; break;
 	case LayoutName::MaterialDynamicFontTest: return "org.stappler.xenolith.test.MaterialDynamicFontTest"; break;
@@ -238,6 +242,7 @@ LayoutName getLayoutNameById(StringView name) {
 	else if (name == "org.stappler.xenolith.test.VgIconList") { return LayoutName::VgIconList; }
 
 	else if (name == "org.stappler.xenolith.test.UtilsStorageTest") { return LayoutName::UtilsStorageTest; }
+	else if (name == "org.stappler.xenolith.test.UtilsNetworkTest") { return LayoutName::UtilsNetworkTest; }
 
 	else if (name == "org.stappler.xenolith.test.MaterialColorPickerTest") { return LayoutName::MaterialColorPickerTest; }
 	else if (name == "org.stappler.xenolith.test.MaterialDynamicFontTest") { return LayoutName::MaterialDynamicFontTest; }
@@ -281,6 +286,7 @@ Rc<Node> makeLayoutNode(LayoutName name) {
 	case LayoutName::VgIconList: return Rc<VgIconList>::create(); break;
 
 	case LayoutName::UtilsStorageTest: return Rc<UtilsStorageTest>::create(); break;
+	case LayoutName::UtilsNetworkTest: return Rc<UtilsNetworkTest>::create(); break;
 
 	case LayoutName::MaterialColorPickerTest: return Rc<MaterialColorPickerTest>::create(); break;
 	case LayoutName::MaterialDynamicFontTest: return Rc<MaterialDynamicFontTest>::create(); break;

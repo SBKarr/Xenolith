@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -27,14 +28,14 @@ namespace stappler::xenolith::vk {
 
 Semaphore::~Semaphore() { }
 
-static void Semaphore_destroy(gl::Device *dev, gl::ObjectType, void *ptr) {
+static void Semaphore_destroy(gl::Device *dev, gl::ObjectType, gl::ObjectHandle ptr) {
 	auto d = ((Device *)dev);
-	d->getTable()->vkDestroySemaphore(d->getDevice(), (VkSemaphore)ptr, nullptr);
+	d->getTable()->vkDestroySemaphore(d->getDevice(), (VkSemaphore)ptr.get(), nullptr);
 }
 
-static void Fence_destroy(gl::Device *dev, gl::ObjectType, void *ptr) {
+static void Fence_destroy(gl::Device *dev, gl::ObjectType, gl::ObjectHandle ptr) {
 	auto d = ((Device *)dev);
-	d->getTable()->vkDestroyFence(d->getDevice(), (VkFence)ptr, nullptr);
+	d->getTable()->vkDestroyFence(d->getDevice(), (VkFence)ptr.get(), nullptr);
 }
 
 bool Semaphore::init(Device &dev) {
@@ -44,7 +45,7 @@ bool Semaphore::init(Device &dev) {
 	semaphoreInfo.flags = 0;
 
 	if (dev.getTable()->vkCreateSemaphore(dev.getDevice(), &semaphoreInfo, nullptr, &_sem) == VK_SUCCESS) {
-		return gl::Semaphore::init(dev, Semaphore_destroy, gl::ObjectType::Semaphore, _sem);
+		return gl::Semaphore::init(dev, Semaphore_destroy, gl::ObjectType::Semaphore, ObjectHandle(_sem));
 	}
 
 	return false;
@@ -63,7 +64,7 @@ bool Fence::init(Device &dev) {
 	_state = Disabled;
 
 	if (dev.getTable()->vkCreateFence(dev.getDevice(), &fenceInfo, nullptr, &_fence) == VK_SUCCESS) {
-		return gl::Object::init(dev, Fence_destroy, gl::ObjectType::Fence, _fence);
+		return gl::Object::init(dev, Fence_destroy, gl::ObjectType::Fence, ObjectHandle(_fence));
 	}
 	return false;
 }

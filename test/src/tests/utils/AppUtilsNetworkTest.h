@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2021 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,6 +20,34 @@
  THE SOFTWARE.
  **/
 
-#include "XLDefine.h" // precompiled header
+#ifndef TEST_SRC_TESTS_UTILS_APPUTILSNETWORKTEST_H_
+#define TEST_SRC_TESTS_UTILS_APPUTILSNETWORKTEST_H_
 
-#include "XLTestNetworkSprite.cc"
+#include "AppLayoutTest.h"
+#include "MaterialButton.h"
+#include "AppMaterialBackground.h"
+
+namespace stappler::xenolith::app {
+
+class UtilsNetworkTest : public LayoutTest {
+public:
+	virtual ~UtilsNetworkTest() { }
+
+	virtual bool init() override;
+
+	virtual void onContentSizeDirty() override;
+
+protected:
+	using LayoutTest::init;
+
+	void performTest();
+
+	MaterialBackground *_background = nullptr;
+	material::Button *_runButton = nullptr;
+
+	Label *_result = nullptr;
+};
+
+}
+
+#endif /* TEST_SRC_TESTS_UTILS_APPUTILSNETWORKTEST_H_ */

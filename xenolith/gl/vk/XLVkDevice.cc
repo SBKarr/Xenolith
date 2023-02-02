@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -637,7 +638,7 @@ bool Device::hasNonSolidFillMode() const {
 }
 
 void Device::compileSamplers(gl::TaskQueue &q, bool force) {
-	_immutableSamplers.resize(_samplersInfo.size(), nullptr);
+	_immutableSamplers.resize(_samplersInfo.size(), VK_NULL_HANDLE);
 	_samplers.resize(_samplersInfo.size(), nullptr);
 	_samplersCount = _samplersInfo.size();
 

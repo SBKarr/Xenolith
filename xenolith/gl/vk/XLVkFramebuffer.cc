@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2020 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -52,10 +53,10 @@ bool Framebuffer::init(Device &dev, RenderPassImpl *renderPass, SpanView<Rc<gl::
 
 	if (dev.getTable()->vkCreateFramebuffer(dev.getDevice(), &framebufferInfo, nullptr, &_framebuffer) == VK_SUCCESS) {
 		_extent = extent;
-		return gl::Framebuffer::init(dev, [] (gl::Device *dev, gl::ObjectType, void *ptr) {
+		return gl::Framebuffer::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 			auto d = ((Device *)dev);
-			d->getTable()->vkDestroyFramebuffer(d->getDevice(), (VkFramebuffer)ptr, nullptr);
-		}, gl::ObjectType::Framebuffer, _framebuffer);
+			d->getTable()->vkDestroyFramebuffer(d->getDevice(), (VkFramebuffer)ptr.get(), nullptr);
+		}, gl::ObjectType::Framebuffer, ObjectHandle(_framebuffer));
 	}
 	return false;
 }

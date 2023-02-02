@@ -38,7 +38,7 @@ public:
 
 	virtual bool init(NodeStyle = NodeStyle::Filled,
 			ColorRole = ColorRole::Primary, uint32_t schemeTag = SurfaceStyle::PrimarySchemeTag);
-	virtual bool init(const SurfaceStyle &);
+	virtual bool init(const SurfaceStyle &) override;
 
 	virtual void onContentSizeDirty() override;
 
