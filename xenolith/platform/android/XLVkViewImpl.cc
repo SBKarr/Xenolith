@@ -43,6 +43,7 @@ bool ViewImpl::init(gl::Loop &loop, gl::Device &dev, gl::ViewInfo &&info) {
 
 	_options.presentImmediate = true;
 	_options.acquireImageImmediately = true;
+	_options.renderOnDemand = true;
 	return true;
 }
 
@@ -83,9 +84,9 @@ void ViewImpl::update(bool displayLink) {
             return;
         }
 
-		while (_scheduledPresent.empty()) {
+		/*while (_scheduledPresent.empty()) {
 			View::update(false);
-		}
+		}*/
 		View::update(true);
 	} else {
 		View::update(displayLink);
@@ -122,6 +123,7 @@ void ViewImpl::runWithWindow(ANativeWindow *window) {
 	surfaceCreateInfo.flags = 0;
 	surfaceCreateInfo.window = window;
 
+	_nativeWindow = window;
 	_constraints.extent = Extent2(ANativeWindow_getWidth(window), ANativeWindow_getHeight(window));
 
 	if (instance->vkCreateAndroidSurfaceKHR(instance->getInstance(), &surfaceCreateInfo, nullptr, &targetSurface) != VK_SUCCESS) {
@@ -130,8 +132,15 @@ void ViewImpl::runWithWindow(ANativeWindow *window) {
 	}
 
 	_surface = Rc<vk::Surface>::create(instance, targetSurface);
-	_nativeWindow = window;
 	ANativeWindow_acquire(_nativeWindow);
+
+	auto info = View::getSurfaceOptions();
+	if ((info.currentTransform & gl::SurfaceTransformFlags::Rotate90) != gl::SurfaceTransformFlags::None ||
+		(info.currentTransform & gl::SurfaceTransformFlags::Rotate270) != gl::SurfaceTransformFlags::None) {
+		_identityExtent = Extent2(info.currentExtent.height, info.currentExtent.width);
+	} else {
+		_identityExtent = info.currentExtent;
+	}
 
 	if (!_started) {
 		_options.followDisplayLink = true;
@@ -146,7 +155,7 @@ void ViewImpl::initWindow() {
 	auto info = getSurfaceOptions();
 	auto cfg = _selectConfig(info);
 
-	createSwapchain(move(cfg), cfg.presentMode);
+	createSwapchain(info, move(cfg), cfg.presentMode);
 
 	if (_initImage && !_options.followDisplayLink) {
 		presentImmediate(move(_initImage), nullptr);
@@ -171,12 +180,23 @@ void ViewImpl::stopWindow() {
 	}
 }
 
+void ViewImpl::setContentPadding(const Padding &padding) {
+	_constraints.contentPadding = padding;
+	setReadyForNextFrame();
+}
+
 bool ViewImpl::pollInput(bool frameReady) {
 	if (!_nativeWindow) {
 		return false;
 	}
 
 	return true;
+}
+
+gl::SurfaceInfo ViewImpl::getSurfaceOptions() const {
+	auto info = View::getSurfaceOptions();
+	info.currentExtent = _identityExtent;
+	return info;
 }
 
 }

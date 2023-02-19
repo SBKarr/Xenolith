@@ -25,98 +25,12 @@
 
 #include "XLVkAttachment.h"
 #include "XLVkQueuePass.h"
+#include "XLVkMaterialVertexPass.h"
 #include "XLVkShadowRenderPass.h"
 
 namespace stappler::xenolith::vk {
 
-// this attachment should provide material data buffer for rendering
-class MaterialVertexAttachment : public gl::MaterialAttachment {
-public:
-	virtual ~MaterialVertexAttachment();
-
-	virtual bool init(StringView, const gl::BufferInfo &, Vector<Rc<gl::Material>> && = Vector<Rc<gl::Material>>());
-
-	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
-
-protected:
-	using gl::MaterialAttachment::init;
-};
-
-class MaterialVertexAttachmentHandle : public BufferAttachmentHandle {
-public:
-	virtual ~MaterialVertexAttachmentHandle();
-
-	virtual bool init(const Rc<Attachment> &, const FrameQueue &) override;
-
-	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
-			uint32_t, bool isExternal) const override;
-
-	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &) override;
-
-	const MaterialVertexAttachment *getMaterialAttachment() const;
-
-	const Rc<gl::MaterialSet> getSet() const;
-
-protected:
-	std::mutex _mutex;
-	mutable Rc<gl::MaterialSet> _materials;
-};
-
-// this attachment should provide vertex & index buffers
-class VertexMaterialAttachment : public BufferAttachment {
-public:
-	virtual ~VertexMaterialAttachment();
-
-	virtual bool init(StringView, const gl::BufferInfo &, const MaterialVertexAttachment *);
-
-	const MaterialVertexAttachment *getMaterials() const { return _materials; }
-
-protected:
-	using BufferAttachment::init;
-
-	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
-
-	const MaterialVertexAttachment *_materials = nullptr;
-};
-
-class VertexMaterialAttachmentHandle : public BufferAttachmentHandle {
-public:
-	virtual ~VertexMaterialAttachmentHandle();
-
-	virtual bool setup(FrameQueue &, Function<void(bool)> &&) override;
-
-	virtual void submitInput(FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
-
-	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
-			uint32_t, bool isExternal) const override;
-
-	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &) override;
-
-	const Vector<gl::VertexSpan> &getVertexData() const { return _spans; }
-	const Rc<DeviceBuffer> &getVertexes() const { return _vertexes; }
-	const Rc<DeviceBuffer> &getIndexes() const { return _indexes; }
-
-	Rc<gl::CommandList> popCommands() const;
-
-	bool empty() const;
-
-protected:
-	virtual bool loadVertexes(FrameHandle &, const Rc<gl::CommandList> &);
-
-	virtual bool isGpuTransform() const { return false; }
-
-	Rc<DeviceBuffer> _indexes;
-	Rc<DeviceBuffer> _vertexes;
-	Rc<DeviceBuffer> _transforms;
-	Vector<gl::VertexSpan> _spans;
-
-	Rc<gl::MaterialSet> _materialSet;
-	const MaterialVertexAttachmentHandle *_materials = nullptr;
-	mutable Rc<gl::CommandList> _commands;
-	gl::DrawStat _drawStat;
-};
-
-class MaterialPass : public QueuePass {
+class MaterialPass : public MaterialVertexPass {
 public:
 	using AttachmentHandle = renderqueue::AttachmentHandle;
 
@@ -137,8 +51,6 @@ public:
 
 	virtual bool init(StringView, RenderOrdering, size_t subpassCount = 1);
 
-	const VertexMaterialAttachment *getVertexes() const { return _vertexes; }
-	const MaterialVertexAttachment *getMaterials() const { return _materials; }
 	const ShadowLightDataAttachment *getLights() const { return _lights; }
 	const ShadowImageArrayAttachment *getArray() const { return _array; }
 
@@ -149,26 +61,22 @@ protected:
 
 	virtual void prepare(gl::Device &) override;
 
-	const VertexMaterialAttachment *_vertexes = nullptr;
-	const MaterialVertexAttachment *_materials = nullptr;
-
-	// shadows
 	const ShadowLightDataAttachment *_lights = nullptr;
 	const ShadowImageArrayAttachment *_array = nullptr;
 };
 
-class MaterialPassHandle : public QueuePassHandle {
+class MaterialPassHandle : public MaterialVertexPassHandle {
 public:
+	virtual ~MaterialPassHandle() { }
+
 	virtual bool prepare(FrameQueue &, Function<void(bool)> &&) override;
 
 protected:
-	virtual Vector<const CommandBuffer *> doPrepareCommands(FrameHandle &) override;
-	virtual void prepareMaterialCommands(gl::MaterialSet * materials, CommandBuffer &);
+	virtual void prepareRenderPass(CommandBuffer &) override;
+	virtual void prepareMaterialCommands(gl::MaterialSet * materials, CommandBuffer &) override;
 
-	virtual void doFinalizeTransfer(gl::MaterialSet * materials, Vector<ImageMemoryBarrier> &outputImageBarriers, Vector<BufferMemoryBarrier> &outputBufferBarriers);
-
-	const VertexMaterialAttachmentHandle *_vertexBuffer = nullptr;
-	const MaterialVertexAttachmentHandle *_materialBuffer = nullptr;
+	virtual void doFinalizeTransfer(gl::MaterialSet * materials,
+			Vector<ImageMemoryBarrier> &outputImageBarriers, Vector<BufferMemoryBarrier> &outputBufferBarriers) override;
 
 	// shadows
 	const ShadowLightDataAttachmentHandle *_lightsBuffer = nullptr;

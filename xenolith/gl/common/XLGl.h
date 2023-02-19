@@ -285,7 +285,7 @@ struct ImageViewInfo {
 	ComponentMapping b = ComponentMapping::Identity;
 	ComponentMapping a = ComponentMapping::Identity;
 	BaseArrayLayer baseArrayLayer = BaseArrayLayer(0);
-	ArrayLayers layerCount = ArrayLayers(maxOf<uint32_t>());
+	ArrayLayers layerCount = ArrayLayers::max();
 
 	ImageViewInfo() = default;
 	ImageViewInfo(const ImageViewInfo &) = default;
@@ -397,6 +397,7 @@ struct TransformObject {
 	Mat4 transform = Mat4::IDENTITY;
 	Vec4 mask = Vec4(1.0f, 1.0f, 0.0f, 0.0f);
 	Vec4 offset = Vec4(0.0f, 0.0f, 0.0f, 1.0f);
+	Vec4 shadow = Vec4::ZERO;
 };
 
 class DeferredVertexResult : public Ref {
@@ -518,7 +519,61 @@ struct DrawStateValues {
 struct FrameContraints {
 	Extent2 extent;
 	Padding contentPadding;
+	SurfaceTransformFlags transform = SurfaceTransformFlags::Identity;
 	float density = 1.0f;
+
+	Size2 getScreenSize() const {
+		switch (transform) {
+		case gl::SurfaceTransformFlags::Rotate90:
+		case gl::SurfaceTransformFlags::Rotate270:
+		case gl::SurfaceTransformFlags::MirrorRotate90:
+		case gl::SurfaceTransformFlags::MirrorRotate270:
+			return Size2(extent.height, extent.width);
+			break;
+		default:
+			return extent;
+			break;
+		}
+		return extent;
+	}
+
+	Padding getRotatedPadding() const {
+		Padding out = contentPadding;
+		switch (transform) {
+		case gl::SurfaceTransformFlags::Rotate90:
+			out.left = contentPadding.top;
+			out.top = contentPadding.right;
+			out.right = contentPadding.bottom;
+			out.bottom = contentPadding.left;
+			break;
+		case gl::SurfaceTransformFlags::Rotate180:
+			out.left = contentPadding.right;
+			out.top = contentPadding.bottom;
+			out.right = contentPadding.left;
+			out.bottom = contentPadding.top;
+			break;
+		case gl::SurfaceTransformFlags::Rotate270:
+			out.left = contentPadding.bottom;
+			out.top = contentPadding.left;
+			out.right = contentPadding.top;
+			out.bottom = contentPadding.right;
+			break;
+		case gl::SurfaceTransformFlags::Mirror:
+			out.left = contentPadding.right;
+			out.right = contentPadding.left;
+			break;
+		case gl::SurfaceTransformFlags::MirrorRotate90:
+			break;
+		case gl::SurfaceTransformFlags::MirrorRotate180:
+			out.top = contentPadding.bottom;
+			out.bottom = contentPadding.top;
+			break;
+		case gl::SurfaceTransformFlags::MirrorRotate270:
+			break;
+		default: break;
+		}
+		return out;
+	}
 
 	bool operator==(const FrameContraints &) const = default;
 };

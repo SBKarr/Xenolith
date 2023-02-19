@@ -342,11 +342,11 @@ bool SurfaceStyle::apply(SurfaceStyleData &data, const Size2 &contentSize, const
 	if (hasShadow) {
 		switch (targetElevation) {
 		case Elevation::Level0: targetShadowValue = 0.0f; break; // 0dp
-		case Elevation::Level1: targetShadowValue = 1.0f; break; // 1dp 5%
+		case Elevation::Level1: targetShadowValue = 1.75f; break; // 1dp 5%
 		case Elevation::Level2: targetShadowValue = 3.0f; break; // 3dp 8%
-		case Elevation::Level3: targetShadowValue = 5.5f; break; // 6dp 11%
+		case Elevation::Level3: targetShadowValue = 5.0f; break; // 6dp 11%
 		case Elevation::Level4: targetShadowValue = 7.0f; break; // 8dp 12%
-		case Elevation::Level5: targetShadowValue = 10.0f; break; // 12dp 14%
+		case Elevation::Level5: targetShadowValue = 9.0f; break; // 12dp 14%
 		default: targetShadowValue = 10.0f + 3.0f * (toInt(targetElevation) - 5); break;
 		}
 	}

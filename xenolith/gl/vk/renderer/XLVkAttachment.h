@@ -60,7 +60,8 @@ public:
 
 	const Rc<renderqueue::ImageStorage> &getImage() const { return _queueData->image; }
 
-	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorImageInfo &) { return false; }
+	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorImageInfo &);
+	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &, uint32_t, bool isExternal) const;
 };
 
 class TexelAttachmentHandle : public renderqueue::AttachmentHandle {
@@ -68,44 +69,6 @@ public:
 	virtual ~TexelAttachmentHandle();
 
 	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorBufferViewInfo &) { return false; }
-};
-
-class VertexBufferAttachment : public renderqueue::BufferAttachment {
-public:
-	virtual ~VertexBufferAttachment();
-
-protected:
-	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
-};
-
-class VertexBufferAttachmentHandle : public BufferAttachmentHandle {
-public:
-	virtual ~VertexBufferAttachmentHandle();
-
-	virtual void submitInput(FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
-
-	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
-			uint32_t, bool isExternal) const override;
-
-	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &) override;
-
-	const Rc<DeviceBuffer> &getVertexes() const { return _vertexes; }
-	const Rc<DeviceBuffer> &getIndexes() const { return _indexes; }
-
-protected:
-	virtual bool loadVertexes(FrameHandle &, const Rc<gl::VertexData> &);
-
-	Device *_device = nullptr;
-	Rc<DeviceQueue> _transferQueue;
-
-	Rc<CommandPool> _pool;
-
-	Rc<DeviceBuffer> _vertexes;
-
-	Rc<DeviceBuffer> _indexesStaging;
-	Rc<DeviceBuffer> _indexes;
-
-	Rc<gl::VertexData> _data;
 };
 
 }

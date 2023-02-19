@@ -53,9 +53,10 @@ SwapchainHandle::~SwapchainHandle() {
 		}
 	}
 	invalidate();
+	log::text("SwapchainHandle", "~SwapchainHandle");
 }
 
-bool SwapchainHandle::init(Device &dev, const gl::SwapchainConfig &cfg, gl::ImageInfo &&swapchainImageInfo,
+bool SwapchainHandle::init(Device &dev, const gl::SurfaceInfo &info, const gl::SwapchainConfig &cfg, gl::ImageInfo &&swapchainImageInfo,
 		gl::PresentMode presentMode, Surface *surface, uint32_t families[2], SwapchainHandle *old) {
 
 	_device = &dev;
@@ -134,13 +135,14 @@ bool SwapchainHandle::init(Device &dev, const gl::SwapchainConfig &cfg, gl::Imag
 		_imageInfo = move(swapchainImageInfo);
 		_config = move(cfg);
 		_surface = surface;
+		_surfaceInfo = info;
 
 		return gl::Object::init(dev, [] (gl::Device *dev, gl::ObjectType, ObjectHandle ptr) {
 			auto d = ((Device *)dev);
 			d->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
 #if XL_VKAPI_DEBUG
 				auto t = platform::device::_clock(platform::device::Monotonic);
-				table.vkDestroySwapchainKHR(device, (VkSwapchainKHR)ptr, nullptr);
+				table.vkDestroySwapchainKHR(device, (VkSwapchainKHR)ptr.get(), nullptr);
 				XL_VKAPI_LOG("vkDestroySwapchainKHR: [", platform::device::_clock(platform::device::Monotonic) - t, "]");
 #else
 				table.vkDestroySwapchainKHR(device, (VkSwapchainKHR)ptr.get(), nullptr);
@@ -169,7 +171,7 @@ bool SwapchainHandle::deprecate(bool fast) {
 	return !tmp;
 }
 
-auto SwapchainHandle::acquire(bool lockfree, const Rc<Fence> &fence) -> Rc<ImageStorage> {
+auto SwapchainHandle::acquire(bool lockfree, const Rc<Fence> &fence) -> Rc<SwapchainAcquiredImage> {
 	if (_deprecated) {
 		return nullptr;
 	}
@@ -191,7 +193,7 @@ auto SwapchainHandle::acquire(bool lockfree, const Rc<Fence> &fence) -> Rc<Image
 #endif
 	});
 
-	Rc<SwapchainImage> image;
+	Rc<SwapchainAcquiredImage> image;
 	switch (ret) {
 	case VK_SUCCESS:
 		if (sem) {
@@ -202,11 +204,7 @@ auto SwapchainHandle::acquire(bool lockfree, const Rc<Fence> &fence) -> Rc<Image
 			fence->setArmed();
 		}
 		++ _acquiredImages;
-		image = Rc<SwapchainImage>::create(this, _images.at(imageIndex), move(sem));
-#if XL_VKAPI_DEBUG
-		image->setAcquisitionTime(platform::device::_clock(platform::device::Monotonic));
-#endif
-		return move(image);
+		return Rc<SwapchainAcquiredImage>::alloc(imageIndex, &_images.at(imageIndex), move(sem), this);
 		break;
 	case VK_SUBOPTIMAL_KHR:
 		if (sem) {
@@ -218,11 +216,7 @@ auto SwapchainHandle::acquire(bool lockfree, const Rc<Fence> &fence) -> Rc<Image
 		}
 		_deprecated = true;
 		++ _acquiredImages;
-		image = Rc<SwapchainImage>::create(this, _images.at(imageIndex), move(sem));
-#if XL_VKAPI_DEBUG
-		image->setAcquisitionTime(platform::device::_clock(platform::device::Monotonic));
-#endif
-		return move(image);
+		return Rc<SwapchainAcquiredImage>::alloc(imageIndex, &_images.at(imageIndex), move(sem), this);
 		break;
 	default:
 		releaseSemaphore(move(sem));
@@ -230,63 +224,6 @@ auto SwapchainHandle::acquire(bool lockfree, const Rc<Fence> &fence) -> Rc<Image
 	}
 
 	return nullptr;
-}
-
-bool SwapchainHandle::acquire(const Rc<SwapchainImage> &image, const Rc<Fence> &fence, bool immediate) {
-	if (image->getSwapchain() != this) {
-		return false;
-	}
-
-	Rc<Semaphore> sem = acquireSemaphore();
-	uint32_t imageIndex = maxOf<uint32_t>();
-	VkResult ret = VK_ERROR_UNKNOWN;
-	_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
-#if XL_VKAPI_DEBUG
-		auto t = platform::device::_clock(platform::device::Monotonic);
-		ret = table.vkAcquireNextImageKHR(device, _swapchain, immediate ? maxOf<uint64_t>() : 0,
-				sem ? sem->getSemaphore() : VK_NULL_HANDLE, fence->getFence(), &imageIndex);
-		XL_VKAPI_LOG("vkAcquireNextImageKHR: ", imageIndex, " ", ret,
-				" [", platform::device::_clock(platform::device::Monotonic) - t, "]");
-#else
-		ret = table.vkAcquireNextImageKHR(device, _swapchain, immediate ? maxOf<uint64_t>() : 0,
-				sem ? sem->getSemaphore() : VK_NULL_HANDLE, fence->getFence(), &imageIndex);
-#endif
-	});
-
-	switch (ret) {
-	case VK_SUCCESS:
-		if (sem) {
-			sem->setSignaled(true);
-		}
-		fence->setTag("SwapchainHandle::acquire");
-		fence->setArmed();
-		++ _acquiredImages;
-		image->setImage(this, _images.at(imageIndex), move(sem));
-#if XL_VKAPI_DEBUG
-		image->setAcquisitionTime(platform::device::_clock(platform::device::Monotonic));
-#endif
-		return true;
-		break;
-	case VK_SUBOPTIMAL_KHR:
-		if (sem) {
-			sem->setSignaled(true);
-		}
-		fence->setTag("SwapchainHandle::acquire");
-		fence->setArmed();
-		_deprecated = true;
-		++ _acquiredImages;
-		image->setImage(this, _images.at(imageIndex), move(sem));
-#if XL_VKAPI_DEBUG
-		image->setAcquisitionTime(platform::device::_clock(platform::device::Monotonic));
-#endif
-		return true;
-		break;
-	default:
-		releaseSemaphore(move(sem));
-		break;
-	}
-
-	return false;
 }
 
 VkResult SwapchainHandle::present(DeviceQueue &queue, const Rc<ImageStorage> &image) {
@@ -332,7 +269,7 @@ VkResult SwapchainHandle::present(DeviceQueue &queue, const Rc<ImageStorage> &im
 		_presentSemaphore = (Semaphore *)image->getSignalSem().get();
 
 		++ _presentedFrames;
-		if (_presentedFrames == config::MaxSuboptimalFrame && _presentMode == _config.presentModeFast
+		if (_presentedFrames == config::MaxSuboptimalFrames && _presentMode == _config.presentModeFast
 				&& _config.presentModeFast != _config.presentMode) {
 			result = VK_SUBOPTIMAL_KHR;
 			_rebuildMode = _config.presentMode;
@@ -343,7 +280,6 @@ VkResult SwapchainHandle::present(DeviceQueue &queue, const Rc<ImageStorage> &im
 }
 
 void SwapchainHandle::invalidateImage(const ImageStorage *image) {
-
 	if (!((SwapchainImage *)image)->isPresented()) {
 		std::unique_lock<Mutex> lock(_resourceMutex);
 		-- _acquiredImages;
@@ -420,7 +356,7 @@ bool SwapchainImage::init(Rc<SwapchainHandle> &&swapchain, uint64_t order, uint6
 	return true;
 }
 
-bool SwapchainImage::init(Rc<SwapchainHandle> &&swapchain, const SwapchainHandle::SwapchainImageData &image, const Rc<Semaphore> &sem) {
+bool SwapchainImage::init(Rc<SwapchainHandle> &&swapchain, const SwapchainHandle::SwapchainImageData &image, Rc<Semaphore> &&sem) {
 	_swapchain = move(swapchain);
 	_image = image.image.get();
 	for (auto &it : image.views) {
@@ -454,9 +390,10 @@ void SwapchainImage::releaseSemaphore(gl::Semaphore *sem) {
 gl::ImageInfoData SwapchainImage::getInfo() const {
 	if (_image) {
 		return _image->getInfo();
-	} else {
+	} else if (_swapchain) {
 		return _swapchain->getImageInfo();
 	}
+    return gl::ImageInfoData();
 }
 
 Rc<gl::ImageView> SwapchainImage::makeView(const gl::ImageViewInfo &info) {

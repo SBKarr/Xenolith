@@ -52,7 +52,7 @@ bool DeviceFrameHandle::init(Loop &loop, Device &device, Rc<FrameRequest> &&req,
 	return true;
 }
 
-Rc<DeviceMemoryPool> DeviceFrameHandle::getMemPool(void *key) {
+const Rc<DeviceMemoryPool> &DeviceFrameHandle::getMemPool(void *key) {
 	std::unique_lock<Mutex> lock(_mutex);
 	auto v = _memPools.find(key);
 	if (v == _memPools.end()) {

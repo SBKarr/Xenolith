@@ -116,6 +116,8 @@ public:
 
 	Vector<Rc<Attachment>> getOutput() const;
 	Vector<Rc<Attachment>> getOutput(AttachmentType) const;
+	Rc<Attachment> getPresentImageOutput() const;
+	Rc<Attachment> getTransferImageOutput() const;
 
 	// get next frame order dumber for this queue
 	uint64_t incrementOrder();
@@ -125,8 +127,6 @@ public:
 
 	void beginFrame(FrameRequest &);
 	void endFrame(FrameRequest &);
-
-	bool usesSamplers() const;
 
 protected:
 	QueueData *_data = nullptr;
@@ -150,9 +150,9 @@ public:
 			const Rc<GenericAttachment> &, AttachmentDependencyInfo);
 
 	ImageAttachmentRef *addPassInput(const Rc<Pass> &, uint32_t subpassIdx,
-			const Rc<ImageAttachment> &, AttachmentDependencyInfo, DescriptorType = DescriptorType::Unknown);
+			const Rc<ImageAttachment> &, AttachmentDependencyInfo, DescriptorType, AttachmentLayout);
 	ImageAttachmentRef *addPassOutput(const Rc<Pass> &, uint32_t subpassIdx,
-			const Rc<ImageAttachment> &, AttachmentDependencyInfo, DescriptorType = DescriptorType::Unknown);
+			const Rc<ImageAttachment> &, AttachmentDependencyInfo, DescriptorType, AttachmentLayout);
 
 	Pair<ImageAttachmentRef *, ImageAttachmentRef *> addPassResolve(const Rc<Pass> &, uint32_t subpassIdx,
 			const Rc<ImageAttachment> &color, const Rc<ImageAttachment> &resolve,

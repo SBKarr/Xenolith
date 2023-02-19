@@ -34,6 +34,8 @@ static constexpr size_t NodePreallocateChilds = 4;
 /* Presentation Scheduler interval, used for non-blocking vkWaitForFence */
 static constexpr uint64_t PresentationSchedulerInterval = 500; // 500 ms or 1/32 of 60fps frame
 
+static constexpr uint64_t OnDemandFrameInterval = 1'000'000;
+
 /* Minimal safe interval offset for frame timeout scheduling, to ensure, that actual timeout is less then nominal */
 static constexpr uint64_t FrameIntervalSafeOffset = 200;
 
@@ -41,7 +43,7 @@ static constexpr uint64_t FrameIntervalSafeOffset = 200;
 static constexpr uint32_t MaxTextureSetImages = 1024;
 
 /* Number of frames, that can be performed in suboptimal swapchain modes */
-static constexpr uint32_t MaxSuboptimalFrame = 24;
+static constexpr uint32_t MaxSuboptimalFrames = 24;
 
 /* Maximum images in single material */
 static constexpr size_t MaxMaterialImages = 4;

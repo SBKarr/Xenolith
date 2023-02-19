@@ -21,8 +21,11 @@ layout (set = 1, binding = 0) uniform sampler immutableSamplers[SAMPLERS_ARRAY_S
 layout (set = 1, binding = 1) uniform texture2D images[IMAGES_ARRAY_SIZE];
 
 layout (location = 0) in vec4 fragColor;
-layout (location = 0) out vec4 outColor;
 layout (location = 1) in vec2 fragTexCoord;
+layout (location = 2) in vec4 shadowColor;
+
+layout (location = 0) out vec4 outColor;
+layout (location = 1) out vec4 outShadow;
 
 void main() {
 	vec4 textureColor = texture(
@@ -31,4 +34,5 @@ void main() {
 			immutableSamplers[materials[pushConstants.materialIdx].samplerIdx]
 		), fragTexCoord);
 	outColor = fragColor * textureColor;
+	outShadow = shadowColor;
 }

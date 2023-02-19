@@ -287,7 +287,7 @@ auto RenderQueuePass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle
 }
 
 void RenderQueuePass::prepare(gl::Device &) {
-	for (auto &it : _data->descriptors) {
+	for (auto &it : _data->passDescriptors) {
 		if (auto a = dynamic_cast<RenderQueueAttachment *>(it->getAttachment())) {
 			_attachment = a;
 		}

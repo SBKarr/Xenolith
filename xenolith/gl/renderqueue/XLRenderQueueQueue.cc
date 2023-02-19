@@ -276,7 +276,7 @@ static void Queue_buildLoadStore(QueueData *data) {
 					bool isRead = ((desc->getOps() & AttachmentOps::ReadColor) != AttachmentOps::Undefined);
 					bool isWrite = ((desc->getOps() & AttachmentOps::WritesColor) != AttachmentOps::Undefined);
 					if (!isRead && isWrite) {
-						log::vtext("Gl-Error", "Attachment's color component '", attachment->getName(), "' is writeen in renderpass ",
+						log::vtext("Gl-Error", "Attachment's color component '", attachment->getName(), "' is writen in renderpass ",
 								desc->getRenderPass()->key, " but never read");
 					}
 					imgDesc->setStoreOp(AttachmentStoreOp::DontCare);
@@ -292,7 +292,7 @@ static void Queue_buildLoadStore(QueueData *data) {
 					bool isRead = ((desc->getOps() & AttachmentOps::ReadStencil) != AttachmentOps::Undefined);
 					bool isWrite = ((desc->getOps() & AttachmentOps::WritesStencil) != AttachmentOps::Undefined);
 					if (!isRead && isWrite) {
-						log::vtext("Gl-Error", "Attachment's stencil component '", attachment->getName(), "' is writeen in renderpass ",
+						log::vtext("Gl-Error", "Attachment's stencil component '", attachment->getName(), "' is writen in renderpass ",
 								desc->getRenderPass()->key, " but never read");
 					}
 					imgDesc->setStencilStoreOp(AttachmentStoreOp::DontCare);
@@ -316,6 +316,13 @@ static void Queue_buildLoadStore(QueueData *data) {
 			}
 			layout = ((ImageAttachmentRef *)desc->getRefs().back().get())->getLayout();
 			imgDesc->setFinalLayout(layout);
+
+			for (auto &ref : desc->getRefs()) {
+				auto imageRef = ref.get();
+				if (((ImageAttachmentRef *)imageRef)->getDescriptorType() != DescriptorType::Attachment) {
+					imgDesc->setDescriptorLayout(((ImageAttachmentRef *)imageRef)->getLayout());
+				}
+			}
 		}
 		if (img->getFinalLayout() != AttachmentLayout::Ignored) {
 			((ImageAttachmentDescriptor *)attachment->getDescriptors().back().get())->setFinalLayout(img->getFinalLayout());
@@ -350,19 +357,7 @@ static void Queue_buildDescriptors(QueueData *data, gl::Device &dev) {
 			}
 		}
 
-		for (auto &attachment : pass->descriptors) {
-			auto &desc = attachment->getDescriptor();
-			if (desc.type != DescriptorType::Unknown) {
-				if (dev.supportsUpdateAfterBind(desc.type)) {
-					const_cast<PipelineDescriptor &>(desc).updateAfterBind = true;
-					pass->hasUpdateAfterBind = true;
-				}
-				pass->queueDescriptors.emplace_back(&desc);
-				if (desc.type == DescriptorType::Sampler) {
-					pass->usesSamplers = true;
-				}
-			}
-
+		for (auto &attachment : pass->passAttachments) {
 			if (attachment->getAttachment()->getType() == AttachmentType::Image) {
 				auto desc = (ImageAttachmentDescriptor *)attachment;
 				switch (desc->getFinalLayout()) {
@@ -396,6 +391,17 @@ static void Queue_buildDescriptors(QueueData *data, gl::Device &dev) {
 					desc->getImageAttachment()->addImageUsage(gl::ImageUsage::DepthStencilAttachment);
 					break;
 				}
+			}
+		}
+
+		for (auto &attachment : pass->passDescriptors) {
+			auto &desc = attachment->getDescriptor();
+			if (desc.type != DescriptorType::Unknown) {
+				if (dev.supportsUpdateAfterBind(desc.type)) {
+					const_cast<PipelineDescriptor &>(desc).updateAfterBind = true;
+					pass->hasUpdateAfterBind = true;
+				}
+				pass->queueDescriptors.emplace_back(&desc);
 			}
 		}
 	}
@@ -544,6 +550,30 @@ Vector<Rc<Attachment>> Queue::getOutput(AttachmentType t) const {
 	return ret;
 }
 
+Rc<Attachment> Queue::getPresentImageOutput() const {
+	for (auto &it : _data->output) {
+		if (it->getType() == AttachmentType::Image) {
+			auto img = (ImageAttachment *)it;
+			if (img->getFinalLayout() == AttachmentLayout::PresentSrc) {
+				return it;
+			}
+		}
+	}
+	return nullptr;
+}
+
+Rc<Attachment> Queue::getTransferImageOutput() const {
+	for (auto &it : _data->output) {
+		if (it->getType() == AttachmentType::Image) {
+			auto img = (ImageAttachment *)it;
+			if (img->getFinalLayout() == AttachmentLayout::TransferSrcOptimal) {
+				return it;
+			}
+		}
+	}
+	return nullptr;
+}
+
 uint64_t Queue::incrementOrder() {
 	auto ret = _data->order;
 	++ _data->order;
@@ -601,15 +631,6 @@ void Queue::endFrame(FrameRequest &frame) {
 	}
 }
 
-bool Queue::usesSamplers() const {
-	for (auto &it : _data->passes) {
-		if (it->usesSamplers) {
-			return true;
-		}
-	}
-	return false;
-}
-
 Queue::Builder::Builder(StringView name) {
 	auto p = memory::pool::create((memory::pool_t *)nullptr);
 	memory::pool::push(p);
@@ -660,12 +681,26 @@ static bool subpass_attachment_exists(memory::vector<ImageAttachmentRef *> &vec,
 }
 
 template <typename T>
-inline T * emplaceAttachment(PassData *pass, T *val) {
+inline T * emplacePassAttachment(PassData *pass, T *val) {
 	T *ret = nullptr;
 
-	auto lb = std::find(pass->descriptors.begin(), pass->descriptors.end(), val);
-	if (lb == pass->descriptors.end()) {
-		ret = (T *)pass->descriptors.emplace_back(std::move(val));
+	auto lb = std::find(pass->passAttachments.begin(), pass->passAttachments.end(), val);
+	if (lb == pass->passAttachments.end()) {
+		ret = (T *)pass->passAttachments.emplace_back(std::move(val));
+	} else {
+		ret = (T *)(*lb);
+	}
+
+	return ret;
+}
+
+template <typename T>
+inline T * emplacePassDescriptor(PassData *pass, T *val) {
+	T *ret = nullptr;
+
+	auto lb = std::find(pass->passDescriptors.begin(), pass->passDescriptors.end(), val);
+	if (lb == pass->passDescriptors.end()) {
+		ret = (T *)pass->passDescriptors.emplace_back(std::move(val));
 	} else {
 		ret = (T *)(*lb);
 	}
@@ -692,7 +727,7 @@ AttachmentRef *Queue::Builder::addPassInput(const Rc<Pass> &p, uint32_t subpassI
 		attachment->setIndex(_data->attachments.size() - 1);
 	}
 
-	auto desc = emplaceAttachment(pass, attachment->addBufferDescriptor(pass));
+	auto desc = emplacePassDescriptor(pass, attachment->addBufferDescriptor(pass));
 	if (auto ref = desc->addBufferRef(subpassIdx, AttachmentUsage::Input, info)) {
 		pass->subpasses[subpassIdx].inputBuffers.emplace_back(ref);
 		return ref;
@@ -721,7 +756,7 @@ AttachmentRef *Queue::Builder::addPassOutput(const Rc<Pass> &p, uint32_t subpass
 		attachment->setIndex(_data->attachments.size() - 1);
 	}
 
-	auto desc = emplaceAttachment(pass, attachment->addBufferDescriptor(pass));
+	auto desc = emplacePassDescriptor(pass, attachment->addBufferDescriptor(pass));
 	if (auto ref = desc->addBufferRef(subpassIdx, AttachmentUsage::Output, info)) {
 		pass->subpasses[subpassIdx].outputBuffers.emplace_back(ref);
 		return ref;
@@ -750,7 +785,7 @@ AttachmentRef *Queue::Builder::addPassInput(const Rc<Pass> &p, uint32_t subpassI
 		attachment->setIndex(_data->attachments.size() - 1);
 	}
 
-	auto desc = emplaceAttachment(pass, attachment->addDescriptor(pass));
+	auto desc = emplacePassDescriptor(pass, attachment->addDescriptor(pass));
 	if (auto ref = desc->addRef(subpassIdx, AttachmentUsage::Input, info)) {
 		pass->subpasses[subpassIdx].inputGenerics.emplace_back(ref);
 		return ref;
@@ -779,7 +814,7 @@ AttachmentRef *Queue::Builder::addPassOutput(const Rc<Pass> &p, uint32_t subpass
 		attachment->setIndex(_data->attachments.size() - 1);
 	}
 
-	auto desc = emplaceAttachment(pass, attachment->addDescriptor(pass));
+	auto desc = emplacePassDescriptor(pass, attachment->addDescriptor(pass));
 	if (auto ref = desc->addRef(subpassIdx, AttachmentUsage::Output, info)) {
 		pass->subpasses[subpassIdx].outputGenerics.emplace_back(ref);
 		return ref;
@@ -790,7 +825,7 @@ AttachmentRef *Queue::Builder::addPassOutput(const Rc<Pass> &p, uint32_t subpass
 }
 
 ImageAttachmentRef *Queue::Builder::addPassInput(const Rc<Pass> &p, uint32_t subpassIdx,
-		const Rc<ImageAttachment> &attachment, AttachmentDependencyInfo info, DescriptorType descriptorType) {
+		const Rc<ImageAttachment> &attachment, AttachmentDependencyInfo info, DescriptorType descriptorType, AttachmentLayout refLayout) {
 	auto pass = getPassData(p);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
@@ -807,20 +842,33 @@ ImageAttachmentRef *Queue::Builder::addPassInput(const Rc<Pass> &p, uint32_t sub
 	if (emplaced) {
 		attachment->setIndex(_data->attachments.size() - 1);
 	}
-	auto desc = emplaceAttachment(pass, attachment->addImageDescriptor(pass, descriptorType));
-	if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::Input, AttachmentLayout::Ignored, info)) {
-		switch (descriptorType) {
-		case DescriptorType::Unknown:
-		case DescriptorType::InputAttachment:
-		case DescriptorType::Attachment:
+
+	auto desc = attachment->addImageDescriptor(pass, descriptorType);
+	switch (descriptorType) {
+	case DescriptorType::Attachment:
+		emplacePassAttachment(pass, desc);
+		if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::Input, refLayout, info, descriptorType)) {
 			pass->subpasses[subpassIdx].inputImages.emplace_back(ref);
-			break;
-		default:
-			// sampled and storage image is a descriptors, not image attachments
-			pass->subpasses[subpassIdx].inputGenerics.emplace_back(ref);
-			break;
+			return ref;
 		}
-		return ref;
+		break;
+	case DescriptorType::Unknown:
+	case DescriptorType::InputAttachment:
+		emplacePassAttachment(pass, desc);
+		emplacePassDescriptor(pass, desc);
+		if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::Input, refLayout, info, descriptorType)) {
+			pass->subpasses[subpassIdx].inputImages.emplace_back(ref);
+			return ref;
+		}
+		break;
+	default:
+		emplacePassDescriptor(pass, desc);
+		// sampled and storage image is a descriptors, not image attachments
+		if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::Input, refLayout, info, descriptorType)) {
+			pass->subpasses[subpassIdx].inputGenerics.emplace_back(ref);
+			return ref;
+		}
+		break;
 	}
 
 	log::vtext("Gl-Error", "Attachment '", attachment->getName(), "' is already added to subpass '", pass->key ,"' input");
@@ -828,7 +876,7 @@ ImageAttachmentRef *Queue::Builder::addPassInput(const Rc<Pass> &p, uint32_t sub
 }
 
 ImageAttachmentRef *Queue::Builder::addPassOutput(const Rc<Pass> &p, uint32_t subpassIdx,
-		const Rc<ImageAttachment> &attachment, AttachmentDependencyInfo info, DescriptorType descriptorType) {
+		const Rc<ImageAttachment> &attachment, AttachmentDependencyInfo info, DescriptorType descriptorType, AttachmentLayout refLayout) {
 	auto pass = getPassData(p);
 	if (!pass) {
 		log::vtext("Gl-Error", "RenderPass '", p->getName(),"' was not added to render queue '", _data->key, "'");
@@ -845,10 +893,33 @@ ImageAttachmentRef *Queue::Builder::addPassOutput(const Rc<Pass> &p, uint32_t su
 	if (emplaced) {
 		attachment->setIndex(_data->attachments.size() - 1);
 	}
-	auto desc = emplaceAttachment(pass, attachment->addImageDescriptor(pass, descriptorType));
-	if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::Output, AttachmentLayout::Ignored, info)) {
-		pass->subpasses[subpassIdx].outputImages.emplace_back(ref);
-		return ref;
+
+	auto desc = attachment->addImageDescriptor(pass, descriptorType);
+	switch (descriptorType) {
+	case DescriptorType::Attachment:
+		emplacePassAttachment(pass, desc);
+		if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::Output, refLayout, info, descriptorType)) {
+			pass->subpasses[subpassIdx].outputImages.emplace_back(ref);
+			return ref;
+		}
+		break;
+	case DescriptorType::Unknown:
+	case DescriptorType::InputAttachment:
+		emplacePassAttachment(pass, desc);
+		emplacePassDescriptor(pass, desc);
+		if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::Output, refLayout, info, descriptorType)) {
+			pass->subpasses[subpassIdx].outputImages.emplace_back(ref);
+			return ref;
+		}
+		break;
+	default:
+		emplacePassDescriptor(pass, desc);
+		// sampled and storage image is a descriptors, not image attachments
+		if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::Output, refLayout, info, descriptorType)) {
+			pass->subpasses[subpassIdx].outputGenerics.emplace_back(ref);
+			return ref;
+		}
+		break;
 	}
 
 	log::vtext("Gl-Error", "Attachment '", attachment->getName(), "' is already added to subpass '", pass->key ,"' output");
@@ -894,8 +965,8 @@ Pair<ImageAttachmentRef *, ImageAttachmentRef *> Queue::Builder::addPassResolve(
 		resolve->setIndex(_data->attachments.size() - 1);
 	}
 
-	auto colorDesc = emplaceAttachment(pass, color->addImageDescriptor(pass));
-	auto resolveDesc = emplaceAttachment(pass, resolve->addImageDescriptor(pass));
+	auto colorDesc = emplacePassAttachment(pass, color->addImageDescriptor(pass));
+	auto resolveDesc = emplacePassAttachment(pass, resolve->addImageDescriptor(pass));
 
 	if (subpass_attachment_exists(pass->subpasses[subpassIdx].outputImages, colorDesc)) {
 		log::vtext("Gl-Error", "Attachment '", color->getName(), "' is already added to subpass '", pass->key ,"' output");
@@ -907,12 +978,12 @@ Pair<ImageAttachmentRef *, ImageAttachmentRef *> Queue::Builder::addPassResolve(
 		return pair(nullptr, nullptr);
 	}
 
-	auto colorRef = colorDesc->addImageRef(subpassIdx, AttachmentUsage::Output, AttachmentLayout::Ignored, colorDep);
+	auto colorRef = colorDesc->addImageRef(subpassIdx, AttachmentUsage::Output, AttachmentLayout::Ignored, colorDep, DescriptorType::Attachment);
 	if (!colorRef) {
 		log::vtext("Gl-Error", "Fail to add attachment '", color->getName(), "' into subpass '", pass->key ,"' output");
 	}
 
-	auto resolveRef = colorDesc->addImageRef(subpassIdx, AttachmentUsage::Resolve, AttachmentLayout::Ignored, resolveDep);
+	auto resolveRef = colorDesc->addImageRef(subpassIdx, AttachmentUsage::Resolve, AttachmentLayout::Ignored, resolveDep, DescriptorType::Attachment);
 	if (!resolveRef) {
 		log::vtext("Gl-Error", "Fail to add attachment '", resolve->getName(), "' into subpass '", pass->key ,"' resolves");
 	}
@@ -957,8 +1028,8 @@ ImageAttachmentRef * Queue::Builder::addPassDepthStencil(const Rc<Pass> &p,
 		attachment->setIndex(_data->attachments.size() - 1);
 	}
 
-	auto desc = emplaceAttachment(pass, attachment->addImageDescriptor(pass));
-	if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::DepthStencil, AttachmentLayout::Ignored, info)) {
+	auto desc = emplacePassAttachment(pass, attachment->addImageDescriptor(pass));
+	if (auto ref = desc->addImageRef(subpassIdx, AttachmentUsage::DepthStencil, AttachmentLayout::Ignored, info, DescriptorType::Attachment)) {
 		pass->subpasses[subpassIdx].depthStencil = ref;
 		return ref;
 	}

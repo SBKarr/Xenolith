@@ -92,7 +92,7 @@ void UtilScene::FpsDisplay::update(const UpdateTime &) {
 			switch (_mode) {
 			case Fps:
 				str = toString(std::setprecision(3),
-					"FPS: ", fps, "\nSPF: ", spf, "\nLFT: ", local,
+					"FPS: ", fps, "\nSPF: ", spf, "\nGPU: ", local,
 					"\nF12 to switch");
 				break;
 			case Vertexes:
@@ -108,7 +108,7 @@ void UtilScene::FpsDisplay::update(const UpdateTime &) {
 				break;
 			case Full:
 				str = toString(std::setprecision(3),
-					"FPS: ", fps, "\nSPF: ", spf, "\nLFT: ", local, "\n",
+					"FPS: ", fps, "\nSPF: ", spf, "\nGPU: ", local, "\n",
 					"V:", stat.vertexes, " T:", stat.triangles, "\nZ:", stat.zPaths, " C:", stat.drawCalls, " M: ", stat.materials, "\n",
 					stat.solidCmds, "/", stat.surfaceCmds, "/", stat.transparentCmds, "\n",
 					"Cache:", stat.cachedFramebuffers, "/", stat.cachedImages, "/", stat.cachedImageViews,

@@ -32,7 +32,6 @@ namespace stappler::xenolith::vk {
 class Device;
 class SwapchainSync;
 class DeviceBuffer;
-class Swapchain;
 class CommandPool;
 class DeviceQueue;
 class SwapchainAttachmentHandle;
@@ -97,38 +96,6 @@ protected:
 	Vector<const CommandBuffer *> _buffers;
 	Rc<FrameSync> _sync;
 };
-
-class VertexPass : public QueuePass {
-public:
-	virtual ~VertexPass();
-
-	virtual bool init(StringView, RenderOrdering, size_t subpassCount = 1);
-
-	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
-
-	const VertexBufferAttachment *getVertexes() const { return _vertexes; }
-
-protected:
-	using QueuePass::init;
-
-	virtual void prepare(gl::Device &) override;
-
-	const VertexBufferAttachment *_vertexes = nullptr;
-};
-
-class VertexPassHandle : public QueuePassHandle {
-public:
-	virtual ~VertexPassHandle();
-
-	virtual bool prepare(FrameQueue &, Function<void(bool)> &&) override;
-
-protected:
-	virtual Vector<const CommandBuffer *> doPrepareCommands(FrameHandle &) override;
-	virtual bool doSubmit(FrameHandle &frame, Function<void(bool)> &&onSubmited) override;
-
-	VertexBufferAttachmentHandle *_mainBuffer;
-};
-
 
 }
 

@@ -86,6 +86,8 @@ protected:
 
 	void updateGeneralTransform();
 
+	bool hasActiveInteractions();
+
 	gl::FrameContraints _constraints;
 	Size2 _screenSize;
 

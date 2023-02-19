@@ -785,7 +785,7 @@ Rc<DeviceBuffer> DeviceMemoryPool::spawn(AllocationUsage type, const gl::BufferI
 				return nullptr;
 			}
 		} else {
-			log::text("DeviceMemoryPool", "Fail to allocate memory for buffer");
+			log::vtext("DeviceMemoryPool", "Fail to allocate memory for buffer: ", type);
 		}
 	}
 

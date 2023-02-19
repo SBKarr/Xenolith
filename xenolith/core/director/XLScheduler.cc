@@ -90,4 +90,8 @@ void Scheduler::pause(void *ptr) {
 	}
 }
 
+bool Scheduler::empty() const {
+	return _list.empty() && _tmp.empty();
+}
+
 }

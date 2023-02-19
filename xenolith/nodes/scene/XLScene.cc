@@ -61,6 +61,8 @@ void Scene::renderRequest(const Rc<FrameRequest> &req) {
 		return;
 	}
 
+	Size2 scaledExtent(_constraints.extent.width / _constraints.density, _constraints.extent.height / _constraints.density);
+
 	RenderFrameInfo info;
 	info.pool = req->getPool()->getPool();
 	info.shadows = Rc<gl::CommandList>::create(req->getPool());
@@ -78,10 +80,12 @@ void Scene::renderRequest(const Rc<FrameRequest> &req) {
 	for (auto &it : _lights) {
 		switch (it->getType()) {
 		case SceneLightType::Ambient:
-			info.lights->addAmbientLight(it->getNormal(), it->getColor(), it->isSoftShadow());
+			info.lights->addAmbientLight(Vec4(it->getNormal().x / scaledExtent.width, -it->getNormal().y / scaledExtent.height,
+					it->getNormal().z, it->getNormal().w), it->getColor(), it->isSoftShadow());
 			break;
 		case SceneLightType::Direct:
-			info.lights->addDirectLight(it->getNormal(), it->getColor(), it->getData());
+			info.lights->addDirectLight(Vec4(it->getNormal().x / scaledExtent.width, -it->getNormal().y / scaledExtent.height,
+					it->getNormal().z, it->getNormal().w), it->getColor(), it->getData());
 			break;
 		}
 	}
@@ -93,14 +97,37 @@ void Scene::renderRequest(const Rc<FrameRequest> &req) {
 	}
 
 	_director->getView()->getLoop()->performOnGlThread(
-			[req, q = _queue,
+			[req, q = _queue, dir = _director,
 			 commands = move(info.commands),
 			 shadows = move(info.shadows),
 			 lights = move(info.lights)] () mutable {
 		req->addInput(q->getInputAttachment<vk::VertexMaterialAttachment>(), move(commands));
 		req->addInput(q->getInputAttachment<vk::ShadowLightDataAttachment>(), Rc<gl::ShadowLightInput>(lights));
 		req->addInput(q->getInputAttachment<vk::ShadowVertexAttachment>(), move(shadows));
-		req->addInput(q->getInputAttachment<vk::ShadowImageArrayAttachment>(), Rc<gl::ShadowLightInput>(lights));
+		req->addInput(q->getInputAttachment<vk::ShadowSdfImageAttachment>(), Rc<gl::ShadowLightInput>(lights));
+
+		req->setOutput(q->getInputAttachment<vk::ShadowSdfImageAttachment>(), dir->getView(),
+				[] (const Rc<gl::View> &view, renderqueue::FrameAttachmentData &data, bool success) {
+			view->captureImage([] (const gl::ImageInfo &info, BytesView view) {
+				Bitmap bmp;
+				bmp.alloc(info.extent.width, info.extent.height, bitmap::PixelFormat::A8);
+
+				auto d = bmp.dataPtr();
+
+				while (!view.empty()) {
+					auto value = view.readFloat16() / 16.0f;
+
+					*d = uint8_t(value * 255.0f);
+					++ d;
+					view.readFloat16();
+				}
+
+				bmp.save(toString(Time::now().toMicros(), ".png"));
+
+				std::cout << info.extent << "\n";
+			}, data.image->getImage(), data.image->getLayout());
+			return true;
+		});
 	}, req);
 
 	// submit material updates
@@ -182,6 +209,8 @@ void Scene::onContentSizeDirty() {
 			_contentSize.height - _constraints.contentPadding.vertical() / _constraints.density));
 	_content->setAnchorPoint(Anchor::BottomLeft);
 
+	_cacheDirty = true;
+
 	log::vtext("Scene", "ContentSize: ", _contentSize, " density: ", _constraints.density);
 }
 
@@ -213,7 +242,10 @@ void Scene::onFinished(Director *dir) {
 
 	if (_director == dir) {
 		if (auto res = _queue->getInternalResource()) {
-			dir->getResourceCache()->removeResource(res->getName());
+			auto cache = dir->getResourceCache();
+			if (cache) {
+				cache->removeResource(res->getName());
+			}
 		}
 		_attachmentsByType.clear();
 		_materials.clear();
@@ -289,8 +321,11 @@ uint64_t Scene::acquireMaterial(const MaterialInfo &info, Vector<gl::MaterialIma
 
 void Scene::setFrameConstraints(const gl::FrameContraints &constraints) {
 	if (_constraints != constraints) {
+		auto size = constraints.getScreenSize();
+
 		_constraints = constraints;
-		setContentSize(Size2(_constraints.extent) / _constraints.density);
+		//_constraints.contentPadding = constraints.getRotatedPadding();
+		setContentSize(size / _constraints.density);
 		setScale(_constraints.density);
 		_contentSizeDirty = true;
 
@@ -367,14 +402,36 @@ void Scene::specializeRequest(const Rc<FrameRequest> &req) {
 	if (auto a = _queue->getInputAttachment<vk::ShadowImageArrayAttachment>()) {
 		gl::ImageInfoData info = a->getImageInfo();
 		info.arrayLayers = gl::ArrayLayers(_lightsAmbientCount + _lightsDirectCount);
-		info.extent =  Extent2(std::floor(req->getFrameConstraints().extent.width * _shadowDensity),
-				std::floor(req->getFrameConstraints().extent.height * _shadowDensity));
+		info.extent =  Extent2(std::ceil(req->getFrameConstraints().extent.width * _shadowDensity),
+				std::ceil(req->getFrameConstraints().extent.height * _shadowDensity));
 		req->addImageSpecialization(a, move(info));
 
-		auto spec = req->getFrameSpecialization();
-		spec.nlights = _lightsAmbientCount + _lightsDirectCount;
-		spec.shadowDensity = _shadowDensity;
-		req->setFrameSpecialization(spec);
+		if (_cachedShadowDensity != _shadowDensity / req->getFrameConstraints().density
+				|| _cachedLightsCount != _lightsAmbientCount + _lightsDirectCount) {
+			_cachedShadowDensity = _shadowDensity / req->getFrameConstraints().density;
+			_cachedLightsCount = _lightsAmbientCount + _lightsDirectCount;
+			req->setAttachmentsDirty(true);
+		}
+	}
+
+	if (auto a = _queue->getInputAttachment<vk::ShadowSdfImageAttachment>()) {
+		gl::ImageInfoData info = a->getImageInfo();
+		auto &constraints = req->getFrameConstraints();
+		auto screenSize = constraints.getScreenSize();
+		info.extent =  Extent2(std::ceil((screenSize.width / constraints.density) * _shadowDensity),
+				std::ceil((screenSize.height / constraints.density) * _shadowDensity));
+		req->addImageSpecialization(a, move(info));
+
+		if (_cachedShadowDensity != _shadowDensity / req->getFrameConstraints().density
+				|| _cachedLightsCount != _lightsAmbientCount + _lightsDirectCount) {
+			_cachedShadowDensity = _shadowDensity / req->getFrameConstraints().density;
+			_cachedLightsCount = _lightsAmbientCount + _lightsDirectCount;
+			req->setAttachmentsDirty(true);
+		}
+	}
+
+	if (_cacheDirty) {
+		req->setAttachmentsDirty(true);
 	}
 
 	req->setQueue(_queue);
@@ -557,10 +614,10 @@ void Scene::readInitialMaterials(gl::MaterialAttachment *a) {
 	while (renderPass) {
 		auto &subpasses = renderPass->subpasses;
 
-		for (auto it = subpasses.rbegin(); it != subpasses.rend(); ++ it) {
+		for (auto &it : subpasses) {
 			// check if subpass has material attachment
 			bool isUsable = false;
-			for (auto &attachment : it->inputBuffers) {
+			for (auto &attachment : it.inputBuffers) {
 				if (attachment->getAttachment() == a) {
 					isUsable = true;
 					break;
@@ -571,9 +628,9 @@ void Scene::readInitialMaterials(gl::MaterialAttachment *a) {
 				break;
 			}
 
-			auto &sp = v.subasses.emplace_back(SubpassData({&(*it)}));
+			auto &sp = v.subasses.emplace_back(SubpassData({&it}));
 
-			for (auto &pipeline : it->graphicPipelines) {
+			for (auto &pipeline : it.graphicPipelines) {
 				auto hash = pipeline->material.hash();
 				auto it = sp.pipelines.find(hash);
 				if (it == sp.pipelines.end()) {

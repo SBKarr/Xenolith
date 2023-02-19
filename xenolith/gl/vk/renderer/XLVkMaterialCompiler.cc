@@ -269,7 +269,7 @@ auto MaterialCompilationRenderPass::makeFrameHandle(const FrameQueue &handle) ->
 }
 
 void MaterialCompilationRenderPass::prepare(gl::Device &) {
-	for (auto &it : _data->descriptors) {
+	for (auto &it : _data->passDescriptors) {
 		if (auto a = dynamic_cast<MaterialCompilationAttachment *>(it->getAttachment())) {
 			_materialAttachment = a;
 		}

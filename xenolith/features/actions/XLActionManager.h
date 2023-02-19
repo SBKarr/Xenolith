@@ -166,6 +166,8 @@ public:
 	/** Main loop of ActionManager. */
 	void update(const UpdateTime &);
 
+	bool empty() const;
+
 protected:
 	struct PendingAction {
 		Rc<Action> action;

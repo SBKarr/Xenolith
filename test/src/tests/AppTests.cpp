@@ -33,6 +33,7 @@
 #include "general/AppGeneralAutofitTest.cc"
 #include "general/AppGeneralTemporaryResourceTest.cc"
 #include "general/AppGeneralShadowTest.cc"
+#include "general/AppGeneralScissorTest.cc"
 #include "input/AppInputTouchTest.cc"
 #include "input/AppInputKeyboardTest.cc"
 #include "input/AppInputTapPressTest.cc"
@@ -74,6 +75,7 @@ Vector<MenuData> s_generalTestsMenu({
 	MenuData{LayoutName::GeneralAutofitTest, "Autofit test"},
 	MenuData{LayoutName::GeneralTemporaryResourceTest, "Temporary resource test"},
 	MenuData{LayoutName::GeneralShadowTest, "Shadow test"},
+	MenuData{LayoutName::GeneralScissorTest, "Scissor test"},
 });
 
 Vector<MenuData> s_inputTestsMenu({
@@ -128,6 +130,7 @@ LayoutName getRootLayoutForLayout(LayoutName name) {
 	case LayoutName::GeneralAutofitTest:
 	case LayoutName::GeneralTemporaryResourceTest:
 	case LayoutName::GeneralShadowTest:
+	case LayoutName::GeneralScissorTest:
 		return LayoutName::GeneralTests;
 		break;
 
@@ -184,6 +187,7 @@ StringView getLayoutNameId(LayoutName name) {
 	case LayoutName::GeneralAutofitTest: return "org.stappler.xenolith.test.GeneralAutofitTest"; break;
 	case LayoutName::GeneralTemporaryResourceTest: return "org.stappler.xenolith.test.GeneralTemporaryResourceTest"; break;
 	case LayoutName::GeneralShadowTest: return "org.stappler.xenolith.test.GeneralShadowTest"; break;
+	case LayoutName::GeneralScissorTest: return "org.stappler.xenolith.test.GeneralScissorTest"; break;
 
 	case LayoutName::InputTouchTest: return "org.stappler.xenolith.test.InputTouchTest"; break;
 	case LayoutName::InputKeyboardTest: return "org.stappler.xenolith.test.InputKeyboardTest"; break;
@@ -227,6 +231,7 @@ LayoutName getLayoutNameById(StringView name) {
 	else if (name == "org.stappler.xenolith.test.GeneralAutofitTest") { return LayoutName::GeneralAutofitTest; }
 	else if (name == "org.stappler.xenolith.test.GeneralTemporaryResourceTest") { return LayoutName::GeneralTemporaryResourceTest; }
 	else if (name == "org.stappler.xenolith.test.GeneralShadowTest") { return LayoutName::GeneralShadowTest; }
+	else if (name == "org.stappler.xenolith.test.GeneralScissorTest") { return LayoutName::GeneralScissorTest; }
 
 	else if (name == "org.stappler.xenolith.test.InputTouchTest") { return LayoutName::InputTouchTest; }
 	else if (name == "org.stappler.xenolith.test.InputKeyboardTest") { return LayoutName::InputKeyboardTest; }
@@ -271,6 +276,7 @@ Rc<Node> makeLayoutNode(LayoutName name) {
 	case LayoutName::GeneralAutofitTest: return Rc<GeneralAutofitTest>::create(); break;
 	case LayoutName::GeneralTemporaryResourceTest: return Rc<GeneralTemporaryResourceTest>::create(); break;
 	case LayoutName::GeneralShadowTest: return Rc<GeneralShadowTest>::create(); break;
+	case LayoutName::GeneralScissorTest: return Rc<GeneralScissorTest>::create(); break;
 
 	case LayoutName::InputTouchTest: return Rc<InputTouchTest>::create(); break;
 	case LayoutName::InputKeyboardTest: return Rc<InputKeyboardTest>::create(); break;

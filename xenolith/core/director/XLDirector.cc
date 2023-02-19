@@ -68,11 +68,11 @@ const Rc<ResourceCache> &Director::getResourceCache() const {
 bool Director::acquireFrame(const Rc<FrameRequest> &req) {
 	if (_constraints != req->getFrameConstraints()) {
 		_constraints = req->getFrameConstraints();
-		_screenSize = _constraints.extent;
-
+		_screenSize = _constraints.getScreenSize();
 		if (_scene) {
 			_scene->setFrameConstraints(_constraints);
 		}
+
 		updateGeneralTransform();
 	}
 
@@ -83,6 +83,10 @@ bool Director::acquireFrame(const Rc<FrameRequest> &req) {
 
 	_application->performOnMainThread([this, req] {
 		_scene->renderRequest(req);
+
+		if (hasActiveInteractions()) {
+			_view->setReadyForNextFrame();
+		}
 	}, this, true);
 
 	return true;
@@ -117,10 +121,6 @@ void Director::update() {
 		_scene->onPresented(this);
 		_nextScene = nullptr;
 	}
-
-	// log::vtext("Director", "FrameOffset: ", platform::device::_clock() - _view->getFrameTime());
-
-	//_view->runFrame(_scene->getRenderQueue(), _screenSize);
 
 	_inputDispatcher->update(_time);
 	_scheduler->update(_time);
@@ -196,18 +196,41 @@ void Director::invalidate() {
 }
 
 void Director::updateGeneralTransform() {
-	if (_scene) {
-		auto size = _screenSize /* / _scene->getDensity() */;
+	auto size = _screenSize;
 
-		Mat4 proj;
-		proj.scale(2.0f / size.width, -2.0f / size.height, -1.0);
-		proj.m[12] = -1.0;
-		proj.m[13] = 1.0;
-		proj.m[14] = 0.0f;
-		proj.m[15] = 1.0f;
-
-		_generalProjection = proj;
+	Mat4 proj;
+	switch (_constraints.transform) {
+		case gl::SurfaceTransformFlags::Rotate90: proj = Mat4::ROTATION_Z_90; break;
+		case gl::SurfaceTransformFlags::Rotate180: proj = Mat4::ROTATION_Z_180; break;
+		case gl::SurfaceTransformFlags::Rotate270: proj = Mat4::ROTATION_Z_270; break;
+		case gl::SurfaceTransformFlags::Mirror: break;
+		case gl::SurfaceTransformFlags::MirrorRotate90: break;
+		case gl::SurfaceTransformFlags::MirrorRotate180: break;
+		case gl::SurfaceTransformFlags::MirrorRotate270: break;
+		default: proj = Mat4::IDENTITY; break;
 	}
+	proj.scale(2.0f / size.width, -2.0f / size.height, -1.0);
+	proj.m[12] = -1.0;
+	proj.m[13] = 1.0f;
+	proj.m[14] = 0.0f;
+	proj.m[15] = 1.0f;
+
+	switch (_constraints.transform) {
+		case gl::SurfaceTransformFlags::Rotate90: proj.m[13] = -1.0f; break;
+		case gl::SurfaceTransformFlags::Rotate180: proj.m[12] = 1.0f; proj.m[13] = -1.0f; break;
+		case gl::SurfaceTransformFlags::Rotate270: proj.m[12] = 1.0f; break;
+		case gl::SurfaceTransformFlags::Mirror: break;
+		case gl::SurfaceTransformFlags::MirrorRotate90: break;
+		case gl::SurfaceTransformFlags::MirrorRotate180: break;
+		case gl::SurfaceTransformFlags::MirrorRotate270: break;
+		default: break;
+	}
+
+	_generalProjection = proj;
+}
+
+bool Director::hasActiveInteractions() {
+	return !_actionManager->empty();
 }
 
 }

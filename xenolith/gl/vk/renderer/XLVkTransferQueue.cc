@@ -951,7 +951,7 @@ auto TransferRenderPass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHan
 
 void TransferRenderPass::prepare(gl::Device &dev) {
 	QueuePass::prepare(dev);
-	for (auto &it : _data->descriptors) {
+	for (auto &it : _data->passDescriptors) {
 		if (auto a = dynamic_cast<TransferAttachment *>(it->getAttachment())) {
 			_attachment = a;
 		}

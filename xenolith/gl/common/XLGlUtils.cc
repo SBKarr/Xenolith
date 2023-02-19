@@ -563,6 +563,7 @@ String getCompositeAlphaFlagsDescription(CompositeAlphaFlags fmt) {
 	if ((fmt & CompositeAlphaFlags::Opaque) != CompositeAlphaFlags::None) { stream << " Opaque"; }
 	if ((fmt & CompositeAlphaFlags::Premultiplied) != CompositeAlphaFlags::None) { stream << " Premultiplied"; }
 	if ((fmt & CompositeAlphaFlags::Postmultiplied) != CompositeAlphaFlags::None) { stream << " Postmultiplied"; }
+	if ((fmt & CompositeAlphaFlags::Inherit) != CompositeAlphaFlags::None) { stream << " Inherit"; }
 	return stream.str();
 }
 
@@ -786,14 +787,14 @@ void ImageViewInfo::setup(ColorMode value, bool allowSwizzle) {
 void ImageViewInfo::setup(ImageType t, ArrayLayers layers) {
 	switch (t) {
 	case gl::ImageType::Image1D:
-		if (layerCount.get() > 1) {
+		if (layerCount.get() > 1 && layerCount != ArrayLayers::max()) {
 			type = gl::ImageViewType::ImageView1DArray;
 		} else {
 			type = gl::ImageViewType::ImageView1D;
 		}
 		break;
 	case gl::ImageType::Image2D:
-		if (layerCount.get() > 1) {
+		if (layerCount.get() > 1 && layerCount != ArrayLayers::max()) {
 			type = gl::ImageViewType::ImageView2DArray;
 		} else {
 			type = gl::ImageViewType::ImageView2D;

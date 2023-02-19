@@ -44,9 +44,9 @@ struct DescriptorBinding {
 
 	DescriptorBinding(VkDescriptorType, uint32_t count);
 
-	void write(uint32_t, DescriptorBufferInfo &&);
-	void write(uint32_t, DescriptorImageInfo &&);
-	void write(uint32_t, DescriptorBufferViewInfo &&);
+	Rc<Ref> write(uint32_t, DescriptorBufferInfo &&);
+	Rc<Ref> write(uint32_t, DescriptorImageInfo &&);
+	Rc<Ref> write(uint32_t, DescriptorBufferViewInfo &&);
 };
 
 struct DescriptorSet : public Ref {

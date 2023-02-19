@@ -41,6 +41,7 @@ THE SOFTWARE.
 #include "mac/XLVulkan.cc"
 #include "mac/XLVkViewImpl.cc"
 
+#include "android/XLKeyMapping.cc"
 #include "android/XLJni.cc"
 #include "android/XLDevice.cc"
 #include "android/XLInteraction.cc"

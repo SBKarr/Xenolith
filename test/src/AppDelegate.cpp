@@ -116,11 +116,19 @@ gl::SwapchainConfig AppDelegate::selectConfig(const gl::SurfaceInfo &info) {
 		ret.colorSpace = it->second;
 	}
 
+	if ((info.supportedCompositeAlpha & gl::CompositeAlphaFlags::Opaque) != gl::CompositeAlphaFlags::None) {
+		ret.alpha = gl::CompositeAlphaFlags::Opaque;
+	} else if ((info.supportedCompositeAlpha & gl::CompositeAlphaFlags::Inherit) != gl::CompositeAlphaFlags::None) {
+		ret.alpha = gl::CompositeAlphaFlags::Inherit;
+	}
+
 	ret.transfer = (info.supportedUsageFlags & gl::ImageUsage::TransferDst) != gl::ImageUsage::None;
 
 	if (ret.presentMode == gl::PresentMode::Mailbox) {
 		ret.imageCount = std::max(uint32_t(3), ret.imageCount);
 	}
+
+	ret.transform = info.currentTransform;
 
 	performOnMainThread([this, info, ret] {
 		_surfaceInfo = info;

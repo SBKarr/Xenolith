@@ -48,6 +48,9 @@ Command *Command::create(memory::pool_t *p, CommandType t, CommandFlags flags) {
 	case CommandType::ShadowDeferred:
 		c->data = new ( memory::pool::palloc(p, sizeof(CmdShadowDeferred)) ) CmdShadowDeferred;
 		break;
+	case CommandType::SdfGroup2D:
+		c->data = new ( memory::pool::palloc(p, sizeof(CmdSdfGroup2D)) ) CmdSdfGroup2D;
+		break;
 	}
 	return c;
 }
@@ -112,7 +115,7 @@ bool CommandList::init(const Rc<PoolRef> &pool) {
 }
 
 void CommandList::pushVertexArray(Rc<VertexData> &&vert, const Mat4 &t, SpanView<int16_t> zPath,
-		gl::MaterialId material, RenderingLevel level, CommandFlags flags) {
+		gl::MaterialId material, RenderingLevel level, float depthValue, CommandFlags flags) {
 	_pool->perform([&] {
 		auto cmd = Command::create(_pool->getPool(), CommandType::VertexArray, flags);
 		auto cmdData = (CmdVertexArray *)cmd->data;
@@ -133,13 +136,14 @@ void CommandList::pushVertexArray(Rc<VertexData> &&vert, const Mat4 &t, SpanView
 		cmdData->material = material;
 		cmdData->state = _currentState;
 		cmdData->renderingLevel = level;
+		cmdData->depthValue = depthValue;
 
 		addCommand(cmd);
 	});
 }
 
 void CommandList::pushVertexArray(SpanView<TransformedVertexData> data, SpanView<int16_t> zPath,
-		gl::MaterialId material, RenderingLevel level, CommandFlags flags) {
+		gl::MaterialId material, RenderingLevel level, float depthValue, CommandFlags flags) {
 	_pool->perform([&] {
 		auto cmd = Command::create(_pool->getPool(), CommandType::VertexArray, flags);
 		auto cmdData = (CmdVertexArray *)cmd->data;
@@ -154,13 +158,14 @@ void CommandList::pushVertexArray(SpanView<TransformedVertexData> data, SpanView
 		cmdData->material = material;
 		cmdData->state = _currentState;
 		cmdData->renderingLevel = level;
+		cmdData->depthValue = depthValue;
 
 		addCommand(cmd);
 	});
 }
 
 void CommandList::pushDeferredVertexResult(const Rc<DeferredVertexResult> &res, const Mat4 &viewT, const Mat4 &modelT, bool normalized,
-		SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel level, CommandFlags flags) {
+		SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel level, float depthValue, CommandFlags flags) {
 	_pool->perform([&] {
 		auto cmd = Command::create(_pool->getPool(), CommandType::Deferred, flags);
 		auto cmdData = (CmdDeferred *)cmd->data;
@@ -178,6 +183,7 @@ void CommandList::pushDeferredVertexResult(const Rc<DeferredVertexResult> &res, 
 		cmdData->material = material;
 		cmdData->state = _currentState;
 		cmdData->renderingLevel = level;
+		cmdData->depthValue = depthValue;
 
 		addCommand(cmd);
 	});
@@ -226,6 +232,22 @@ void CommandList::pushDeferredShadow(const Rc<DeferredVertexResult> &res, const 
 		cmdData->normalized = normalized;
 		cmdData->value = value;
 		cmdData->state = _currentState;
+
+		addCommand(cmd);
+	});
+}
+
+void CommandList::pushSdfGroup(const Mat4 &viewT, const Mat4 &modelT, float value, const Callback<void(CmdSdfGroup2D &)> &cb) {
+	_pool->perform([&] {
+		auto cmd = Command::create(_pool->getPool(), CommandType::SdfGroup2D, CommandFlags::None);
+		auto cmdData = (CmdSdfGroup2D *)cmd->data;
+
+		cmdData->viewTransform = viewT;
+		cmdData->modelTransform = modelT;
+		cmdData->value = value;
+		cmdData->state = _currentState;
+
+		cb(*cmdData);
 
 		addCommand(cmd);
 	});

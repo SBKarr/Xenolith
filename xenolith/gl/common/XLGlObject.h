@@ -179,8 +179,8 @@ public:
 
 	bool init(uint32_t count, uint32_t objectSize, Extent2);
 
-	uint8_t *getObjectByName(uint32_t);
-	uint8_t *getObjectByOrder(uint32_t);
+	const uint8_t *getObjectByName(uint32_t) const;
+	const uint8_t *getObjectByOrder(uint32_t) const;
 
 	void addObject(uint32_t, void *);
 

@@ -76,7 +76,10 @@ void QueueData::clear() {
 	}
 
 	for (auto &it : passes) {
-		for (auto &desc : it->descriptors) {
+		for (auto &desc : it->passDescriptors) {
+			desc->clear();
+		}
+		for (auto &desc : it->passAttachments) {
 			desc->clear();
 		}
 

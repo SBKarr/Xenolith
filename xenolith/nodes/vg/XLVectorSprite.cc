@@ -242,7 +242,7 @@ void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 		}
 
 		frame.commands->pushVertexArray(makeSpanView(tmpData, targetData.size()), frame.zPath,
-				_materialId, _realRenderingLevel, _commandFlags);
+				_materialId, _realRenderingLevel, _shadowIndex, _commandFlags);
 	} else if (_deferredResult) {
 		if (_deferredResult->isReady() && _deferredResult->getResult()->data.empty()) {
 			return;
@@ -255,7 +255,7 @@ void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 		}
 
 		frame.commands->pushDeferredVertexResult(_deferredResult, frame.viewProjectionStack.back(), transform, _normalized, frame.zPath,
-						_materialId, _realRenderingLevel, _commandFlags);
+						_materialId, _realRenderingLevel, _shadowIndex, _commandFlags);
 	}
 }
 

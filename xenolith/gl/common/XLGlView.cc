@@ -54,14 +54,12 @@ void View::end() {
 	_running = false;
 	_frameEmitter->invalidate();
 	_loop->removeView(this);
-	if (_onClosed) {
-		_loop->getApplication()->performOnMainThread([this, cb = move(_onClosed)] () {
-			if (_director) {
-				_director->end();
-			}
-			cb();
-		}, this);
-	}
+	_loop->getApplication()->performOnMainThread([this, cb = move(_onClosed)] () {
+		if (_director) {
+			_director->end();
+		}
+		cb();
+	}, this);
 }
 
 void View::update(bool displayLink) {
@@ -93,12 +91,6 @@ void View::performOnThread(Function<void()> &&func, Ref *target, bool immediate)
 	}
 }
 
-void View::setScreenExtent(Extent2 e) {
-	if (e != _constraints.extent) {
-		_constraints.extent = e;
-	}
-}
-
 void View::handleInputEvent(const InputEventData &event) {
 	_loop->getApplication()->performOnMainThread([this, event = event] () mutable {
 		if (event.isPointEvent()) {
@@ -120,6 +112,7 @@ void View::handleInputEvent(const InputEventData &event) {
 		}
 		_director->getInputDispatcher()->handleInputEvent(event);
 	}, this);
+	setReadyForNextFrame();
 }
 
 void View::handleInputEvents(Vector<InputEventData> &&events) {
@@ -145,13 +138,23 @@ void View::handleInputEvents(Vector<InputEventData> &&events) {
 			_director->getInputDispatcher()->handleInputEvent(event);
 		}
 	}, this);
+	setReadyForNextFrame();
 }
 
-void View::runFrame(const Rc<RenderQueue> &queue) {
+/*void View::runFrame(const Rc<RenderQueue> &queue) {
+	auto a = queue->getPresentImageOutput();
+	if (!a) {
+		a = queue->getTransferImageOutput();
+	}
+	if (!a) {
+		log::vtext("vk::View", "Fail to run view with queue '", queue->getName(),  "': no usable output attachments found");
+		return;
+	}
+
 	auto req = Rc<FrameRequest>::create(queue, _frameEmitter, _constraints);
-	req->bindSwapchain(this);
+	req->setOutput(Rc<renderqueue::FrameOutputBinding>::create(a, this));
 	_frameEmitter->submitNextFrame(move(req));
-}
+}*/
 
 gl::ImageInfo View::getSwapchainImageInfo() const {
 	return getSwapchainImageInfo(_config);
@@ -223,6 +226,10 @@ void View::setNavigationEmpty(bool value) {
 	performOnThread([this, value] {
 		_navigationEmpty = value;
 	}, this, true);
+}
+
+void View::setReadyForNextFrame() {
+
 }
 
 }

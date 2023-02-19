@@ -126,8 +126,11 @@ public:
 	virtual void clear();
 	virtual void reset();
 
-	uint32_t getIndex() const { return _index; }
-	void setIndex(uint32_t idx);
+	uint32_t getAttachmentIndex() const { return _attachmentIndex; }
+	void setAttachmentIndex(uint32_t idx);
+
+	uint32_t getDescriptorIndex() const { return _descriptorIndex; }
+	void setDescriptorIndex(uint32_t idx);
 
 	AttachmentOps getOps() const { return _ops; }
 	void setOps(AttachmentOps ops) { _ops = ops; }
@@ -161,7 +164,8 @@ protected:
 	}
 
 	PassData *_renderPass;
-	uint32_t _index = maxOf<uint32_t>();
+	uint32_t _descriptorIndex = maxOf<uint32_t>();
+	uint32_t _attachmentIndex = maxOf<uint32_t>();
 	AttachmentOps _ops = AttachmentOps::Undefined;
 	Vector<Rc<AttachmentRef>> _refs;
 	PipelineDescriptor _descriptor;
@@ -243,7 +247,7 @@ public:
 		AttachmentLayout finalLayout = AttachmentLayout::Ignored;
 		bool clearOnLoad = false;
 		Color4F clearColor = Color4F::BLACK;
-		Function<Extent3(const FrameQueue &)> frameSizeCallback;
+		Function<Extent3(const FrameQueue &, const gl::ImageInfoData *specialization)> frameSizeCallback;
 		ColorMode colorMode;
 	};
 
@@ -296,13 +300,16 @@ public:
 	AttachmentStoreOp getStencilStoreOp() const { return _stencilStoreOp; }
 	void setStencilStoreOp(AttachmentStoreOp op) { _stencilStoreOp = op; }
 
-	virtual ImageAttachmentRef *addImageRef(uint32_t idx, AttachmentUsage, AttachmentLayout, AttachmentDependencyInfo);
+	virtual ImageAttachmentRef *addImageRef(uint32_t idx, AttachmentUsage, AttachmentLayout, AttachmentDependencyInfo, DescriptorType descType);
 
 	AttachmentLayout getInitialLayout() const { return _initialLayout; }
 	void setInitialLayout(AttachmentLayout l) { _initialLayout = l; }
 
 	AttachmentLayout getFinalLayout() const { return _finalLayout; }
 	void setFinalLayout(AttachmentLayout l) { _finalLayout = l; }
+
+	AttachmentLayout getDescriptorLayout() const { return _descriptorLayout; }
+	void setDescriptorLayout(AttachmentLayout l) { _descriptorLayout = l; }
 
 	ColorMode getColorMode() const { return _colorMode; }
 	void setColorMode(ColorMode value) { _colorMode = value; }
@@ -312,7 +319,7 @@ public:
 protected:
 	using AttachmentDescriptor::init;
 
-	virtual Rc<ImageAttachmentRef> makeImageRef(uint32_t idx, AttachmentUsage, AttachmentLayout, AttachmentDependencyInfo);
+	virtual Rc<ImageAttachmentRef> makeImageRef(uint32_t idx, AttachmentUsage, AttachmentLayout, AttachmentDependencyInfo, DescriptorType);
 
 	// calculated initial layout
 	// for first descriptor in execution chain - initial layout of queue's attachment or first usage layout
@@ -323,6 +330,8 @@ protected:
 	// for last descriptor in execution chain - final layout of queue's attachment or last usage layout
 	// for others - last usage layout
 	AttachmentLayout _finalLayout = AttachmentLayout::Undefined;
+
+	AttachmentLayout _descriptorLayout = AttachmentLayout::Undefined;
 
 	AttachmentLoadOp _loadOp = AttachmentLoadOp::DontCare;
 	AttachmentStoreOp _storeOp = AttachmentStoreOp::DontCare;
@@ -336,12 +345,16 @@ class ImageAttachmentRef : public AttachmentRef {
 public:
 	virtual ~ImageAttachmentRef() { }
 
-	virtual bool init(ImageAttachmentDescriptor *, uint32_t, AttachmentUsage, AttachmentLayout, AttachmentDependencyInfo);
+	virtual bool init(ImageAttachmentDescriptor *, uint32_t, AttachmentUsage, AttachmentLayout, AttachmentDependencyInfo, DescriptorType);
+
+	ImageAttachmentDescriptor *getImageDescriptor() const { return (ImageAttachmentDescriptor *)_descriptor; }
 
 	virtual const gl::ImageInfo &getImageInfo() const { return ((ImageAttachmentDescriptor *)_descriptor)->getImageInfo(); }
 
-	virtual AttachmentLayout getLayout() const { return _layout; }
-	virtual void setLayout(AttachmentLayout);
+	AttachmentLayout getLayout() const { return _layout; }
+	void setLayout(AttachmentLayout);
+
+	DescriptorType getDescriptorType() const { return _descriptorType; }
 
 	virtual void updateLayout() override;
 
@@ -349,6 +362,7 @@ protected:
 	using AttachmentRef::init;
 
 	AttachmentLayout _layout = AttachmentLayout::Undefined;
+	DescriptorType _descriptorType = DescriptorType::Attachment;
 };
 
 class GenericAttachment : public Attachment {

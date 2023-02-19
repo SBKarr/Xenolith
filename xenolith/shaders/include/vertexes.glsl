@@ -39,4 +39,5 @@ struct TransformObject {
 	mat4 transform;
 	vec4 mask;
 	vec4 offset;
+	vec4 shadow;
 };

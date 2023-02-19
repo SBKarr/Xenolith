@@ -60,7 +60,6 @@ protected:
 	std::atomic<uint64_t> _targetOffset = 0;
 	AllocationUsage _usage = AllocationUsage::DeviceLocal;
 	Allocator::MemBlock _memory;
-	DeviceMemoryPool *_pool = nullptr;
 	bool _needInvalidate = false;
 };
 

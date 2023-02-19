@@ -214,14 +214,14 @@ struct PassData : NamedMem {
 	PassData &operator=(const PassData &) = delete;
 	PassData &operator=(PassData &&) = delete;
 
-	memory::vector<AttachmentDescriptor *> descriptors;
+	memory::vector<AttachmentDescriptor *> passAttachments;
+	memory::vector<AttachmentDescriptor *> passDescriptors;
 	memory::vector<SubpassData> subpasses;
 	memory::vector<SubpassDependency> dependencies;
 	memory::vector<const PipelineDescriptor *> queueDescriptors;
 	memory::vector<PipelineDescriptor> extraDescriptors;
 
 	RenderOrdering ordering = RenderOrderingLowest;
-	bool usesSamplers = false;
 	bool hasUpdateAfterBind = false;
 
 	Rc<Pass> renderPass;

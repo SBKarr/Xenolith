@@ -205,4 +205,19 @@ protected:
 
 }
 
+namespace std {
+
+inline std::ostream &operator<<(std::ostream &stream, stappler::xenolith::vk::AllocationUsage usage) {
+	switch (usage) {
+	case stappler::xenolith::vk::AllocationUsage::DeviceLocal: stream << "DeviceLocal"; break;
+	case stappler::xenolith::vk::AllocationUsage::DeviceLocalHostVisible: stream << "DeviceLocalHostVisible"; break;
+	case stappler::xenolith::vk::AllocationUsage::DeviceLocalLazilyAllocated: stream << "DeviceLocalLazilyAllocated"; break;
+	case stappler::xenolith::vk::AllocationUsage::HostTransitionSource: stream << "HostTransitionSource"; break;
+	case stappler::xenolith::vk::AllocationUsage::HostTransitionDestination: stream << "HostTransitionDestination"; break;
+	}
+	return stream;
+}
+
+}
+
 #endif /* XENOLITH_GL_VK_XLVKALLOCATOR_H_ */

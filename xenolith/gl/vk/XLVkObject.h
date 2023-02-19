@@ -81,6 +81,8 @@ public:
 
 	VkBuffer getBuffer() const { return _buffer; }
 
+	DeviceMemoryPool *getPool() const { return _pool; }
+
 	void setPendingBarrier(const BufferMemoryBarrier &);
 	const BufferMemoryBarrier *getPendingBarrier() const;
 	void dropPendingBarrier();
@@ -91,6 +93,8 @@ protected:
 	Rc<DeviceMemory> _memory;
 	VkBuffer _buffer = VK_NULL_HANDLE;
 	std::optional<BufferMemoryBarrier> _barrier;
+
+	DeviceMemoryPool *_pool = nullptr;
 };
 
 class ImageView : public gl::ImageView {

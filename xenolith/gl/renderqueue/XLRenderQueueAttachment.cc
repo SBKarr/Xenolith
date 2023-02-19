@@ -167,8 +167,15 @@ void AttachmentDescriptor::reset() {
 
 }
 
-void AttachmentDescriptor::setIndex(uint32_t idx) {
-	_index = idx;
+void AttachmentDescriptor::setAttachmentIndex(uint32_t idx) {
+	_attachmentIndex = idx;
+
+	std::cout << "[" << _renderPass->key << ":attachment:" << getName() << ":" << _attachmentIndex << "] "
+			<< getDescriptorTypeName(_descriptor.type) << ": usage:" << getProgramStageDescription(_descriptor.stages) << "\n";
+}
+
+void AttachmentDescriptor::setDescriptorIndex(uint32_t idx) {
+	_descriptorIndex = idx;
 
 	if (_descriptor.type == DescriptorType::Attachment) {
 		return;
@@ -178,11 +185,11 @@ void AttachmentDescriptor::setIndex(uint32_t idx) {
 		for (auto &pipeline : subpass.graphicPipelines) {
 			for (auto &it : pipeline->shaders) {
 				for (auto &binding : it.data->bindings) {
-					if (binding.set == 0 && binding.descriptor == _index) {
+					if (binding.set == 0 && binding.descriptor == _descriptorIndex) {
 						if (_descriptor.type == DescriptorType::Unknown) {
 							_descriptor.type = binding.type;
 						} else if (_descriptor.type != binding.type) {
-							std::cout << "[" << _renderPass->key << ":" << getName() << ":" << _index << "] descriptor type conflict: (code)"
+							std::cout << "[" << _renderPass->key << ":" << getName() << ":" << _descriptorIndex << "] descriptor type conflict: (code)"
 									<<  getDescriptorTypeName(_descriptor.type)  << " vs. (shader)" << getDescriptorTypeName(binding.type) << "\n";
 						}
 						_descriptor.stages |= it.data->stage;
@@ -193,11 +200,11 @@ void AttachmentDescriptor::setIndex(uint32_t idx) {
 		}
 		for (auto &pipeline : subpass.computePipelines) {
 			for (auto &binding : pipeline->shader.data->bindings) {
-				if (binding.set == 0 && binding.descriptor == _index) {
+				if (binding.set == 0 && binding.descriptor == _descriptorIndex) {
 					if (_descriptor.type == DescriptorType::Unknown) {
 						_descriptor.type = binding.type;
 					} else if (_descriptor.type != binding.type) {
-						std::cout << "[" << getName() << ":" << _index << "] descriptor type conflict: (code)"
+						std::cout << "[" << getName() << ":" << _descriptorIndex << "] descriptor type conflict: (code)"
 								<<  getDescriptorTypeName(_descriptor.type)  << " vs. (shader)" << getDescriptorTypeName(binding.type) << "\n";
 					}
 					_descriptor.stages |= ProgramStage::Compute;
@@ -208,11 +215,11 @@ void AttachmentDescriptor::setIndex(uint32_t idx) {
 	}
 
 	if (_descriptor.type == DescriptorType::Unknown) {
-		std::cout << "[" << _renderPass->key << ":" << getName() << ":" << _index << "] type is not defined\n";
+		std::cout << "[" << _renderPass->key << ":descriptor:" << getName() << ":" << _descriptorIndex << "] type is not defined\n";
 		return;
 	}
 
-	std::cout << "[" << _renderPass->key << ":" << getName() << ":" << _index << "] "
+	std::cout << "[" << _renderPass->key << ":descriptor:" << getName() << ":" << _descriptorIndex << "] "
 			<< getDescriptorTypeName(_descriptor.type) << ": usage:" << getProgramStageDescription(_descriptor.stages) << "\n";
 }
 
@@ -391,11 +398,16 @@ bool ImageAttachment::isCompatible(const gl::ImageInfo &image) const {
 }
 
 Extent3 ImageAttachment::getSizeForFrame(const FrameQueue &frame) const {
+	Extent3 ret = _imageInfo.extent;
+	auto spec = frame.getFrame()->getImageSpecialization(this);
 	if (_attachmentInfo.frameSizeCallback) {
-		return _attachmentInfo.frameSizeCallback(frame);
+		ret = _attachmentInfo.frameSizeCallback(frame, spec);
+	} else if (spec) {
+		ret = spec->extent;
 	} else {
-		return _imageInfo.extent;
+		ret = Extent3(frame.getExtent());
 	}
+	return ret;
 }
 
 Rc<AttachmentDescriptor> ImageAttachment::makeDescriptor(PassData *pass) {
@@ -411,7 +423,7 @@ bool ImageAttachmentDescriptor::init(PassData *pass, ImageAttachment *attachment
 }
 
 ImageAttachmentRef *ImageAttachmentDescriptor::addImageRef(uint32_t idx, AttachmentUsage usage, AttachmentLayout layout,
-		AttachmentDependencyInfo info) {
+		AttachmentDependencyInfo info, DescriptorType descType) {
 	for (auto &it : _refs) {
 		if (it->getSubpass() == idx) {
 			if ((it->getUsage() & usage) != AttachmentUsage::None) {
@@ -431,7 +443,7 @@ ImageAttachmentRef *ImageAttachmentDescriptor::addImageRef(uint32_t idx, Attachm
 		}
 	}
 
-	if (auto ref = makeImageRef(idx, usage, layout, info)) {
+	if (auto ref = makeImageRef(idx, usage, layout, info, descType)) {
 		_refs.emplace_back(ref);
 		return ref;
 	}
@@ -444,14 +456,15 @@ ImageAttachment *ImageAttachmentDescriptor::getImageAttachment() const {
 }
 
 Rc<ImageAttachmentRef> ImageAttachmentDescriptor::makeImageRef(uint32_t idx, AttachmentUsage usage, AttachmentLayout layout,
-		AttachmentDependencyInfo info) {
-	return Rc<ImageAttachmentRef>::create(this, idx, usage, layout, info);
+		AttachmentDependencyInfo info, DescriptorType descType) {
+	return Rc<ImageAttachmentRef>::create(this, idx, usage, layout, info, descType);
 }
 
 bool ImageAttachmentRef::init(ImageAttachmentDescriptor *desc, uint32_t subpass, AttachmentUsage usage, AttachmentLayout layout,
-		AttachmentDependencyInfo info) {
+		AttachmentDependencyInfo info, DescriptorType descType) {
 	if (AttachmentRef::init(desc, subpass, usage, info)) {
 		_layout = layout;
+		_descriptorType = descType;
 		return true;
 	}
 	return false;
@@ -657,7 +670,7 @@ uint32_t AttachmentHandle::getDescriptorArraySize(const PassHandle &, const Pipe
 	return d.count;
 }
 
-bool AttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &, uint32_t, bool isExternal) const {
+bool AttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &d, uint32_t, bool isExternal) const {
 	return false;
 }
 

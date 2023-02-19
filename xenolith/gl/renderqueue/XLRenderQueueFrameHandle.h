@@ -52,18 +52,15 @@ public:
 	const Rc<FrameEmitter> &getEmitter() const { return _request->getEmitter(); }
 	const Rc<Queue> &getQueue() const { return _request->getQueue(); }
 	const gl::FrameContraints &getFrameConstraints() const { return _request->getFrameConstraints(); }
-	const FrameAttachmentSpecialization &getFrameSpecialization() const { return _request->getFrameSpecialization(); }
 	const Rc<PoolRef> &getPool() const { return _pool; }
-	const Rc<gl::View> &getSwapchain() const { return _request->getSwapchain(); }
 
-	gl::ImageInfoData getImageSpecialization(const ImageAttachment *) const;
+	const gl::ImageInfoData *getImageSpecialization(const ImageAttachment *) const;
 
-	const Rc<ImageStorage> &getRenderTarget() const { return _request->getRenderTarget(); }
+	const FrameOutputBinding *getOutputBinding(const Attachment *a) const { return _request->getOutputBinding(a); }
+	Rc<ImageStorage> getRenderTarget(const Attachment *a) const { return _request->getRenderTarget(a); }
 	const Vector<Rc<DependencyEvent>> &getSignalDependencies() const { return _request->getSignalDependencies(); }
 
 	const Vector<Rc<FrameQueue>> &getFrameQueues() const { return _queues; }
-
-	bool isSwapchainAttachment(const Attachment *) const;
 
 	// spinners within frame should not spin directly on loop to preserve FrameHandle object
 	virtual void schedule(Function<bool(FrameHandle &)> &&, StringView tag);

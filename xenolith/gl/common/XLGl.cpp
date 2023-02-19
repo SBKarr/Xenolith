@@ -37,3 +37,4 @@
 #include "XLGlUtils.cc"
 #include "XLGlDevice.cc"
 #include "XLGlLoop.cc"
+#include "XLGlSdf.cc"

@@ -275,7 +275,7 @@ void Sprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 	if (_shadowIndex > 0.0f) {
 		frame.shadows->pushShadowArray(Rc<gl::VertexData>(data), newMV, _shadowIndex);
 	}
-	frame.commands->pushVertexArray(move(data), newMV, frame.zPath, _materialId, _realRenderingLevel, _commandFlags);
+	frame.commands->pushVertexArray(move(data), newMV, frame.zPath, _materialId, _realRenderingLevel, _shadowIndex, _commandFlags);
 }
 
 MaterialInfo Sprite::getMaterialInfo() const {

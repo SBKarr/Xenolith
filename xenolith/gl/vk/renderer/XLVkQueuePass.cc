@@ -24,8 +24,12 @@
 
 #include "XLRenderQueueFrameHandle.h"
 #include "XLVkRenderPassImpl.h"
+#include "XLVkAllocator.h"
+#include "XLVkBuffer.h"
 #include "XLVkAttachment.h"
 #include "XLVkDevice.h"
+#include "XLVkTextureSet.h"
+#include "XLVkView.h"
 #include "XLGlLoop.h"
 
 namespace stappler::xenolith::vk {
@@ -209,12 +213,17 @@ bool QueuePassHandle::doSubmit(FrameHandle &frame, Function<void(bool)> &&onSubm
 	auto success = _queue->submit(*_sync, *_fence, *_pool, _buffers);
 	_pool = nullptr;
 	frame.performOnGlThread([this, success, onSubmited = move(onSubmited), queue = move(_queue), armedTime = _fence->getArmedTime()] (FrameHandle &frame) mutable {
-		bool scheduleWithSwapcchain = false;
+		gl::View *swapchainView = nullptr;
 
 		_queueData->submitTime = armedTime;
 		for (auto &it : _sync->images) {
 			if (it.image->isSwapchainImage()) {
-				scheduleWithSwapcchain = true;
+				if (auto b = frame.getOutputBinding(it.attachment->getAttachment())) {
+					if (b->view) {
+						swapchainView = b->view;
+						break;
+					}
+				}
 			}
 		}
 
@@ -224,14 +233,12 @@ bool QueuePassHandle::doSubmit(FrameHandle &frame, Function<void(bool)> &&onSubm
 		}
 
 		if (success) {
-			if (scheduleWithSwapcchain) {
+			if (swapchainView) {
 				// from frame's perspective, onComplete event, binded with fence,
 				// will occur on next Loop clock, after onSubmit event
 				// but in View's perspective fence will be scheduled before presentation to allow wait on it
 				// so, fence scheduling and submission event is inverted in this case
-				if (auto &view = frame.getSwapchain()) {
-					((View *)view.get())->scheduleFence(move(_fence));
-				}
+				((View *)swapchainView)->scheduleFence(move(_fence));
 				doSubmitted(frame, move(onSubmited), true);
 			} else {
 				doSubmitted(frame, move(onSubmited), true);
@@ -284,7 +291,7 @@ auto QueuePassHandle::updateMaterials(FrameHandle &frame, const Rc<gl::MaterialS
 
 	auto &bufferInfo = data->getInfo();
 
-	auto pool = static_cast<DeviceFrameHandle &>(frame).getMemPool(&frame);
+	auto &pool = static_cast<DeviceFrameHandle &>(frame).getMemPool(&frame);
 
 	ret.stagingBuffer = pool->spawn(AllocationUsage::HostTransitionSource,
 			gl::BufferInfo(gl::ForceBufferUsage(gl::BufferUsage::TransferSrc), bufferInfo.size));
@@ -305,63 +312,6 @@ auto QueuePassHandle::updateMaterials(FrameHandle &frame, const Rc<gl::MaterialS
 
 	ret.stagingBuffer->unmap(mapped);
 	return ret;
-}
-
-
-VertexPass::~VertexPass() { }
-
-bool VertexPass::init(StringView name, RenderOrdering ordering, size_t subpassCount) {
-	return QueuePass::init(name, gl::RenderPassType::Graphics, ordering, subpassCount);
-}
-
-auto VertexPass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle> {
-	return Rc<VertexPassHandle>::create(*this, handle);
-}
-
-void VertexPass::prepare(gl::Device &dev) {
-	QueuePass::prepare(dev);
-	for (auto &it : _data->descriptors) {
-		if (auto a = dynamic_cast<VertexBufferAttachment *>(it->getAttachment())) {
-			_vertexes = a;
-		}
-	}
-}
-
-VertexPassHandle::~VertexPassHandle() { }
-
-bool VertexPassHandle::prepare(FrameQueue &queue, Function<void(bool)> &&cb) {
-	if (auto vertexes = queue.getAttachment(((VertexPass *)_renderPass.get())->getVertexes())) {
-		_mainBuffer = (VertexBufferAttachmentHandle *)vertexes->handle.get();
-	}
-	return QueuePassHandle::prepare(queue, move(cb));
-}
-
-Vector<const CommandBuffer *> VertexPassHandle::doPrepareCommands(FrameHandle &handle) {
-	auto pass = (RenderPassImpl *)_data->impl.get();
-	auto buf = _pool->recordBuffer(*_device, [&] (CommandBuffer &buf) {
-		pass->perform(*this, buf, [&] {
-			auto currentExtent = getFramebuffer()->getExtent();
-
-			VkViewport viewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
-			buf.cmdSetViewport(0, makeSpanView(&viewport, 1));
-
-			VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
-			buf.cmdSetScissor(0, makeSpanView(&scissorRect, 1));
-
-			auto pipeline = _data->subpasses[0].graphicPipelines.get(StringView("Vertexes"));
-			buf.cmdBindPipeline((GraphicPipeline *)pipeline->pipeline.get());
-			buf.cmdBindIndexBuffer(_mainBuffer->getIndexes(), 0, VK_INDEX_TYPE_UINT32);
-			buf.cmdBindDescriptorSets(pass);
-			buf.cmdDrawIndexed(6, 1, 0, 0, 0);
-		});
-		return true;
-	});
-
-	return Vector<const CommandBuffer *>{buf};
-}
-
-bool VertexPassHandle::doSubmit(FrameHandle &frame, Function<void(bool)> &&onSubmited) {
-	return QueuePassHandle::doSubmit(frame, move(onSubmited));
 }
 
 }

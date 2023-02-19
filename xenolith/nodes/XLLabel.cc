@@ -373,7 +373,7 @@ void Label::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 		}
 
 		frame.commands->pushDeferredVertexResult(_deferredResult, frame.viewProjectionStack.back(), frame.modelTransformStack.back(),
-				_normalized, frame.zPath, _materialId, _realRenderingLevel, _commandFlags);
+				_normalized, frame.zPath, _materialId, _realRenderingLevel, 0.0f, _commandFlags);
 	} else {
 		Sprite::pushCommands(frame, flags);
 	}

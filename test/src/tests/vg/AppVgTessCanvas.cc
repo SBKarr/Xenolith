@@ -182,7 +182,7 @@ bool VgTessCanvas::init(Function<void()> &&cb) {
 	_pathFill->setColor(Color::Blue_100);
 	_pathFill->setPosition(Vec2(0.0f, 0.0f));
 	_pathFill->setVisible(false);
-	_pathFill->setOpacity(0.5f);
+	_pathFill->setOpacity(1.0f);
 	_pathFill->setRenderingLevel(RenderingLevel::Transparent);
 
 	_pathLines = addChild(Rc<VectorSprite>::create(Size2(0, 0)), 2);

@@ -91,7 +91,7 @@ bool ImageAtlas::init(uint32_t count, uint32_t objectSize, Extent2 imageSize) {
 	return true;
 }
 
-uint8_t *ImageAtlas::getObjectByName(uint32_t id) {
+const uint8_t *ImageAtlas::getObjectByName(uint32_t id) const {
 	auto it = _names.find(id);
 	if (it != _names.end()) {
 		if (it->second < _data.size() / _objectSize) {
@@ -101,7 +101,7 @@ uint8_t *ImageAtlas::getObjectByName(uint32_t id) {
 	return nullptr;
 }
 
-uint8_t *ImageAtlas::getObjectByOrder(uint32_t order) {
+const uint8_t *ImageAtlas::getObjectByOrder(uint32_t order) const {
 	if (order < _data.size() / _objectSize) {
 		return _data.data() + _objectSize * order;
 	}

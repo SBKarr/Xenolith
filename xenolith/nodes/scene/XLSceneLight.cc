@@ -44,7 +44,7 @@ bool SceneLight::init(SceneLightType type, const Vec2 &normal, float k, const Co
 
 void SceneLight::onEnter(Scene *scene) {
 	if (_enable2dNormal) {
-		_normal = Vec4(Vec3(_2dNormal.x, -_2dNormal.y, 1.0f).normalize(), _k);
+		_normal = Vec4(Vec3(_2dNormal.x, _2dNormal.y, 1.0f).normalize(), _k);
 	}
 
 	_running = true;

@@ -28,29 +28,40 @@
 
 namespace stappler::xenolith::renderqueue {
 
+FrameOutputBinding::FrameOutputBinding(const Attachment *a, CompleteCallback &&cb)
+: callback(cb), attachment(a) { }
+
+FrameOutputBinding::FrameOutputBinding(const Attachment *a, Rc<gl::View> &&view, CompleteCallback &&cb)
+: view(view), handle(view->getSwapchainHandle()), callback(cb), attachment(a) { }
+
+FrameOutputBinding::~FrameOutputBinding() { }
+
+bool FrameOutputBinding::handleReady(FrameAttachmentData &data, bool success) {
+	if (callback) {
+		return callback(view, data, success);
+	} else if (view && data.image) {
+		if (success) {
+			return view->present(move(data.image));
+		} else {
+			view->invalidateTarget(move(data.image));
+			return true;
+		}
+	}
+	return false;
+}
+
 FrameRequest::~FrameRequest() {
 	if (_queue) {
 		_queue->endFrame(*this);
 	}
+	_renderTargets.clear();
 	_pool = nullptr;
-}
-
-bool FrameRequest::init(const Rc<FrameEmitter> &emitter, Rc<ImageStorage> &&target, const gl::FrameContraints &constraints) {
-	auto e = target->getInfo().extent;
-	_pool = Rc<PoolRef>::alloc();
-	_emitter = emitter;
-	_constraints = constraints;
-	_specialization.extent = _constraints.extent = Extent2(e.width, e.height);
-	_readyForSubmit = false;
-	_renderTarget = move(target);
-	return true;
 }
 
 bool FrameRequest::init(const Rc<FrameEmitter> &emitter, const gl::FrameContraints &constraints) {
 	_pool = Rc<PoolRef>::alloc();
 	_emitter = emitter;
 	_constraints = constraints;
-	_specialization.extent = _constraints.extent;
 	_readyForSubmit = false;
 	return true;
 }
@@ -63,19 +74,17 @@ bool FrameRequest::init(const Rc<Queue> &q) {
 }
 
 bool FrameRequest::init(const Rc<Queue> &q, const gl::FrameContraints &constraints) {
-	_pool = Rc<PoolRef>::alloc();
-	_queue = q;
-	_queue->beginFrame(*this);
-	_constraints = constraints;
-	_specialization.extent = _constraints.extent;
-	return true;
+	if (init(q)) {
+		_constraints = constraints;
+		return true;
+	}
+	return false;
 }
 
 bool FrameRequest::init(const Rc<Queue> &q, const Rc<FrameEmitter> &emitter, const gl::FrameContraints &constraints) {
 	if (init(q)) {
 		_emitter = emitter;
 		_constraints = constraints;
-		_specialization.extent = _constraints.extent;
 		_readyForSubmit = emitter->isReadyForSubmit();
 		return true;
 	}
@@ -151,50 +160,56 @@ void FrameRequest::setQueue(const Rc<Queue> &q) {
 	}
 }
 
-void FrameRequest::setOutput(const Attachment *a, Function<bool(const FrameAttachmentData &, bool)> &&cb) {
-	_output.emplace(a, move(cb));
+void FrameRequest::setOutput(Rc<FrameOutputBinding> &&binding) {
+	_output.emplace(binding->attachment, move(binding));
 }
 
-bool FrameRequest::onOutputReady(gl::Loop &loop, FrameAttachmentData &data) const {
+void FrameRequest::setOutput(const Attachment *a, CompleteCallback &&cb) {
+	setOutput(Rc<FrameOutputBinding>::alloc(a, move(cb)));
+}
+
+void FrameRequest::setOutput(const Attachment *a, Rc<gl::View> &&view, CompleteCallback &&cb) {
+	setOutput(Rc<FrameOutputBinding>::alloc(a, move(view), move(cb)));
+}
+
+void FrameRequest::setRenderTarget(const Attachment *a, Rc<ImageStorage> &&img) {
+	_renderTargets.emplace(a, move(img));
+}
+
+bool FrameRequest::onOutputReady(gl::Loop &loop, FrameAttachmentData &data) {
 	auto it = _output.find(data.handle->getAttachment());
 	if (it != _output.end()) {
-		if (it->second(data, true)) {
+		if (it->second->handleReady(data, true)) {
+			_output.erase(it);
 			return true;
 		}
 		return false;
 	}
 
-	if (data.handle->getAttachment() == _swapchainAttachment && data.image) {
-		if (_swapchain->present(move(data.image))) {
-			return true;
-		}
-	}
-
 	return false;
 }
 
-void FrameRequest::onOutputInvalidated(gl::Loop &loop, FrameAttachmentData &data) const {
+void FrameRequest::onOutputInvalidated(gl::Loop &loop, FrameAttachmentData &data) {
 	auto it = _output.find(data.handle->getAttachment());
 	if (it != _output.end()) {
-		if (it->second(data, false)) {
+		if (it->second->handleReady(data, false)) {
+			_output.erase(it);
 			return;
 		}
 	}
-
-	if (data.handle->getAttachment() == _swapchainAttachment && data.image) {
-		_swapchain->invalidateTarget(move(data.image));
-	}
 }
 
-void FrameRequest::finalize(gl::Loop &loop, bool success) {
+void FrameRequest::finalize(gl::Loop &loop, HashMap<const Attachment *, FrameAttachmentData *> &attachments, bool success) {
 	_waitForInputs.clear();
 
 	if (!success) {
-		if (_swapchain && _renderTarget) {
-			_swapchain->invalidateTarget(move(_renderTarget));
+		for (auto &it : _output) {
+			auto iit = attachments.find(it.second->attachment);
+			if (iit != attachments.end()) {
+				it.second->handleReady(*(iit->second), false);
+			}
 		}
-		_swapchain = nullptr;
-		_renderTarget = nullptr;
+		_output.clear();
 	}
 	if (_emitter) {
 		_emitter = nullptr;
@@ -212,49 +227,20 @@ void FrameRequest::signalDependencies(gl::Loop &loop, bool success) {
 	}
 }
 
-bool FrameRequest::bindSwapchainCallback(Function<bool(FrameAttachmentData &, bool)> &&cb) {
-	for (auto &it : _queue->getOutputAttachments()) {
-		if (it->getType() == AttachmentType::Image) {
-			_output.emplace(it, move(cb));
-			return true;
-		}
-	}
-	return false;
-}
-
-bool FrameRequest::bindSwapchain(const Rc<gl::View> &swapchain) {
-	_constraints = swapchain->getFrameContraints();
-	for (auto &it : _queue->getOutputAttachments()) {
-		if (it->getType() == AttachmentType::Image && it->isCompatible(swapchain->getSwapchainImageInfo())) {
-			_swapchainAttachment = it;
-			_swapchain = swapchain;
-			_swapchainHandle = _swapchain->getSwapchainHandle();
-			return true;
-		}
-	}
-	return false;
-}
-
-bool FrameRequest::bindSwapchain(const Attachment *a, const Rc<gl::View> &swapchain) {
-	if (a->isCompatible(swapchain->getSwapchainImageInfo())) {
-		_swapchainAttachment = a;
-		_swapchain = swapchain;
-		_swapchainHandle = _swapchain->getSwapchainHandle();
-		return true;
-	}
-	return false;
-}
-
-bool FrameRequest::isSwapchainAttachment(const Attachment *a) const {
-	return _swapchainAttachment == a;
-}
-
 Rc<AttachmentInputData> FrameRequest::getInputData(const Attachment *attachment) {
 	auto it = _input.find(attachment);
 	if (it != _input.end()) {
 		auto ret = it->second;
 		_input.erase(it);
 		return ret;
+	}
+	return nullptr;
+}
+
+Rc<ImageStorage> FrameRequest::getRenderTarget(const Attachment *a) {
+	auto it = _renderTargets.find(a);
+	if (it != _renderTargets.end()) {
+		return it->second;
 	}
 	return nullptr;
 }
@@ -271,6 +257,14 @@ void FrameRequest::waitForInput(FrameQueue &queue, const Rc<AttachmentHandle> &a
 	} else {
 		_waitForInputs.emplace(a->getAttachment(), WaitInputData{&queue, a, move(cb)});
 	}
+}
+
+const FrameOutputBinding *FrameRequest::getOutputBinding(const Attachment *a) const {
+	auto it = _output.find(a);
+	if (it != _output.end()) {
+		return it->second;
+	}
+	return nullptr;
 }
 
 FrameEmitter::~FrameEmitter() { }
@@ -448,10 +442,11 @@ Rc<FrameHandle> FrameEmitter::makeFrame(Rc<FrameRequest> &&req, bool readyForSub
 		return nullptr;
 	}
 
+	bool isAttachmentsDirty = req->isAttachmentsDirty();
 	req->setReadyForSubmit(readyForSubmit);
 	auto frame = _loop->makeFrame(move(req), _gen);
 
-	enableCacheAttachments(frame);
+	enableCacheAttachments(frame, isAttachmentsDirty);
 
 	return frame;
 }
@@ -490,11 +485,6 @@ void FrameEmitter::scheduleFrameTimeout() {
 			return true; // end spinning
 		}, _frameInterval - config::FrameIntervalSafeOffset, "FrameEmitter::scheduleFrameTimeout");
 	}
-}
-
-Rc<FrameRequest> FrameEmitter::makeRequest(Rc<ImageStorage> &&storage, const gl::FrameContraints &constraints) {
-	_frame = platform::device::_clock();
-	return Rc<FrameRequest>::create(this, move(storage), constraints);
 }
 
 Rc<FrameRequest> FrameEmitter::makeRequest(const gl::FrameContraints &constraints) {
@@ -536,7 +526,7 @@ Rc<FrameHandle> FrameEmitter::submitNextFrame(Rc<FrameRequest> &&req) {
 	return nullptr;
 }
 
-void FrameEmitter::enableCacheAttachments(const Rc<FrameHandle> &req) {
+void FrameEmitter::enableCacheAttachments(const Rc<FrameHandle> &req, bool dirty) {
 	auto &queues = req->getFrameQueues();
 
 	Set<Rc<Queue>> list;
@@ -544,15 +534,16 @@ void FrameEmitter::enableCacheAttachments(const Rc<FrameHandle> &req) {
 		list.emplace(it->getRenderQueue());
 	}
 
-	auto targetSpec = req->getFrameSpecialization();
-
-	if (_cacheRenderQueue != list || targetSpec != _cacheSpecialization) {
+	if (_cacheRenderQueue != list || dirty) {
 		Set<gl::ImageInfoData> images;
 		for (auto &it : queues) {
 			for (auto &a : it->getRenderQueue()->getAttachments()) {
 				if (a->getType() == AttachmentType::Image) {
 					auto img = (ImageAttachment *)a.get();
-					gl::ImageInfoData data = req->getImageSpecialization(img);
+					gl::ImageInfoData data = img->getImageInfo();
+					if (auto spec = req->getImageSpecialization(img)) {
+						data = *spec;
+					}
 					data.extent = img->getSizeForFrame(*it);
 					images.emplace(data);
 
@@ -566,7 +557,6 @@ void FrameEmitter::enableCacheAttachments(const Rc<FrameHandle> &req) {
 		}
 
 		_cacheRenderQueue = list;
-		_cacheSpecialization = targetSpec;
 
 		for (auto &it : images) {
 			auto iit = _cacheImages.find(it);

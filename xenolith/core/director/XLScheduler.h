@@ -61,6 +61,8 @@ public:
 	void resume(void *);
 	void pause(void *);
 
+	bool empty() const;
+
 protected:
 	struct ScheduledTemporary {
 		SchedulerFunc callback;

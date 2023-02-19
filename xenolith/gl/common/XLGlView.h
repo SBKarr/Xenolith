@@ -95,13 +95,13 @@ public:
 
 	// update screen extent, non thread-safe
 	// only updates field, view is not resized
-	virtual void setScreenExtent(Extent2);
+	// virtual void setScreenExtent(Extent2);
 
 	// handle and propagate input event
 	void handleInputEvent(const InputEventData &);
 	void handleInputEvents(Vector<InputEventData> &&);
 
-	virtual void runFrame(const Rc<RenderQueue> &);
+	// virtual void runFrame(const Rc<RenderQueue> &);
 
 	virtual ImageInfo getSwapchainImageInfo() const;
 	virtual ImageInfo getSwapchainImageInfo(const SwapchainConfig &cfg) const;
@@ -129,6 +129,8 @@ public:
 
 	void setNavigationEmpty(bool);
 	bool isNavigationEmpty() const { return _navigationEmpty; }
+
+	virtual void setReadyForNextFrame();
 
 protected:
 	virtual void wakeup() = 0;

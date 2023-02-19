@@ -394,6 +394,7 @@ enum class CompositeAlphaFlags {
 	Opaque = 0x00000001,
 	Premultiplied = 0x00000002,
 	Postmultiplied = 0x00000004,
+	Inherit = 0x00000008,
 };
 
 SP_DEFINE_ENUM_AS_MASK(CompositeAlphaFlags)
@@ -541,15 +542,15 @@ enum class MaterialType {
 
 enum class SurfaceTransformFlags {
 	None,
-    Identity = 0x00000001,
-    Rotate90 = 0x00000002,
-    Rotate180 = 0x00000004,
-    Rotate270 = 0x00000008,
-    Mirror = 0x00000010,
+	Identity = 0x00000001,
+	Rotate90 = 0x00000002,
+	Rotate180 = 0x00000004,
+	Rotate270 = 0x00000008,
+	Mirror = 0x00000010,
 	MirrorRotate90 = 0x00000020,
 	MirrorRotate180 = 0x00000040,
 	MirrorRotate270 = 0x00000080,
-    Inherit = 0x00000100,
+	Inherit = 0x00000100,
 };
 
 SP_DEFINE_ENUM_AS_MASK(SurfaceTransformFlags)

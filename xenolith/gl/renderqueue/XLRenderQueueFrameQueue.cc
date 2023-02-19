@@ -104,10 +104,22 @@ bool FrameQueue::setup() {
 	}
 
 	for (auto &passIt : _renderPasses) {
-		for (auto &a : passIt.first->descriptors) {
+		for (auto &a : passIt.first->passAttachments) {
 			auto aIt = _attachments.find(a->getAttachment());
 			if (aIt != _attachments.end()) {
 				passIt.second.attachments.emplace_back(a, &aIt->second);
+			} else {
+				XL_FRAME_QUEUE_LOG("Attachment '", a->getName(), "' is not available on frame");
+				valid = false;
+			}
+		}
+
+		for (auto &a : passIt.first->passDescriptors) {
+			auto aIt = _attachments.find(a->getAttachment());
+			if (aIt != _attachments.end()) {
+				if (a->getAttachmentIndex() == maxOf<uint32_t>()) {
+					passIt.second.attachments.emplace_back(a, &aIt->second);
+				}
 			} else {
 				XL_FRAME_QUEUE_LOG("Attachment '", a->getName(), "' is not available on frame");
 				valid = false;
@@ -370,17 +382,16 @@ void FrameQueue::onAttachmentAcquire(FrameAttachmentData &attachment) {
 	if (attachment.handle->getAttachment()->getType() == AttachmentType::Image) {
 		auto img = (ImageAttachment *)attachment.handle->getAttachment().get();
 
-		if (_frame->isSwapchainAttachment(attachment.handle->getAttachment())) {
-			attachment.image = _frame->getRenderTarget();
-		}
+		attachment.image = _frame->getRenderTarget(attachment.handle->getAttachment());
 
 		if (!attachment.image && attachment.handle->isAvailable(*this)) {
 			attachment.image = _loop->acquireImage(img, attachment.handle.get(), attachment.extent);
-
 			if (!attachment.image) {
 				invalidate(attachment);
 				return;
 			}
+
+			attachment.image->setFrameIndex(_frame->getOrder());
 
 			_autorelease.emplace_front(attachment.image);
 			if (attachment.image->getSignalSem()) {
@@ -457,6 +468,10 @@ bool FrameQueue::isRenderPassReadyForState(const FramePassData &data, FrameRende
 }
 
 void FrameQueue::updateRenderPassState(FramePassData &data, FrameRenderPassState state) {
+	if (_finalized && state != FrameRenderPassState::Finalized) {
+		return;
+	}
+
 	if (state == FrameRenderPassState::Ready && data.handle->isAsync()) {
 		state = FrameRenderPassState::Owned;
 	}
@@ -522,7 +537,7 @@ void FrameQueue::updateRenderPassState(FramePassData &data, FrameRenderPassState
 	}
 
 	for (auto &it : data.attachments) {
-		if (it.second->passes.back() == &data && it.second->state != FrameAttachmentState::ResourcesReleased) {
+		if (!it.second->passes.empty() && it.second->passes.back() == &data && it.second->state != FrameAttachmentState::ResourcesReleased) {
 			if ((toInt(state) >= toInt(it.second->final))
 					|| (toInt(state) >= toInt(FrameRenderPassState::Submitted) && it.second->final == FrameRenderPassState::Initial)) {
 				onAttachmentRelease(*it.second);
@@ -603,10 +618,17 @@ void FrameQueue::onRenderPassOwned(FramePassData &data) {
 
 	data.waitForResult = true;
 	for (auto &it : data.attachments) {
+		if (it.second->handle->isOutput()) {
+			auto out = _frame->getOutputBinding(it.second->handle->getAttachment());
+			if (out) {
+				_autorelease.emplace_front((FrameOutputBinding *)out);
+			}
+		}
 		if (it.second->state == FrameAttachmentState::Ready) {
 			onAttachmentAcquire(*it.second);
 			if (it.second->state != FrameAttachmentState::ResourcesAcquired) {
 				attachmentsAcquired = false;
+				XL_FRAME_QUEUE_LOG("[RenderPass:", data.handle->getName(), "] waitForResource: ", it.second->handle->getName());
 				waitForResource(*it.second, [this, data = &data] (bool success) {
 					if (!success) {
 						invalidate();
@@ -641,6 +663,7 @@ void FrameQueue::onRenderPassOwned(FramePassData &data) {
 				_autorelease.emplace_front(data.framebuffer);
 			}
 			if (isResourcePending(data)) {
+				XL_FRAME_QUEUE_LOG("[RenderPass:", data.handle->getName(), "] waitForResource (pending): ", data.handle->getName());
 				waitForResource(data, [this, data = &data] {
 					data->waitForResult = false;
 					updateRenderPassState(*data, FrameRenderPassState::ResourcesAcquired);
@@ -818,7 +841,12 @@ Rc<FrameSync> FrameQueue::makeRenderPassSync(FramePassData &data) const {
 }
 
 PipelineStage FrameQueue::getWaitStageForAttachment(FramePassData &data, const AttachmentHandle *handle) const {
-	for (auto &it : data.handle->getData()->descriptors) {
+	for (auto &it : data.handle->getData()->passDescriptors) {
+		if (it->getAttachment() == handle->getAttachment()) {
+			return it->getDependency().initialUsageStage;
+		}
+	}
+	for (auto &it : data.handle->getData()->passAttachments) {
 		if (it->getAttachment() == handle->getAttachment()) {
 			return it->getDependency().initialUsageStage;
 		}

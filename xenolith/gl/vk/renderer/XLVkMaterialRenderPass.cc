@@ -28,646 +28,10 @@
 #include "XLVkRenderPassImpl.h"
 #include "XLVkPipeline.h"
 #include "XLVkBuffer.h"
-#include "XLVkTextureSet.h"
 
 #include "XLDefaultShaders.h"
 
 namespace stappler::xenolith::vk {
-
-MaterialVertexAttachment::~MaterialVertexAttachment() { }
-
-bool MaterialVertexAttachment::init(StringView str, const gl::BufferInfo &info, Vector<Rc<gl::Material>> &&initial) {
-	return MaterialAttachment::init(str, info, [] (uint8_t *target, const gl::Material *material) {
-		auto &images = material->getImages();
-		if (!images.empty()) {
-			auto &image = images.front();
-			uint32_t sampler = image.sampler;
-			memcpy(target, &sampler, sizeof(uint32_t));
-			memcpy(target + sizeof(uint32_t), &image.descriptor, sizeof(uint32_t));
-			memcpy(target + sizeof(uint32_t) * 2, &image.set, sizeof(uint32_t));
-			return true;
-		}
-		return false;
-	}, [] (Rc<gl::TextureSet> &&set) {
-		auto s = (TextureSet *)set.get();
-		s->getDevice()->getTextureSetLayout()->releaseSet(s);
-	}, sizeof(uint32_t) * 4, gl::MaterialType::Basic2D, move(initial));
-}
-
-auto MaterialVertexAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<AttachmentHandle> {
-	return Rc<MaterialVertexAttachmentHandle>::create(this, handle);
-}
-
-MaterialVertexAttachmentHandle::~MaterialVertexAttachmentHandle() { }
-
-bool MaterialVertexAttachmentHandle::init(const Rc<Attachment> &a, const FrameQueue &handle) {
-	if (BufferAttachmentHandle::init(a, handle)) {
-		return true;
-	}
-	return false;
-}
-
-bool MaterialVertexAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &desc,
-		uint32_t, bool isExternal) const {
-	return _materials && _materials->getGeneration() != ((gl::MaterialAttachmentDescriptor *)desc.descriptor)->getBoundGeneration();
-}
-
-bool MaterialVertexAttachmentHandle::writeDescriptor(const QueuePassHandle &handle, DescriptorBufferInfo &info) {
-	if (!_materials) {
-		return false;
-	}
-
-	auto b = _materials->getBuffer();
-	if (!b) {
-		return false;
-	}
-	info.buffer = ((Buffer *)b.get());
-	info.offset = 0;
-	info.range = info.buffer->getSize();
-	return true;
-}
-
-const MaterialVertexAttachment *MaterialVertexAttachmentHandle::getMaterialAttachment() const {
-	return (MaterialVertexAttachment *)_attachment.get();
-}
-
-const Rc<gl::MaterialSet> MaterialVertexAttachmentHandle::getSet() const {
-	if (!_materials) {
-		_materials = getMaterialAttachment()->getMaterials();
-	}
-	return _materials;
-}
-
-VertexMaterialAttachment::~VertexMaterialAttachment() { }
-
-bool VertexMaterialAttachment::init(StringView name, const gl::BufferInfo &info, const MaterialVertexAttachment *m) {
-	if (BufferAttachment::init(name, info)) {
-		_materials = m;
-		return true;
-	}
-	return false;
-}
-
-auto VertexMaterialAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<AttachmentHandle> {
-	return Rc<VertexMaterialAttachmentHandle>::create(this, handle);
-}
-
-VertexMaterialAttachmentHandle::~VertexMaterialAttachmentHandle() { }
-
-bool VertexMaterialAttachmentHandle::setup(FrameQueue &handle, Function<void(bool)> &&cb) {
-	if (auto materials = handle.getAttachment(((VertexMaterialAttachment *)_attachment.get())->getMaterials())) {
-		_materials = (const MaterialVertexAttachmentHandle *)materials->handle.get();
-	}
-	return true;
-}
-
-void VertexMaterialAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
-	auto d = data.cast<gl::CommandList>();
-	if (!d || q.isFinalized()) {
-		cb(false);
-		return;
-	}
-
-	q.getFrame()->waitForDependencies(data->waitDependencies, [this, d = move(d), cb = move(cb)] (FrameHandle &handle, bool success) {
-		if (!success || !handle.isValidFlag()) {
-			cb(false);
-			return;
-		}
-
-		auto &cache = handle.getLoop()->getFrameCache();
-
-		_materialSet = _materials->getSet();
-		_drawStat.cachedFramebuffers = cache->getFramebuffersCount();
-		_drawStat.cachedImages = cache->getImagesCount();
-		_drawStat.cachedImageViews = cache->getImageViewsCount();
-
-		handle.performInQueue([this, d = move(d)] (FrameHandle &handle) {
-			return loadVertexes(handle, d);
-		}, [cb = move(cb)] (FrameHandle &handle, bool success) {
-			cb(success);
-		}, this, "VertexMaterialAttachmentHandle::submitInput");
-	});
-}
-
-bool VertexMaterialAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
-		uint32_t idx, bool isExternal) const {
-	switch (idx) {
-	case 0:
-		return _vertexes;
-		break;
-	case 1:
-		return _transforms;
-		break;
-	default:
-		break;
-	}
-	return false;
-}
-
-bool VertexMaterialAttachmentHandle::writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &info) {
-	switch (info.index) {
-	case 0:
-		info.buffer = _vertexes;
-		info.offset = 0;
-		info.range = _vertexes->getSize();
-		return true;
-		break;
-	case 1:
-		info.buffer = _transforms;
-		info.offset = 0;
-		info.range = _transforms->getSize();
-		return true;
-		break;
-	default:
-		break;
-	}
-	return false;
-}
-
-bool VertexMaterialAttachmentHandle::empty() const {
-	return !_indexes || !_vertexes || !_transforms;
-}
-
-Rc<gl::CommandList> VertexMaterialAttachmentHandle::popCommands() const {
-	auto ret = move(_commands);
-	_commands = nullptr;
-	return ret;
-}
-
-struct VertexMaterialDrawPlan {
-	struct PlanCommandInfo {
-		const gl::CmdGeneral *cmd;
-		SpanView<gl::TransformedVertexData> vertexes;
-	};
-
-	struct MaterialWritePlan {
-		const gl::Material *material = nullptr;
-		Rc<gl::ImageAtlas> atlas;
-		uint32_t vertexes = 0;
-		uint32_t indexes = 0;
-		uint32_t transforms = 0;
-		Map<gl::StateId, std::forward_list<PlanCommandInfo>> states;
-	};
-
-	struct WriteTarget {
-		uint8_t *transform;
-		uint8_t *vertexes;
-		uint8_t *indexes;
-	};
-
-	Extent2 surfaceExtent;
-
-	uint32_t excludeVertexes = 0;
-	uint32_t excludeIndexes = 0;
-
-	Map<SpanView<int16_t>, float, ZIndexLess> paths;
-
-	// fill write plan
-	MaterialWritePlan globalWritePlan;
-
-	// write plan for objects, that do depth-write and can be drawn out of order
-	std::unordered_map<gl::MaterialId, MaterialWritePlan> solidWritePlan;
-
-	// write plan for objects without depth-write, that can be drawn out of order
-	std::unordered_map<gl::MaterialId, MaterialWritePlan> surfaceWritePlan;
-
-	// write plan for transparent objects, that should be drawn in order
-	Map<SpanView<int16_t>, std::unordered_map<gl::MaterialId, MaterialWritePlan>, ZIndexLess> transparentWritePlan;
-
-	std::forward_list<Vector<gl::TransformedVertexData>> deferredTmp;
-
-	uint32_t vertexOffset = 0;
-	uint32_t indexOffset = 0;
-	uint32_t transtormOffset = 0;
-
-	uint32_t materialVertexes = 0;
-	uint32_t materialIndexes = 0;
-	uint32_t transformIdx = 0;
-
-	uint32_t solidCmds = 0;
-	uint32_t surfaceCmds = 0;
-	uint32_t transparentCmds = 0;
-
-	VertexMaterialDrawPlan(Extent2 surfaceExtent) : surfaceExtent{surfaceExtent} { }
-
-	void emplaceWritePlan(const gl::Material *material, std::unordered_map<gl::MaterialId, MaterialWritePlan> &writePlan,
-				const gl::Command *c, const gl::CmdGeneral *cmd, SpanView<gl::TransformedVertexData> vertexes) {
-		auto it = writePlan.find(cmd->material);
-		if (it == writePlan.end()) {
-			if (material) {
-				it = writePlan.emplace(cmd->material, MaterialWritePlan()).first;
-				it->second.material = material;
-				if (auto atlas = it->second.material->getAtlas()) {
-					it->second.atlas = atlas;
-				}
-			}
-		}
-
-		if (it != writePlan.end() && it->second.material) {
-			for (auto &iit : vertexes) {
-				globalWritePlan.vertexes += iit.data->data.size();
-				globalWritePlan.indexes += iit.data->indexes.size();
-				++ globalWritePlan.transforms;
-
-				it->second.vertexes += iit.data->data.size();
-				it->second.indexes += iit.data->indexes.size();
-				++ it->second.transforms;
-
-				if ((c->flags & gl::CommandFlags::DoNotCount) != gl::CommandFlags::None) {
-					excludeVertexes = iit.data->data.size();
-					excludeIndexes = iit.data->indexes.size();
-				}
-			}
-
-			auto iit = it->second.states.find(cmd->state);
-			if (iit == it->second.states.end()) {
-				iit = it->second.states.emplace(cmd->state, std::forward_list<PlanCommandInfo>()).first;
-			}
-
-			iit->second.emplace_front(PlanCommandInfo{cmd, vertexes});
-		}
-
-		auto pathsIt = paths.find(cmd->zPath);
-		if (pathsIt == paths.end()) {
-			paths.emplace(cmd->zPath, 0.0f);
-		}
-	}
-
-	void pushVertexData(gl::MaterialSet *materialSet, const gl::Command *c, const gl::CmdVertexArray *cmd) {
-		auto material = materialSet->getMaterialById(cmd->material);
-		if (!material) {
-			return;
-		}
-		if (material->getPipeline()->isSolid()) {
-			emplaceWritePlan(material, solidWritePlan, c, cmd, cmd->vertexes);
-		} else if (cmd->renderingLevel == RenderingLevel::Surface) {
-			emplaceWritePlan(material, surfaceWritePlan, c, cmd, cmd->vertexes);
-		} else {
-			auto v = transparentWritePlan.find(cmd->zPath);
-			if (v == transparentWritePlan.end()) {
-				v = transparentWritePlan.emplace(cmd->zPath, std::unordered_map<gl::MaterialId, MaterialWritePlan>()).first;
-			}
-			emplaceWritePlan(material, v->second, c, cmd, cmd->vertexes);
-		}
-	};
-
-	void pushDeferred(gl::MaterialSet *materialSet, const gl::Command *c, const gl::CmdDeferred *cmd) {
-		auto material = materialSet->getMaterialById(cmd->material);
-		if (!material) {
-			return;
-		}
-
-		if (!cmd->deferred->isWaitOnReady()) {
-			if (!cmd->deferred->isReady()) {
-				return;
-			}
-		}
-
-		auto &vertexes = deferredTmp.emplace_front(cmd->deferred->getData().vec<Interface>());
-		//auto vertexes = cmd->deferred->getData().pdup(handle->getPool()->getPool());
-
-		// apply transforms;
-		if (cmd->normalized) {
-			for (auto &it : vertexes) {
-				auto modelTransform = cmd->modelTransform * it.mat;
-
-				Mat4 newMV;
-				newMV.m[12] = floorf(modelTransform.m[12]);
-				newMV.m[13] = floorf(modelTransform.m[13]);
-				newMV.m[14] = floorf(modelTransform.m[14]);
-
-				const_cast<gl::TransformedVertexData &>(it).mat = cmd->viewTransform * newMV;
-			}
-		} else {
-			for (auto &it : vertexes) {
-				const_cast<gl::TransformedVertexData &>(it).mat = cmd->viewTransform * cmd->modelTransform * it.mat;
-			}
-		}
-
-		if (cmd->renderingLevel == RenderingLevel::Solid) {
-			emplaceWritePlan(material, solidWritePlan, c, cmd, vertexes);
-		} else if (cmd->renderingLevel == RenderingLevel::Surface) {
-			emplaceWritePlan(material, surfaceWritePlan, c, cmd, vertexes);
-		} else {
-			auto v = transparentWritePlan.find(cmd->zPath);
-			if (v == transparentWritePlan.end()) {
-				v = transparentWritePlan.emplace(cmd->zPath, std::unordered_map<gl::MaterialId, MaterialWritePlan>()).first;
-			}
-			emplaceWritePlan(material, v->second, c, cmd, vertexes);
-		}
-	}
-
-	void updatePathsDepth() {
-		float depthScale = 1.0f / float(paths.size() + 1);
-		float depthOffset = 1.0f - depthScale;
-		for (auto &it : paths) {
-			it.second = depthOffset;
-			depthOffset -= depthScale;
-		}
-	}
-
-	void pushInitial(WriteTarget &writeTarget) {
-		gl::TransformObject val;
-		memcpy(writeTarget.transform, &val, sizeof(gl::TransformObject));
-		transtormOffset += sizeof(gl::TransformObject); ++ transformIdx;
-
-		Vector<uint32_t> indexes{ 0, 2, 1, 0, 3, 2 };
-		Vector<gl::Vertex_V4F_V4F_T2F2U> vertexes {
-			gl::Vertex_V4F_V4F_T2F2U{
-				Vec4(-1.0f, -1.0f, 0.0f, 1.0f),
-				Vec4::ONE, Vec2::ZERO, 0, 0
-			},
-			gl::Vertex_V4F_V4F_T2F2U{
-				Vec4(-1.0f, 1.0f, 0.0f, 1.0f),
-				Vec4::ONE, Vec2::UNIT_Y, 0, 0
-			},
-			gl::Vertex_V4F_V4F_T2F2U{
-				Vec4(1.0f, 1.0f, 0.0f, 1.0f),
-				Vec4::ONE, Vec2::ONE, 0, 0
-			},
-			gl::Vertex_V4F_V4F_T2F2U{
-				Vec4(1.0f, -1.0f, 0.0f, 1.0f),
-				Vec4::ONE, Vec2::UNIT_X, 0, 0
-			}
-		};
-
-		auto target = (gl::Vertex_V4F_V4F_T2F2U *)writeTarget.vertexes + vertexOffset;
-		memcpy(target, (uint8_t *)vertexes.data(), vertexes.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U));
-		memcpy(writeTarget.indexes, (uint8_t *)indexes.data(), indexes.size() * sizeof(uint32_t));
-
-		vertexOffset += vertexes.size();
-		indexOffset += indexes.size();
-	}
-
-	void pushVertexes(WriteTarget &writeTarget, const gl::MaterialId &materialId, const MaterialWritePlan &plan,
-				const gl::CmdGeneral *cmd, const gl::TransformObject &transform, gl::VertexData *vertexes) {
-		auto target = (gl::Vertex_V4F_V4F_T2F2U *)writeTarget.vertexes + vertexOffset;
-		memcpy(target, (uint8_t *)vertexes->data.data(),
-				vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U));
-
-		memcpy(writeTarget.transform + transtormOffset, &transform, sizeof(gl::TransformObject));
-
-		float atlasScaleX = 1.0f;
-		float atlasScaleY = 1.0f;
-		Mat4 inverseTransform;
-
-		if (plan.atlas) {
-			auto ext = plan.atlas->getImageExtent();
-			atlasScaleX = 1.0f / ext.width;
-			atlasScaleY = 1.0f / ext.height;
-			inverseTransform = transform.transform.getInversed();
-		}
-
-		size_t idx = 0;
-		for (; idx < vertexes->data.size(); ++ idx) {
-			auto &t = target[idx];
-			t.material = transformIdx | transformIdx << 16;
-
-			if (plan.atlas && t.object) {
-				if (font::FontAtlasValue *d = (font::FontAtlasValue *)plan.atlas->getObjectByName(t.object)) {
-					// scale to (-1.0, 1.0), then transform into command space
-					Vec2 scaledPos = inverseTransform * (d->pos / Vec2(surfaceExtent.width, surfaceExtent.height) * 2.0f);
-					t.pos.x += scaledPos.x;
-					t.pos.y += scaledPos.y;
-					t.tex = d->tex;
-				} else {
-					std::cout << "VertexMaterialDrawPlan: Object not found: " << t.object << " " << string::toUtf8<Interface>(char16_t(t.object)) << "\n";
-					auto anchor = font::CharLayout::getAnchorForObject(t.object);
-					switch (anchor) {
-					case font::FontAnchor::BottomLeft:
-						t.tex = Vec2(1.0f - atlasScaleX, 0.0f);
-						break;
-					case font::FontAnchor::TopLeft:
-						t.tex = Vec2(1.0f - atlasScaleX, 0.0f + atlasScaleY);
-						break;
-					case font::FontAnchor::TopRight:
-						t.tex = Vec2(1.0f, 0.0f + atlasScaleY);
-						break;
-					case font::FontAnchor::BottomRight:
-						t.tex = Vec2(1.0f, 0.0f);
-						break;
-					}
-				}
-			}
-		}
-
-		auto indexTarget = (uint32_t *)writeTarget.indexes + indexOffset;
-
-		for (auto &it : vertexes->indexes) {
-			*(indexTarget++) = it + vertexOffset;
-		}
-
-		vertexOffset += vertexes->data.size();
-		indexOffset += vertexes->indexes.size();
-		transtormOffset += sizeof(gl::TransformObject);
-		++ transformIdx;
-
-		materialVertexes += vertexes->data.size();
-		materialIndexes += vertexes->indexes.size();
-	}
-
-	void drawWritePlan(Vector<gl::VertexSpan> &spans, WriteTarget &writeTarget, std::unordered_map<gl::MaterialId, MaterialWritePlan> &writePlan) {
-		// optimize draw order, minimize switching pipeline, textureSet and descriptors
-		Vector<const Pair<const gl::MaterialId, MaterialWritePlan> *> drawOrder;
-
-		for (auto &it : writePlan) {
-			if (drawOrder.empty()) {
-				drawOrder.emplace_back(&it);
-			} else {
-				auto lb = std::lower_bound(drawOrder.begin(), drawOrder.end(), &it,
-						[] (const Pair<const gl::MaterialId, MaterialWritePlan> *l, const Pair<const gl::MaterialId, MaterialWritePlan> *r) {
-					if (l->second.material->getPipeline() != l->second.material->getPipeline()) {
-						return GraphicPipeline::comparePipelineOrdering(*l->second.material->getPipeline(), *r->second.material->getPipeline());
-					} else if (l->second.material->getLayoutIndex() != r->second.material->getLayoutIndex()) {
-						return l->second.material->getLayoutIndex() < r->second.material->getLayoutIndex();
-					} else {
-						return l->first < r->first;
-					}
-				});
-				if (lb == drawOrder.end()) {
-					drawOrder.emplace_back(&it);
-				} else {
-					drawOrder.emplace(lb, &it);
-				}
-			}
-		}
-
-		for (auto &it : drawOrder) {
-			// split order on states
-
-			for (auto &state : it->second.states) {
-				materialVertexes = 0;
-				materialIndexes = 0;
-
-				for (auto &cmd : state.second) {
-					for (auto &iit : cmd.vertexes) {
-						gl::TransformObject val{iit.mat};
-
-						auto pathIt = paths.find(cmd.cmd->zPath);
-						if (pathIt != paths.end()) {
-							val.offset.z = pathIt->second;
-						}
-
-						pushVertexes(writeTarget, it->first, it->second, cmd.cmd, val, iit.data.get());
-					}
-				}
-
-				spans.emplace_back(gl::VertexSpan({ it->first, materialIndexes, 1, indexOffset - materialIndexes, state.first}));
-			}
-		}
-	}
-
-	void pushAll(Vector<gl::VertexSpan> &spans, WriteTarget &writeTarget) {
-		pushInitial(writeTarget);
-
-		uint32_t counter = 0;
-		drawWritePlan(spans, writeTarget, solidWritePlan);
-
-		solidCmds = spans.size() - counter;
-		counter = spans.size();
-
-		drawWritePlan(spans, writeTarget, surfaceWritePlan);
-
-		surfaceCmds = spans.size() - counter;
-		counter = spans.size();
-
-		for (auto &it : transparentWritePlan) {
-			drawWritePlan(spans, writeTarget, it.second);
-		}
-
-		transparentCmds = spans.size() - counter;
-	}
-};
-
-bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<gl::CommandList> &commands) {
-	auto handle = dynamic_cast<FrameHandle *>(&fhandle);
-	if (!handle) {
-		return false;
-	}
-
-	VertexMaterialDrawPlan plan(fhandle.getFrameConstraints().extent);
-
-	auto cmd = commands->getFirst();
-	while (cmd) {
-		switch (cmd->type) {
-		case gl::CommandType::CommandGroup:
-			break;
-		case gl::CommandType::VertexArray:
-			plan.pushVertexData(_materialSet.get(), cmd, (const gl::CmdVertexArray *)cmd->data);
-			break;
-		case gl::CommandType::Deferred:
-			plan.pushDeferred(_materialSet.get(), cmd, (const gl::CmdDeferred *)cmd->data);
-			break;
-		case gl::CommandType::ShadowArray:
-		case gl::CommandType::ShadowDeferred:
-			break;
-		}
-		cmd = cmd->next;
-	}
-
-	if (plan.globalWritePlan.vertexes == 0 || plan.globalWritePlan.indexes == 0) {
-		return true;
-	}
-
-	plan.updatePathsDepth();
-
-	auto devFrame = static_cast<DeviceFrameHandle *>(handle);
-
-	auto pool = devFrame->getMemPool(this);
-
-	// create buffers
-	_indexes = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(gl::BufferUsage::IndexBuffer, (plan.globalWritePlan.indexes + 6) * sizeof(uint32_t)));
-
-	_vertexes = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(gl::BufferUsage::StorageBuffer, (plan.globalWritePlan.vertexes + 4) * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
-
-	_transforms = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(gl::BufferUsage::StorageBuffer, (plan.globalWritePlan.transforms + 1) * sizeof(gl::TransformObject)));
-
-	if (!_vertexes || !_indexes || !_transforms) {
-		return false;
-	}
-
-	DeviceBuffer::MappedRegion vertexesMap, indexesMap, transformMap;
-
-	Bytes vertexData, indexData, transformData;
-
-	if (fhandle.isPersistentMapping()) {
-		vertexesMap = _vertexes->map();
-		indexesMap = _indexes->map();
-		transformMap = _transforms->map();
-
-		memset(vertexesMap.ptr, 0, sizeof(gl::Vertex_V4F_V4F_T2F2U) * 1024);
-		memset(indexesMap.ptr, 0, sizeof(uint32_t) * 1024);
-	} else {
-		vertexData.resize(_vertexes->getSize());
-		indexData.resize(_indexes->getSize());
-		transformData.resize(_transforms->getSize());
-
-		vertexesMap.ptr = vertexData.data(); vertexesMap.size = vertexData.size();
-		indexesMap.ptr = indexData.data(); indexesMap.size = indexData.size();
-		transformMap.ptr = transformData.data(); transformMap.size = transformData.size();
-	}
-
-	VertexMaterialDrawPlan::WriteTarget writeTarget{transformMap.ptr, vertexesMap.ptr, indexesMap.ptr};
-
-	// write initial full screen quad
-	plan.pushAll(_spans, writeTarget);
-
-
-	if (fhandle.isPersistentMapping()) {
-		_vertexes->unmap(vertexesMap, true);
-		_indexes->unmap(indexesMap, true);
-		_transforms->unmap(transformMap, true);
-	} else {
-		_vertexes->setData(vertexData);
-		_indexes->setData(indexData);
-		_transforms->setData(transformData);
-	}
-
-	_drawStat.vertexes = plan.globalWritePlan.vertexes - plan.excludeVertexes;
-	_drawStat.triangles = (plan.globalWritePlan.indexes - plan.excludeIndexes) / 3;
-	_drawStat.zPaths = plan.paths.size();
-	_drawStat.drawCalls = _spans.size();
-	_drawStat.materials = _materialSet->getMaterials().size();
-	_drawStat.solidCmds = plan.solidCmds;
-	_drawStat.surfaceCmds = plan.surfaceCmds;
-	_drawStat.transparentCmds = plan.transparentCmds;
-
-	commands->sendStat(_drawStat);
-
-	_commands = commands;
-	return true;
-}
-
-static gl::ImageFormat MaterialPass_selectDepthFormat(SpanView<gl::ImageFormat> formats) {
-	gl::ImageFormat ret = gl::ImageFormat::Undefined;
-
-	uint32_t score = 0;
-
-	auto selectWithScore = [&] (gl::ImageFormat fmt, uint32_t sc) {
-		if (score < sc) {
-			ret = fmt;
-			score = sc;
-		}
-	};
-
-	for (auto &it : formats) {
-		switch (it) {
-		case gl::ImageFormat::D16_UNORM: selectWithScore(it, 12); break;
-		case gl::ImageFormat::X8_D24_UNORM_PACK32: selectWithScore(it, 7); break;
-		case gl::ImageFormat::D32_SFLOAT: selectWithScore(it, 9); break;
-		case gl::ImageFormat::S8_UINT: break;
-		case gl::ImageFormat::D16_UNORM_S8_UINT: selectWithScore(it, 11); break;
-		case gl::ImageFormat::D24_UNORM_S8_UINT: selectWithScore(it, 10); break;
-		case gl::ImageFormat::D32_SFLOAT_S8_UINT: selectWithScore(it, 8); break;
-		default: break;
-		}
-	}
-
-	return ret;
-}
 
 struct MaterialPass_Data {
 	Rc<ShadowLightDataAttachment> lightDataInput;
@@ -701,7 +65,7 @@ static void MaterialPass_makeShadowPass(MaterialPass_Data &data, renderqueue::Qu
 
 		// can be reused after RenderPass is submitted
 		FrameRenderPassState::Submitted,
-	}, DescriptorType::StorageImage);
+	}, DescriptorType::StorageImage, AttachmentLayout::General);
 
 	// define global input-output
 	builder.addInput(data.lightDataInput);
@@ -742,11 +106,6 @@ static void MaterialPass_makePresentPass(MaterialPass_Data &data, renderqueue::Q
 				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
 		DepthInfo(false, true, gl::CompareOp::LessOrEqual)
 	}));
-	/*auto surfacePipeline = builder.addGraphicPipeline(pass, 0, "Surface", shaderSpecInfo, PipelineMaterialInfo(
-		BlendInfo(gl::BlendFactor::SrcAlpha, gl::BlendFactor::OneMinusSrcAlpha, gl::BlendOp::Add,
-				gl::BlendFactor::Zero, gl::BlendFactor::One, gl::BlendOp::Add),
-		DepthInfo(false, true, gl::CompareOp::LessOrEqual)
-	));*/
 
 	// pipeline for debugging - draw lines instead of triangles
 	builder.addGraphicPipeline(pass, 0, "DebugTriangles", shaderSpecInfo, PipelineMaterialInfo(
@@ -761,15 +120,12 @@ static void MaterialPass_makePresentPass(MaterialPass_Data &data, renderqueue::Q
 		gl::ImageInfo(
 			defaultExtent,
 			gl::ForceImageUsage(gl::ImageUsage::DepthStencilAttachment),
-			MaterialPass_selectDepthFormat(app.getGlLoop()->getSupportedDepthStencilFormat())),
+			MaterialPass::selectDepthFormat(app.getGlLoop()->getSupportedDepthStencilFormat())),
 		ImageAttachment::AttachmentInfo{
 			.initialLayout = AttachmentLayout::Undefined,
 			.finalLayout = AttachmentLayout::DepthStencilAttachmentOptimal,
 			.clearOnLoad = true,
-			.clearColor = Color4F::WHITE,
-			.frameSizeCallback = [] (const FrameQueue &frame) {
-				return Extent3(frame.getExtent());
-			}
+			.clearColor = Color4F::WHITE
 	});
 
 	// swapchain output
@@ -782,15 +138,12 @@ static void MaterialPass_makePresentPass(MaterialPass_Data &data, renderqueue::Q
 			.initialLayout = AttachmentLayout::Undefined,
 			.finalLayout = AttachmentLayout::PresentSrc,
 			.clearOnLoad = true,
-			.clearColor = Color4F(1.0f, 1.0f, 1.0f, 1.0f), // Color4F::BLACK;
-			.frameSizeCallback = [] (const FrameQueue &frame) {
-				return Extent3(frame.getExtent());
-			}
+			.clearColor = Color4F(1.0f, 1.0f, 1.0f, 1.0f) // Color4F::BLACK;
 	});
 
 	// Material input attachment - per-scene list of materials
 	auto &cache = app.getResourceCache();
-	auto materialInput = Rc<vk::MaterialVertexAttachment>::create("MaterialInput",
+	auto materialInput = Rc<vk::MaterialAttachment>::create("MaterialInput",
 		gl::BufferInfo(gl::BufferUsage::StorageBuffer),
 
 		// ... with predefined list of materials
@@ -848,7 +201,7 @@ static void MaterialPass_makePresentPass(MaterialPass_Data &data, renderqueue::Q
 			// can be reused after RenderPass is submitted
 			FrameRenderPassState::Submitted,
 			FrameRenderPassState::Submission
-		}, DescriptorType::SampledImage);
+		}, DescriptorType::SampledImage, AttachmentLayout::ShaderReadOnlyOptimal);
 	}
 
 	builder.addPassDepthStencil(pass, 0, depth, AttachmentDependencyInfo{
@@ -869,7 +222,7 @@ static void MaterialPass_makePresentPass(MaterialPass_Data &data, renderqueue::Q
 
 		// can be reused after RenderPass is submitted
 		FrameRenderPassState::Submitted,
-	});
+	}, DescriptorType::Attachment, AttachmentLayout::Ignored);
 
 	builder.addInput(vertexInput);
 	builder.addOutput(out);
@@ -894,8 +247,8 @@ bool MaterialPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
 	return true;
 }
 
-bool MaterialPass::init(StringView name, RenderOrdering ord, size_t subpassCount) {
-	return QueuePass::init(name, gl::RenderPassType::Graphics, ord, subpassCount);
+bool MaterialPass::init(StringView name, RenderOrdering oridering, size_t subpassCount) {
+	return MaterialVertexPass::init(name, oridering, subpassCount);
 }
 
 auto MaterialPass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle> {
@@ -903,13 +256,9 @@ auto MaterialPass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle> {
 }
 
 void MaterialPass::prepare(gl::Device &dev) {
-	QueuePass::prepare(dev);
-	for (auto &it : _data->descriptors) {
-		if (auto a = dynamic_cast<MaterialVertexAttachment *>(it->getAttachment())) {
-			_materials = a;
-		} else if (auto a = dynamic_cast<VertexMaterialAttachment *>(it->getAttachment())) {
-			_vertexes = a;
-		} else if (auto a = dynamic_cast<ShadowLightDataAttachment *>(it->getAttachment())) {
+	MaterialVertexPass::prepare(dev);
+	for (auto &it : _data->passDescriptors) {
+		if (auto a = dynamic_cast<ShadowLightDataAttachment *>(it->getAttachment())) {
 			_lights = a;
 		} else if (auto a = dynamic_cast<ShadowImageArrayAttachment *>(it->getAttachment())) {
 			_array = a;
@@ -920,14 +269,6 @@ void MaterialPass::prepare(gl::Device &dev) {
 bool MaterialPassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
 	auto pass = (MaterialPass *)_renderPass.get();
 
-	if (auto materialBuffer = q.getAttachment(pass->getMaterials())) {
-		_materialBuffer = (const MaterialVertexAttachmentHandle *)materialBuffer->handle.get();
-	}
-
-	if (auto vertexBuffer = q.getAttachment(pass->getVertexes())) {
-		_vertexBuffer = (const VertexMaterialAttachmentHandle *)vertexBuffer->handle.get();
-	}
-
 	if (auto lightsBuffer = q.getAttachment(pass->getLights())) {
 		_lightsBuffer = (const ShadowLightDataAttachmentHandle *)lightsBuffer->handle.get();
 	}
@@ -936,181 +277,56 @@ bool MaterialPassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
 		_arrayImage = (const ShadowImageArrayAttachmentHandle *)arrayImage->handle.get();
 	}
 
-	return QueuePassHandle::prepare(q, move(cb));
+	return MaterialVertexPassHandle::prepare(q, move(cb));
 }
 
-Vector<const CommandBuffer *> MaterialPassHandle::doPrepareCommands(FrameHandle &handle) {
-	auto buf = _pool->recordBuffer(*_device, [&] (CommandBuffer &buf) {
-		auto materials = _materialBuffer->getSet().get();
+void MaterialPassHandle::prepareRenderPass(CommandBuffer &buf) {
+	if (_lightsBuffer->getLightsCount() && _lightsBuffer->getBuffer()) {
+		auto cIdx = _device->getQueueFamily(QueueOperations::Compute)->index;
+		if (cIdx != _pool->getFamilyIdx()) {
+			BufferMemoryBarrier transferBufferBarrier(_lightsBuffer->getBuffer(),
+				VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
+				QueueFamilyTransfer{cIdx, _pool->getFamilyIdx()}, 0, VK_WHOLE_SIZE);
 
-		Vector<ImageMemoryBarrier> outputImageBarriers;
-		Vector<BufferMemoryBarrier> outputBufferBarriers;
+			auto image = (Image *)_arrayImage->getImage()->getImage().get();
 
-		doFinalizeTransfer(materials, outputImageBarriers, outputBufferBarriers);
-
-		if (!outputBufferBarriers.empty() && !outputImageBarriers.empty()) {
-			buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT,
-				VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
-				outputBufferBarriers, outputImageBarriers);
-		}
-
-		if (_lightsBuffer->getLightsCount() && _lightsBuffer->getBuffer()) {
-			auto cIdx = _device->getQueueFamily(QueueOperations::Compute)->index;
-			if (cIdx != _pool->getFamilyIdx()) {
-				BufferMemoryBarrier transferBufferBarrier(_lightsBuffer->getBuffer(),
-					VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
-					QueueFamilyTransfer{cIdx, _pool->getFamilyIdx()}, 0, VK_WHOLE_SIZE);
-
-				auto image = (Image *)_arrayImage->getImage()->getImage().get();
-
-				SpanView<ImageMemoryBarrier> imageBarriers;
-				if (auto b = image->getPendingBarrier()) {
-					imageBarriers = makeSpanView(b, 1);
-				}
-
-				buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-						makeSpanView(&transferBufferBarrier, 1), imageBarriers);
-			} else {
-				// no need for buffer barrier, only switch image layout
-
-				auto image = (Image *)_arrayImage->getImage()->getImage().get();
-				ImageMemoryBarrier transferImageBarrier(image,
-					VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-					VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-				buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-						makeSpanView(&transferImageBarrier, 1));
+			SpanView<ImageMemoryBarrier> imageBarriers;
+			if (auto b = image->getPendingBarrier()) {
+				imageBarriers = makeSpanView(b, 1);
 			}
+
+			buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+					makeSpanView(&transferBufferBarrier, 1), imageBarriers);
+		} else {
+			// no need for buffer barrier, only switch image layout
+
+			auto image = (Image *)_arrayImage->getImage()->getImage().get();
+			ImageMemoryBarrier transferImageBarrier(image,
+				VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+				VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+			buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+					makeSpanView(&transferImageBarrier, 1));
 		}
-
-		_data->impl.cast<RenderPassImpl>()->perform(*this, buf, [&] {
-			prepareMaterialCommands(materials, buf);
-		});
-
-		return true;
-	});
-
-	return Vector<const CommandBuffer *>{buf};
+	}
 }
 
 void MaterialPassHandle::prepareMaterialCommands(gl::MaterialSet * materials, CommandBuffer &buf) {
+	MaterialVertexPassHandle::prepareMaterialCommands(materials, buf);
+
+	auto pass = (RenderPassImpl *)_data->impl.get();
 	auto &fb = getFramebuffer();
 	auto currentExtent = fb->getExtent();
-	auto commands = _vertexBuffer->popCommands();
-	auto pass = (RenderPassImpl *)_data->impl.get();
-
-	if (_vertexBuffer->empty() || !_vertexBuffer->getIndexes() || !_vertexBuffer->getVertexes()) {
-		return;
-	}
-
-	VkViewport viewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
-	buf.cmdSetViewport(0, makeSpanView(&viewport, 1));
-
-	VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
-	buf.cmdSetScissor(0, makeSpanView(&scissorRect, 1));
-
-	// bind primary descriptors
-	// default texture set comes with other sets
-	buf.cmdBindDescriptorSets(pass);
-
-	// bind global indexes
-	buf.cmdBindIndexBuffer(_vertexBuffer->getIndexes(), 0, VK_INDEX_TYPE_UINT32);
-
-	uint32_t boundTextureSetIndex = maxOf<uint32_t>();
-	gl::GraphicPipeline *boundPipeline = nullptr;
-
-	uint32_t dynamicStateId = 0;
-	gl::DrawStateValues dynamicState;
-
-	auto enableState = [&] (uint32_t stateId) {
-		if (stateId == dynamicStateId) {
-			return;
-		}
-
-		auto state = commands->getState(stateId);
-		if (!state) {
-			return;
-		}
-
-		if (state->isScissorEnabled()) {
-			if (dynamicState.isScissorEnabled()) {
-				if (dynamicState.scissor != state->scissor) {
-					VkRect2D scissorRect{ { int32_t(state->scissor.x), int32_t(currentExtent.height - state->scissor.y - state->scissor.height) },
-						{ state->scissor.width, state->scissor.height } };
-					buf.cmdSetScissor(0, makeSpanView(&scissorRect, 1));
-					dynamicState.scissor = state->scissor;
-				}
-			} else {
-				dynamicState.enabled |= renderqueue::DynamicState::Scissor;
-				VkRect2D scissorRect{ { int32_t(state->scissor.x), int32_t(currentExtent.height - state->scissor.y - state->scissor.height) },
-					{ state->scissor.width, state->scissor.height } };
-				buf.cmdSetScissor(0, makeSpanView(&scissorRect, 1));
-				dynamicState.scissor = state->scissor;
-			}
-		} else {
-			if (dynamicState.isScissorEnabled()) {
-				dynamicState.enabled &= ~(renderqueue::DynamicState::Scissor);
-				VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
-				buf.cmdSetScissor(0, makeSpanView(&scissorRect, 1));
-			}
-		}
-
-		dynamicStateId = stateId;
-	};
-
-	for (auto &materialVertexSpan : _vertexBuffer->getVertexData()) {
-		auto materialOrderIdx = materials->getMaterialOrder(materialVertexSpan.material);
-		auto material = materials->getMaterialById(materialVertexSpan.material);
-		if (!material) {
-			continue;
-		}
-
-		auto pipeline = material->getPipeline()->pipeline;
-		auto textureSetIndex =  material->getLayoutIndex();
-
-		if (pipeline != boundPipeline) {
-			buf.cmdBindPipeline((GraphicPipeline *)pipeline.get());
-			boundPipeline = pipeline;
-		}
-
-		if (textureSetIndex != boundTextureSetIndex) {
-			auto l = materials->getLayout(textureSetIndex);
-			if (l && l->set) {
-				auto s = (TextureSet *)l->set.get();
-				auto set = s->getSet();
-
-				// rebind texture set at last index
-				buf.cmdBindDescriptorSets((RenderPassImpl *)_data->impl.get(), makeSpanView(&set, 1), 1);
-				boundTextureSetIndex = textureSetIndex;
-			} else {
-				stappler::log::vtext("MaterialRenderPassHandle", "Invalid textureSetlayout: ", textureSetIndex);
-				return;
-			}
-		}
-
-		enableState(materialVertexSpan.state);
-
-		buf.cmdPushConstants(pass->getPipelineLayout(),
-				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, BytesView((const uint8_t *)&materialOrderIdx, sizeof(uint32_t)));
-
-		buf.cmdDrawIndexed(
-			materialVertexSpan.indexCount, // indexCount
-			materialVertexSpan.instanceCount, // instanceCount
-			materialVertexSpan.firstIndex, // firstIndex
-			0, // int32_t   vertexOffset
-			0  // uint32_t  firstInstance
-		);
-	}
 
 	if (_lightsBuffer->getLightsCount() && _lightsBuffer->getBuffer()) {
 		auto pipeline = (GraphicPipeline *)_data->subpasses[0].graphicPipelines.get(StringView(MaterialPass::ShadowPipeline))->pipeline.get();
 
 		buf.cmdBindPipeline(pipeline);
 
-		viewport = VkViewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
+		auto viewport = VkViewport{ 0.0f, 0.0f, float(currentExtent.width), float(currentExtent.height), 0.0f, 1.0f };
 		buf.cmdSetViewport(0, makeSpanView(&viewport, 1));
 
-		scissorRect = VkRect2D{ { 0, 0}, { currentExtent.width, currentExtent.height } };
+		auto scissorRect = VkRect2D{ { 0, 0}, { currentExtent.width, currentExtent.height } };
 		buf.cmdSetScissor(0, makeSpanView(&scissorRect, 1));
 
 		uint32_t samplerIndex = 1; // linear filtering

@@ -30,21 +30,28 @@
 
 namespace stappler::xenolith::renderqueue {
 
-struct FrameAttachmentSpecialization {
-	Extent2 extent;
-	uint32_t nlights = 0;
-	float shadowDensity = 1.0f;
+struct FrameOutputBinding : public Ref {
+	using CompleteCallback = Function<bool(const Rc<gl::View> &, FrameAttachmentData &data, bool success)>;
 
-	constexpr bool operator==(const FrameAttachmentSpecialization &other) const = default;
-	constexpr bool operator!=(const FrameAttachmentSpecialization &other) const = default;
-	constexpr auto operator<=>(const FrameAttachmentSpecialization &other) const = default;
+	Rc<gl::View> view;
+	Rc<Ref> handle;
+	CompleteCallback callback;
+	const Attachment *attachment = nullptr;
+
+	FrameOutputBinding(const Attachment *, CompleteCallback &&);
+	FrameOutputBinding(const Attachment *, Rc<gl::View> &&, CompleteCallback && = nullptr);
+
+	virtual ~FrameOutputBinding();
+
+	bool handleReady(FrameAttachmentData &data, bool success);
 };
 
 class FrameRequest final : public Ref {
 public:
+	using CompleteCallback = FrameOutputBinding::CompleteCallback;
+
 	virtual ~FrameRequest();
 
-	bool init(const Rc<FrameEmitter> &, Rc<ImageStorage> &&target, const gl::FrameContraints &);
 	bool init(const Rc<FrameEmitter> &, const gl::FrameContraints &);
 	bool init(const Rc<Queue> &q);
 	bool init(const Rc<Queue> &q, const gl::FrameContraints &);
@@ -59,24 +66,26 @@ public:
 	bool addInput(const Attachment *, Rc<AttachmentInputData> &&);
 
 	void setQueue(const Rc<Queue> &q);
-	void setOutput(const Attachment *, Function<bool(const FrameAttachmentData &, bool)> &&);
 
-	bool onOutputReady(gl::Loop &, FrameAttachmentData &) const;
-	void onOutputInvalidated(gl::Loop &, FrameAttachmentData &) const;
+	void setOutput(Rc<FrameOutputBinding> &&);
+	void setOutput(const Attachment *, CompleteCallback &&);
+	void setOutput(const Attachment *, Rc<gl::View> &&, CompleteCallback && = nullptr);
 
-	void finalize(gl::Loop &, bool success);
+	void setRenderTarget(const Attachment *, Rc<ImageStorage> &&);
+
+	bool onOutputReady(gl::Loop &, FrameAttachmentData &);
+	void onOutputInvalidated(gl::Loop &, FrameAttachmentData &);
+
+	void finalize(gl::Loop &, HashMap<const Attachment *, FrameAttachmentData *> &attachments, bool success);
 	void signalDependencies(gl::Loop &, bool success);
-
-	bool bindSwapchainCallback(Function<bool(FrameAttachmentData &, bool)> &&);
-	bool bindSwapchain(const Rc<gl::View> &);
-	bool bindSwapchain(const Attachment *, const Rc<gl::View> &);
-
-	bool isSwapchainAttachment(const Attachment *) const;
 
 	Rc<AttachmentInputData> getInputData(const Attachment *attachment);
 
+	void setAttachmentsDirty(bool value) { _attachmentsDirty = value; }
+	bool isAttachmentsDirty() const { return _attachmentsDirty; }
+
 	const Rc<PoolRef> &getPool() const { return _pool; }
-	const Rc<ImageStorage> &getRenderTarget() const { return _renderTarget; }
+	Rc<ImageStorage> getRenderTarget(const Attachment *);
 
 	const Rc<FrameEmitter> &getEmitter() const { return _emitter; }
 	const Rc<Queue> &getQueue() const { return _queue; }
@@ -93,16 +102,13 @@ public:
 	void setSceneId(uint64_t val) { _sceneId = val; }
 	uint64_t getSceneId() const { return _sceneId; }
 
-	const Rc<gl::View> &getSwapchain() const { return _swapchain; }
-
 	const Vector<Rc<DependencyEvent>> &getSignalDependencies() const { return _signalDependencies; }
-
-	void setFrameSpecialization(const FrameAttachmentSpecialization &spec) { _specialization = spec; }
-	const FrameAttachmentSpecialization &getFrameSpecialization() const { return _specialization; }
 
 	FrameRequest() = default;
 
 	void waitForInput(FrameQueue &, const Rc<AttachmentHandle> &a, Function<void(bool)> &&cb);
+
+	const FrameOutputBinding *getOutputBinding(const Attachment *) const;
 
 protected:
 	FrameRequest(const FrameRequest &) = delete;
@@ -115,15 +121,12 @@ protected:
 	Map<const Attachment *, Rc<AttachmentInputData>> _input;
 	bool _readyForSubmit = true; // if true, do not wait synchronization with other active frames in emitter
 	bool _persistentMappings = true; // true; // true; // try to map per-frame GPU memory persistently
+	bool _attachmentsDirty = false;
 	uint64_t _sceneId = 0;
 
 	Map<const ImageAttachment *, gl::ImageInfoData> _imageSpecialization;
-	Map<const Attachment *, Function<bool(FrameAttachmentData &, bool)>> _output;
-
-	const Attachment *_swapchainAttachment = nullptr;
-	Rc<gl::View> _swapchain;
-	Rc<ImageStorage> _renderTarget;
-	Rc<Ref> _swapchainHandle;
+	Map<const Attachment *, Rc<FrameOutputBinding>> _output;
+	Map<const Attachment *, Rc<ImageStorage>> _renderTargets;
 
 	Vector<Rc<DependencyEvent>> _signalDependencies;
 
@@ -134,8 +137,6 @@ protected:
 	};
 
 	Map<const Attachment *, WaitInputData> _waitForInputs;
-
-	FrameAttachmentSpecialization _specialization;
 };
 
 // Frame emitter is an interface, that continuously spawns frames, and can control validity of a frame
@@ -173,7 +174,6 @@ public:
 
 	void setEnableBarrier(bool value);
 
-	Rc<FrameRequest> makeRequest(Rc<ImageStorage> &&, const gl::FrameContraints &);
 	Rc<FrameRequest> makeRequest(const gl::FrameContraints &);
 	Rc<FrameHandle> submitNextFrame(Rc<FrameRequest> &&);
 
@@ -189,7 +189,7 @@ protected:
 	virtual void scheduleNextFrame(Rc<FrameRequest> &&);
 	virtual void scheduleFrameTimeout();
 
-	virtual void enableCacheAttachments(const Rc<FrameHandle> &);
+	virtual void enableCacheAttachments(const Rc<FrameHandle> &, bool dirty);
 
 	uint64_t _submitted = 0;
 	uint64_t _order = 0;
@@ -221,7 +221,6 @@ protected:
 
 	uint64_t _lastTotalFrameTime = 0;
 
-	FrameAttachmentSpecialization _cacheSpecialization;
 	Set<Rc<Queue>> _cacheRenderQueue;
 	Set<gl::ImageInfoData> _cacheImages;
 };

@@ -61,13 +61,17 @@ public:
 	void initWindow();
 	void stopWindow();
 
+	void setContentPadding(const Padding &);
+
 protected:
 	using vk::View::init;
 
 	virtual bool pollInput(bool frameReady) override;
+	virtual gl::SurfaceInfo getSurfaceOptions() const override;
 
 	bool _started = false;
 	ANativeWindow *_nativeWindow = nullptr;
+	Extent2 _identityExtent;
 };
 
 }
@@ -150,13 +154,25 @@ struct NativeActivity {
 	void setView(graphic::ViewImpl *);
 
 	void handleConfigurationChanged();
+	void handleContentRectChanged(const ARect *);
 
 	void handleInputQueueCreated(AInputQueue *);
 	void handleInputQueueDestroyed(AInputQueue *);
+	void handleLowMemory();
+	void* handleSaveInstanceState(size_t* outLen);
 
 	void handleNativeWindowCreated(ANativeWindow *);
 	void handleNativeWindowDestroyed(ANativeWindow *);
 	void handleNativeWindowRedrawNeeded(ANativeWindow *);
+	void handleNativeWindowResized(ANativeWindow *);
+
+	void handlePause();
+	void handleStart();
+	void handleResume();
+	void handleStop();
+
+	void handleWindowFocusChanged(int focused);
+
 	int handleLooperEvent(int fd, int events);
 	int handleInputEventQueue(int fd, int events, AInputQueue *);
 	int handleInputEvent(AInputEvent *);
@@ -164,6 +180,8 @@ struct NativeActivity {
 	int handleMotionEvent(AInputEvent *);
 
 	Value getAppInfo(AConfiguration *);
+
+	const Rc<graphic::ViewImpl> &waitForView();
 };
 
 }

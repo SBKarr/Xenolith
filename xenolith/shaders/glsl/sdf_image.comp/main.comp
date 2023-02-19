@@ -21,156 +21,52 @@ layout(set = 0, binding = 2) buffer GridIndexesBuffer {
 	uint index[];
 } gridIndexBuffer[3];
 
-layout(set = 0, binding = 3, r8) uniform writeonly image2DArray arrayImage;
-
-uint s_cellIdx;
-
-float dot2(in vec3 v) { return dot(v, v); }
-
-float triangle(in vec3 p, uint idx) {
-	TriangleData t = trianglesBuffer[0].triangles[idx];
-	vec3 v1 = vec3(t.a, t.value);
-	vec3 v2 = vec3(t.b, t.value);
-	vec3 v3 = vec3(t.c, t.value);
-
-	vec3 v21 = v2 - v1; vec3 p1 = p - v1;
-	vec3 v32 = v3 - v2; vec3 p2 = p - v2;
-	vec3 v13 = v1 - v3; vec3 p3 = p - v3;
-	vec3 nor = cross(v21, v13);
-
-	return sqrt((
-		sign(dot(cross(v21,nor),p1)) +
-		sign(dot(cross(v32,nor),p2)) +
-		sign(dot(cross(v13,nor),p3)) < 2.0 )
-	?
-		min( min(
-		dot2( v21 * clamp( dot(v21, p1) / dot2(v21), 0.0, 1.0 ) - p1), 
-		dot2( v32 * clamp( dot(v32, p2) / dot2(v32), 0.0, 1.0 ) - p2) ), 
-		dot2( v13 * clamp( dot(v13, p3) / dot2(v13), 0.0, 1.0 ) - p3) )
-	:
-		dot(nor, p1) * dot(nor, p1) / dot2(nor)
-	);
-}
-
-float map(in vec3 p) {
-	float value = 100.0;
-
-	uint targetOffset = s_cellIdx * shadowData.trianglesCount;
-	for (uint i = 0; i < gridSizeBuffer[1].grid[s_cellIdx]; ++ i) {
-		value = min(value, triangle(p, gridIndexBuffer[2].index[targetOffset + i]));
-	}
-	return value;
-}
-
-uint hit(in vec2 p, float h) {
-	uint idx;
-	uint targetOffset = s_cellIdx * shadowData.trianglesCount;
-
-	for (uint i = 0; i < gridSizeBuffer[1].grid[s_cellIdx]; ++ i) {
-		idx = gridIndexBuffer[2].index[targetOffset + i];
-		if (trianglesBuffer[0].triangles[idx].value > h) {
-			if (all(greaterThan(p, trianglesBuffer[0].triangles[idx].bbMin)) && all(lessThan(p, trianglesBuffer[0].triangles[idx].bbMax))) {
-				return 1;
-			}
-		}
-	}
-	return 0;
-}
+layout(set = 0, binding = 3, r16) uniform writeonly image2D sdfImage;
 
 float intersectTriangle(in vec2 p, uint idx) {
 	TriangleData t = trianglesBuffer[0].triangles[idx];
-
-	vec2 v0 = t.c - t.a;
-	vec2 v1 = t.b - t.a;
-	vec2 v2 = p - t.a;
-
-	float dot00 = dot(v0, v0);
-	float dot01 = dot(v0, v1);
-	float dot02 = dot(v0, v2);
-	float dot11 = dot(v1, v1);
-	float dot12 = dot(v1, v2);
-
-	float invDenom = 1 / (dot00 * dot11 - dot01 * dot01);
-	float u = (dot11 * dot02 - dot01 * dot12) * invDenom;
-	float v = (dot00 * dot12 - dot01 * dot02) * invDenom;
-	
-	return float((u >= -0.0001) && (v >= -0.0001) && (u + v < 1)) * t.value;
+	return (triangle2d(p, t.a, t.b, t.c) < -0.5 * shadowData.density) ? trianglesBuffer[0].triangles[idx].value : 0.0;
 }
 
-float intersect(in vec2 coord) {
+float intersect(in uint cellIdx, in vec2 coord) {
 	float value = 0.0;
 
-	uint targetOffset = s_cellIdx * shadowData.trianglesCount;
-	for (uint i = 0; i < gridSizeBuffer[1].grid[s_cellIdx]; ++ i) {
+	uint targetOffset = cellIdx * shadowData.trianglesCount;
+	for (uint i = 0; i < gridSizeBuffer[1].grid[cellIdx]; ++ i) {
 		value = max(value, intersectTriangle(coord, gridIndexBuffer[2].index[targetOffset + i]));
 	}
 	return value;
 }
 
-float softshadow(in vec3 ro, in vec3 rd, in float k) {
-	float res = 1.0;
-	float t = 0.002;
-	float h = 1.0;
-	for (int i = 0; i < 1000; i++) {
-		h = map(ro + rd * t);
-		if (h < 0.0001) {
-			return 0.0;
-		}
-		res = min(res, h / (t * k));
-		t += h;
-		if (t > 100.0) {
-			break;
-		}
-	}
-	return clamp(res, 0.0, 1.0);
-}
-
-float softshadow2(in vec3 ro, in vec3 rd, in float k) {
-	float res = 1.0;
-	float t = 0.002;
-	float h = 1.0;
-	for (int i = 0; i < 1000; i++) {
-		h = map(ro + rd * t) + t * (k * 0.5);
-		if (h < 0.0001) {
-			return 0.0;
-		}
-		res = min(res, h / (t * k));
-		t += h * inversesqrt(t + 1.0);
-		if (t > 100.0) {
-			break;
-		}
-	}
-	return clamp(res, 0.0, 1.0);
-}
-
 void main() {
-	uint xID = gl_GlobalInvocationID.x;
-	uint yID = gl_GlobalInvocationID.y;
+	ivec2 imgSize = imageSize(sdfImage);
+	vec2 rel = vec2(float(gl_GlobalInvocationID.x) / float(imgSize.x - 1), float(gl_GlobalInvocationID.y - 1) / float(imgSize.y));
+	vec2 coords = (vec2(float(gl_GlobalInvocationID.x) + 0.5, float(gl_GlobalInvocationID.y) + 0.5))
+			* shadowData.shadowSdfDensity
+			- shadowData.shadowOffset * rel 
+			//* shadowData.shadowSdfDensity + shadowData.shadowOffset * rel
+			;
 
-	ivec3 imgSize = imageSize(arrayImage);
-	vec2 coord = (vec2(float(xID), float(yID)) / (shadowData.density.xx) + 0.5.xx) / shadowData.shadowDensity;
+	uvec2 cellIdxs = uvec2(floor(coords)) / shadowData.gridSize;
+	uint cellIdx = cellIdxs.y * (shadowData.gridWidth) + cellIdxs.x;
 
-	uvec2 cellIdx = gl_GlobalInvocationID.xy / uint(floor(float(shadowData.gridSize) * shadowData.shadowDensity.xx));
+	uint targetOffset = cellIdx * shadowData.trianglesCount;
+	uint nTriangles = gridSizeBuffer[1].grid[cellIdx];
 
-	s_cellIdx = cellIdx.y * (shadowData.gridWidth) + cellIdx.x;
+	vec3 coords3d = vec3(coords, intersect(cellIdx, coords));
+	float value = 128.0;
+	float sdf;
+	float height;
 
-	vec3 norm = vec3(0.0, 0.0, 1.0);
+	for (uint i = 0; i < nTriangles; ++ i) {
+		TriangleData t = trianglesBuffer[0].triangles[gridIndexBuffer[2].index[targetOffset + i]];
+		sdf = triangle3d(coords3d, t.a, t.b, t.c, t.value);
 
-	float t = intersect(coord);
-
-	if (hit(coord, t) == 1) {
-		float value = 0.0;
-
-		for (uint i = 0; i < shadowData.ambientLightCount; ++ i) {
-			float s = softshadow2(vec3(coord, t), shadowData.ambientLights[i].normal.xyz, shadowData.ambientLights[i].normal.w);
-
-			imageStore(arrayImage, ivec3(xID, yID, i), (1.0 - s).xxxx);
-
-			value += (1.0 - s) * (1.0 / float(shadowData.ambientLightCount));
-		}
-	} else {
-		for (uint i = 0; i < shadowData.ambientLightCount; ++ i) {
-			imageStore(arrayImage, ivec3(xID, yID, i), 0.0.xxxx);
+		if (sdf < value) {
+			value = sdf;
+			height = t.value;
 		}
 	}
+
+	imageStore(sdfImage, ivec2(gl_GlobalInvocationID.x, imgSize.y - gl_GlobalInvocationID.y - 1), vec4(value, height, 0.0, 0.0));
 }

@@ -89,7 +89,16 @@ Extent2 Pass::getSizeForFrame(const FrameQueue &queue) const {
 }
 
 const AttachmentDescriptor *Pass::getDescriptor(const Attachment *a) const {
-	for (auto &it : _data->descriptors) {
+	for (auto &it : _data->passDescriptors) {
+		if (it->getAttachment() == a) {
+			return it;
+		}
+	}
+	return nullptr;
+}
+
+const AttachmentDescriptor *Pass::getAttachment(const Attachment *a) const {
+	for (auto &it : _data->passAttachments) {
 		if (it->getAttachment() == a) {
 			return it;
 		}
@@ -153,7 +162,11 @@ AttachmentHandle *PassHandle::getAttachmentHandle(const Attachment *a) const {
 	return nullptr;
 }
 
-void PassHandle::autorelease(Ref *ref) {
+void PassHandle::autorelease(Ref *ref) const {
+	if (!ref) {
+		return;
+	}
+
 	std::unique_lock lock(_autoreleaseMutex);
 	_autorelease.emplace_back(ref);
 }

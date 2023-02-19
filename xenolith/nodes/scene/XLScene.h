@@ -165,7 +165,7 @@ protected:
 	// отозванные ид могут быть выданы новым отзываемым материалам, чтобы не засорять биндинги
 	Vector<gl::MaterialId> _revokedIds;
 
-	float _shadowDensity = 1.0f;
+	float _shadowDensity = 0.5f;
 
 	uint32_t _lightsAmbientCount = 0;
 	uint32_t _lightsDirectCount = 0;
@@ -175,6 +175,10 @@ protected:
 
 	Color4F _globalLight = Color4F(1.0f, 1.0f, 1.0f, 1.0f);
 	gl::FrameContraints _constraints;
+
+	bool _cacheDirty = false;
+	float _cachedShadowDensity = nan();
+	uint32_t _cachedLightsCount = 0;
 };
 
 }

@@ -171,7 +171,7 @@ bool GeneralShadowTest::init() {
 		_sprite = addChild(Rc<VectorSprite>::create(move(image)), 0);
 		_sprite->setContentSize(Size2(256, 256));
 		_sprite->setAnchorPoint(Anchor::Middle);
-		_sprite->setColor(Color::Grey_500);
+		_sprite->setColor(Color::Grey_100);
 		_sprite->setQuality(0.75f);
 		_sprite->setScale(initialScale);
 		_sprite->setShadowIndex(initialShadow);

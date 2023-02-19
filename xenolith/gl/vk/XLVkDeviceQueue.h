@@ -46,6 +46,7 @@ class GraphicPipeline;
 class ComputePipeline;
 class CommandBuffer;
 class DescriptorSet;
+class DeviceMemoryPool;
 
 using PipelineDescriptor = renderqueue::PipelineDescriptor;
 
@@ -245,6 +246,9 @@ public:
 	void cmdBindDescriptorSets(RenderPassImpl *, uint32_t firstSet = 0);
 	void cmdBindDescriptorSets(RenderPassImpl *, SpanView<VkDescriptorSet>, uint32_t firstSet = 0);
 
+	void cmdBindGraphicDescriptorSets(VkPipelineLayout, SpanView<VkDescriptorSet>, uint32_t firstSet = 0);
+	void cmdBindComputeDescriptorSets(VkPipelineLayout, SpanView<VkDescriptorSet>, uint32_t firstSet = 0);
+
 	void cmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
 	void cmdDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex,
 			int32_t vertexOffset, uint32_t firstInstance);
@@ -256,9 +260,14 @@ public:
 
 	void cmdDispatch(uint32_t groupCountX, uint32_t groupCountY = 1, uint32_t groupCountZ = 1);
 
+	void cmdNextSubpass();
+
 	VkCommandBuffer getBuffer() const { return _buffer; }
 
 protected:
+	void addImage(Image *);
+	void addBuffer(Buffer *);
+
 	const CommandPool *_pool = nullptr;
 	const DeviceTable *_table = nullptr;
 	VkCommandBuffer _buffer = VK_NULL_HANDLE;
@@ -267,6 +276,7 @@ protected:
 	Set<Rc<Image>> _images;
 	Set<Rc<Framebuffer>> _framebuffers;
 	Set<Rc<DescriptorSet>> _descriptorSets;
+	Set<Rc<DeviceMemoryPool>> _memPool;
 };
 
 class CommandPool : public Ref {

@@ -134,7 +134,7 @@ bool GeneralAutofitTest::init() {
 
 	_nodeResize = addChild(Rc<GeneralAutofitTestResize>::create(), 1);
 	_nodeResize->setAnchorPoint(Anchor::Middle);
-	_nodeResize->setColor(Color::Grey_200);
+	_nodeResize->setColor(Color::Grey_400);
 	_nodeResize->setContentSize(Size2(48, 48));
 	_nodeResize->setRotation(-45.0_to_rad);
 
@@ -156,7 +156,7 @@ bool GeneralAutofitTest::init() {
 			auto max = Vec2(_contentSize / 2.0f) + Vec2(tmp.width, -tmp.height);
 			auto min = Vec2(_contentSize / 2.0f) + Vec2(32.0f, -32.0f);
 			auto pos = _nodeResize->getPosition().xy();
-			auto newPos = pos + swipe.delta;
+			auto newPos = pos + swipe.delta / swipe.density;
 
 			if (newPos.x < min.x) {
 				newPos.x = min.x;

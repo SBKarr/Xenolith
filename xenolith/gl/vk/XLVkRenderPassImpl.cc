@@ -36,16 +36,22 @@ DescriptorBinding::DescriptorBinding(VkDescriptorType type, uint32_t count) : ty
 	data.resize(count, DescriptorData{gl::ObjectHandle::zero(), nullptr});
 }
 
-void DescriptorBinding::write(uint32_t idx, DescriptorBufferInfo &&info) {
-	data[idx] = DescriptorData{gl::ObjectHandle(info.buffer->getBuffer()), info.buffer};
+Rc<Ref> DescriptorBinding::write(uint32_t idx, DescriptorBufferInfo &&info) {
+	auto ret = move(data[idx].data);
+	data[idx] = DescriptorData{gl::ObjectHandle(info.buffer->getBuffer()), move(info.buffer)};
+	return ret;
 }
 
-void DescriptorBinding::write(uint32_t idx, DescriptorImageInfo &&info) {
-	data[idx] = DescriptorData{gl::ObjectHandle(info.imageView->getImageView()), info.imageView};
+Rc<Ref> DescriptorBinding::write(uint32_t idx, DescriptorImageInfo &&info) {
+	auto ret = move(data[idx].data);
+	data[idx] = DescriptorData{gl::ObjectHandle(info.imageView->getImageView()), move(info.imageView)};
+	return ret;
 }
 
-void DescriptorBinding::write(uint32_t idx, DescriptorBufferViewInfo &&info) {
-	data[idx] = DescriptorData{gl::ObjectHandle(info.buffer->getBuffer()), info.buffer};
+Rc<Ref> DescriptorBinding::write(uint32_t idx, DescriptorBufferViewInfo &&info) {
+	auto ret = move(data[idx].data);
+	data[idx] = DescriptorData{gl::ObjectHandle(info.buffer->getBuffer()), move(info.buffer)};
+	return ret;
 }
 
 bool RenderPassImpl::Data::cleanup(Device &dev) {
@@ -98,13 +104,6 @@ VkRenderPass RenderPassImpl::getRenderPass(bool alt) const {
 	}
 	return _data->renderPass;
 }
-
-/*VkDescriptorSet RenderPassImpl::getDescriptorSet(uint32_t idx) const {
-	if (idx >= _data->sets.size()) {
-		return VK_NULL_HANDLE;
-	}
-	return _data->sets[idx];
-}*/
 
 bool RenderPassImpl::writeDescriptors(const QueuePassHandle &handle, bool async) const {
 	auto dev = (Device *)_device;
@@ -159,7 +158,9 @@ bool RenderPassImpl::writeDescriptors(const QueuePassHandle &handle, bool async)
 							return false;
 						} else {
 							localImages->emplace_back(VkDescriptorImageInfo{info.sampler, info.imageView->getImageView(), info.layout});
-							set->bindings[currentDescriptor].write(i, move(info));
+							if (auto ref = set->bindings[currentDescriptor].write(i, move(info))) {
+								handle.autorelease(ref);
+							}
 						}
 					}
 					break;
@@ -174,7 +175,9 @@ bool RenderPassImpl::writeDescriptors(const QueuePassHandle &handle, bool async)
 						DescriptorBufferViewInfo info(&desc, i, external);
 						if (h->writeDescriptor(handle, info)) {
 							localViews->emplace_back(info.target);
-							set->bindings[currentDescriptor].write(i, move(info));
+							if (auto ref = set->bindings[currentDescriptor].write(i, move(info))) {
+								handle.autorelease(ref);
+							}
 						} else {
 							return false;
 						}
@@ -195,7 +198,9 @@ bool RenderPassImpl::writeDescriptors(const QueuePassHandle &handle, bool async)
 							return false;
 						} else {
 							localBuffers->emplace_back(VkDescriptorBufferInfo{info.buffer->getBuffer(), info.offset, info.range});
-							set->bindings[currentDescriptor].write(i, move(info));
+							if (auto ref = set->bindings[currentDescriptor].write(i, move(info))) {
+								handle.autorelease(ref);
+							}
 						}
 					}
 					break;
@@ -259,6 +264,7 @@ bool RenderPassImpl::writeDescriptors(const QueuePassHandle &handle, bool async)
 		uint32_t currentDescriptor = 0;
 		for (auto &it : data->queueDescriptors) {
 			if (it->updateAfterBind != async) {
+				++ currentDescriptor;
 				continue;
 			}
 			if (!writeDescriptor(set, *it, currentDescriptor, false)) {
@@ -274,6 +280,7 @@ bool RenderPassImpl::writeDescriptors(const QueuePassHandle &handle, bool async)
 		uint32_t currentDescriptor = 0;
 		for (auto &it : data->extraDescriptors) {
 			if (it.updateAfterBind != async) {
+				++ currentDescriptor;
 				continue;
 			}
 			if (!writeDescriptor(set, it, currentDescriptor, true)) {
@@ -319,7 +326,7 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, PassData &data) {
 	Data pass;
 
 	size_t attachmentReferences = 0;
-	for (auto &it : data.descriptors) {
+	for (auto &it : data.passAttachments) {
 		if (it->getAttachment()->getType() != renderqueue::AttachmentType::Image) {
 			continue;
 		}
@@ -362,7 +369,7 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, PassData &data) {
 		if (it->getDescriptorType() == DescriptorType::Unknown) {
 			it->setDescriptorType(DescriptorType::Attachment);
 		}
-		it->setIndex(_attachmentDescriptions.size());
+		it->setAttachmentIndex(_attachmentDescriptions.size());
 
 		_attachmentDescriptions.emplace_back(attachment);
 		_attachmentDescriptionsAlternative.emplace_back(attachmentAlternative);
@@ -431,7 +438,7 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, PassData &data) {
 					}
 				}
 				if (!found) {
-					data.subpasses[i].preserve.emplace_back(it->getIndex());
+					data.subpasses[i].preserve.emplace_back(it->getAttachmentIndex());
 				}
 			}
 		}
@@ -452,7 +459,7 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, PassData &data) {
 					attachmentRef.attachment = VK_ATTACHMENT_UNUSED;
 					attachmentRef.layout = VK_IMAGE_LAYOUT_UNDEFINED;
 				} else {
-					attachmentRef.attachment = iit->getDescriptor()->getIndex();
+					attachmentRef.attachment = iit->getDescriptor()->getAttachmentIndex();
 					attachmentRef.layout = VkImageLayout(iit->getLayout());
 				}
 				_attachmentReferences.emplace_back(attachmentRef);
@@ -471,7 +478,7 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, PassData &data) {
 					attachmentRef.attachment = VK_ATTACHMENT_UNUSED;
 					attachmentRef.layout = VK_IMAGE_LAYOUT_UNDEFINED;
 				} else {
-					attachmentRef.attachment = iit->getDescriptor()->getIndex();
+					attachmentRef.attachment = iit->getDescriptor()->getAttachmentIndex();
 					attachmentRef.layout = VkImageLayout(iit->getLayout());
 				}
 				_attachmentReferences.emplace_back(attachmentRef);
@@ -494,7 +501,7 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, PassData &data) {
 					attachmentRef.attachment = VK_ATTACHMENT_UNUSED;
 					attachmentRef.layout = VK_IMAGE_LAYOUT_UNDEFINED;
 				} else {
-					attachmentRef.attachment = iit->getDescriptor()->getIndex();
+					attachmentRef.attachment = iit->getDescriptor()->getAttachmentIndex();
 					attachmentRef.layout = VkImageLayout(iit->getLayout());
 				}
 				_attachmentReferences.emplace_back(attachmentRef);
@@ -505,7 +512,7 @@ bool RenderPassImpl::initGraphicsPass(Device &dev, PassData &data) {
 
 		if (it.depthStencil) {
 			VkAttachmentReference attachmentRef{};
-			attachmentRef.attachment = it.depthStencil->getDescriptor()->getIndex();
+			attachmentRef.attachment = it.depthStencil->getDescriptor()->getAttachmentIndex();
 			attachmentRef.layout = VkImageLayout(it.depthStencil->getLayout());
 			_attachmentReferences.emplace_back(attachmentRef);
 			subpass.pDepthStencilAttachment = &_attachmentReferences.back();
@@ -653,7 +660,7 @@ bool RenderPassImpl::initDescriptors(Device &dev, PassData &data, Data &pass) {
 				flags.emplace_back(0);
 			}
 
-			binding->descriptor->setIndex(bindingIdx);
+			binding->descriptor->setDescriptorIndex(bindingIdx);
 
 			VkDescriptorSetLayoutBinding b;
 			b.binding = bindingIdx;
@@ -824,7 +831,7 @@ bool RenderPassImpl::initDescriptors(Device &dev, PassData &data, Data &pass) {
 
 	auto textureSetLayout = dev.getTextureSetLayout();
 	Vector<VkDescriptorSetLayout> layouts(pass.layouts);
-	for (auto &it : data.descriptors) {
+	for (auto &it : data.passDescriptors) {
 		if (it->usesTextureSet()) {
 			layouts.emplace_back(textureSetLayout->getLayout());
 		}

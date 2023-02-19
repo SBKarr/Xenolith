@@ -67,6 +67,9 @@ public:
 
 		// Не использовать переключение потоков для вывода изображения. Вместо этого, блокироваться на ожидании очереди в текущем потоке
 		bool presentImmediate = false;
+
+		// Запускать следующий кадр только по запросу либо наличию действий в процессе
+		bool renderOnDemand = true;
 	};
 
 	virtual ~View();
@@ -104,6 +107,8 @@ public:
 
 	vk::Device *getDevice() const { return _device; }
 
+	virtual void setReadyForNextFrame() override;
+
 protected:
 	using gl::View::init;
 
@@ -132,16 +137,16 @@ protected:
 	// Попытаться захватить изображение для отрисовки кадра. Если задан флаг immediate
 	// или включен режим followDisplayLink - блокирует поток до успешного захвата
 	// В противном случае, если захват не удался - необходимо поробовать позже
-	bool acquireScheduledImage(const Rc<SwapchainImage> &, ScheduleImageMode);
+	bool acquireScheduledImageImmediate(const Rc<SwapchainImage> &);
+	bool acquireScheduledImage();
+
+	void scheduleImage(Rc<SwapchainImage> &&);
+	void onSwapchainImageReady(Rc<SwapchainHandle::SwapchainAcquiredImage> &&);
 
 	virtual bool recreateSwapchain(gl::PresentMode);
-	virtual bool createSwapchain(gl::SwapchainConfig &&cfg, gl::PresentMode presentMode);
+	virtual bool createSwapchain(const gl::SurfaceInfo &, gl::SwapchainConfig &&cfg, gl::PresentMode presentMode);
 
 	bool isImagePresentable(const gl::ImageObject &image, VkFilter &filter) const;
-
-	// Отправляет запрос на кадр для изображения (оно может быть или не быть захваченным для отрисовки)
-	// Запрос сперва собирает данные с помощью директора в основном потоке, затем начинает цикл построения кадра в графическом потоке
-	void runFrameWithSwapchainImage(Rc<ImageStorage> &&);
 
 	// Презентует отложенное подготовленное (кадр завершён) изображение
 	void runScheduledPresent(Rc<SwapchainImage> &&);
@@ -161,9 +166,13 @@ protected:
 
 	EngineOptions _options;
 
+	bool _readyForNextFrame = false;
 	bool _blockDeprecation = false;
+	uint64_t _framesInProgress = 0;
 	uint64_t _fenceOrder = 0;
 	uint64_t _frameOrder = 0;
+	uint64_t _onDemandOrder = 1;
+	uint64_t _scheduledTime = 0;
 	Rc<Surface> _surface;
 	Rc<Instance> _instance;
 	Rc<Device> _device;
@@ -171,11 +180,13 @@ protected:
 	String _threadName;
 
 	Rc<ImageStorage> _initImage;
-	Set<Rc<Fence>> _fences;
+	Vector<Rc<Fence>> _fences;
 
 	Vector<Rc<SwapchainImage>> _fenceImages;
-	Vector<Rc<SwapchainImage>> _scheduledImages;
+	std::deque<Rc<SwapchainImage>> _scheduledImages;
 	Vector<Rc<SwapchainImage>> _scheduledPresent;
+	Set<SwapchainHandle::SwapchainAcquiredImage *> _requestedSwapchainImage;
+	std::deque<Rc<SwapchainHandle::SwapchainAcquiredImage>> _swapchainImages;
 };
 
 }

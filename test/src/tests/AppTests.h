@@ -45,6 +45,7 @@ enum class LayoutName {
 	GeneralAutofitTest,
 	GeneralTemporaryResourceTest,
 	GeneralShadowTest,
+	GeneralScissorTest,
 
 	InputTouchTest = 256 * 2,
 	InputKeyboardTest,

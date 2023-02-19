@@ -117,6 +117,7 @@ class Application;
 class Director;
 
 class Node;
+class DynamicStateNode;
 class Sprite;
 class Label;
 class Layer;

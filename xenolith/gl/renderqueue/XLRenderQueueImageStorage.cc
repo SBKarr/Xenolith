@@ -104,10 +104,10 @@ void ImageStorage::releaseSemaphore(gl::Semaphore *) {
 
 void ImageStorage::setReady(bool value) {
 	if (_ready != value) {
+		_ready = value;
 		if (value) {
 			notifyReady();
 		}
-		_ready = value;
 	}
 }
 

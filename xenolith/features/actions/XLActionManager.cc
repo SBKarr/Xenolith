@@ -272,4 +272,8 @@ void ActionManager::update(const UpdateTime &time) {
 	_pending.clear();
 }
 
+bool ActionManager::empty() const {
+	return _actions.empty() && _pending.empty();
+}
+
 }

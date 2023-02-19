@@ -42,7 +42,7 @@ public:
 
 	bool init(Loop &loop, Device &, Rc<FrameRequest> &&, uint64_t gen);
 
-	Rc<DeviceMemoryPool> getMemPool(void *key);
+	const Rc<DeviceMemoryPool> &getMemPool(void *key);
 
 protected:
 	Rc<Allocator> _allocator;

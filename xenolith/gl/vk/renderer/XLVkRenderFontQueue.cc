@@ -236,7 +236,7 @@ void RenderFontAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentInp
 		handle.performInQueue([this, cb = move(cb), d = move(d)] (FrameHandle &handle) mutable -> bool {
 			doSubmitInput(handle, move(cb), move(d));
 			return true;
-		}, d, "RenderFontAttachmentHandle::submitInput");
+		}, nullptr, "RenderFontAttachmentHandle::submitInput");
 	});
 }
 
@@ -296,7 +296,7 @@ void RenderFontAttachmentHandle::doSubmitInput(FrameHandle &handle, Function<voi
 	}
 
 	auto frame = static_cast<DeviceFrameHandle *>(&handle);
-	auto memPool =  frame->getMemPool(&handle);
+	auto &memPool = frame->getMemPool(&handle);
 
 	_frontBuffer = memPool->spawn(AllocationUsage::HostTransitionSource, gl::BufferInfo(
 		gl::ForceBufferUsage(gl::BufferUsage::TransferSrc),
@@ -542,7 +542,7 @@ auto RenderFontRenderPass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassH
 }
 
 void RenderFontRenderPass::prepare(gl::Device &) {
-	for (auto &it : _data->descriptors) {
+	for (auto &it : _data->passDescriptors) {
 		if (auto a = dynamic_cast<RenderFontAttachment *>(it->getAttachment())) {
 			_fontAttachment = a;
 		}

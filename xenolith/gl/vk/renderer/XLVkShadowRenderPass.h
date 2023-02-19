@@ -33,6 +33,7 @@ class ShadowLightDataAttachment : public BufferAttachment {
 public:
 	struct LightData {
 		Color4F globalColor;
+		Color4F discardColor;
 
 		uint32_t trianglesCount;
 		uint32_t gridSize;
@@ -47,7 +48,10 @@ public:
 		float pixX;
 		float pixY;
 		float luminosity;
-		float shadowDensity;
+		float shadowSdfDensity;
+
+		Vec2 shadowDensity;
+		Vec2 shadowOffset;
 
 		gl::AmbientLightData ambientLights[16];
 		gl::DirectLightData directLights[16];
@@ -89,6 +93,13 @@ public:
 		Vec2 a;
 		Vec2 b;
 		Vec2 c;
+		/*Vec2 e0;
+		Vec2 e1;
+		Vec2 e2;
+		float e0dot;
+		float e1dot;
+		float e2dot;
+		float s;*/
 		float value;
 		float opacity;
 	};
@@ -120,7 +131,17 @@ public:
 
 	virtual gl::ImageInfo getAttachmentInfo(const AttachmentHandle *, Extent3 e) const override;
 
-	virtual Extent3 getSizeForFrame(const FrameQueue &) const override;
+protected:
+	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
+};
+
+class ShadowSdfImageAttachment : public ImageAttachment {
+public:
+	virtual ~ShadowSdfImageAttachment();
+
+	virtual bool init(StringView, Extent2 extent);
+
+	virtual gl::ImageInfo getAttachmentInfo(const AttachmentHandle *, Extent3 e) const override;
 
 protected:
 	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
@@ -132,13 +153,6 @@ public:
 
 	static constexpr StringView SdfTrianglesComp = "SdfTrianglesComp";
 	static constexpr StringView SdfImageComp = "SdfImageComp";
-
-	struct RenderQueueInfo {
-		Application *app = nullptr;
-		renderqueue::Queue::Builder *builder = nullptr;
-		Extent2 extent;
-		Function<void(gl::Resource::Builder &)> resourceCallback;
-	};
 
 	static bool makeDefaultRenderQueue(renderqueue::Queue::Builder &, Extent2 extent);
 
@@ -230,7 +244,10 @@ public:
 	const Rc<DeviceBuffer> &getGridSize() const { return _gridSize; }
 	const Rc<DeviceBuffer> &getGridIndex() const { return _gridIndex; }
 
+	uint32_t getTrianglesCount() const { return _trianglesCount; }
+
 protected:
+	uint32_t _trianglesCount = 0;
 	Rc<DeviceBuffer> _triangles;
 	Rc<DeviceBuffer> _gridSize;
 	Rc<DeviceBuffer> _gridIndex;
@@ -241,8 +258,6 @@ public:
 	virtual ~ShadowImageArrayAttachmentHandle() { }
 
 	virtual void submitInput(FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
-	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &, uint32_t, bool isExternal) const override;
-	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorImageInfo &) override;
 
 	gl::ImageInfo getImageInfo() const { return _currentImageInfo; }
 	float getShadowDensity() const { return _shadowDensity; }
@@ -250,6 +265,22 @@ public:
 	virtual bool isAvailable(const FrameQueue &) const override;
 
 protected:
+	float _shadowDensity = 1.0f;
+	gl::ImageInfo _currentImageInfo;
+};
+
+class ShadowSdfImageAttachmentHandle : public ImageAttachmentHandle {
+public:
+	virtual ~ShadowSdfImageAttachmentHandle() { }
+
+	virtual void submitInput(FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
+
+	gl::ImageInfo getImageInfo() const { return _currentImageInfo; }
+	float getShadowDensity() const { return _shadowDensity; }
+	float getSceneDensity() const { return _sceneDensity; }
+
+protected:
+	float _sceneDensity = 1.0f;
 	float _shadowDensity = 1.0f;
 	gl::ImageInfo _currentImageInfo;
 };
@@ -268,7 +299,7 @@ protected:
 	const ShadowTrianglesAttachmentHandle *_trianglesBuffer = nullptr;
 	const ShadowImageArrayAttachmentHandle *_arrayAttachment = nullptr;
 
-	uint32_t _gridCellSize = 64;
+	uint32_t _gridCellSize = 32;
 };
 
 }

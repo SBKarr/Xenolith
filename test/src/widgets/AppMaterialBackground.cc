@@ -66,8 +66,11 @@ void MaterialBackground::onContentSizeDirty() {
 void MaterialBackground::onEnter(Scene *scene) {
 	BackgroundSurface::onEnter(scene);
 
-	auto light = Rc<SceneLight>::create(SceneLightType::Ambient, Vec2(0.0f, 0.3f), 1.5f, Color::White);
-	auto ambient = Rc<SceneLight>::create(SceneLightType::Ambient, Vec2(0.0f, 0.0f), 1.5f, Color::White);
+	auto color = Color4F::WHITE;
+	color.a = 0.5f;
+
+	auto light = Rc<SceneLight>::create(SceneLightType::Ambient, Vec2(0.0f, 0.3f), 1.5f, color);
+	auto ambient = Rc<SceneLight>::create(SceneLightType::Ambient, Vec2(0.0f, 0.0f), 1.5f, color);
 
 	_scene->setGlobalLight(Color4F::WHITE);
 	_scene->removeAllLights();

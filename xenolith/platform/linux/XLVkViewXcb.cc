@@ -187,7 +187,7 @@ XcbView::XcbView(XcbLibrary *lib, ViewImpl *impl, StringView name, URect rect) {
 
 	_xcb->xcb_flush(_connection);
 
-	impl->setScreenExtent(Extent2(_width, _height));
+	//impl->setScreenExtent(Extent2(_width, _height));
 }
 
 XcbView::~XcbView() {

@@ -57,6 +57,7 @@ public:
 	virtual Extent2 getSizeForFrame(const FrameQueue &) const;
 
 	virtual const AttachmentDescriptor *getDescriptor(const Attachment *) const;
+	virtual const AttachmentDescriptor *getAttachment(const Attachment *) const;
 
 protected:
 	friend class Queue;
@@ -125,7 +126,7 @@ public:
 
 	virtual AttachmentHandle *getAttachmentHandle(const Attachment *) const;
 
-	void autorelease(Ref *);
+	void autorelease(Ref *) const;
 
 protected:
 	bool _isAsync = false; // async passes can be submitted before previous frame submits all passes
@@ -133,8 +134,8 @@ protected:
 	const PassData *_data = nullptr;
 	FramePassData *_queueData = nullptr;
 
-	Mutex _autoreleaseMutex;
-	Vector<Rc<Ref>> _autorelease;
+	mutable Mutex _autoreleaseMutex;
+	mutable Vector<Rc<Ref>> _autorelease;
 };
 
 }

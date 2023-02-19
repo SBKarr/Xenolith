@@ -25,6 +25,7 @@
 #define XENOLITH_GL_COMMON_XLGLCOMMANDLIST_H_
 
 #include "XLGl.h"
+#include "XLGlSdf.h"
 
 namespace stappler::xenolith::gl {
 
@@ -35,6 +36,8 @@ enum class CommandType : uint16_t {
 
 	ShadowArray,
 	ShadowDeferred,
+
+	SdfGroup2D
 };
 
 struct CmdGeneral {
@@ -42,6 +45,7 @@ struct CmdGeneral {
 	gl::MaterialId material = 0;
 	gl::StateId state = 0;
 	RenderingLevel renderingLevel = RenderingLevel::Solid;
+	float depthValue = 0.0f;
 };
 
 struct CmdVertexArray : CmdGeneral {
@@ -93,18 +97,20 @@ public:
 	}
 
 	void pushVertexArray(Rc<VertexData> &&, const Mat4 &,
-			SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel, CommandFlags = CommandFlags::None);
+			SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel, float depthValue, CommandFlags = CommandFlags::None);
 
 	// data should be preallocated from frame's pool
 	void pushVertexArray(SpanView<TransformedVertexData>,
-			SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel, CommandFlags = CommandFlags::None);
+			SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel, float depthValue, CommandFlags = CommandFlags::None);
 
 	void pushDeferredVertexResult(const Rc<DeferredVertexResult> &, const Mat4 &view, const Mat4 &model, bool normalized,
-			SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel, CommandFlags = CommandFlags::None);
+			SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel, float depthValue, CommandFlags = CommandFlags::None);
 
 	void pushShadowArray(Rc<VertexData> &&, const Mat4 &, float value);
 	void pushShadowArray(SpanView<TransformedVertexData>, float value);
 	void pushDeferredShadow(const Rc<DeferredVertexResult> &, const Mat4 &view, const Mat4 &model, bool normalized, float value);
+
+	void pushSdfGroup(const Mat4 &view, const Mat4 &model, float value, const Callback<void(CmdSdfGroup2D &)> &cb);
 
 	gl::StateId addState(DrawStateValues);
 	const DrawStateValues *getState(gl::StateId) const;

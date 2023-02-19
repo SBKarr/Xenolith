@@ -43,14 +43,21 @@ void ShadowLightDataAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::Attachme
 			return;
 		}
 
+		auto devFrame = (DeviceFrameHandle *)(&handle);
+
 		_input = move(d);
+		_data = devFrame->getMemPool(devFrame)->spawn(AllocationUsage::DeviceLocalHostVisible,
+					gl::BufferInfo(((BufferAttachment *)_attachment.get())->getInfo(), sizeof(ShadowLightDataAttachment::LightData)));
 		cb(true);
 	});
 }
 
 bool ShadowLightDataAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
 		uint32_t, bool isExternal) const {
-	return _data;
+	if (_data) {
+		return true;
+	}
+	return false;
 }
 
 bool ShadowLightDataAttachmentHandle::writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &info) {
@@ -67,12 +74,8 @@ bool ShadowLightDataAttachmentHandle::writeDescriptor(const QueuePassHandle &, D
 	return false;
 }
 
-void ShadowLightDataAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame, uint32_t trianglesCount, float value, uint32_t gridSize, Extent2 extent) {
-	_data = devFrame->getMemPool(devFrame)->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(((BufferAttachment *)_attachment.get())->getInfo(), sizeof(ShadowLightDataAttachment::LightData)));
-
+void ShadowLightDataAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame, uint32_t trianglesCount, float value, uint32_t gridSize, Extent2) {
 	ShadowLightDataAttachment::LightData *data = nullptr;
-
 	DeviceBuffer::MappedRegion mapped;
 	if (devFrame->isPersistentMapping()) {
 		mapped = _data->map();
@@ -89,23 +92,44 @@ void ShadowLightDataAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame
 		for (uint32_t i = 0; i < _input->directLightCount; ++ i) {
 			l += _input->directLights[i].color.a;
 		}
-		data->luminosity = l;
+		data->luminosity = 1.0f / l;
 	} else {
-		data->luminosity = _input->luminosity;
+		data->luminosity = 1.0f / _input->luminosity;
 	}
 
-	data->globalColor = _input->globalColor;
+	float fullDensity = _input->sceneDensity;
+	float shadowDensity = _input->sceneDensity / _input->shadowDensity;
+	auto screenSize = devFrame->getFrameConstraints().getScreenSize();
+
+	Extent2 scaledExtent(ceilf(screenSize.width / fullDensity), ceilf(screenSize.height / fullDensity));
+
+	Extent2 shadowExtent(ceilf(screenSize.width / shadowDensity), ceilf(screenSize.height / shadowDensity));
+	Vec2 shadowOffset(shadowExtent.width - screenSize.width / shadowDensity, shadowExtent.height - screenSize.height / shadowDensity);
+
+	data->globalColor = _input->globalColor * data->luminosity;
+
+	// pre-calculated color with no shadows
+	Color4F discardColor = _input->globalColor;
+	for (uint i = 0; i < _input->ambientLightCount; ++ i) {
+		discardColor = discardColor + (_input->ambientLights[i].color * _input->ambientLights[i].color.a) * data->luminosity;
+	}
+	discardColor.a = 1.0f;
+	data->discardColor = discardColor;
+
 	data->trianglesCount = trianglesCount;
-	data->gridSize = gridSize;
-	data->gridWidth = (extent.width - 1) / gridSize + 1;
-	data->gridHeight = (extent.height - 1) / gridSize + 1;
+	data->gridSize = ceilf(gridSize / fullDensity);
+	data->gridWidth = (scaledExtent.width - 1) / data->gridSize + 1;
+	data->gridHeight = (scaledExtent.height - 1) / data->gridSize + 1;
 	data->ambientLightCount = _input->ambientLightCount;
 	data->directLightCount = _input->directLightCount;
 	data->bbOffset = getBoxOffset(value);
 	data->density = _input->sceneDensity;
-	data->shadowDensity = _input->shadowDensity;
-	data->pixX = 2.0f / float(extent.width);
-	data->pixY = 2.0f / float(extent.height);
+	data->shadowSdfDensity = 1.0f / _input->shadowDensity;
+	data->shadowDensity = Vec2(float(scaledExtent.width) / float(screenSize.width), float(scaledExtent.height) / float(screenSize.height));
+	data->shadowDensity = Vec2(1.0f / _input->sceneDensity, 1.0 / _input->sceneDensity);
+	data->shadowOffset = shadowOffset;
+	data->pixX = 1.0f / float(screenSize.width);
+	data->pixY = 1.0f / float(screenSize.height);
 	memcpy(data->ambientLights, _input->ambientLights, sizeof(gl::AmbientLightData) * config::MaxAmbientLights);
 	memcpy(data->directLights, _input->directLights, sizeof(gl::DirectLightData) * config::MaxDirectLights);
 
@@ -125,7 +149,7 @@ float ShadowLightDataAttachmentHandle::getBoxOffset(float value) const {
 		float n_2 = l.normal.x * l.normal.x + l.normal.y * l.normal.y;
 		float m = std::sqrt(n_2) / std::sqrt(1 - n_2);
 
-		bbox = std::max((m * value * 2.0f) + (std::ceil(l.normal.w * value * 2.0f)), bbox);
+		bbox = std::max((m * value * 2.0f) + (std::ceil(l.normal.w * value)), bbox);
 	}
 	return bbox;
 }
@@ -259,7 +283,7 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 			}
 		} else {
 			for (auto &it : vertexes) {
-				const_cast<gl::TransformedVertexData &>(it).mat = cmd->viewTransform * cmd->modelTransform * it.mat;
+				const_cast<gl::TransformedVertexData &>(it).mat = /*cmd->viewTransform */ cmd->modelTransform * it.mat;
 			}
 		}
 
@@ -279,6 +303,9 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 		case gl::CommandType::ShadowDeferred:
 			pushDeferred(cmd, (const gl::CmdShadowDeferred *)cmd->data);
 			break;
+		case gl::CommandType::SdfGroup2D:
+			// TODO
+			break;
 		}
 		cmd = cmd->next;
 	}
@@ -290,7 +317,7 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 	auto &info = ((BufferAttachment *)_attachment.get())->getInfo();
 
 	// create buffers
-	auto pool = handle->getMemPool(handle);
+	auto &pool = handle->getMemPool(handle);
 	_indexes = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
 			gl::BufferInfo(info, (globalWritePlan.indexes / 3) * sizeof(ShadowTrianglesAttachment::IndexData)));
 
@@ -408,13 +435,14 @@ void ShadowTrianglesAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame
 	uint32_t width = (extent.width - 1) / gridSize + 1;
 	uint32_t height = (extent.height - 1) / gridSize + 1;
 	trianglesCount = std::max(uint32_t(1), trianglesCount);
-	auto pool = devFrame->getMemPool(devFrame);
+	auto &pool = devFrame->getMemPool(devFrame);
 	_triangles = pool->spawn(AllocationUsage::DeviceLocal,
 			gl::BufferInfo(gl::BufferUsage::StorageBuffer, trianglesCount * sizeof(ShadowTrianglesAttachment::TriangleData)));
 	_gridSize = pool->spawn(AllocationUsage::DeviceLocal,
 			gl::BufferInfo(gl::BufferUsage::StorageBuffer, width * height * sizeof(uint32_t)));
 	_gridIndex = pool->spawn(AllocationUsage::DeviceLocal,
 			gl::BufferInfo(gl::BufferUsage::StorageBuffer, trianglesCount * width * height * sizeof(uint32_t)));
+	_trianglesCount = trianglesCount;
 }
 
 bool ShadowTrianglesAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
@@ -522,10 +550,7 @@ bool ShadowImageArrayAttachment::init(StringView name, Extent2 extent) {
 		.initialLayout = renderqueue::AttachmentLayout::Undefined,
 		.finalLayout = renderqueue::AttachmentLayout::ShaderReadOnlyOptimal,
 		.clearOnLoad = false,
-		.clearColor = Color4F(1.0f, 0.0f, 0.0f, 0.0f),
-		.frameSizeCallback = [] (const FrameQueue &frame) {
-			return Extent3(frame.getExtent());
-		}
+		.clearColor = Color4F(1.0f, 0.0f, 0.0f, 0.0f)
 	});
 }
 
@@ -534,14 +559,33 @@ gl::ImageInfo ShadowImageArrayAttachment::getAttachmentInfo(const AttachmentHand
 	return img->getImageInfo();
 }
 
-Extent3 ShadowImageArrayAttachment::getSizeForFrame(const FrameQueue &q) const {
-	auto e = ImageAttachment::getSizeForFrame(q);
-	auto d = q.getFrame()->getFrameSpecialization().shadowDensity;
-	return Extent3(std::floor(e.width * d), std::floor(e.height * d), e.depth);
-}
-
 auto ShadowImageArrayAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<AttachmentHandle> {
 	return Rc<ShadowImageArrayAttachmentHandle>::create(this, handle);
+}
+
+ShadowSdfImageAttachment::~ShadowSdfImageAttachment() { }
+
+bool ShadowSdfImageAttachment::init(StringView name, Extent2 extent) {
+	return ImageAttachment::init(name, gl::ImageInfo(
+		extent,
+		gl::ForceImageUsage(gl::ImageUsage::Storage | gl::ImageUsage::Sampled | gl::ImageUsage::TransferDst | gl::ImageUsage::TransferSrc),
+		gl::RenderPassType::Compute,
+		gl::ImageFormat::R16G16_SFLOAT),
+	ImageAttachment::AttachmentInfo{
+		.initialLayout = renderqueue::AttachmentLayout::Undefined,
+		.finalLayout = renderqueue::AttachmentLayout::ShaderReadOnlyOptimal,
+		.clearOnLoad = false,
+		.clearColor = Color4F(1.0f, 0.0f, 0.0f, 0.0f)
+	});
+}
+
+gl::ImageInfo ShadowSdfImageAttachment::getAttachmentInfo(const AttachmentHandle *a, Extent3 e) const {
+	auto img = (const ShadowSdfImageAttachmentHandle *)a;
+	return img->getImageInfo();
+}
+
+Rc<ShadowSdfImageAttachment::AttachmentHandle> ShadowSdfImageAttachment::makeFrameHandle(const FrameQueue &handle) {
+	return Rc<ShadowSdfImageAttachmentHandle>::create(this, handle);
 }
 
 bool ShadowPass::makeDefaultRenderQueue(renderqueue::Queue::Builder &builder, Extent2 extent) {
@@ -572,7 +616,7 @@ bool ShadowPass::makeDefaultRenderQueue(renderqueue::Queue::Builder &builder, Ex
 
 		// can be reused after RenderPass is submitted
 		FrameRenderPassState::Submitted,
-	}, DescriptorType::StorageImage);
+	}, DescriptorType::StorageImage, AttachmentLayout::ShaderReadOnlyOptimal);
 
 	// define global input-output
 	// materialInput is persistent between frames, only vertexes should be provided before rendering started
@@ -593,7 +637,7 @@ auto ShadowPass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle> {
 
 void ShadowPass::prepare(gl::Device &dev) {
 	QueuePass::prepare(dev);
-	for (auto &it : _data->descriptors) {
+	for (auto &it : _data->passDescriptors) {
 		if (auto a = dynamic_cast<ShadowVertexAttachment *>(it->getAttachment())) {
 			_vertexes = a;
 		} else if (auto a = dynamic_cast<ShadowTrianglesAttachment *>(it->getAttachment())) {
@@ -757,23 +801,30 @@ void ShadowImageArrayAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::Attachm
 	});
 }
 
-bool ShadowImageArrayAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &, uint32_t, bool isExternal) const {
-	return getImage();
-}
-
-bool ShadowImageArrayAttachmentHandle::writeDescriptor(const QueuePassHandle &, DescriptorImageInfo &target) {
-	auto &image = _queueData->image;
-	auto viewInfo = gl::ImageViewInfo(*(renderqueue::ImageAttachmentDescriptor *)target.descriptor->descriptor, image->getInfo());
-	if (auto view = image->getView(viewInfo)) {
-		target.layout = VK_IMAGE_LAYOUT_GENERAL;
-		target.imageView = (ImageView *)view.get();
-		return true;
-	}
-	return false;
-}
-
 bool ShadowImageArrayAttachmentHandle::isAvailable(const FrameQueue &) const {
 	return _currentImageInfo.arrayLayers.get() > 0;
+}
+
+void ShadowSdfImageAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
+	auto d = data.cast<gl::ShadowLightInput>();
+	if (!d || q.isFinalized()) {
+		cb(false);
+		return;
+	}
+
+	q.getFrame()->waitForDependencies(data->waitDependencies, [this, d = move(d), cb = move(cb)] (FrameHandle &handle, bool success) mutable {
+		if (!success || !handle.isValidFlag()) {
+			cb(false);
+			return;
+		}
+
+		_shadowDensity = d->shadowDensity;
+		_sceneDensity = d->sceneDensity;
+		_currentImageInfo = ((ImageAttachment *)_attachment.get())->getImageInfo();
+		_currentImageInfo.extent = Extent2(std::floor((_currentImageInfo.extent.width / d->sceneDensity) * _shadowDensity),
+				std::floor((_currentImageInfo.extent.height / d->sceneDensity) * _shadowDensity));
+		cb(true);
+	});
 }
 
 }

@@ -54,15 +54,26 @@ public:
 		Map<gl::ImageViewInfo, Rc<ImageView>> views;
 	};
 
+	struct SwapchainAcquiredImage : public Ref {
+		uint32_t imageIndex;
+		const SwapchainImageData *data;
+		Rc<Semaphore> sem;
+		Rc<SwapchainHandle> swapchain;
+
+		SwapchainAcquiredImage(uint32_t idx, const SwapchainImageData *data, Rc<Semaphore> &&sem, Rc<SwapchainHandle> &&swapchain)
+		: imageIndex(idx), data(data), sem(move(sem)), swapchain(move(swapchain)) { }
+	};
+
 	virtual ~SwapchainHandle();
 
-	bool init(Device &dev, const gl::SwapchainConfig &, gl::ImageInfo &&, gl::PresentMode,
+	bool init(Device &dev, const gl::SurfaceInfo &, const gl::SwapchainConfig &, gl::ImageInfo &&, gl::PresentMode,
 			Surface *, uint32_t families[2], SwapchainHandle * = nullptr);
 
 	gl::PresentMode getPresentMode() const { return _presentMode; }
 	gl::PresentMode getRebuildMode() const { return _rebuildMode; }
 	const gl::ImageInfo &getImageInfo() const { return _imageInfo; }
 	const gl::SwapchainConfig &getConfig() const { return _config; }
+	const gl::SurfaceInfo &getSurfaceInfo() const { return _surfaceInfo; }
 	VkSwapchainKHR getSwapchain() const { return _swapchain; }
 	uint32_t getAcquiredImagesCount() const { return _acquiredImages; }
 	const Vector<SwapchainImageData> &getImages() const { return _images; }
@@ -73,8 +84,7 @@ public:
 	// returns true if it was first deprecation
 	bool deprecate(bool fast);
 
-	Rc<ImageStorage> acquire(bool lockfree, const Rc<Fence> &fence);
-	bool acquire(const Rc<SwapchainImage> &, const Rc<Fence> &fence, bool immediate);
+	Rc<SwapchainAcquiredImage> acquire(bool lockfree, const Rc<Fence> &fence);
 
 	VkResult present(DeviceQueue &queue, const Rc<ImageStorage> &);
 	void invalidateImage(const ImageStorage *);
@@ -93,6 +103,7 @@ protected:
 	bool _deprecated = false;
 	gl::PresentMode _presentMode = gl::PresentMode::Unsupported;
 	gl::ImageInfo _imageInfo;
+	gl::SurfaceInfo _surfaceInfo;
 	gl::SwapchainConfig _config;
 	VkSwapchainKHR _swapchain = VK_NULL_HANDLE;
 	Vector<SwapchainImageData> _images;
@@ -118,7 +129,7 @@ public:
 	virtual ~SwapchainImage();
 
 	virtual bool init(Rc<SwapchainHandle> &&, uint64_t frameOrder, uint64_t presentWindow);
-	virtual bool init(Rc<SwapchainHandle> &&, const SwapchainHandle::SwapchainImageData &, const Rc<Semaphore> &);
+	virtual bool init(Rc<SwapchainHandle> &&, const SwapchainHandle::SwapchainImageData &, Rc<Semaphore> &&);
 
 	virtual void cleanup() override;
 	virtual void rearmSemaphores(gl::Loop &) override;

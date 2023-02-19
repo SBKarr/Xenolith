@@ -25,7 +25,7 @@
 namespace stappler::xenolith::app {
 
 bool InputTextTest::init() {
-	if (!LayoutTest::init(LayoutName::MaterialInputFieldTest, "")) {
+	if (!LayoutTest::init(LayoutName::InputTextTest, "")) {
 		return false;
 	}
 

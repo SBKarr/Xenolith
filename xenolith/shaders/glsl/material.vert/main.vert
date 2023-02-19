@@ -24,6 +24,7 @@ layout (set = 0, binding = 1) readonly buffer Materials {
 
 layout (location = 0) out vec4 fragColor;
 layout (location = 1) out vec2 fragTexCoord;
+layout (location = 2) out vec4 shadowColor;
 
 void main() {
 	uint transformIdx = vertexBuffer[0].vertices[gl_VertexIndex].material >> 16;
@@ -33,4 +34,5 @@ void main() {
 
 	fragColor = vertexBuffer[0].vertices[gl_VertexIndex].color;
 	fragTexCoord = vertexBuffer[0].vertices[gl_VertexIndex].tex;
+	shadowColor = transformObjectBuffer[1].objects[transformIdx].shadow;
 }

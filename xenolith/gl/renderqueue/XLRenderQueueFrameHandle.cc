@@ -103,9 +103,6 @@ bool FrameHandle::init(gl::Loop &loop, gl::Device &dev, Rc<FrameRequest> &&req, 
 
 	_gen = gen;
 	_order = _request->getQueue()->incrementOrder();
-	if (const auto &target = _request->getRenderTarget()) {
-		target->setFrameIndex(_order);
-	}
 
 	XL_FRAME_LOG(XL_FRAME_LOG_INFO, "Init; ready: ", _request->isReadyForSubmit());
 	return setup();
@@ -123,18 +120,8 @@ void FrameHandle::update(bool init) {
 	}
 }
 
-gl::ImageInfoData FrameHandle::getImageSpecialization(const ImageAttachment *a) const {
-	gl::ImageInfoData ret;
-	if (auto img = _request->getImageSpecialization(a)) {
-		ret = *img;
-	} else {
-		ret = a->getImageInfo();
-	}
-	return ret;
-}
-
-bool FrameHandle::isSwapchainAttachment(const Attachment *a) const {
-	return _request->isSwapchainAttachment(a);
+const gl::ImageInfoData *FrameHandle::getImageSpecialization(const ImageAttachment *a) const {
+	return _request->getImageSpecialization(a);
 }
 
 void FrameHandle::schedule(Function<bool(FrameHandle &)> &&cb, StringView tag) {
@@ -262,7 +249,14 @@ void FrameHandle::invalidate() {
 
 			_valid = false;
 			_completed = true;
+
+			HashMap<const Attachment *, FrameAttachmentData *> attachments;
 			for (auto &it : _queues) {
+				for (auto &iit : it->getAttachments()) {
+					if (iit.second.handle->isOutput()) {
+						attachments.emplace(iit.first, (FrameAttachmentData *)&iit.second);
+					}
+				}
 				it->invalidate();
 			}
 
@@ -278,7 +272,7 @@ void FrameHandle::invalidate() {
 			}
 
 			if (_request) {
-				_request->finalize(*_loop, _valid);
+				_request->finalize(*_loop, attachments, _valid);
 			}
 		}
 	} else {
@@ -293,7 +287,6 @@ void FrameHandle::setCompleteCallback(Function<void(FrameHandle &)> &&cb) {
 }
 
 bool FrameHandle::setup() {
-
 	_pool->perform([&] {
 		auto q = Rc<FrameQueue>::create(_pool, _request->getQueue(), *this, _request->getFrameConstraints().extent);
 		q->setup();
@@ -377,11 +370,20 @@ void FrameHandle::onComplete() {
 		}
 		_completed = true;
 
+		HashMap<const Attachment *, FrameAttachmentData *> attachments;
+		for (auto &it : _queues) {
+			for (auto &iit : it->getAttachments()) {
+				if (iit.second.handle->isOutput()) {
+					attachments.emplace(iit.first, (FrameAttachmentData *)&iit.second);
+				}
+			}
+		}
+
 		if (_complete) {
 			_complete(*this);
 		}
 
-		_request->finalize(*_loop, _valid);
+		_request->finalize(*_loop, attachments, _valid);
 	}
 }
 

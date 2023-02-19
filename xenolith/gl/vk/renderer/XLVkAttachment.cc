@@ -29,123 +29,21 @@ auto ImageAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<Attachment
 	return Rc<ImageAttachmentHandle>::create(this, handle);
 }
 
-VertexBufferAttachment::~VertexBufferAttachment() {
-
-}
-
-auto VertexBufferAttachment::makeFrameHandle(const FrameQueue &frame) -> Rc<AttachmentHandle> {
-	return Rc<VertexBufferAttachmentHandle>::create(this, frame);
-}
-
-VertexBufferAttachmentHandle::~VertexBufferAttachmentHandle() {
-	if (_pool) {
-		_device->releaseCommandPoolUnsafe(move(_pool));
-		_pool = nullptr;
+bool ImageAttachmentHandle::writeDescriptor(const QueuePassHandle &queue, DescriptorImageInfo &info) {
+	auto &image = _queueData->image;
+	auto desc = (renderqueue::ImageAttachmentDescriptor *)info.descriptor->descriptor;
+	auto viewInfo = gl::ImageViewInfo(*desc, image->getInfo());
+	if (auto view = image->getView(viewInfo)) {
+		info.layout = VkImageLayout(desc->getDescriptorLayout());
+		info.imageView = (ImageView *)view.get();
+		return true;
 	}
 
-	if (_transferQueue) {
-		_device->releaseQueue(move(_transferQueue));
-		_transferQueue = nullptr;
-	}
+	return false;
 }
 
-void VertexBufferAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {
-	auto d = data.cast<gl::VertexData>();
-	if (!d || q.isFinalized()) {
-		cb(false);
-		return;
-	}
-
-	q.getFrame()->waitForDependencies(data->waitDependencies, [this, d = move(d), cb = move(cb)] (FrameHandle &handle, bool success) {
-		if (!success || !handle.isValidFlag()) {
-			cb(false);
-			return;
-		}
-
-		handle.performInQueue([this, d = move(d)] (FrameHandle &handle) {
-			return loadVertexes(handle, d);
-		}, [cb = move(cb)] (FrameHandle &handle, bool success) {
-			cb(success);
-		}, this, "VertexBufferAttachmentHandle::submitInput");
-	});
-}
-
-bool VertexBufferAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
-		uint32_t, bool isExternal) const {
-	return true;
-}
-
-bool VertexBufferAttachmentHandle::writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &info) {
-	info.buffer = _vertexes;
-	info.offset = 0;
-	info.range = _vertexes->getSize();
-	return true;
-}
-
-bool VertexBufferAttachmentHandle::loadVertexes(FrameHandle &handle, const Rc<gl::VertexData> &vertexes) {
-	_data = vertexes;
-
-	auto memPool = static_cast<DeviceFrameHandle &>(handle).getMemPool(this);
-
-	_vertexes = memPool->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(gl::BufferUsage::StorageBuffer, vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
-	_vertexes->setData(BytesView((uint8_t *)vertexes->data.data(), vertexes->data.size() * sizeof(gl::Vertex_V4F_V4F_T2F2U)));
-
-
-	_indexes = memPool->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(gl::BufferUsage::IndexBuffer, vertexes->indexes.size() * sizeof(uint32_t)));
-	_indexes->setData(BytesView((uint8_t *)vertexes->indexes.data(), vertexes->indexes.size() * sizeof(uint32_t)));
-
-
-	// index buffer
-	/*_indexesStaging = handle->getMemPool()->spawn(AllocationUsage::HostTransitionSource,
-			gl::BufferInfo(gl::BufferUsage::TransferSrc, vertexes->indexes.size() * sizeof(uint32_t)));
-	_indexesStaging->setData(BytesView((uint8_t *)vertexes->indexes.data(), vertexes->indexes.size() * sizeof(uint32_t)));
-
-	_indexes = handle->getMemPool()->spawn(AllocationUsage::DeviceLocal,
-			gl::BufferInfo(gl::BufferUsage::IndexBuffer, vertexes->indexes.size() * sizeof(uint32_t)));
-
-	auto buf = _pool->allocBuffer(*_device);
-	auto table = _device->getTable();
-
-	VkCommandBufferBeginInfo beginInfo { };
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	beginInfo.pInheritanceInfo = nullptr;
-
-	if (table->vkBeginCommandBuffer(buf, &beginInfo) != VK_SUCCESS) {
-		return false;
-	}
-
-	VkBufferCopy indexesCopy;
-	indexesCopy.srcOffset = 0;
-	indexesCopy.dstOffset = 0;
-	indexesCopy.size = _indexesStaging->getSize();
-
-	table->vkCmdCopyBuffer(buf, _indexesStaging->getBuffer(), _indexes->getBuffer(), 1, &indexesCopy);
-
-	if (table->vkEndCommandBuffer(buf) != VK_SUCCESS) {
-		return false;
-	}
-
-	_fence->addRelease([dev = _device, pool = move(_pool)] {
-		dev->releaseCommandPool(Rc<CommandPool>(pool));
-	});
-	_pool = nullptr;
-
-	VkSubmitInfo submitInfo{};
-	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-
-	submitInfo.waitSemaphoreCount = 0;
-	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &buf;
-	submitInfo.signalSemaphoreCount = 0;
-
-	if (table->vkQueueSubmit(_transferQueue->getQueue(), 1, &submitInfo, _fence->getFence()) != VK_SUCCESS) {
-		return false;
-	}*/
-
-	return true;
+bool ImageAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &d, uint32_t, bool isExternal) const {
+	return getImage();
 }
 
 }
