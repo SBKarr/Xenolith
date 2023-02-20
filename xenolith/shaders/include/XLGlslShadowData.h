@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,24 +20,50 @@
  THE SOFTWARE.
  **/
 
-struct Vertex {
-	vec4 pos;
-	vec4 color;
-	vec2 tex;
-	uint material;
-	uint object;
-};
+#include "XLGlslCompatibility.h"
 
-struct Material {
-	uint samplerIdx;
-	uint imageIdx;
-	uint setIdx;
+struct AmbientLightData {
+	vec4 normal;
+	color4 color;
+	uint soft;
 	uint padding0;
+	uint padding1;
+	uint padding2;
 };
 
-struct TransformObject {
-	mat4 transform;
-	vec4 mask;
-	vec4 offset;
-	vec4 shadow;
+struct DirectLightData {
+	vec4 position;
+	color4 color;
+	vec4 data;
+};
+
+struct ShadowData {
+	color4 globalColor;
+	color4 discardColor;
+
+	vec2 shadowOffset;
+	vec2 pix;
+
+	float shadowDensity;
+	uint gridSize;
+	uint gridWidth;
+	uint gridHeight;
+
+	float bbOffset;
+	float density;
+	float shadowSdfDensity;
+	float luminosity;
+
+	uint trianglesCount;
+	uint circlesCount;
+	uint rectsCount;
+	uint roundedRectsCount;
+
+	uint polygonCount;
+	uint padding0;
+	uint ambientLightCount;
+	uint directLightCount;
+
+	AmbientLightData ambientLights[16];
+	DirectLightData directLights[16];
 };

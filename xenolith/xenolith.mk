@@ -81,6 +81,7 @@ XENOLITH_INCLUDES_DIRS += \
 # non-recursive includes
 XENOLITH_INCLUDES_OBJS += \
 	$(XENOLITH_MAKEFILE_DIR)/shaders \
+	$(XENOLITH_MAKEFILE_DIR)/shaders/include \
 	$(OSTYPE_INCLUDE) \
 	thirdparty
 
@@ -215,7 +216,7 @@ $(XENOLITH_MAKEFILE_DIR)/shaders/linked/% : $(XENOLITH_SHADERS_COMPILED)
 
 $(XENOLITH_MAKEFILE_DIR)/shaders/compiled/% : $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/%
 	@$(GLOBAL_MKDIR) $(dir $@)
-	${GLSLC} -V -o $(XENOLITH_MAKEFILE_DIR)/shaders/compiled/$* $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/$* -e $(notdir $(basename $*)) --sep main
+	${GLSLC} -I$(XENOLITH_MAKEFILE_DIR)/shaders/include -DXL_GLSL=1 -V -o $(XENOLITH_MAKEFILE_DIR)/shaders/compiled/$* $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/$* -e $(notdir $(basename $*)) --sep main
 
 # Static library
 $(XENOLITH_OUTPUT_STATIC) : $(XENOLITH_H_GCH) $(XENOLITH_GCH) $(XENOLITH_OBJS)

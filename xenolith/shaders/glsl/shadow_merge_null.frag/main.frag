@@ -2,8 +2,9 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_GOOGLE_include_directive : enable
 
-#include "../../include/vertexes.glsl"
-#include "../../include/struct.glsl"
+#include "XLGlslVertexData.h"
+#include "XLGlslShadowData.h"
+#include "XLGlslSdfData.h"
 
 layout (push_constant) uniform pcb {
 	uint samplerIdx;

@@ -1,7 +1,8 @@
 #version 450
 #extension GL_GOOGLE_include_directive : enable
 
-#include "../../include/struct.glsl"
+#include "XLGlslShadowData.h"
+#include "XLGlslSdfData.h"
 
 layout (local_size_x = 8, local_size_y = 8) in;
 
@@ -10,7 +11,7 @@ layout (set = 0, binding = 0) uniform ShadowDataBuffer {
 };
 
 layout(set = 0, binding = 2) buffer TrianglesBuffer {
-	TriangleData triangles[];
+	Triangle2DData triangles[];
 } trianglesBuffer[3];
 
 layout(set = 0, binding = 2) buffer GridSizeBuffer {
@@ -24,7 +25,7 @@ layout(set = 0, binding = 2) buffer GridIndexesBuffer {
 layout(set = 0, binding = 3, r16) uniform writeonly image2D sdfImage;
 
 float intersectTriangle(in vec2 p, uint idx) {
-	TriangleData t = trianglesBuffer[0].triangles[idx];
+	Triangle2DData t = trianglesBuffer[0].triangles[idx];
 	return (triangle2d(p, t.a, t.b, t.c) < -0.5 * shadowData.density) ? trianglesBuffer[0].triangles[idx].value : 0.0;
 }
 
@@ -51,15 +52,15 @@ void main() {
 	uint cellIdx = cellIdxs.y * (shadowData.gridWidth) + cellIdxs.x;
 
 	uint targetOffset = cellIdx * shadowData.trianglesCount;
-	uint nTriangles = gridSizeBuffer[1].grid[cellIdx];
 
 	vec3 coords3d = vec3(coords, intersect(cellIdx, coords));
 	float value = 128.0;
 	float sdf;
 	float height;
 
+	uint nTriangles = gridSizeBuffer[1].grid[cellIdx];
 	for (uint i = 0; i < nTriangles; ++ i) {
-		TriangleData t = trianglesBuffer[0].triangles[gridIndexBuffer[2].index[targetOffset + i]];
+		Triangle2DData t = trianglesBuffer[0].triangles[gridIndexBuffer[2].index[targetOffset + i]];
 		sdf = triangle3d(coords3d, t.a, t.b, t.c, t.value);
 
 		if (sdf < value) {

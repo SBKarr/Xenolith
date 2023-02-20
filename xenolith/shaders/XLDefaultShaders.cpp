@@ -28,6 +28,7 @@ namespace stappler::xenolith::shaders {
 #include "embedded/material.frag"
 #include "embedded/material.vert"
 #include "embedded/sdf_triangles.comp"
+#include "embedded/sdf_circles.comp"
 #include "embedded/sdf_shadows.frag"
 #include "embedded/sdf_image.comp"
 #include "embedded/shadow_merge.frag"
@@ -37,6 +38,7 @@ namespace stappler::xenolith::shaders {
 SpanView<uint32_t> MaterialFrag(material_frag, sizeof(material_frag) / sizeof(uint32_t));
 SpanView<uint32_t> MaterialVert(material_vert, sizeof(material_vert) / sizeof(uint32_t));
 SpanView<uint32_t> SdfTrianglesComp(sdf_triangles_comp, sizeof(sdf_triangles_comp) / sizeof(uint32_t));
+SpanView<uint32_t> SdfCirclesComp(sdf_circles_comp, sizeof(sdf_circles_comp) / sizeof(uint32_t));
 SpanView<uint32_t> SdfShadowsFrag(sdf_shadows_frag, sizeof(sdf_shadows_frag) / sizeof(uint32_t));
 SpanView<uint32_t> SdfImageComp(sdf_image_comp, sizeof(sdf_image_comp) / sizeof(uint32_t));
 SpanView<uint32_t> ShadowMergeFrag(shadow_merge_frag, sizeof(shadow_merge_frag) / sizeof(uint32_t));

@@ -31,31 +31,7 @@ namespace stappler::xenolith::vk {
 
 class ShadowLightDataAttachment : public BufferAttachment {
 public:
-	struct LightData {
-		Color4F globalColor;
-		Color4F discardColor;
-
-		uint32_t trianglesCount;
-		uint32_t gridSize;
-		uint32_t gridWidth;
-		uint32_t gridHeight;
-
-		uint32_t ambientLightCount;
-		uint32_t directLightCount;
-		float bbOffset;
-		float density;
-
-		float pixX;
-		float pixY;
-		float luminosity;
-		float shadowSdfDensity;
-
-		Vec2 shadowDensity;
-		Vec2 shadowOffset;
-
-		gl::AmbientLightData ambientLights[16];
-		gl::DirectLightData directLights[16];
-	};
+	using LightData = gl::glsl::ShadowData;
 
 	virtual ~ShadowLightDataAttachment();
 
@@ -87,32 +63,6 @@ protected:
 // this attachment should provide vertex & index buffers
 class ShadowTrianglesAttachment : public BufferAttachment {
 public:
-	struct TriangleData {
-		Vec2 bbMin;
-		Vec2 bbMax;
-		Vec2 a;
-		Vec2 b;
-		Vec2 c;
-		/*Vec2 e0;
-		Vec2 e1;
-		Vec2 e2;
-		float e0dot;
-		float e1dot;
-		float e2dot;
-		float s;*/
-		float value;
-		float opacity;
-	};
-
-	struct IndexData {
-		uint32_t a;
-		uint32_t b;
-		uint32_t c;
-		uint32_t transform;
-		float value;
-		float opacity;
-	};
-
 	virtual ~ShadowTrianglesAttachment();
 
 	virtual bool init(StringView);
@@ -152,6 +102,7 @@ public:
 	using AttachmentHandle = renderqueue::AttachmentHandle;
 
 	static constexpr StringView SdfTrianglesComp = "SdfTrianglesComp";
+	static constexpr StringView SdfCirclesComp = "SdfCirclesComp";
 	static constexpr StringView SdfImageComp = "SdfImageComp";
 
 	static bool makeDefaultRenderQueue(renderqueue::Queue::Builder &, Extent2 extent);
@@ -194,12 +145,15 @@ public:
 	float getBoxOffset(float value) const;
 
 	uint32_t getLightsCount() const;
+	uint32_t getObjectsCount() const;
 
+	const gl::glsl::ShadowData &getShadowData() const { return _shadowData; }
 	const Rc<DeviceBuffer> &getBuffer() const { return _data; }
 
 protected:
 	Rc<DeviceBuffer> _data;
 	Rc<gl::ShadowLightInput> _input;
+	gl::glsl::ShadowData _shadowData;
 };
 
 class ShadowVertexAttachmentHandle : public BufferAttachmentHandle {
@@ -216,6 +170,7 @@ public:
 	bool empty() const;
 
 	uint32_t getTrianglesCount() const { return _trianglesCount; }
+	uint32_t getCirclesCount() const { return _circlesCount; }
 	float getMaxValue() const { return _maxValue; }
 
 protected:
@@ -224,8 +179,9 @@ protected:
 	Rc<DeviceBuffer> _indexes;
 	Rc<DeviceBuffer> _vertexes;
 	Rc<DeviceBuffer> _transforms;
-	Vector<gl::VertexSpan> _spans;
+	Rc<DeviceBuffer> _circles;
 	uint32_t _trianglesCount = 0;
+	uint32_t _circlesCount = 0;
 	float _maxValue = 0.0f;
 };
 
@@ -233,7 +189,7 @@ class ShadowTrianglesAttachmentHandle : public BufferAttachmentHandle {
 public:
 	virtual ~ShadowTrianglesAttachmentHandle();
 
-	void allocateBuffer(DeviceFrameHandle *, uint32_t trianglesCount, uint32_t gridCells, Extent2 extent);
+	void allocateBuffer(DeviceFrameHandle *, const gl::glsl::ShadowData &);
 
 	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
 			uint32_t, bool isExternal) const override;
@@ -241,14 +197,13 @@ public:
 	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &) override;
 
 	const Rc<DeviceBuffer> &getTriangles() const { return _triangles; }
+	const Rc<DeviceBuffer> &getCircles() const { return _circles; }
 	const Rc<DeviceBuffer> &getGridSize() const { return _gridSize; }
 	const Rc<DeviceBuffer> &getGridIndex() const { return _gridIndex; }
 
-	uint32_t getTrianglesCount() const { return _trianglesCount; }
-
 protected:
-	uint32_t _trianglesCount = 0;
 	Rc<DeviceBuffer> _triangles;
+	Rc<DeviceBuffer> _circles;
 	Rc<DeviceBuffer> _gridSize;
 	Rc<DeviceBuffer> _gridIndex;
 };

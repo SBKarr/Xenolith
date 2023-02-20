@@ -41,6 +41,9 @@ bool MaterialShadowPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
 	builder.addComputePipeline(computePass, ShadowPass::SdfTrianglesComp,
 			builder.addProgramByRef("ShadowPass_SdfTrianglesComp", xenolith::shaders::SdfTrianglesComp));
 
+	builder.addComputePipeline(computePass, ShadowPass::SdfCirclesComp,
+			builder.addProgramByRef("ShadowPass_SdfCirclesComp", xenolith::shaders::SdfCirclesComp));
+
 	builder.addComputePipeline(computePass, ShadowPass::SdfImageComp,
 			builder.addProgramByRef("ShadowPass_SdfImageComp", xenolith::shaders::SdfImageComp));
 
@@ -326,7 +329,7 @@ void MaterialShadowPassHandle::prepareMaterialCommands(gl::MaterialSet * materia
 
 	buf.cmdNextSubpass();
 
-	if (_shadowData->getLightsCount() && _shadowData->getBuffer() && _shadowTriangles->getTrianglesCount()) {
+	if (_shadowData->getLightsCount() && _shadowData->getBuffer() && _shadowData->getObjectsCount()) {
 		auto pipeline = (GraphicPipeline *)_data->subpasses[1].graphicPipelines.get(StringView(MaterialShadowPass::ShadowPipeline))->pipeline.get();
 
 		buf.cmdBindPipeline(pipeline);
@@ -400,11 +403,8 @@ bool MaterialShadowComputePassHandle::prepare(FrameQueue &q, Function<void(bool)
 		lightsHandle->allocateBuffer(static_cast<DeviceFrameHandle *>(q.getFrame().get()),
 				_vertexBuffer->getTrianglesCount(), _vertexBuffer->getMaxValue(), _gridCellSize, q.getExtent());
 
-		if (_vertexBuffer && _vertexBuffer->getTrianglesCount()) {
-			if (trianglesHandle) {
-				trianglesHandle->allocateBuffer(static_cast<DeviceFrameHandle *>(q.getFrame().get()),
-						_vertexBuffer->getTrianglesCount(), _gridCellSize, q.getExtent());
-			}
+		if (lightsHandle->getObjectsCount() > 0 && trianglesHandle) {
+			trianglesHandle->allocateBuffer(static_cast<DeviceFrameHandle *>(q.getFrame().get()), lightsHandle->getShadowData());
 		}
 
 		return QueuePassHandle::prepare(q, move(cb));
@@ -448,8 +448,6 @@ void MaterialShadowComputePassHandle::writeShadowCommands(RenderPassImpl *pass, 
 	buf.cmdBindDescriptorSets(pass);
 	buf.cmdFillBuffer(_trianglesBuffer->getGridSize(), 0);
 
-	pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(StringView(ShadowPass::SdfTrianglesComp))->pipeline.get();
-	buf.cmdBindPipeline(pipeline);
 
 	BufferMemoryBarrier bufferBarrier(_trianglesBuffer->getGridSize(),
 		VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT
@@ -457,7 +455,17 @@ void MaterialShadowComputePassHandle::writeShadowCommands(RenderPassImpl *pass, 
 
 	buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, makeSpanView(&bufferBarrier, 1));
 
-	buf.cmdDispatch((_vertexBuffer->getTrianglesCount() - 1) / pipeline->getLocalX() + 1);
+	if (_vertexBuffer->getTrianglesCount()) {
+		pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(StringView(ShadowPass::SdfTrianglesComp))->pipeline.get();
+		buf.cmdBindPipeline(pipeline);
+		buf.cmdDispatch((_vertexBuffer->getTrianglesCount() - 1) / pipeline->getLocalX() + 1);
+	}
+
+	if (_vertexBuffer->getCirclesCount()) {
+		pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(StringView(ShadowPass::SdfCirclesComp))->pipeline.get();
+		buf.cmdBindPipeline(pipeline);
+		buf.cmdDispatch((_vertexBuffer->getCirclesCount() - 1) / pipeline->getLocalX() + 1);
+	}
 
 	BufferMemoryBarrier bufferBarriers[] = {
 		BufferMemoryBarrier(_trianglesBuffer->getTriangles(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),

@@ -25,6 +25,7 @@
 #include "XLVkBuffer.h"
 #include "XLVkRenderPassImpl.h"
 #include "XLDefaultShaders.h"
+#include "XLGlSdf.h"
 
 namespace stappler::xenolith::vk {
 
@@ -92,9 +93,9 @@ void ShadowLightDataAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame
 		for (uint32_t i = 0; i < _input->directLightCount; ++ i) {
 			l += _input->directLights[i].color.a;
 		}
-		data->luminosity = 1.0f / l;
+		_shadowData.luminosity = data->luminosity = 1.0f / l;
 	} else {
-		data->luminosity = 1.0f / _input->luminosity;
+		_shadowData.luminosity = data->luminosity = 1.0f / _input->luminosity;
 	}
 
 	float fullDensity = _input->sceneDensity;
@@ -106,7 +107,7 @@ void ShadowLightDataAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame
 	Extent2 shadowExtent(ceilf(screenSize.width / shadowDensity), ceilf(screenSize.height / shadowDensity));
 	Vec2 shadowOffset(shadowExtent.width - screenSize.width / shadowDensity, shadowExtent.height - screenSize.height / shadowDensity);
 
-	data->globalColor = _input->globalColor * data->luminosity;
+	_shadowData.globalColor = data->globalColor = _input->globalColor * data->luminosity;
 
 	// pre-calculated color with no shadows
 	Color4F discardColor = _input->globalColor;
@@ -114,24 +115,25 @@ void ShadowLightDataAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame
 		discardColor = discardColor + (_input->ambientLights[i].color * _input->ambientLights[i].color.a) * data->luminosity;
 	}
 	discardColor.a = 1.0f;
-	data->discardColor = discardColor;
+	_shadowData.discardColor = data->discardColor = discardColor;
 
-	data->trianglesCount = trianglesCount;
-	data->gridSize = ceilf(gridSize / fullDensity);
-	data->gridWidth = (scaledExtent.width - 1) / data->gridSize + 1;
-	data->gridHeight = (scaledExtent.height - 1) / data->gridSize + 1;
-	data->ambientLightCount = _input->ambientLightCount;
-	data->directLightCount = _input->directLightCount;
-	data->bbOffset = getBoxOffset(value);
-	data->density = _input->sceneDensity;
-	data->shadowSdfDensity = 1.0f / _input->shadowDensity;
-	data->shadowDensity = Vec2(float(scaledExtent.width) / float(screenSize.width), float(scaledExtent.height) / float(screenSize.height));
-	data->shadowDensity = Vec2(1.0f / _input->sceneDensity, 1.0 / _input->sceneDensity);
-	data->shadowOffset = shadowOffset;
-	data->pixX = 1.0f / float(screenSize.width);
-	data->pixY = 1.0f / float(screenSize.height);
+	_shadowData.trianglesCount = data->trianglesCount = trianglesCount;
+	_shadowData.gridSize = data->gridSize = ceilf(gridSize / fullDensity);
+	_shadowData.gridWidth = data->gridWidth = (scaledExtent.width - 1) / data->gridSize + 1;
+	_shadowData.gridHeight = data->gridHeight = (scaledExtent.height - 1) / data->gridSize + 1;
+	_shadowData.ambientLightCount = data->ambientLightCount = _input->ambientLightCount;
+	_shadowData.directLightCount = data->directLightCount = _input->directLightCount;
+	_shadowData.bbOffset = data->bbOffset = getBoxOffset(value);
+	_shadowData.density = data->density = _input->sceneDensity;
+	_shadowData.shadowSdfDensity = data->shadowSdfDensity = 1.0f / _input->shadowDensity;
+	_shadowData.shadowDensity = data->shadowDensity = 1.0f / _input->sceneDensity;
+	_shadowData.shadowOffset = data->shadowOffset = shadowOffset;
+	_shadowData.pix = data->pix = Vec2(1.0f / float(screenSize.width), 1.0f / float(screenSize.height));
+
 	memcpy(data->ambientLights, _input->ambientLights, sizeof(gl::AmbientLightData) * config::MaxAmbientLights);
 	memcpy(data->directLights, _input->directLights, sizeof(gl::DirectLightData) * config::MaxDirectLights);
+	memcpy(_shadowData.ambientLights, _input->ambientLights, sizeof(gl::AmbientLightData) * config::MaxAmbientLights);
+	memcpy(_shadowData.directLights, _input->directLights, sizeof(gl::DirectLightData) * config::MaxDirectLights);
 
 	if (devFrame->isPersistentMapping()) {
 		_data->unmap(mapped, true);
@@ -158,6 +160,10 @@ uint32_t ShadowLightDataAttachmentHandle::getLightsCount() const {
 	return _input->ambientLightCount + _input->directLightCount;
 }
 
+uint32_t ShadowLightDataAttachmentHandle::getObjectsCount() const {
+	return _shadowData.trianglesCount + _shadowData.circlesCount + _shadowData.rectsCount
+			+ _shadowData.roundedRectsCount + _shadowData.polygonCount;
+}
 
 ShadowVertexAttachmentHandle::~ShadowVertexAttachmentHandle() { }
 
@@ -185,17 +191,11 @@ void ShadowVertexAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentI
 bool ShadowVertexAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
 		uint32_t idx, bool isExternal) const {
 	switch (idx) {
-	case 0:
-		return _indexes;
-		break;
-	case 1:
-		return _vertexes;
-		break;
-	case 2:
-		return _transforms;
-		break;
-	default:
-		break;
+	case 0: return _indexes; break;
+	case 1: return _vertexes; break;
+	case 2: return _transforms; break;
+	case 3: return _circles; break;
+	default: break;
 	}
 	return false;
 }
@@ -220,6 +220,12 @@ bool ShadowVertexAttachmentHandle::writeDescriptor(const QueuePassHandle &, Desc
 		info.range = _transforms->getSize();
 		return true;
 		break;
+	case 3:
+		info.buffer = _circles;
+		info.offset = 0;
+		info.range = _circles->getSize();
+		return true;
+		break;
 	default:
 		break;
 	}
@@ -230,44 +236,34 @@ bool ShadowVertexAttachmentHandle::empty() const {
 	return !_indexes || !_vertexes || !_transforms;
 }
 
-bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<gl::CommandList> &commands) {
-	auto handle = dynamic_cast<DeviceFrameHandle *>(&fhandle);
-	if (!handle) {
-		return false;
-	}
-
+struct ShadowDrawPlan {
 	struct PlanCommandInfo {
 		const gl::CmdShadow *cmd;
 		SpanView<gl::TransformedVertexData> vertexes;
 	};
 
-	struct MaterialWritePlan {
-		uint32_t vertexes = 0;
-		uint32_t indexes = 0;
-		uint32_t transforms = 0;
-		Map<gl::StateId, std::forward_list<PlanCommandInfo>> states;
-	};
+	ShadowDrawPlan(renderqueue::FrameHandle &fhandle) : pool(fhandle.getPool()->getPool()) {
 
-	// fill write plan
-	MaterialWritePlan globalWritePlan;
+	}
 
-	auto emplaceWritePlan = [&] (const gl::Command *c, const gl::CmdShadow *cmd, SpanView<gl::TransformedVertexData> vertexes) {
-		for (auto &iit : vertexes) {
-			globalWritePlan.vertexes += iit.data->data.size();
-			globalWritePlan.indexes += iit.data->indexes.size();
-			++ globalWritePlan.transforms;
+	void emplaceWritePlan(const gl::Command *c, const gl::CmdShadow *cmd, SpanView<gl::TransformedVertexData> v) {
+		for (auto &iit : v) {
+			vertexes += iit.data->data.size();
+			indexes += iit.data->indexes.size();
+			++ transforms;
 		}
 
-		auto iit = globalWritePlan.states.find(cmd->state);
-		if (iit == globalWritePlan.states.end()) {
-			iit = globalWritePlan.states.emplace(cmd->state, std::forward_list<PlanCommandInfo>()).first;
+		commands.emplace_front(PlanCommandInfo{cmd, v});
+	}
+
+	void pushDeferred(const gl::Command *c, const gl::CmdShadowDeferred *cmd) {
+		if (!cmd->deferred->isWaitOnReady()) {
+			if (!cmd->deferred->isReady()) {
+				return;
+			}
 		}
 
-		iit->second.emplace_front(PlanCommandInfo{cmd, vertexes});
-	};
-
-	auto pushDeferred = [&] (const gl::Command *c, const gl::CmdShadowDeferred *cmd) {
-		auto vertexes = cmd->deferred->getData().pdup(handle->getPool()->getPool());
+		auto vertexes = cmd->deferred->getData().pdup(pool);
 
 		// apply transforms;
 		if (cmd->normalized) {
@@ -279,16 +275,74 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 				newMV.m[13] = floorf(modelTransform.m[13]);
 				newMV.m[14] = floorf(modelTransform.m[14]);
 
-				const_cast<gl::TransformedVertexData &>(it).mat = cmd->viewTransform * newMV;
+				const_cast<gl::TransformedVertexData &>(it).mat = newMV;
 			}
 		} else {
 			for (auto &it : vertexes) {
-				const_cast<gl::TransformedVertexData &>(it).mat = /*cmd->viewTransform */ cmd->modelTransform * it.mat;
+				const_cast<gl::TransformedVertexData &>(it).mat = cmd->modelTransform * it.mat;
 			}
 		}
 
 		emplaceWritePlan(c, cmd, vertexes);
-	};
+	}
+
+	void pushSdf(const gl::Command *c, const gl::CmdSdfGroup2D *cmd) {
+		uint32_t objects = 0;
+		for (auto &it : cmd->data) {
+			switch (it.type) {
+			case gl::SdfShape::Circle2D: ++ circles; ++ objects; break;
+			case gl::SdfShape::Triangle2D:
+				break;
+			default: break;
+			}
+		}
+		if (objects > 0) {
+			sdfCommands.emplace_front(cmd);
+		}
+	}
+
+	memory::pool_t *pool = nullptr;
+	uint32_t vertexes = 0;
+	uint32_t indexes = 0;
+	uint32_t transforms = 0;
+	uint32_t circles = 0;
+	std::forward_list<PlanCommandInfo> commands;
+	std::forward_list<const gl::CmdSdfGroup2D *> sdfCommands;
+};
+
+struct ShadowBufferMap {
+	DeviceBuffer::MappedRegion region;
+	Bytes external;
+	DeviceBuffer *buffer;
+	bool isPersistent = false;
+
+	~ShadowBufferMap() {
+		if (isPersistent) {
+			buffer->unmap(region, true);
+		} else {
+			buffer->setData(external);
+		}
+	}
+
+	ShadowBufferMap(DeviceBuffer *b, bool persistent) : buffer(b), isPersistent(persistent) {
+		if (isPersistent) {
+			region = buffer->map();
+		} else {
+			external.resize(buffer->getSize());
+			region.ptr = external.data(); region.size = external.size();
+		}
+	}
+};
+
+bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<gl::CommandList> &commands) {
+	auto handle = dynamic_cast<DeviceFrameHandle *>(&fhandle);
+	if (!handle) {
+		return false;
+	}
+
+	// fill write plan
+
+	ShadowDrawPlan plan(fhandle);
 
 	auto cmd = commands->getFirst();
 	while (cmd) {
@@ -298,19 +352,19 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 		case gl::CommandType::Deferred:
 			break;
 		case gl::CommandType::ShadowArray:
-			emplaceWritePlan(cmd, (const gl::CmdShadowArray *)cmd->data, ((const gl::CmdShadowArray *)cmd->data)->vertexes);
+			plan.emplaceWritePlan(cmd, (const gl::CmdShadowArray *)cmd->data, ((const gl::CmdShadowArray *)cmd->data)->vertexes);
 			break;
 		case gl::CommandType::ShadowDeferred:
-			pushDeferred(cmd, (const gl::CmdShadowDeferred *)cmd->data);
+			plan.pushDeferred(cmd, (const gl::CmdShadowDeferred *)cmd->data);
 			break;
 		case gl::CommandType::SdfGroup2D:
-			// TODO
+			plan.pushSdf(cmd, (const gl::CmdSdfGroup2D *)cmd->data);
 			break;
 		}
 		cmd = cmd->next;
 	}
 
-	if (globalWritePlan.vertexes == 0 || globalWritePlan.indexes == 0) {
+	if (plan.vertexes == 0 && plan.indexes == 0 && plan.circles == 0) {
 		return true;
 	}
 
@@ -319,63 +373,51 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 	// create buffers
 	auto &pool = handle->getMemPool(handle);
 	_indexes = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(info, (globalWritePlan.indexes / 3) * sizeof(ShadowTrianglesAttachment::IndexData)));
+			gl::BufferInfo(info, std::max((plan.indexes / 3), uint32_t(1)) * sizeof(gl::Triangle2DIndex)));
 
 	_vertexes = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(info, globalWritePlan.vertexes * sizeof(Vec4)));
+			gl::BufferInfo(info, std::max(plan.vertexes, uint32_t(1)) * sizeof(Vec4)));
 
 	_transforms = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
-			gl::BufferInfo(info, (globalWritePlan.transforms + 1) * sizeof(Mat4)));
+			gl::BufferInfo(info, std::max((plan.transforms + 1), uint32_t(1)) * sizeof(gl::TransformObject)));
 
-	if (!_vertexes || !_indexes || !_transforms) {
+	_circles = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
+			gl::BufferInfo(info, std::max(plan.circles, uint32_t(1)) * sizeof(gl::Circle2DIndex)));
+
+	if (!_vertexes || !_indexes || !_transforms || !_circles) {
 		return false;
 	}
 
-	DeviceBuffer::MappedRegion vertexesMap, indexesMap, transformMap;
+	ShadowBufferMap vertexesMap(_vertexes, fhandle.isPersistentMapping());
+	ShadowBufferMap indexesMap(_indexes, fhandle.isPersistentMapping());
+	ShadowBufferMap transformMap(_transforms, fhandle.isPersistentMapping());
+	ShadowBufferMap circlesMap(_circles, fhandle.isPersistentMapping());
 
-	Bytes vertexData, indexData, transformData;
-
-	if (fhandle.isPersistentMapping()) {
-		vertexesMap = _vertexes->map();
-		indexesMap = _indexes->map();
-		transformMap = _transforms->map();
-
-		memset(vertexesMap.ptr, 0, sizeof(gl::Vertex_V4F_V4F_T2F2U) * 1024);
-		memset(indexesMap.ptr, 0, sizeof(uint32_t) * 1024);
-	} else {
-		vertexData.resize(_vertexes->getSize());
-		indexData.resize(_indexes->getSize());
-		transformData.resize(_transforms->getSize());
-
-		vertexesMap.ptr = vertexData.data(); vertexesMap.size = vertexData.size();
-		indexesMap.ptr = indexData.data(); indexesMap.size = indexData.size();
-		transformMap.ptr = transformData.data(); transformMap.size = transformData.size();
-	}
-
-	Mat4 val;
-	memcpy(transformMap.ptr, &val, sizeof(Mat4));
+	gl::TransformObject val;
+	memcpy(transformMap.region.ptr, &val, sizeof(gl::TransformObject));
 
 	uint32_t vertexOffset = 0;
 	uint32_t indexOffset = 0;
-	uint32_t transtormOffset = sizeof(Mat4);
+	uint32_t transtormOffset = sizeof(gl::TransformObject);
+	uint32_t circleOffset = 0;
 
 	uint32_t materialVertexes = 0;
 	uint32_t materialIndexes = 0;
 	uint32_t transformIdx = 1;
 
-	auto pushVertexes = [&] (const gl::CmdShadow *cmd, const Mat4 &transform, gl::VertexData *vertexes) {
-		auto target = (Vec4 *)vertexesMap.ptr + vertexOffset;
+	auto pushVertexes = [&] (const gl::CmdShadow *cmd, const gl::TransformObject &transform, gl::VertexData *vertexes) {
+		auto target = (Vec4 *)vertexesMap.region.ptr + vertexOffset;
 
-		memcpy(transformMap.ptr + transtormOffset, &transform, sizeof(Mat4));
+		memcpy(transformMap.region.ptr + transtormOffset, &transform, sizeof(gl::TransformObject));
 
 		for (size_t idx = 0; idx < vertexes->data.size(); ++ idx) {
 			memcpy(target++, &vertexes->data[idx].pos, sizeof(Vec4));
 		}
 
-		auto indexTarget = (ShadowTrianglesAttachment::IndexData *)indexesMap.ptr + indexOffset;
+		auto indexTarget = (gl::Triangle2DIndex *)indexesMap.region.ptr + indexOffset;
 
 		for (size_t idx = 0; idx < vertexes->indexes.size() / 3; ++ idx) {
-			ShadowTrianglesAttachment::IndexData data({
+			gl::Triangle2DIndex data({
 				vertexes->indexes[idx * 3 + 0] + vertexOffset,
 				vertexes->indexes[idx * 3 + 1] + vertexOffset,
 				vertexes->indexes[idx * 3 + 2] + vertexOffset,
@@ -383,66 +425,86 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 				cmd->value,
 				1.0f
 			});
-			memcpy(indexTarget++, &data, sizeof(ShadowTrianglesAttachment::IndexData));
+			memcpy(indexTarget++, &data, sizeof(gl::Triangle2DIndex));
 
 			_maxValue = std::max(_maxValue, cmd->value);
 		}
 
 		vertexOffset += vertexes->data.size();
 		indexOffset += vertexes->indexes.size() / 3;
-		transtormOffset += sizeof(Mat4);
+		transtormOffset += sizeof(gl::TransformObject);
 		++ transformIdx;
 
 		materialVertexes += vertexes->data.size();
 		materialIndexes += vertexes->indexes.size();
 	};
 
-	// optimize draw order, minimize switching pipeline, textureSet and descriptors
-	Vector<const Pair<const gl::MaterialId, MaterialWritePlan> *> drawOrder;
+	for (auto &cmd : plan.commands) {
+		for (auto &iit : cmd.vertexes) {
+			pushVertexes(cmd.cmd, iit.mat, iit.data.get());
+		}
+	}
 
-	for (auto &state : globalWritePlan.states) {
-		// split order on states
-		materialVertexes = 0;
-		materialIndexes = 0;
+	auto pushSdf = [&] (const gl::CmdSdfGroup2D *cmd) {
+		auto target = (Vec4 *)vertexesMap.region.ptr + vertexOffset;
+		gl::TransformObject transform(cmd->modelTransform.getInversed());
+		cmd->modelTransform.getScale(&val.shadow.x);
 
-		for (auto &cmd : state.second) {
-			for (auto &iit : cmd.vertexes) {
-				pushVertexes(cmd.cmd, iit.mat, iit.data.get());
+		memcpy(transformMap.region.ptr + transtormOffset, &transform, sizeof(gl::TransformObject));
+
+		for (auto &it : cmd->data) {
+			switch (it.type) {
+			case gl::SdfShape::Circle2D: {
+				auto data = (gl::SdfCircle2D *)it.bytes.data();
+				auto pos = Vec4(data->origin, 0.0f, 1.0f);
+
+				memcpy(target++, &pos, sizeof(Vec4));
+
+				gl::Circle2DIndex index;
+				index.origin = vertexOffset;
+				index.transform = transtormOffset;
+				index.value = cmd->value;
+				index.opacity = cmd->opacity;
+
+				memcpy(((gl::Circle2DIndex *)circlesMap.region.ptr) + circleOffset, &index, sizeof(gl::Circle2DIndex));
+
+				++ circleOffset;
+				++ vertexOffset;
+				break;
+			}
+			case gl::SdfShape::Triangle2D:
+				break;
+			default: break;
 			}
 		}
 
-		_spans.emplace_back(gl::VertexSpan({ 0, materialIndexes, 1, indexOffset - materialIndexes, state.first}));
+		transtormOffset += sizeof(gl::TransformObject);
+		++ transformIdx;
+	};
+
+	for (auto &cmd : plan.sdfCommands) {
+		pushSdf(cmd);
 	}
 
-	if (fhandle.isPersistentMapping()) {
-		_vertexes->unmap(vertexesMap, true);
-		_indexes->unmap(indexesMap, true);
-		_transforms->unmap(transformMap, true);
-	} else {
-		_vertexes->setData(vertexData);
-		_indexes->setData(indexData);
-		_transforms->setData(transformData);
-	}
-
-	_trianglesCount = globalWritePlan.indexes / 3;
+	_trianglesCount = plan.indexes / 3;
+	_circlesCount = plan.circles;
 
 	return true;
 }
 
 ShadowTrianglesAttachmentHandle::~ShadowTrianglesAttachmentHandle() { }
 
-void ShadowTrianglesAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame, uint32_t trianglesCount, uint32_t gridSize, Extent2 extent) {
-	uint32_t width = (extent.width - 1) / gridSize + 1;
-	uint32_t height = (extent.height - 1) / gridSize + 1;
-	trianglesCount = std::max(uint32_t(1), trianglesCount);
+void ShadowTrianglesAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame, const gl::glsl::ShadowData &data) {
+	auto trianglesCount = std::max(uint32_t(1), data.trianglesCount);
 	auto &pool = devFrame->getMemPool(devFrame);
-	_triangles = pool->spawn(AllocationUsage::DeviceLocal,
-			gl::BufferInfo(gl::BufferUsage::StorageBuffer, trianglesCount * sizeof(ShadowTrianglesAttachment::TriangleData)));
-	_gridSize = pool->spawn(AllocationUsage::DeviceLocal,
-			gl::BufferInfo(gl::BufferUsage::StorageBuffer, width * height * sizeof(uint32_t)));
-	_gridIndex = pool->spawn(AllocationUsage::DeviceLocal,
-			gl::BufferInfo(gl::BufferUsage::StorageBuffer, trianglesCount * width * height * sizeof(uint32_t)));
-	_trianglesCount = trianglesCount;
+	_triangles = pool->spawn(AllocationUsage::DeviceLocal, gl::BufferInfo(gl::BufferUsage::StorageBuffer,
+			trianglesCount * sizeof(gl::Triangle2DData)));
+	_circles = pool->spawn(AllocationUsage::DeviceLocal, gl::BufferInfo(gl::BufferUsage::StorageBuffer,
+			data.circlesCount * sizeof(gl::Triangle2DData)));
+	_gridSize = pool->spawn(AllocationUsage::DeviceLocal, gl::BufferInfo(gl::BufferUsage::StorageBuffer,
+			data.gridWidth * data.gridHeight * 2 * sizeof(uint32_t)));
+	_gridIndex = pool->spawn(AllocationUsage::DeviceLocal, gl::BufferInfo(gl::BufferUsage::StorageBuffer,
+			(trianglesCount + data.circlesCount)* data.gridWidth * data.gridHeight * sizeof(uint32_t)));
 }
 
 bool ShadowTrianglesAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
@@ -451,6 +513,7 @@ bool ShadowTrianglesAttachmentHandle::isDescriptorDirty(const PassHandle &, cons
 	case 0: return _triangles; break;
 	case 1: return _gridSize; break;
 	case 2: return _gridIndex; break;
+	case 3: return _circles; break;
 	default:
 		break;
 	}
@@ -475,6 +538,12 @@ bool ShadowTrianglesAttachmentHandle::writeDescriptor(const QueuePassHandle &, D
 		info.buffer = _gridIndex;
 		info.offset = 0;
 		info.range = _gridIndex->getSize();
+		return true;
+		break;
+	case 3:
+		info.buffer = _circles;
+		info.offset = 0;
+		info.range = _circles->getSize();
 		return true;
 		break;
 	default:
@@ -676,11 +745,8 @@ bool ShadowPassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
 		lightsHandle->allocateBuffer(static_cast<DeviceFrameHandle *>(q.getFrame().get()),
 				_vertexBuffer->getTrianglesCount(), _vertexBuffer->getMaxValue(), _gridCellSize, q.getExtent());
 
-		if (_vertexBuffer && _vertexBuffer->getTrianglesCount()) {
-			if (trianglesHandle) {
-				trianglesHandle->allocateBuffer(static_cast<DeviceFrameHandle *>(q.getFrame().get()),
-						_vertexBuffer->getTrianglesCount(), _gridCellSize, q.getExtent());
-			}
+		if (lightsHandle->getObjectsCount() > 0 && trianglesHandle) {
+			trianglesHandle->allocateBuffer(static_cast<DeviceFrameHandle *>(q.getFrame().get()), lightsHandle->getShadowData());
 		}
 
 		return QueuePassHandle::prepare(q, move(cb));

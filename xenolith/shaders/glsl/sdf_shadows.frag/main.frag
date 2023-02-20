@@ -2,8 +2,9 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_GOOGLE_include_directive : enable
 
-#include "../../include/vertexes.glsl"
-#include "../../include/struct.glsl"
+#include "XLGlslVertexData.h"
+#include "XLGlslShadowData.h"
+#include "XLGlslSdfData.h"
 
 layout (constant_id = 0) const int SAMPLERS_ARRAY_SIZE = 2;
 
@@ -18,7 +19,7 @@ layout (set = 0, binding = 2) uniform ShadowDataBuffer {
 };
 
 layout(set = 0, binding = 3) buffer TrianglesBuffer {
-	TriangleData triangles[];
+	Triangle2DData triangles[];
 } trianglesBuffer[3];
 
 layout(set = 0, binding = 3) buffer GridSizeBuffer {
@@ -48,7 +49,7 @@ float map(in vec3 p) {
 
 	uint targetOffset = s_cellIdx * shadowData.trianglesCount;
 	for (uint i = 0; i < gridSizeBuffer[1].grid[s_cellIdx]; ++ i) {
-		TriangleData t = trianglesBuffer[0].triangles[gridIndexBuffer[2].index[targetOffset + i]];
+		Triangle2DData t = trianglesBuffer[0].triangles[gridIndexBuffer[2].index[targetOffset + i]];
 		value = min(value, triangle3d(p, t.a, t.b, t.c, t.value));
 	}
 	return value;
@@ -63,7 +64,7 @@ float map2d(in vec2 p, in vec2 n, in float k) {
 	uint targetOffset = s_cellIdx * shadowData.trianglesCount;
 	for (uint i = 0; i < gridSizeBuffer[1].grid[s_cellIdx]; ++ i) {
 		index = gridIndexBuffer[2].index[targetOffset + i];
-		TriangleData t = trianglesBuffer[0].triangles[index];
+		Triangle2DData t = trianglesBuffer[0].triangles[index];
 		sdf = triangle2d(p + n * trianglesBuffer[0].triangles[index].value, t.a, t.b, t.c);
 		if (value > sdf) {
 			max = trianglesBuffer[0].triangles[index].value * k * k * 1.5;

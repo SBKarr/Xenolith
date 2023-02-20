@@ -220,7 +220,7 @@ void AttachmentDescriptor::setDescriptorIndex(uint32_t idx) {
 	}
 
 	std::cout << "[" << _renderPass->key << ":descriptor:" << getName() << ":" << _descriptorIndex << "] "
-			<< getDescriptorTypeName(_descriptor.type) << ": usage:" << getProgramStageDescription(_descriptor.stages) << "\n";
+			<< getDescriptorTypeName(_descriptor.type) << "[" << _descriptor.count << "]: usage:" << getProgramStageDescription(_descriptor.stages) << "\n";
 }
 
 AttachmentRef *AttachmentDescriptor::addRef(uint32_t idx, AttachmentUsage usage, AttachmentDependencyInfo info) {

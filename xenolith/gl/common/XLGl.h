@@ -33,6 +33,13 @@
 #include "SPEventTaskQueue.h"
 #include <optional>
 
+namespace stappler::xenolith::gl::glsl {
+
+#include "XLGlslVertexData.h"
+#include "XLGlslShadowData.h"
+
+}
+
 namespace stappler::xenolith::renderqueue {
 
 class Resource;
@@ -74,6 +81,11 @@ using RenderPassType = renderqueue::PassType;
 using Resource = renderqueue::Resource;
 using AttachmentInputData = renderqueue::AttachmentInputData;
 using ProgramStage = renderqueue::ProgramStage;
+
+using AmbientLightData = glsl::AmbientLightData;
+using DirectLightData = glsl::DirectLightData;
+using Vertex_V4F_V4F_T2F2U = glsl::Vertex;
+using TransformObject = glsl::TransformObject;
 
 enum class ObjectType {
 	Unknown,
@@ -333,15 +345,6 @@ struct ImageViewInfo {
 	auto operator<=>(const ImageViewInfo &) const = default;
 };
 
-// Designed to use with SSBO and std430
-struct alignas(16) Vertex_V4F_V4F_T2F2U {
-	Vec4 pos;
-	Vec4 color;
-	Vec2 tex;
-	uint32_t material;
-	uint32_t object;
-};
-
 struct Triangle_V3F_C4F_T2F {
 	Vertex_V4F_V4F_T2F2U a;
 	Vertex_V4F_V4F_T2F2U b;
@@ -391,13 +394,6 @@ struct alignas(16) TransformedVertexData {
 	TransformedVertexData() = default;
 	TransformedVertexData(const Mat4 &mat, Rc<VertexData> &&data)
 	: mat(mat), data(move(data)) { }
-};
-
-struct TransformObject {
-	Mat4 transform = Mat4::IDENTITY;
-	Vec4 mask = Vec4(1.0f, 1.0f, 0.0f, 0.0f);
-	Vec4 offset = Vec4(0.0f, 0.0f, 0.0f, 1.0f);
-	Vec4 shadow = Vec4::ZERO;
 };
 
 class DeferredVertexResult : public Ref {
@@ -473,21 +469,6 @@ struct ViewInfo {
 
 	Function<void(const Rc<Director> &)> onCreated;
 	Function<void()> onClosed;
-};
-
-struct AmbientLightData {
-	Vec4 normal;
-	Color4F color;
-	uint32_t soft;
-	uint32_t padding0;
-	uint32_t padding1;
-	uint32_t padding2;
-};
-
-struct DirectLightData {
-	Vec4 position;
-	Color4F color;
-	Vec4 data;
 };
 
 struct ShadowLightInput : AttachmentInputData {

@@ -548,7 +548,7 @@ struct VertexMaterialDrawPlan {
 
 				for (auto &cmd : state.second) {
 					for (auto &iit : cmd.vertexes) {
-						gl::TransformObject val{iit.mat};
+						gl::TransformObject val(iit.mat);
 
 						auto pathIt = paths.find(cmd.cmd->zPath);
 						if (pathIt != paths.end()) {

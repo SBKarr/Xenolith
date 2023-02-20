@@ -25,6 +25,12 @@
 
 #include "XLGl.h"
 
+namespace stappler::xenolith::gl::glsl {
+
+#include "XLGlslSdfData.h"
+
+}
+
 namespace stappler::xenolith::gl {
 
 enum class SdfShape {
@@ -72,6 +78,7 @@ struct CmdSdfGroup2D {
 	Mat4 modelTransform;
 	gl::StateId state = 0;
 	float value = 0.0f;
+	float opacity = 1.0f;
 
 	memory::vector<SdfPrimitive2DHeader> data;
 
@@ -82,6 +89,11 @@ struct CmdSdfGroup2D {
 	void addTriangle2D(Vec2 origin, Vec2 a, Vec2 b, Vec2 c);
 	void addPolygon2D(SpanView<Vec2>);
 };
+
+using Circle2DData = glsl::Circle2DData;
+using Circle2DIndex = glsl::Circle2DIndex;
+using Triangle2DData = glsl::Triangle2DData;
+using Triangle2DIndex = glsl::Triangle2DIndex;
 
 }
 

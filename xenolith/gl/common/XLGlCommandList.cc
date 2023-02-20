@@ -83,6 +83,8 @@ void Command::release() {
 			d->deferred = nullptr;
 		}
 		break;
+	case CommandType::SdfGroup2D:
+		break;
 	}
 }
 

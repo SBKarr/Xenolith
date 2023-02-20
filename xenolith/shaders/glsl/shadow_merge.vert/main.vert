@@ -2,7 +2,7 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_GOOGLE_include_directive : enable
 
-#include "../../include/vertexes.glsl"
+#include "XLGlslVertexData.h"
 
 layout (set = 0, binding = 0) readonly buffer Vertices {
 	Vertex vertices[];
