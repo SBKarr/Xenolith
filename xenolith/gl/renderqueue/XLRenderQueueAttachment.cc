@@ -193,7 +193,7 @@ void AttachmentDescriptor::setDescriptorIndex(uint32_t idx) {
 									<<  getDescriptorTypeName(_descriptor.type)  << " vs. (shader)" << getDescriptorTypeName(binding.type) << "\n";
 						}
 						_descriptor.stages |= it.data->stage;
-						_descriptor.count = binding.count;
+						_descriptor.count = std::max(binding.count, _descriptor.count);
 					}
 				}
 			}
@@ -208,7 +208,7 @@ void AttachmentDescriptor::setDescriptorIndex(uint32_t idx) {
 								<<  getDescriptorTypeName(_descriptor.type)  << " vs. (shader)" << getDescriptorTypeName(binding.type) << "\n";
 					}
 					_descriptor.stages |= ProgramStage::Compute;
-					_descriptor.count = binding.count;
+					_descriptor.count = std::max(binding.count, _descriptor.count);
 				}
 			}
 		}

@@ -20,7 +20,7 @@
  THE SOFTWARE.
  **/
 
-#include "AppGeneralShadowTest.h"
+#include "AppVgShadowTest.h"
 
 namespace stappler::xenolith::app {
 
@@ -34,7 +34,7 @@ protected:
 	using VectorSprite::init;
 };
 
-class GeneralShadowTest::LightNormalSelector : public VectorSprite {
+class VgShadowTest::LightNormalSelector : public VectorSprite {
 public:
 	virtual ~LightNormalSelector() { }
 
@@ -72,7 +72,7 @@ bool LightNormalSelectorPoint::init() {
 	return true;
 }
 
-bool GeneralShadowTest::LightNormalSelector::init() {
+bool VgShadowTest::LightNormalSelector::init() {
 	auto image = Rc<VectorImage>::create(Size2(16.0f, 16.0f));
 	image->addPath(VectorPath()
 			.addCircle(8.0f, 8.0f, 7.0f)
@@ -110,34 +110,34 @@ bool GeneralShadowTest::LightNormalSelector::init() {
 	return true;
 }
 
-void GeneralShadowTest::LightNormalSelector::onContentSizeDirty() {
+void VgShadowTest::LightNormalSelector::onContentSizeDirty() {
 	VectorSprite::onContentSizeDirty();
 
 	_point->setPosition(Vec2(_contentSize / 2.0f) + _normal * Vec2(_contentSize / 2.0f));
 }
 
-void GeneralShadowTest::LightNormalSelector::onEnter(Scene *scene) {
+void VgShadowTest::LightNormalSelector::onEnter(Scene *scene) {
 	VectorSprite::onEnter(scene);
 
 	updateLightNormal(_normal);
 }
 
-void GeneralShadowTest::LightNormalSelector::setSoftShadow(bool soft) {
+void VgShadowTest::LightNormalSelector::setSoftShadow(bool soft) {
 	_softShadow = soft;
 	updateLightNormal(_normal);
 }
 
-void GeneralShadowTest::LightNormalSelector::setK(float k) {
+void VgShadowTest::LightNormalSelector::setK(float k) {
 	_k = k;
 	updateLightNormal(_normal);
 }
 
-void GeneralShadowTest::LightNormalSelector::setAmbient(bool value) {
+void VgShadowTest::LightNormalSelector::setAmbient(bool value) {
 	_ambient = value;
 	updateLightNormal(_normal);
 }
 
-void GeneralShadowTest::LightNormalSelector::updateLightNormal(const Vec2 &vec) {
+void VgShadowTest::LightNormalSelector::updateLightNormal(const Vec2 &vec) {
 	if (!_scene) {
 		return;
 	}
@@ -155,8 +155,8 @@ void GeneralShadowTest::LightNormalSelector::updateLightNormal(const Vec2 &vec) 
 	}
 }
 
-bool GeneralShadowTest::init() {
-	if (!LayoutTest::init(LayoutName::GeneralShadowTest, "")) {
+bool VgShadowTest::init() {
+	if (!LayoutTest::init(LayoutName::VgShadowTest, "")) {
 		return false;
 	}
 
@@ -269,7 +269,7 @@ bool GeneralShadowTest::init() {
 	return true;
 }
 
-void GeneralShadowTest::onContentSizeDirty() {
+void VgShadowTest::onContentSizeDirty() {
 	LayoutTest::onContentSizeDirty();
 
 	_sprite->setPosition(Size2(_contentSize.width / 2.0f, _contentSize.height / 2.0f));
@@ -284,7 +284,7 @@ void GeneralShadowTest::onContentSizeDirty() {
 	_normalSelector->setPosition(Vec2(16.0f, _contentSize.height - 16.0f - 48.0f * 4.0f));
 }
 
-void GeneralShadowTest::update(const UpdateTime &t) {
+void VgShadowTest::update(const UpdateTime &t) {
 	LayoutTest::update(t);
 
 	uint32_t ntriangles = _sprite->getTrianglesCount();
@@ -293,7 +293,7 @@ void GeneralShadowTest::update(const UpdateTime &t) {
 	_info->setString(toString("V: ", nvertexes, "; T: ", ntriangles));
 }
 
-void GeneralShadowTest::setDataValue(Value &&data) {
+void VgShadowTest::setDataValue(Value &&data) {
 	if (data.isInteger("icon")) {
 		auto icon = IconName(data.getInteger("icon"));
 		if (icon != _currentName) {
@@ -305,7 +305,7 @@ void GeneralShadowTest::setDataValue(Value &&data) {
 	LayoutTest::setDataValue(move(data));
 }
 
-void GeneralShadowTest::updateIcon(IconName name) {
+void VgShadowTest::updateIcon(IconName name) {
 	_currentName = name;
 	_label->setString(toString(getIconName(_currentName), " ", toInt(_currentName), "/", toInt(IconName::Toggle_toggle_on_solid)));
 
@@ -326,7 +326,7 @@ void GeneralShadowTest::updateIcon(IconName name) {
 	}));
 }
 
-void GeneralShadowTest::updateScaleValue(float value) {
+void VgShadowTest::updateScaleValue(float value) {
 	auto q = 0.1f + 2.9f * value;
 
 	_sliderScale->setString(toString("Scale: ", q));

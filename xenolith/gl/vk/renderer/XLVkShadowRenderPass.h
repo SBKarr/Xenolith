@@ -103,6 +103,8 @@ public:
 
 	static constexpr StringView SdfTrianglesComp = "SdfTrianglesComp";
 	static constexpr StringView SdfCirclesComp = "SdfCirclesComp";
+	static constexpr StringView SdfRectsComp = "SdfRectsComp";
+	static constexpr StringView SdfRoundedRectsComp = "SdfRoundedRectsComp";
 	static constexpr StringView SdfImageComp = "SdfImageComp";
 
 	static bool makeDefaultRenderQueue(renderqueue::Queue::Builder &, Extent2 extent);
@@ -129,33 +131,6 @@ protected:
 	const ShadowImageArrayAttachment *_array = nullptr;
 };
 
-class ShadowLightDataAttachmentHandle : public BufferAttachmentHandle {
-public:
-	virtual ~ShadowLightDataAttachmentHandle();
-
-	virtual void submitInput(FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
-
-	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
-			uint32_t, bool isExternal) const override;
-
-	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &) override;
-
-	void allocateBuffer(DeviceFrameHandle *, uint32_t trianglesCount, float value, uint32_t gridCells, Extent2 extent);
-
-	float getBoxOffset(float value) const;
-
-	uint32_t getLightsCount() const;
-	uint32_t getObjectsCount() const;
-
-	const gl::glsl::ShadowData &getShadowData() const { return _shadowData; }
-	const Rc<DeviceBuffer> &getBuffer() const { return _data; }
-
-protected:
-	Rc<DeviceBuffer> _data;
-	Rc<gl::ShadowLightInput> _input;
-	gl::glsl::ShadowData _shadowData;
-};
-
 class ShadowVertexAttachmentHandle : public BufferAttachmentHandle {
 public:
 	virtual ~ShadowVertexAttachmentHandle();
@@ -171,6 +146,9 @@ public:
 
 	uint32_t getTrianglesCount() const { return _trianglesCount; }
 	uint32_t getCirclesCount() const { return _circlesCount; }
+	uint32_t getRectsCount() const { return _rectsCount; }
+	uint32_t getRoundedRectsCount() const { return _roundedRectsCount; }
+	uint32_t getPolygonCount() const { return _polygonCount; }
 	float getMaxValue() const { return _maxValue; }
 
 protected:
@@ -180,16 +158,48 @@ protected:
 	Rc<DeviceBuffer> _vertexes;
 	Rc<DeviceBuffer> _transforms;
 	Rc<DeviceBuffer> _circles;
+	Rc<DeviceBuffer> _rects;
+	Rc<DeviceBuffer> _roundedRects;
 	uint32_t _trianglesCount = 0;
 	uint32_t _circlesCount = 0;
+	uint32_t _rectsCount = 0;
+	uint32_t _roundedRectsCount = 0;
+	uint32_t _polygonCount = 0;
 	float _maxValue = 0.0f;
+};
+
+class ShadowLightDataAttachmentHandle : public BufferAttachmentHandle {
+public:
+	virtual ~ShadowLightDataAttachmentHandle();
+
+	virtual void submitInput(FrameQueue &, Rc<gl::AttachmentInputData> &&, Function<void(bool)> &&) override;
+
+	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
+			uint32_t, bool isExternal) const override;
+
+	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &) override;
+
+	void allocateBuffer(DeviceFrameHandle *, const ShadowVertexAttachmentHandle *vertexes, uint32_t gridCells, Extent2 extent);
+
+	float getBoxOffset(float value) const;
+
+	uint32_t getLightsCount() const;
+	uint32_t getObjectsCount() const;
+
+	const gl::glsl::ShadowData &getShadowData() const { return _shadowData; }
+	const Rc<DeviceBuffer> &getBuffer() const { return _data; }
+
+protected:
+	Rc<DeviceBuffer> _data;
+	Rc<gl::ShadowLightInput> _input;
+	gl::glsl::ShadowData _shadowData;
 };
 
 class ShadowTrianglesAttachmentHandle : public BufferAttachmentHandle {
 public:
 	virtual ~ShadowTrianglesAttachmentHandle();
 
-	void allocateBuffer(DeviceFrameHandle *, const gl::glsl::ShadowData &);
+	void allocateBuffer(DeviceFrameHandle *, uint32_t objects, const gl::glsl::ShadowData &);
 
 	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
 			uint32_t, bool isExternal) const override;
@@ -198,12 +208,16 @@ public:
 
 	const Rc<DeviceBuffer> &getTriangles() const { return _triangles; }
 	const Rc<DeviceBuffer> &getCircles() const { return _circles; }
+	const Rc<DeviceBuffer> &getRects() const { return _rects; }
+	const Rc<DeviceBuffer> &getRoundedRects() const { return _roundedRects; }
 	const Rc<DeviceBuffer> &getGridSize() const { return _gridSize; }
 	const Rc<DeviceBuffer> &getGridIndex() const { return _gridIndex; }
 
 protected:
 	Rc<DeviceBuffer> _triangles;
 	Rc<DeviceBuffer> _circles;
+	Rc<DeviceBuffer> _rects;
+	Rc<DeviceBuffer> _roundedRects;
 	Rc<DeviceBuffer> _gridSize;
 	Rc<DeviceBuffer> _gridIndex;
 };

@@ -22,6 +22,10 @@
 
 #include "XLGlslCompatibility.h"
 
+#ifndef XL_GLSL
+namespace stappler::xenolith::gl::glsl {
+#endif
+
 struct Vertex {
 	vec4 pos;
 	vec4 color;
@@ -42,6 +46,7 @@ struct TransformObject {
 	vec4 mask;
 	vec4 offset;
 	vec4 shadow;
+	vec4 padding;
 
 #ifndef XL_GLSL
 	TransformObject() :
@@ -59,3 +64,7 @@ struct TransformObject {
 	{ }
 #endif
 };
+
+#ifndef XL_GLSL
+}
+#endif

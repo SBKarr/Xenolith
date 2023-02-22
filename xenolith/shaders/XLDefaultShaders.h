@@ -31,6 +31,8 @@ extern SpanView<uint32_t> MaterialFrag;
 extern SpanView<uint32_t> MaterialVert;
 extern SpanView<uint32_t> SdfTrianglesComp;
 extern SpanView<uint32_t> SdfCirclesComp;
+extern SpanView<uint32_t> SdfRectsComp;
+extern SpanView<uint32_t> SdfRoundedRectsComp;
 extern SpanView<uint32_t> SdfShadowsFrag;
 extern SpanView<uint32_t> SdfImageComp;
 extern SpanView<uint32_t> ShadowMergeFrag;

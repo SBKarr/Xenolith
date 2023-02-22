@@ -75,7 +75,7 @@ bool ShadowLightDataAttachmentHandle::writeDescriptor(const QueuePassHandle &, D
 	return false;
 }
 
-void ShadowLightDataAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame, uint32_t trianglesCount, float value, uint32_t gridSize, Extent2) {
+void ShadowLightDataAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame, const ShadowVertexAttachmentHandle *vertexes, uint32_t gridSize, Extent2) {
 	ShadowLightDataAttachment::LightData *data = nullptr;
 	DeviceBuffer::MappedRegion mapped;
 	if (devFrame->isPersistentMapping()) {
@@ -117,18 +117,50 @@ void ShadowLightDataAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame
 	discardColor.a = 1.0f;
 	_shadowData.discardColor = data->discardColor = discardColor;
 
-	_shadowData.trianglesCount = data->trianglesCount = trianglesCount;
 	_shadowData.gridSize = data->gridSize = ceilf(gridSize / fullDensity);
 	_shadowData.gridWidth = data->gridWidth = (scaledExtent.width - 1) / data->gridSize + 1;
 	_shadowData.gridHeight = data->gridHeight = (scaledExtent.height - 1) / data->gridSize + 1;
 	_shadowData.ambientLightCount = data->ambientLightCount = _input->ambientLightCount;
 	_shadowData.directLightCount = data->directLightCount = _input->directLightCount;
-	_shadowData.bbOffset = data->bbOffset = getBoxOffset(value);
+	_shadowData.bbOffset = data->bbOffset = getBoxOffset(vertexes->getMaxValue());
 	_shadowData.density = data->density = _input->sceneDensity;
 	_shadowData.shadowSdfDensity = data->shadowSdfDensity = 1.0f / _input->shadowDensity;
 	_shadowData.shadowDensity = data->shadowDensity = 1.0f / _input->sceneDensity;
 	_shadowData.shadowOffset = data->shadowOffset = shadowOffset;
 	_shadowData.pix = data->pix = Vec2(1.0f / float(screenSize.width), 1.0f / float(screenSize.height));
+
+	_shadowData.trianglesCount = data->trianglesCount = vertexes->getTrianglesCount();
+	_shadowData.circlesCount = data->circlesCount = vertexes->getCirclesCount();
+	_shadowData.rectsCount = data->rectsCount = vertexes->getRectsCount();
+	_shadowData.roundedRectsCount = data->roundedRectsCount = vertexes->getRoundedRectsCount();
+	_shadowData.polygonCount = data->polygonCount = vertexes->getPolygonCount();
+
+	_shadowData.groupsCount = data->groupsCount =
+			(data->trianglesCount > 0 ? 1 : 0)
+			+ (data->circlesCount > 0 ? 1 : 0)
+			+ (data->rectsCount > 0 ? 1 : 0)
+			+ (data->roundedRectsCount > 0 ? 1 : 0)
+			+ (data->polygonCount > 0 ? 1 : 0);
+
+	_shadowData.circleGridSizeOffset = data->circleGridSizeOffset = data->gridWidth * data->gridHeight
+			* (data->trianglesCount > 0 ? 1 : 0);
+	_shadowData.circleGridIndexOffset = data->circleGridIndexOffset = data->gridWidth * data->gridHeight
+			* data->trianglesCount;
+
+	_shadowData.rectGridSizeOffset = data->rectGridSizeOffset = data->gridWidth * data->gridHeight
+			* ((data->trianglesCount > 0 ? 1 : 0) + (data->circlesCount > 0 ? 1 : 0));
+	_shadowData.rectGridIndexOffset = data->rectGridIndexOffset = data->gridWidth * data->gridHeight
+			* (data->trianglesCount + data->circlesCount);
+
+	_shadowData.roundedRectGridSizeOffset = data->roundedRectGridSizeOffset = data->gridWidth * data->gridHeight
+			* ((data->trianglesCount > 0 ? 1 : 0) + (data->circlesCount > 0 ? 1 : 0) + (data->rectsCount > 0 ? 1 : 0));
+	_shadowData.roundedRectGridIndexOffset = data->roundedRectGridIndexOffset = data->gridWidth * data->gridHeight
+			* (data->trianglesCount + data->circlesCount + data->rectsCount);
+
+	_shadowData.polygonGridSizeOffset = data->polygonGridSizeOffset = data->gridWidth * data->gridHeight
+			* ((data->trianglesCount > 0 ? 1 : 0) + (data->circlesCount > 0 ? 1 : 0) + (data->rectsCount > 0 ? 1 : 0) + (data->roundedRectsCount > 0 ? 1 : 0));
+	_shadowData.polygonGridIndexOffset = data->polygonGridIndexOffset
+			= data->gridWidth * data->gridHeight * (data->trianglesCount + data->circlesCount + data->rectsCount + data->roundedRectsCount);
 
 	memcpy(data->ambientLights, _input->ambientLights, sizeof(gl::AmbientLightData) * config::MaxAmbientLights);
 	memcpy(data->directLights, _input->directLights, sizeof(gl::DirectLightData) * config::MaxDirectLights);
@@ -195,6 +227,8 @@ bool ShadowVertexAttachmentHandle::isDescriptorDirty(const PassHandle &, const P
 	case 1: return _vertexes; break;
 	case 2: return _transforms; break;
 	case 3: return _circles; break;
+	case 4: return _rects; break;
+	case 5: return _roundedRects; break;
 	default: break;
 	}
 	return false;
@@ -226,6 +260,18 @@ bool ShadowVertexAttachmentHandle::writeDescriptor(const QueuePassHandle &, Desc
 		info.range = _circles->getSize();
 		return true;
 		break;
+	case 4:
+		info.buffer = _rects;
+		info.offset = 0;
+		info.range = _rects->getSize();
+		return true;
+		break;
+	case 5:
+		info.buffer = _roundedRects;
+		info.offset = 0;
+		info.range = _roundedRects->getSize();
+		return true;
+		break;
 	default:
 		break;
 	}
@@ -233,7 +279,7 @@ bool ShadowVertexAttachmentHandle::writeDescriptor(const QueuePassHandle &, Desc
 }
 
 bool ShadowVertexAttachmentHandle::empty() const {
-	return !_indexes || !_vertexes || !_transforms;
+	return !_indexes || !_vertexes || !_transforms || !_circles || !_rects;
 }
 
 struct ShadowDrawPlan {
@@ -290,13 +336,16 @@ struct ShadowDrawPlan {
 		uint32_t objects = 0;
 		for (auto &it : cmd->data) {
 			switch (it.type) {
-			case gl::SdfShape::Circle2D: ++ circles; ++ objects; break;
+			case gl::SdfShape::Circle2D: ++ circles; ++ objects; ++ vertexes; break;
+			case gl::SdfShape::Rect2D: ++ rects; ++ objects; ++ vertexes; break;
+			case gl::SdfShape::RoundedRect2D: ++ roundedRects; ++ objects; vertexes += 2; break;
 			case gl::SdfShape::Triangle2D:
 				break;
 			default: break;
 			}
 		}
 		if (objects > 0) {
+			++ transforms;
 			sdfCommands.emplace_front(cmd);
 		}
 	}
@@ -306,6 +355,8 @@ struct ShadowDrawPlan {
 	uint32_t indexes = 0;
 	uint32_t transforms = 0;
 	uint32_t circles = 0;
+	uint32_t rects = 0;
+	uint32_t roundedRects = 0;
 	std::forward_list<PlanCommandInfo> commands;
 	std::forward_list<const gl::CmdSdfGroup2D *> sdfCommands;
 };
@@ -384,7 +435,13 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 	_circles = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
 			gl::BufferInfo(info, std::max(plan.circles, uint32_t(1)) * sizeof(gl::Circle2DIndex)));
 
-	if (!_vertexes || !_indexes || !_transforms || !_circles) {
+	_rects = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
+			gl::BufferInfo(info, std::max(plan.rects, uint32_t(1)) * sizeof(gl::Rect2DIndex)));
+
+	_roundedRects = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
+			gl::BufferInfo(info, std::max(plan.roundedRects, uint32_t(1)) * sizeof(gl::glsl::RoundedRect2DIndex)));
+
+	if (!_vertexes || !_indexes || !_transforms || !_circles || !_rects || !_roundedRects) {
 		return false;
 	}
 
@@ -392,14 +449,17 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 	ShadowBufferMap indexesMap(_indexes, fhandle.isPersistentMapping());
 	ShadowBufferMap transformMap(_transforms, fhandle.isPersistentMapping());
 	ShadowBufferMap circlesMap(_circles, fhandle.isPersistentMapping());
+	ShadowBufferMap rectsMap(_rects, fhandle.isPersistentMapping());
+	ShadowBufferMap roundedRectsMap(_roundedRects, fhandle.isPersistentMapping());
 
 	gl::TransformObject val;
 	memcpy(transformMap.region.ptr, &val, sizeof(gl::TransformObject));
 
 	uint32_t vertexOffset = 0;
 	uint32_t indexOffset = 0;
-	uint32_t transtormOffset = sizeof(gl::TransformObject);
 	uint32_t circleOffset = 0;
+	uint32_t rectOffset = 0;
+	uint32_t roundedRectOffset = 0;
 
 	uint32_t materialVertexes = 0;
 	uint32_t materialIndexes = 0;
@@ -408,7 +468,7 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 	auto pushVertexes = [&] (const gl::CmdShadow *cmd, const gl::TransformObject &transform, gl::VertexData *vertexes) {
 		auto target = (Vec4 *)vertexesMap.region.ptr + vertexOffset;
 
-		memcpy(transformMap.region.ptr + transtormOffset, &transform, sizeof(gl::TransformObject));
+		memcpy(transformMap.region.ptr + sizeof(gl::TransformObject) * transformIdx, &transform, sizeof(gl::TransformObject));
 
 		for (size_t idx = 0; idx < vertexes->data.size(); ++ idx) {
 			memcpy(target++, &vertexes->data[idx].pos, sizeof(Vec4));
@@ -432,7 +492,6 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 
 		vertexOffset += vertexes->data.size();
 		indexOffset += vertexes->indexes.size() / 3;
-		transtormOffset += sizeof(gl::TransformObject);
 		++ transformIdx;
 
 		materialVertexes += vertexes->data.size();
@@ -448,21 +507,21 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 	auto pushSdf = [&] (const gl::CmdSdfGroup2D *cmd) {
 		auto target = (Vec4 *)vertexesMap.region.ptr + vertexOffset;
 		gl::TransformObject transform(cmd->modelTransform.getInversed());
-		cmd->modelTransform.getScale(&val.shadow.x);
+		cmd->modelTransform.getScale(&transform.padding.x);
 
-		memcpy(transformMap.region.ptr + transtormOffset, &transform, sizeof(gl::TransformObject));
+		memcpy(transformMap.region.ptr + sizeof(gl::TransformObject) * transformIdx, &transform, sizeof(gl::TransformObject));
 
 		for (auto &it : cmd->data) {
 			switch (it.type) {
 			case gl::SdfShape::Circle2D: {
 				auto data = (gl::SdfCircle2D *)it.bytes.data();
-				auto pos = Vec4(data->origin, 0.0f, 1.0f);
+				auto pos = Vec4(data->origin, 0.0f, data->radius);
 
 				memcpy(target++, &pos, sizeof(Vec4));
 
 				gl::Circle2DIndex index;
 				index.origin = vertexOffset;
-				index.transform = transtormOffset;
+				index.transform = transformIdx;
 				index.value = cmd->value;
 				index.opacity = cmd->opacity;
 
@@ -472,13 +531,49 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 				++ vertexOffset;
 				break;
 			}
+			case gl::SdfShape::Rect2D: {
+				auto data = (gl::SdfRect2D *)it.bytes.data();
+				auto pos = Vec4(data->origin, data->size);
+
+				memcpy(target++, &pos, sizeof(Vec4));
+
+				gl::Rect2DIndex index;
+				index.origin = vertexOffset;
+				index.transform = transformIdx;
+				index.value = cmd->value;
+				index.opacity = cmd->opacity;
+
+				memcpy(((gl::Rect2DIndex *)rectsMap.region.ptr) + rectOffset, &index, sizeof(gl::Rect2DIndex));
+
+				++ rectOffset;
+				++ vertexOffset;
+				break;
+			}
+			case gl::SdfShape::RoundedRect2D: {
+				auto data = (gl::SdfRoundedRect2D *)it.bytes.data();
+				auto pos = Vec4(data->origin, data->size);
+
+				memcpy(target++, &pos, sizeof(Vec4));
+				memcpy(target++, &data->radius, sizeof(Vec4));
+
+				gl::glsl::RoundedRect2DIndex index;
+				index.origin = vertexOffset;
+				index.transform = transformIdx;
+				index.value = cmd->value;
+				index.opacity = cmd->opacity;
+
+				memcpy(((gl::glsl::RoundedRect2DIndex *)roundedRectsMap.region.ptr) + roundedRectOffset, &index, sizeof(gl::glsl::RoundedRect2DIndex));
+
+				++ roundedRectOffset;
+				vertexOffset += 2;
+				break;
+			}
 			case gl::SdfShape::Triangle2D:
 				break;
 			default: break;
 			}
 		}
 
-		transtormOffset += sizeof(gl::TransformObject);
 		++ transformIdx;
 	};
 
@@ -488,23 +583,28 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 
 	_trianglesCount = plan.indexes / 3;
 	_circlesCount = plan.circles;
+	_rectsCount = plan.rects;
+	_roundedRectsCount = plan.roundedRects;
 
 	return true;
 }
 
 ShadowTrianglesAttachmentHandle::~ShadowTrianglesAttachmentHandle() { }
 
-void ShadowTrianglesAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame, const gl::glsl::ShadowData &data) {
-	auto trianglesCount = std::max(uint32_t(1), data.trianglesCount);
+void ShadowTrianglesAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame, uint32_t objects, const gl::glsl::ShadowData &data) {
 	auto &pool = devFrame->getMemPool(devFrame);
 	_triangles = pool->spawn(AllocationUsage::DeviceLocal, gl::BufferInfo(gl::BufferUsage::StorageBuffer,
-			trianglesCount * sizeof(gl::Triangle2DData)));
+			std::max(uint32_t(1), data.trianglesCount) * sizeof(gl::Triangle2DData)));
 	_circles = pool->spawn(AllocationUsage::DeviceLocal, gl::BufferInfo(gl::BufferUsage::StorageBuffer,
-			data.circlesCount * sizeof(gl::Triangle2DData)));
+			std::max(uint32_t(1), data.circlesCount) * sizeof(gl::Circle2DData)));
+	_rects = pool->spawn(AllocationUsage::DeviceLocal, gl::BufferInfo(gl::BufferUsage::StorageBuffer,
+			std::max(uint32_t(1), data.rectsCount) * sizeof(gl::Rect2DData)));
+	_roundedRects = pool->spawn(AllocationUsage::DeviceLocal, gl::BufferInfo(gl::BufferUsage::StorageBuffer,
+			std::max(uint32_t(1), data.roundedRectsCount) * sizeof(gl::glsl::RoundedRect2DData)));
 	_gridSize = pool->spawn(AllocationUsage::DeviceLocal, gl::BufferInfo(gl::BufferUsage::StorageBuffer,
-			data.gridWidth * data.gridHeight * 2 * sizeof(uint32_t)));
+			data.gridWidth * data.gridHeight * data.groupsCount * sizeof(uint32_t)));
 	_gridIndex = pool->spawn(AllocationUsage::DeviceLocal, gl::BufferInfo(gl::BufferUsage::StorageBuffer,
-			(trianglesCount + data.circlesCount)* data.gridWidth * data.gridHeight * sizeof(uint32_t)));
+			std::max(uint32_t(1), objects) * data.gridWidth * data.gridHeight * sizeof(uint32_t)));
 }
 
 bool ShadowTrianglesAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
@@ -514,6 +614,8 @@ bool ShadowTrianglesAttachmentHandle::isDescriptorDirty(const PassHandle &, cons
 	case 1: return _gridSize; break;
 	case 2: return _gridIndex; break;
 	case 3: return _circles; break;
+	case 4: return _rects; break;
+	case 5: return _roundedRects; break;
 	default:
 		break;
 	}
@@ -544,6 +646,18 @@ bool ShadowTrianglesAttachmentHandle::writeDescriptor(const QueuePassHandle &, D
 		info.buffer = _circles;
 		info.offset = 0;
 		info.range = _circles->getSize();
+		return true;
+		break;
+	case 4:
+		info.buffer = _rects;
+		info.offset = 0;
+		info.range = _rects->getSize();
+		return true;
+		break;
+	case 5:
+		info.buffer = _roundedRects;
+		info.offset = 0;
+		info.range = _roundedRects->getSize();
 		return true;
 		break;
 	default:
@@ -743,10 +857,11 @@ bool ShadowPassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
 
 	if (lightsHandle && lightsHandle->getLightsCount()) {
 		lightsHandle->allocateBuffer(static_cast<DeviceFrameHandle *>(q.getFrame().get()),
-				_vertexBuffer->getTrianglesCount(), _vertexBuffer->getMaxValue(), _gridCellSize, q.getExtent());
+				_vertexBuffer, _gridCellSize, q.getExtent());
 
 		if (lightsHandle->getObjectsCount() > 0 && trianglesHandle) {
-			trianglesHandle->allocateBuffer(static_cast<DeviceFrameHandle *>(q.getFrame().get()), lightsHandle->getShadowData());
+			trianglesHandle->allocateBuffer(static_cast<DeviceFrameHandle *>(q.getFrame().get()),
+					lightsHandle->getObjectsCount(), lightsHandle->getShadowData());
 		}
 
 		return QueuePassHandle::prepare(q, move(cb));

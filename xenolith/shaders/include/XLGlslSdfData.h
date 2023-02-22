@@ -22,6 +22,10 @@
 
 #include "XLGlslCompatibility.h"
 
+#ifndef XL_GLSL
+namespace stappler::xenolith::gl::glsl {
+#endif
+
 struct Circle2DData {
 	vec2 bbMin;
 	vec2 bbMax;
@@ -58,6 +62,43 @@ struct Triangle2DIndex {
 	float opacity;
 };
 
+struct Rect2DData {
+	vec2 bbMin;
+	vec2 bbMax;
+	vec2 origin;
+	vec2 size;
+	float value;
+	float opacity;
+	uint transform;
+	uint padding;
+};
+
+struct Rect2DIndex {
+	uint origin;
+	uint transform;
+	float value;
+	float opacity;
+};
+
+struct RoundedRect2DData {
+	vec2 bbMin;
+	vec2 bbMax;
+	vec2 origin;
+	vec2 size;
+	vec4 corners;
+	float value;
+	float opacity;
+	uint transform;
+	uint padding;
+};
+
+struct RoundedRect2DIndex {
+	uint origin;
+	uint transform;
+	float value;
+	float opacity;
+};
+
 XL_GLSL_INLINE float triangle2d(XL_GLSL_IN vec2 p, XL_GLSL_IN vec2 a, XL_GLSL_IN vec2 b, XL_GLSL_IN vec2 c) {
 	vec2 e0 = b - a;
 	vec2 e1 = c - b;
@@ -77,6 +118,26 @@ XL_GLSL_INLINE float triangle2d(XL_GLSL_IN vec2 p, XL_GLSL_IN vec2 a, XL_GLSL_IN
                        vec2( dot( pq2, pq2 ), s*(v2.x*e2.y-v2.y*e2.x) ));
 
 	return -sqrt(d.x)*sign(d.y);
+}
+
+XL_GLSL_INLINE float circle2d(XL_GLSL_IN vec2 p, XL_GLSL_IN vec2 origin, XL_GLSL_IN float radius) {
+	return length(p - origin) - radius;
+}
+
+XL_GLSL_INLINE float circle3d(XL_GLSL_IN vec3 p, XL_GLSL_IN vec2 origin, XL_GLSL_IN float radius, XL_GLSL_IN float value, XL_GLSL_IN vec4 scale) {
+	vec2 originVector = vec2(p.x, p.y) - origin;
+	float l = length(originVector);
+	float d = l - radius;
+	float height = value - p.z;
+
+	if (d <= float(0.0)) {
+		return height;
+	} else {
+		vec2 normal = originVector / l;
+		vec2 targetVector = normal * d * vec2(scale.x, scale.y);
+		float ds = length(targetVector);
+		return sqrt(ds * ds + height * height);
+	}
 }
 
 XL_GLSL_INLINE float dot2(XL_GLSL_IN vec3 v) { return dot(v, v); }
@@ -104,3 +165,54 @@ XL_GLSL_INLINE float triangle3d(XL_GLSL_IN vec3 p, XL_GLSL_IN vec2 a, XL_GLSL_IN
 		dot(nor, p1) * dot(nor, p1) / dot2(nor)
 	);
 }
+
+XL_GLSL_INLINE float rect2d(XL_GLSL_IN vec2 p, XL_GLSL_IN vec2 origin, XL_GLSL_IN vec2 size) {
+	vec2 d = abs(p - origin) - size;
+	return length(max(d, vec2(0, 0))) + min(max(d.x,d.y),float(0));
+}
+
+XL_GLSL_INLINE float rect3d(XL_GLSL_IN vec3 p, XL_GLSL_IN vec2 origin, XL_GLSL_IN vec2 size, XL_GLSL_IN float value, XL_GLSL_IN vec4 scale) {
+	vec2 originVector = abs(vec2(p.x, p.y) - origin) - size;
+	float height = value - p.z;
+
+	if (all(lessThanEqual(originVector, vec2(0, 0)))) {
+		return height;
+	} else {
+		float ds = length(max(originVector, vec2(0, 0)) * vec2(scale.x, scale.y))
+				+ min(max(originVector.x * scale.x, originVector.y * scale.y), float(0));
+		return sqrt(ds * ds + height * height);
+	}
+}
+
+XL_GLSL_INLINE float roundedRect2d(XL_GLSL_IN vec2 p, XL_GLSL_IN vec2 origin, XL_GLSL_IN vec2 size, XL_GLSL_IN vec4 corners) {
+	p = p - origin;
+#if XL_GLSL
+	corners.xy = (p.x > 0.0) ? corners.xy : corners.zw;
+	corners.x  = (p.y > 0.0) ? corners.x  : corners.y;
+#endif
+	vec2 q = abs(p) - size + corners.x;
+	return min(max(q.x, q.y), float(0.0)) + length(max(q, vec2(0,0))) - corners.x;
+}
+
+XL_GLSL_INLINE float roundedRect3d(XL_GLSL_IN vec3 p, XL_GLSL_IN vec2 origin, XL_GLSL_IN vec2 size, XL_GLSL_IN vec4 corners,
+		XL_GLSL_IN float value, XL_GLSL_IN vec4 scale) {
+	vec2 pt = vec2(p.x, p.y) - origin;
+#if XL_GLSL
+	corners.xy = (pt.x > 0.0) ? corners.xy : corners.zw;
+	corners.x  = (pt.y > 0.0) ? corners.x  : corners.y;
+#endif
+	vec2 originVector = abs(pt) - size + corners.x;
+	float height = value - p.z;
+
+	if (all(lessThanEqual(originVector, vec2(0, 0)))) {
+		return height;
+	} else {
+		float ds = length(max(originVector, vec2(0,0)) * vec2(scale.x, scale.y))
+				+ min(max(originVector.x * scale.x, originVector.y * scale.y), float(0)) - corners.x * (scale.x + scale.y) * 0.5;
+		return sqrt(ds * ds + height * height);
+	}
+
+}
+#ifndef XL_GLSL
+}
+#endif

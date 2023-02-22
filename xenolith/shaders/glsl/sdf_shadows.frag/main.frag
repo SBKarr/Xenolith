@@ -6,6 +6,8 @@
 #include "XLGlslShadowData.h"
 #include "XLGlslSdfData.h"
 
+#define OUTPUT_BUFFER_LAYOUT_SIZE 6
+
 layout (constant_id = 0) const int SAMPLERS_ARRAY_SIZE = 2;
 
 layout (push_constant) uniform pcb {
@@ -20,15 +22,27 @@ layout (set = 0, binding = 2) uniform ShadowDataBuffer {
 
 layout(set = 0, binding = 3) buffer TrianglesBuffer {
 	Triangle2DData triangles[];
-} trianglesBuffer[3];
+} trianglesBuffer[OUTPUT_BUFFER_LAYOUT_SIZE];
 
 layout(set = 0, binding = 3) buffer GridSizeBuffer {
 	uint grid[];
-} gridSizeBuffer[3];
+} gridSizeBuffer[OUTPUT_BUFFER_LAYOUT_SIZE];
 
 layout(set = 0, binding = 3) buffer GridIndexesBuffer {
 	uint index[];
-} gridIndexBuffer[3];
+} gridIndexBuffer[OUTPUT_BUFFER_LAYOUT_SIZE];
+
+layout(set = 0, binding = 3) buffer CirclesBuffer {
+	Circle2DData circles[];
+} circlesBuffer[OUTPUT_BUFFER_LAYOUT_SIZE];
+
+layout(set = 0, binding = 3) buffer RectsBuffer {
+	Rect2DData rects[];
+} rectsBuffer[OUTPUT_BUFFER_LAYOUT_SIZE];
+
+layout(set = 0, binding = 3) buffer RoundedRectsBuffer {
+	RoundedRect2DData rects[];
+} roundedRectsBuffer[OUTPUT_BUFFER_LAYOUT_SIZE];
 
 layout(input_attachment_index = 0, set = 0, binding = 4) uniform subpassInput inputDepth;
 
@@ -44,83 +58,47 @@ uint s_cellIdx;
 
 #define GAUSSIAN_CONST -6.2383246250
 
-float map(in vec3 p) {
-	float value = 100.0;
-
-	uint targetOffset = s_cellIdx * shadowData.trianglesCount;
-	for (uint i = 0; i < gridSizeBuffer[1].grid[s_cellIdx]; ++ i) {
-		Triangle2DData t = trianglesBuffer[0].triangles[gridIndexBuffer[2].index[targetOffset + i]];
-		value = min(value, triangle3d(p, t.a, t.b, t.c, t.value));
-	}
-	return value;
-}
-
-float map2d(in vec2 p, in vec2 n, in float k) {
-	float value = 100.0;
-	float sdf;
-	float max = 100.0;
-	uint index;
-
-	uint targetOffset = s_cellIdx * shadowData.trianglesCount;
-	for (uint i = 0; i < gridSizeBuffer[1].grid[s_cellIdx]; ++ i) {
-		index = gridIndexBuffer[2].index[targetOffset + i];
-		Triangle2DData t = trianglesBuffer[0].triangles[index];
-		sdf = triangle2d(p + n * trianglesBuffer[0].triangles[index].value, t.a, t.b, t.c);
-		if (value > sdf) {
-			max = trianglesBuffer[0].triangles[index].value * k * k * 1.5;
-			value = sdf;
-		}
-	}
-
-	value = clamp(value / max, 0.0, 1.0);
-	return 1.0 - exp(value * value * GAUSSIAN_CONST);
-}
-
-float softshadow(in vec3 ro, in vec3 rd, in float k) {
-	float res = 1.0;
-	float t = 0.002;
-	float h = 1.0;
-	for (int i = 0; i < 1000; i++) {
-		h = map(ro + rd * t);
-		if (h < 0.0001) {
-			return 0.0;
-		}
-		res = min(res, h / (t * k * 0.5));
-		t += h;
-		if (t > 100.0) {
-			break;
-		}
-	}
-	return clamp(res, 0.0, 1.0);
-}
-
-float softshadow2(in vec3 ro, in vec3 rd, in float k) {
-	float res = 1.0;
-	float t = 0.002;
-	float h = 1.0;
-	for (int i = 0; i < 1000; i++) {
-		h = map(ro + rd * t) + t * (k * 0.5);
-		if (h < 0.001) {
-			return 0.0;
-		}
-		res = min(res, h / (t * k));
-		t += h * inversesqrt(t + 1.0);
-		if (t > 100.0) {
-			break;
-		}
-	}
-	return clamp(res, 0.0, 1.0);
-}
-
 uint hit(in vec2 p, float h) {
 	uint idx;
 	uint targetOffset = s_cellIdx * shadowData.trianglesCount;
-
 	for (uint i = 0; i < gridSizeBuffer[1].grid[s_cellIdx]; ++ i) {
 		idx = gridIndexBuffer[2].index[targetOffset + i];
 		// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
 		if (trianglesBuffer[0].triangles[idx].value > h + 0.02) {
 			if (all(greaterThan(p, trianglesBuffer[0].triangles[idx].bbMin)) && all(lessThan(p, trianglesBuffer[0].triangles[idx].bbMax))) {
+				return 1;
+			}
+		}
+	}
+
+	targetOffset = shadowData.circleGridIndexOffset + s_cellIdx * shadowData.circlesCount;
+	for (uint i = 0; i < gridSizeBuffer[1].grid[shadowData.circleGridSizeOffset + s_cellIdx]; ++ i) {
+		idx = gridIndexBuffer[2].index[targetOffset + i];
+		// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
+		if (circlesBuffer[3].circles[idx].value > h + 0.02) {
+			if (all(greaterThan(p, circlesBuffer[3].circles[idx].bbMin)) && all(lessThan(p, circlesBuffer[3].circles[idx].bbMax))) {
+				return 1;
+			}
+		}
+	}
+
+	targetOffset = shadowData.rectGridIndexOffset + s_cellIdx * shadowData.rectsCount;
+	for (uint i = 0; i < gridSizeBuffer[1].grid[shadowData.rectGridSizeOffset + s_cellIdx]; ++ i) {
+		idx = gridIndexBuffer[2].index[targetOffset + i];
+		// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
+		if (rectsBuffer[4].rects[idx].value > h + 0.02) {
+			if (all(greaterThan(p, rectsBuffer[4].rects[idx].bbMin)) && all(lessThan(p, rectsBuffer[4].rects[idx].bbMax))) {
+				return 1;
+			}
+		}
+	}
+	
+	targetOffset = shadowData.roundedRectGridIndexOffset + s_cellIdx * shadowData.circlesCount;
+	for (uint i = 0; i < gridSizeBuffer[1].grid[shadowData.roundedRectGridSizeOffset + s_cellIdx]; ++ i) {
+		idx = gridIndexBuffer[2].index[targetOffset + i];
+		// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
+		if (roundedRectsBuffer[5].rects[idx].value > h + 0.02) {
+			if (all(greaterThan(p, roundedRectsBuffer[5].rects[idx].bbMin)) && all(lessThan(p, roundedRectsBuffer[5].rects[idx].bbMax))) {
 				return 1;
 			}
 		}
@@ -135,8 +113,8 @@ void main() {
 
 	float depth = subpassLoad(inputDepth).r;
 	vec2 sdfValue = texture(sampler2D(sdfImage, immutableSamplers[pushConstants.samplerIdx]), fragTexCoord).xy;
+
 	if (sdfValue.y < depth + 0.1) {
-		//outColor = vec4(1.0, 0.75, 1.0, 1.0);
 		outColor = shadowData.discardColor;
 		return;
 	}
@@ -159,7 +137,6 @@ void main() {
 
 		outColor = vec4(textureColor.xyz, 1.0);
 	} else {
-		//outColor = vec4(0.75, 1.0, 1.0, 1.0);
 		outColor = shadowData.discardColor;
 	}
 

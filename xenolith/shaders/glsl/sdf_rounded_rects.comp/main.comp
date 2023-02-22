@@ -1,0 +1,61 @@
+#version 450
+#extension GL_GOOGLE_include_directive : enable
+
+#include "XLGlslVertexData.h"
+#include "XLGlslShadowData.h"
+#include "XLGlslSdfData.h"
+
+layout (local_size_x = 64) in;
+
+#include "XLGlslSdfDescriptors.h"
+
+uint GridSizeOffset;
+uint GridIndexOffset;
+
+void emplaceIntoGrid(const in int i, const in int j, const in uint gID) {
+	if (i >= 0 && i < shadowData.gridWidth && j >= 0 && j < shadowData.gridHeight) {
+		uint gridId = (j) * shadowData.gridWidth + i;
+		uint target = atomicAdd(GRID_SIZE_BUFFER[shadowData.roundedRectGridSizeOffset + gridId], 1);
+		GRID_INDEX_BUFFER[shadowData.roundedRectGridIndexOffset + gridId * shadowData.circlesCount + target] = gID;
+	}
+}
+
+void main() {
+	const uint gID = gl_GlobalInvocationID.x;
+
+    if (gID < shadowData.roundedRectsCount) {
+		const RoundedRect2DIndex idx = ROUNDED_RECT_INDEX_BUFFER[gID];
+		const mat4 transform = inverse(TRANSFORM_BUFFER[idx.transform].transform);
+		const vec4 scale = TRANSFORM_BUFFER[idx.transform].padding;
+		const vec2 size = VERTEX_BUFFER[idx.origin].zw;
+		const vec4 origin = vec4(VERTEX_BUFFER[idx.origin].xy, 0, 1);
+		const vec4 corners = VERTEX_BUFFER[idx.origin + 1];
+
+		RoundedRect2DData rect;
+		rect.origin = VERTEX_BUFFER[idx.origin].xy * shadowData.shadowDensity * shadowData.density;
+		rect.size = size * shadowData.shadowDensity;
+		rect.corners = corners * shadowData.shadowDensity;
+		rect.value = idx.value;
+		rect.opacity = idx.opacity;
+		rect.transform = idx.transform;
+
+		vec4 radiusX1 = transform * (origin + vec4(size.x, size.y, 0, 0)) * shadowData.shadowDensity;
+		vec4 radiusX2 = transform * (origin + vec4(-size.x, -size.y, 0, 0)) * shadowData.shadowDensity;
+		vec4 radiusY1 = transform * (origin + vec4(-size.x, size.y, 0, 0)) * shadowData.shadowDensity;
+		vec4 radiusY2 = transform * (origin + vec4(size.x, -size.y, 0, 0)) * shadowData.shadowDensity;
+
+		rect.bbMin = vec2(min(min(radiusX1.xy, radiusX2.xy), min(radiusY1.xy, radiusY2.xy))) - shadowData.bbOffset.xx;
+		rect.bbMax = vec2(max(max(radiusX1.xy, radiusX2.xy), max(radiusY1.xy, radiusY2.xy))) + shadowData.bbOffset.xx;
+
+		ivec2 minCell = ivec2(trunc(rect.bbMin / vec2(shadowData.gridSize, shadowData.gridSize)));
+		ivec2 maxCell = ivec2(floor(rect.bbMax / vec2(shadowData.gridSize, shadowData.gridSize)));
+
+		for (int i = minCell.x; i <= maxCell.x; ++ i) {
+			for (int j = minCell.y; j <= maxCell.y; ++ j) {
+				emplaceIntoGrid(i, j, gID);
+			}
+		}
+
+		ROUNDED_RECT_DATA_BUFFER[gID] = rect;
+    }
+}

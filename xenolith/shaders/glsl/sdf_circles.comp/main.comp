@@ -11,43 +11,46 @@ layout (local_size_x = 64) in;
 
 void emplaceIntoGrid(const in int i, const in int j, const in uint gID) {
 	if (i >= 0 && i < shadowData.gridWidth && j >= 0 && j < shadowData.gridHeight) {
-		uint gridId = (j + shadowData.gridHeight) * shadowData.gridWidth + i;
-		uint target = atomicAdd(GRID_SIZE_BUFFER[gridId], 1);
-		GRID_INDEX_BUFFER[gridId * shadowData.trianglesCount + target] = gID;
+		uint gridId = (j) * shadowData.gridWidth + i;
+		uint target = atomicAdd(GRID_SIZE_BUFFER[shadowData.circleGridSizeOffset + gridId], 1);
+		GRID_INDEX_BUFFER[shadowData.circleGridIndexOffset + gridId * shadowData.circlesCount + target] = gID;
 	}
 }
 
 void main() {
-	uint gID = gl_GlobalInvocationID.x;
+	const uint gID = gl_GlobalInvocationID.x;
 
-    if (gID < shadowData.trianglesCount) {
-		Triangle2DIndex idx = indexBuffer[0].indexes[gID];
+    if (gID < shadowData.circlesCount) {
+		const Circle2DIndex idx = CIRCLE_INDEX_BUFFER[gID];
+		const mat4 transform = inverse(TRANSFORM_BUFFER[idx.transform].transform);
+		const vec4 scale = TRANSFORM_BUFFER[idx.transform].padding;
+		const float radius = VERTEX_BUFFER[idx.origin].w;
+		const vec4 origin = vec4(VERTEX_BUFFER[idx.origin].xyz, 1);
 
-		trianglesBuffer[0].triangles[gID].a = ((transformObjectBuffer[2].transforms[idx.transform].transform
-				* vertexBuffer[1].vertices[idx.a]).xy) * shadowData.shadowDensity;
-		trianglesBuffer[0].triangles[gID].b = ((transformObjectBuffer[2].transforms[idx.transform].transform
-				* vertexBuffer[1].vertices[idx.b]).xy) * shadowData.shadowDensity;
-		trianglesBuffer[0].triangles[gID].c = ((transformObjectBuffer[2].transforms[idx.transform].transform
-				* vertexBuffer[1].vertices[idx.c]).xy) * shadowData.shadowDensity;
+		Circle2DData circle;
+		circle.origin = VERTEX_BUFFER[idx.origin].xy * shadowData.shadowDensity * shadowData.density;
+		circle.radius = radius * shadowData.shadowDensity;
+		circle.value = idx.value;
+		circle.opacity = idx.opacity;
+		circle.transform = idx.transform;
 
-		trianglesBuffer[0].triangles[gID].value = idx.value;
-		trianglesBuffer[0].triangles[gID].opacity = idx.opacity;
+		vec4 radiusX1 = transform * (origin + vec4(radius, radius, 0, 0)) * shadowData.shadowDensity;
+		vec4 radiusX2 = transform * (origin + vec4(-radius, -radius, 0, 0)) * shadowData.shadowDensity;
+		vec4 radiusY1 = transform * (origin + vec4(-radius, radius, 0, 0)) * shadowData.shadowDensity;
+		vec4 radiusY2 = transform * (origin + vec4(radius, -radius, 0, 0)) * shadowData.shadowDensity;
 
-		trianglesBuffer[0].triangles[gID].bbMin =
-			min(min(trianglesBuffer[0].triangles[gID].a, trianglesBuffer[0].triangles[gID].b), trianglesBuffer[0].triangles[gID].c)
-			 - shadowData.bbOffset.xx;
+		circle.bbMin = vec2(min(min(radiusX1.xy, radiusX2.xy), min(radiusY1.xy, radiusY2.xy))) - shadowData.bbOffset.xx;
+		circle.bbMax = vec2(max(max(radiusX1.xy, radiusX2.xy), max(radiusY1.xy, radiusY2.xy))) + shadowData.bbOffset.xx;
 
-		trianglesBuffer[0].triangles[gID].bbMax =
-			max(max(trianglesBuffer[0].triangles[gID].a, trianglesBuffer[0].triangles[gID].b), trianglesBuffer[0].triangles[gID].c)
-			+ shadowData.bbOffset.xx;
-
-		ivec2 minCell = ivec2(trunc(trianglesBuffer[0].triangles[gID].bbMin / vec2(shadowData.gridSize, shadowData.gridSize)));
-		ivec2 maxCell = ivec2(floor(trianglesBuffer[0].triangles[gID].bbMax / vec2(shadowData.gridSize, shadowData.gridSize)));
+		ivec2 minCell = ivec2(trunc(circle.bbMin / vec2(shadowData.gridSize, shadowData.gridSize)));
+		ivec2 maxCell = ivec2(floor(circle.bbMax / vec2(shadowData.gridSize, shadowData.gridSize)));
 
 		for (int i = minCell.x; i <= maxCell.x; ++ i) {
 			for (int j = minCell.y; j <= maxCell.y; ++ j) {
 				emplaceIntoGrid(i, j, gID);
 			}
 		}
+
+		CIRCLE_DATA_BUFFER[gID] = circle;
     }
 }

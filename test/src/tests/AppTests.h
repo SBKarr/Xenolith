@@ -44,7 +44,6 @@ enum class LayoutName {
 	GeneralTransparencyTest,
 	GeneralAutofitTest,
 	GeneralTemporaryResourceTest,
-	GeneralShadowTest,
 	GeneralScissorTest,
 
 	InputTouchTest = 256 * 2,
@@ -59,6 +58,8 @@ enum class LayoutName {
 	VgTessTest = 256 * 4,
 	VgIconTest,
 	VgIconList,
+	VgShadowTest,
+	VgSdfTest,
 
 	UtilsStorageTest = 256 * 5,
 	UtilsNetworkTest,

@@ -214,7 +214,7 @@ $(XENOLITH_MAKEFILE_DIR)/shaders/linked/% : $(XENOLITH_SHADERS_COMPILED)
 	@$(GLOBAL_MKDIR) $(dir $@)
 	$(SPIRV_LINK) -o $@ $(subst /glsl/,/compiled/,$(wildcard $(subst /linked/,/glsl/,$@)/*))
 
-$(XENOLITH_MAKEFILE_DIR)/shaders/compiled/% : $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/%
+$(XENOLITH_MAKEFILE_DIR)/shaders/compiled/% : $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/% $(wildcard $(XENOLITH_MAKEFILE_DIR)/shaders/include/*)
 	@$(GLOBAL_MKDIR) $(dir $@)
 	${GLSLC} -I$(XENOLITH_MAKEFILE_DIR)/shaders/include -DXL_GLSL=1 -V -o $(XENOLITH_MAKEFILE_DIR)/shaders/compiled/$* $(XENOLITH_MAKEFILE_DIR)/shaders/glsl/$* -e $(notdir $(basename $*)) --sep main
 

@@ -201,6 +201,14 @@ void VectorSprite::setDeferred(bool val) {
 	}
 }
 
+void VectorSprite::pushShadowCommands(RenderFrameInfo &frame, NodeFlags flags, const Mat4 &transform, SpanView<gl::TransformedVertexData> data) {
+	if (_deferredResult) {
+		frame.shadows->pushDeferredShadow(_deferredResult, frame.viewProjectionStack.back(), transform * _targetTransform, _normalized, _shadowIndex);
+	} else if (!data.empty()) {
+		frame.shadows->pushShadowArray(data, _shadowIndex);
+	}
+}
+
 void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 	if (!_deferredResult && (!_result || _result->data.empty())) {
 		return;
@@ -238,7 +246,7 @@ void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 		}
 
 		if (_shadowIndex > 0.0f) {
-			frame.shadows->pushShadowArray(makeSpanView(tmpData, targetData.size()), _shadowIndex);
+			pushShadowCommands(frame, flags, frame.modelTransformStack.back(), makeSpanView(tmpData, targetData.size()));
 		}
 
 		frame.commands->pushVertexArray(makeSpanView(tmpData, targetData.size()), frame.zPath,
@@ -248,13 +256,12 @@ void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 			return;
 		}
 
-		auto transform =  frame.modelTransformStack.back() * _targetTransform;
-
 		if (_shadowIndex > 0.0f) {
-			frame.shadows->pushDeferredShadow(_deferredResult, frame.viewProjectionStack.back(), transform, _normalized, _shadowIndex);
+			pushShadowCommands(frame, flags, frame.modelTransformStack.back());
 		}
 
-		frame.commands->pushDeferredVertexResult(_deferredResult, frame.viewProjectionStack.back(), transform, _normalized, frame.zPath,
+		frame.commands->pushDeferredVertexResult(_deferredResult, frame.viewProjectionStack.back(),
+				frame.modelTransformStack.back() * _targetTransform, _normalized, frame.zPath,
 						_materialId, _realRenderingLevel, _shadowIndex, _commandFlags);
 	}
 }

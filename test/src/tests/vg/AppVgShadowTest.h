@@ -20,36 +20,51 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_WIDGETS_APPLAYOUTTEST_H_
-#define TEST_SRC_WIDGETS_APPLAYOUTTEST_H_
+#ifndef TEST_SRC_TESTS_GENERAL_APPGENERALSHADOWTEST_H_
+#define TEST_SRC_TESTS_GENERAL_APPGENERALSHADOWTEST_H_
 
-#include "AppTests.h"
-#include "XLNode.h"
+#include "AppLayoutTest.h"
+#include "XLIconNames.h"
+#include "XLVectorSprite.h"
+#include "XLGuiLayerRounded.h"
+#include "AppCheckbox.h"
+#include "AppSlider.h"
 
 namespace stappler::xenolith::app {
 
-class LayoutTest : public Node {
+class VgShadowTest : public LayoutTest {
 public:
-	virtual ~LayoutTest() { }
+	class LightNormalSelector;
 
-	virtual bool init(LayoutName, StringView);
+	virtual ~VgShadowTest() { }
+
+	virtual bool init() override;
 
 	virtual void onContentSizeDirty() override;
 
-	virtual void onEnter(Scene *) override;
+	virtual void update(const UpdateTime &) override;
 
 	virtual void setDataValue(Value &&) override;
 
 protected:
-	LayoutName _layout = LayoutName::Root;
-	LayoutName _layoutRoot = LayoutName::Root;
-	Node *_backButton = nullptr;
-	Label *_infoLabel = nullptr;
+	using LayoutTest::init;
 
-private:
-	using Node::init;
+	void updateIcon(IconName);
+	void updateScaleValue(float);
+
+	IconName _currentName = IconName::Action_text_rotate_vertical_solid;
+
+	Label *_label = nullptr;
+	Label *_info = nullptr;
+	VectorSprite *_sprite = nullptr;
+
+	AppSliderWithLabel *_sliderScale = nullptr;
+	AppSliderWithLabel *_sliderShadow = nullptr;
+	AppSliderWithLabel *_sliderK = nullptr;
+	LightNormalSelector *_normalSelector = nullptr;
+	AppCheckboxWithLabel *_checkboxAmbient = nullptr;
 };
 
 }
 
-#endif /* TEST_SRC_WIDGETS_APPLAYOUTTEST_H_ */
+#endif /* TEST_SRC_TESTS_GENERAL_APPGENERALSHADOWTEST_H_ */

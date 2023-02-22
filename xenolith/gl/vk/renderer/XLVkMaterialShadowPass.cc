@@ -44,6 +44,12 @@ bool MaterialShadowPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
 	builder.addComputePipeline(computePass, ShadowPass::SdfCirclesComp,
 			builder.addProgramByRef("ShadowPass_SdfCirclesComp", xenolith::shaders::SdfCirclesComp));
 
+	builder.addComputePipeline(computePass, ShadowPass::SdfRectsComp,
+			builder.addProgramByRef("ShadowPass_SdfRectsComp", xenolith::shaders::SdfRectsComp));
+
+	builder.addComputePipeline(computePass, ShadowPass::SdfRoundedRectsComp,
+			builder.addProgramByRef("ShadowPass_SdfRoundedRectsComp", xenolith::shaders::SdfRoundedRectsComp));
+
 	builder.addComputePipeline(computePass, ShadowPass::SdfImageComp,
 			builder.addProgramByRef("ShadowPass_SdfImageComp", xenolith::shaders::SdfImageComp));
 
@@ -305,6 +311,24 @@ void MaterialShadowPassHandle::prepareRenderPass(CommandBuffer &buf) {
 		}
 	}
 
+	if (_shadowTriangles->getCircles()) {
+		if (auto b = _shadowTriangles->getCircles()->getPendingBarrier()) {
+			bufferBarriers.emplace_back(*b);
+		}
+	}
+
+	if (_shadowTriangles->getRects()) {
+		if (auto b = _shadowTriangles->getRects()->getPendingBarrier()) {
+			bufferBarriers.emplace_back(*b);
+		}
+	}
+
+	if (_shadowTriangles->getRoundedRects()) {
+		if (auto b = _shadowTriangles->getRoundedRects()->getPendingBarrier()) {
+			bufferBarriers.emplace_back(*b);
+		}
+	}
+
 	if (auto image = _sdfImage->getImage()) {
 		if (auto b = image->getImage().cast<vk::Image>()->getPendingBarrier()) {
 			imageBarriers.emplace_back(*b);
@@ -401,10 +425,11 @@ bool MaterialShadowComputePassHandle::prepare(FrameQueue &q, Function<void(bool)
 
 	if (lightsHandle && lightsHandle->getLightsCount()) {
 		lightsHandle->allocateBuffer(static_cast<DeviceFrameHandle *>(q.getFrame().get()),
-				_vertexBuffer->getTrianglesCount(), _vertexBuffer->getMaxValue(), _gridCellSize, q.getExtent());
+				_vertexBuffer, _gridCellSize, q.getExtent());
 
 		if (lightsHandle->getObjectsCount() > 0 && trianglesHandle) {
-			trianglesHandle->allocateBuffer(static_cast<DeviceFrameHandle *>(q.getFrame().get()), lightsHandle->getShadowData());
+			trianglesHandle->allocateBuffer(static_cast<DeviceFrameHandle *>(q.getFrame().get()),
+					lightsHandle->getObjectsCount(), lightsHandle->getShadowData());
 		}
 
 		return QueuePassHandle::prepare(q, move(cb));
@@ -416,12 +441,12 @@ bool MaterialShadowComputePassHandle::prepare(FrameQueue &q, Function<void(bool)
 
 void MaterialShadowComputePassHandle::writeShadowCommands(RenderPassImpl *pass, CommandBuffer &buf) {
 	auto sdfImage = (Image *)_sdfImage->getImage()->getImage().get();
-	auto targetLayout = (_vertexBuffer && _vertexBuffer->getTrianglesCount()) ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	ImageMemoryBarrier inImageBarriers[] = {
-		ImageMemoryBarrier(sdfImage, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, targetLayout)
-	};
 
-	if (!_vertexBuffer || _vertexBuffer->getTrianglesCount() == 0) {
+	if (!_lightsBuffer || _lightsBuffer->getObjectsCount() == 0) {
+		ImageMemoryBarrier inImageBarriers[] = {
+			ImageMemoryBarrier(sdfImage, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+		};
+
 		buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, inImageBarriers);
 		buf.cmdClearColorImage(sdfImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, Color4F(128.0f, 0.0f, 0.0f, 0.0f));
 
@@ -448,7 +473,6 @@ void MaterialShadowComputePassHandle::writeShadowCommands(RenderPassImpl *pass, 
 	buf.cmdBindDescriptorSets(pass);
 	buf.cmdFillBuffer(_trianglesBuffer->getGridSize(), 0);
 
-
 	BufferMemoryBarrier bufferBarrier(_trianglesBuffer->getGridSize(),
 		VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT
 	);
@@ -467,10 +491,29 @@ void MaterialShadowComputePassHandle::writeShadowCommands(RenderPassImpl *pass, 
 		buf.cmdDispatch((_vertexBuffer->getCirclesCount() - 1) / pipeline->getLocalX() + 1);
 	}
 
+	if (_vertexBuffer->getRectsCount()) {
+		pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(StringView(ShadowPass::SdfRectsComp))->pipeline.get();
+		buf.cmdBindPipeline(pipeline);
+		buf.cmdDispatch((_vertexBuffer->getRectsCount() - 1) / pipeline->getLocalX() + 1);
+	}
+
+	if (_vertexBuffer->getRoundedRectsCount()) {
+		pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(StringView(ShadowPass::SdfRoundedRectsComp))->pipeline.get();
+		buf.cmdBindPipeline(pipeline);
+		buf.cmdDispatch((_vertexBuffer->getRoundedRectsCount() - 1) / pipeline->getLocalX() + 1);
+	}
+
 	BufferMemoryBarrier bufferBarriers[] = {
 		BufferMemoryBarrier(_trianglesBuffer->getTriangles(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
 		BufferMemoryBarrier(_trianglesBuffer->getGridSize(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
-		BufferMemoryBarrier(_trianglesBuffer->getGridIndex(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT)
+		BufferMemoryBarrier(_trianglesBuffer->getGridIndex(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
+		BufferMemoryBarrier(_trianglesBuffer->getCircles(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
+		BufferMemoryBarrier(_trianglesBuffer->getRects(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
+		BufferMemoryBarrier(_trianglesBuffer->getRoundedRects(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
+	};
+
+	ImageMemoryBarrier inImageBarriers[] = {
+		ImageMemoryBarrier(sdfImage, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL)
 	};
 
 	buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
@@ -495,6 +538,12 @@ void MaterialShadowComputePassHandle::writeShadowCommands(RenderPassImpl *pass, 
 					QueueFamilyTransfer{_pool->getFamilyIdx(), gIdx}, 0, VK_WHOLE_SIZE),
 			BufferMemoryBarrier(_trianglesBuffer->getGridIndex(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
 					QueueFamilyTransfer{_pool->getFamilyIdx(), gIdx}, 0, VK_WHOLE_SIZE),
+			BufferMemoryBarrier(_trianglesBuffer->getCircles(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+					QueueFamilyTransfer{_pool->getFamilyIdx(), gIdx}, 0, VK_WHOLE_SIZE),
+			BufferMemoryBarrier(_trianglesBuffer->getRects(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+					QueueFamilyTransfer{_pool->getFamilyIdx(), gIdx}, 0, VK_WHOLE_SIZE),
+			BufferMemoryBarrier(_trianglesBuffer->getRoundedRects(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+					QueueFamilyTransfer{_pool->getFamilyIdx(), gIdx}, 0, VK_WHOLE_SIZE),
 			BufferMemoryBarrier(_lightsBuffer->getBuffer(), VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
 					QueueFamilyTransfer{_pool->getFamilyIdx(), gIdx}, 0, VK_WHOLE_SIZE)
 		};
@@ -508,6 +557,9 @@ void MaterialShadowComputePassHandle::writeShadowCommands(RenderPassImpl *pass, 
 		_trianglesBuffer->getTriangles()->setPendingBarrier(bufferBarriers[0]);
 		_trianglesBuffer->getGridSize()->setPendingBarrier(bufferBarriers[1]);
 		_trianglesBuffer->getGridIndex()->setPendingBarrier(bufferBarriers[2]);
+		_trianglesBuffer->getCircles()->setPendingBarrier(bufferBarriers[3]);
+		_trianglesBuffer->getRects()->setPendingBarrier(bufferBarriers[4]);
+		_trianglesBuffer->getRoundedRects()->setPendingBarrier(bufferBarriers[5]);
 		_lightsBuffer->getBuffer()->setPendingBarrier(bufferBarriers[3]);
 
 		buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,

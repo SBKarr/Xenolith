@@ -22,6 +22,10 @@
 
 #include "XLGlslCompatibility.h"
 
+#ifndef XL_GLSL
+namespace stappler::xenolith::gl::glsl {
+#endif
+
 struct AmbientLightData {
 	vec4 normal;
 	color4 color;
@@ -60,10 +64,24 @@ struct ShadowData {
 	uint roundedRectsCount;
 
 	uint polygonCount;
-	uint padding0;
+	uint groupsCount;
+	uint circleGridSizeOffset;
+	uint circleGridIndexOffset;
+
+	uint rectGridSizeOffset;
+	uint rectGridIndexOffset;
+	uint roundedRectGridSizeOffset;
+	uint roundedRectGridIndexOffset;
+
+	uint polygonGridSizeOffset;
+	uint polygonGridIndexOffset;
 	uint ambientLightCount;
 	uint directLightCount;
 
 	AmbientLightData ambientLights[16];
 	DirectLightData directLights[16];
 };
+
+#ifndef XL_GLSL
+}
+#endif

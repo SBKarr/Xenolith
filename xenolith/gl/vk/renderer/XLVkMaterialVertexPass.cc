@@ -556,7 +556,8 @@ struct VertexMaterialDrawPlan {
 						}
 
 						auto f16 = halffloat::encode(cmd.cmd->depthValue);
-						val.shadow.x = halffloat::decode(f16);
+						auto value = halffloat::decode(f16);
+						val.shadow = Vec4(value, value, value, value);
 
 						pushVertexes(writeTarget, it->first, it->second, cmd.cmd, val, iit.data.get());
 					}

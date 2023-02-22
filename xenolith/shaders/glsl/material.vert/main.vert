@@ -27,12 +27,14 @@ layout (location = 1) out vec2 fragTexCoord;
 layout (location = 2) out vec4 shadowColor;
 
 void main() {
-	uint transformIdx = vertexBuffer[0].vertices[gl_VertexIndex].material >> 16;
+	const uint transformIdx = vertexBuffer[0].vertices[gl_VertexIndex].material >> 16;
+	const TransformObject transform = transformObjectBuffer[1].objects[transformIdx];
+	const Vertex vertex = vertexBuffer[0].vertices[gl_VertexIndex];
 
-	gl_Position = transformObjectBuffer[1].objects[transformIdx].transform * vertexBuffer[0].vertices[gl_VertexIndex].pos
-		* transformObjectBuffer[1].objects[transformIdx].mask + transformObjectBuffer[1].objects[transformIdx].offset;
+	gl_Position = transform.transform * vertexBuffer[0].vertices[gl_VertexIndex].pos
+		* transform.mask + transform.offset;
 
-	fragColor = vertexBuffer[0].vertices[gl_VertexIndex].color;
-	fragTexCoord = vertexBuffer[0].vertices[gl_VertexIndex].tex;
-	shadowColor = transformObjectBuffer[1].objects[transformIdx].shadow;
+	fragColor = vertex.color;
+	fragTexCoord = vertex.tex;
+	shadowColor = transform.shadow;
 }

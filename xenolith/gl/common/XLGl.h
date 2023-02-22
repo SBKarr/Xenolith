@@ -33,12 +33,8 @@
 #include "SPEventTaskQueue.h"
 #include <optional>
 
-namespace stappler::xenolith::gl::glsl {
-
 #include "XLGlslVertexData.h"
 #include "XLGlslShadowData.h"
-
-}
 
 namespace stappler::xenolith::renderqueue {
 

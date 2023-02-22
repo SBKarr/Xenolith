@@ -26,8 +26,8 @@ layout (set = 0, binding = 0) uniform ShadowDataBuffer {
 	ShadowData shadowData;
 };
 
-#define INPUT_BUFFER_LAYOUT_SIZE 4
-#define OUTPUT_BUFFER_LAYOUT_SIZE 4
+#define INPUT_BUFFER_LAYOUT_SIZE 6
+#define OUTPUT_BUFFER_LAYOUT_SIZE 6
 
 layout (set = 0, binding = 1) readonly buffer TriangleIndexes {
 	Triangle2DIndex indexes[];
@@ -45,8 +45,18 @@ layout (set = 0, binding = 1) readonly buffer CircleIndexes {
 	Circle2DIndex circles[];
 } circleIndexBuffer[INPUT_BUFFER_LAYOUT_SIZE];
 
+layout (set = 0, binding = 1) readonly buffer RectIndexes {
+	Rect2DIndex rects[];
+} rectIndexBuffer[INPUT_BUFFER_LAYOUT_SIZE];
+
+layout (set = 0, binding = 1) readonly buffer RoundedRectIndexes {
+	RoundedRect2DIndex rects[];
+} roundedRectIndexBuffer[INPUT_BUFFER_LAYOUT_SIZE];
+
 #define TRIANGLE_INDEX_BUFFER indexBuffer[0].indexes
-#define CIRCLE_INDEX_BUFFER indexBuffer[3].indexes
+#define CIRCLE_INDEX_BUFFER circleIndexBuffer[3].circles
+#define RECT_INDEX_BUFFER rectIndexBuffer[4].rects
+#define ROUNDED_RECT_INDEX_BUFFER roundedRectIndexBuffer[5].rects
 #define VERTEX_BUFFER vertexBuffer[1].vertices
 #define TRANSFORM_BUFFER transformObjectBuffer[2].transforms
 
@@ -66,8 +76,18 @@ layout(set = 0, binding = 2) buffer CirclesBuffer {
 	Circle2DData circles[];
 } circlesBuffer[OUTPUT_BUFFER_LAYOUT_SIZE];
 
+layout(set = 0, binding = 2) buffer RectsBuffer {
+	Rect2DData rects[];
+} rectsBuffer[OUTPUT_BUFFER_LAYOUT_SIZE];
+
+layout(set = 0, binding = 2) buffer RoundedRectsBuffer {
+	RoundedRect2DData rects[];
+} roundedRectsBuffer[OUTPUT_BUFFER_LAYOUT_SIZE];
+
 #define TRIANGLE_DATA_BUFFER trianglesBuffer[0].triangles
-#define CIRCLE_DATA_BUFFER circlesBuffer[3].triangles
+#define CIRCLE_DATA_BUFFER circlesBuffer[3].circles
+#define RECT_DATA_BUFFER rectsBuffer[4].rects
+#define ROUNDED_RECT_DATA_BUFFER roundedRectsBuffer[5].rects
 #define GRID_SIZE_BUFFER gridSizeBuffer[1].grid
 #define GRID_INDEX_BUFFER gridIndexBuffer[2].index
 

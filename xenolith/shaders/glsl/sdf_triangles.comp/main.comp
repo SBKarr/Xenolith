@@ -33,8 +33,7 @@ void main() {
 		triangle.opacity = idx.opacity;
 
 		triangle.bbMin = min(min(triangle.a, triangle.b), triangle.c) - shadowData.bbOffset.xx;
-		triangle.bbMax = max(max(triangle.a, triangle.b), triangle.c)
-			+ shadowData.bbOffset.xx;
+		triangle.bbMax = max(max(triangle.a, triangle.b), triangle.c) + shadowData.bbOffset.xx;
 
 		ivec2 minCell = ivec2(trunc(triangle.bbMin / vec2(shadowData.gridSize, shadowData.gridSize)));
 		ivec2 maxCell = ivec2(floor(triangle.bbMax / vec2(shadowData.gridSize, shadowData.gridSize)));

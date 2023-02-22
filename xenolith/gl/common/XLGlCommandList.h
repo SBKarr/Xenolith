@@ -110,7 +110,7 @@ public:
 	void pushShadowArray(SpanView<TransformedVertexData>, float value);
 	void pushDeferredShadow(const Rc<DeferredVertexResult> &, const Mat4 &view, const Mat4 &model, bool normalized, float value);
 
-	void pushSdfGroup(const Mat4 &view, const Mat4 &model, float value, const Callback<void(CmdSdfGroup2D &)> &cb);
+	void pushSdfGroup(const Mat4 &model, float value, const Callback<void(CmdSdfGroup2D &)> &cb);
 
 	gl::StateId addState(DrawStateValues);
 	const DrawStateValues *getState(gl::StateId) const;

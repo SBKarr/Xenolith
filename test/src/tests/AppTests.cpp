@@ -32,7 +32,6 @@
 #include "general/AppGeneralTransparencyTest.cc"
 #include "general/AppGeneralAutofitTest.cc"
 #include "general/AppGeneralTemporaryResourceTest.cc"
-#include "general/AppGeneralShadowTest.cc"
 #include "general/AppGeneralScissorTest.cc"
 #include "input/AppInputTouchTest.cc"
 #include "input/AppInputKeyboardTest.cc"
@@ -45,6 +44,8 @@
 #include "vg/AppVgTessTest.cc"
 #include "vg/AppVgIconTest.cc"
 #include "vg/AppVgIconList.cc"
+#include "vg/AppVgShadowTest.cc"
+#include "vg/AppVgSdfTest.cc"
 #include "utils/AppUtilsStorageTest.cc"
 #include "utils/AppUtilsNetworkTest.cc"
 #include "material/AppMaterialColorPickerTest.cc"
@@ -74,7 +75,6 @@ Vector<MenuData> s_generalTestsMenu({
 	MenuData{LayoutName::GeneralTransparencyTest, "Transparency test"},
 	MenuData{LayoutName::GeneralAutofitTest, "Autofit test"},
 	MenuData{LayoutName::GeneralTemporaryResourceTest, "Temporary resource test"},
-	MenuData{LayoutName::GeneralShadowTest, "Shadow test"},
 	MenuData{LayoutName::GeneralScissorTest, "Scissor test"},
 });
 
@@ -95,6 +95,8 @@ Vector<MenuData> s_vgTestsMenu({
 	MenuData{LayoutName::VgTessTest, "Tess test"},
 	MenuData{LayoutName::VgIconTest, "Icon test"},
 	MenuData{LayoutName::VgIconList, "Icon list"},
+	MenuData{LayoutName::VgShadowTest, "Shadow test"},
+	MenuData{LayoutName::VgSdfTest, "SDF test"},
 });
 
 Vector<MenuData> s_utilsTestsMenu({
@@ -129,7 +131,6 @@ LayoutName getRootLayoutForLayout(LayoutName name) {
 	case LayoutName::GeneralTransparencyTest:
 	case LayoutName::GeneralAutofitTest:
 	case LayoutName::GeneralTemporaryResourceTest:
-	case LayoutName::GeneralShadowTest:
 	case LayoutName::GeneralScissorTest:
 		return LayoutName::GeneralTests;
 		break;
@@ -150,6 +151,8 @@ LayoutName getRootLayoutForLayout(LayoutName name) {
 	case LayoutName::VgTessTest:
 	case LayoutName::VgIconTest:
 	case LayoutName::VgIconList:
+	case LayoutName::VgShadowTest:
+	case LayoutName::VgSdfTest:
 		return LayoutName::VgTests;
 		break;
 
@@ -186,7 +189,6 @@ StringView getLayoutNameId(LayoutName name) {
 	case LayoutName::GeneralTransparencyTest: return "org.stappler.xenolith.test.GeneralTransparencyTest"; break;
 	case LayoutName::GeneralAutofitTest: return "org.stappler.xenolith.test.GeneralAutofitTest"; break;
 	case LayoutName::GeneralTemporaryResourceTest: return "org.stappler.xenolith.test.GeneralTemporaryResourceTest"; break;
-	case LayoutName::GeneralShadowTest: return "org.stappler.xenolith.test.GeneralShadowTest"; break;
 	case LayoutName::GeneralScissorTest: return "org.stappler.xenolith.test.GeneralScissorTest"; break;
 
 	case LayoutName::InputTouchTest: return "org.stappler.xenolith.test.InputTouchTest"; break;
@@ -201,6 +203,8 @@ StringView getLayoutNameId(LayoutName name) {
 	case LayoutName::VgTessTest: return "org.stappler.xenolith.test.VgTessTest"; break;
 	case LayoutName::VgIconTest: return "org.stappler.xenolith.test.VgIconTest"; break;
 	case LayoutName::VgIconList: return "org.stappler.xenolith.test.VgIconList"; break;
+	case LayoutName::VgShadowTest: return "org.stappler.xenolith.test.VgShadowTest"; break;
+	case LayoutName::VgSdfTest: return "org.stappler.xenolith.test.VgSdfTest"; break;
 
 	case LayoutName::UtilsStorageTest: return "org.stappler.xenolith.test.UtilsStorageTest"; break;
 	case LayoutName::UtilsNetworkTest: return "org.stappler.xenolith.test.UtilsNetworkTest"; break;
@@ -230,7 +234,6 @@ LayoutName getLayoutNameById(StringView name) {
 	else if (name == "org.stappler.xenolith.test.GeneralTransparencyTest") { return LayoutName::GeneralTransparencyTest; }
 	else if (name == "org.stappler.xenolith.test.GeneralAutofitTest") { return LayoutName::GeneralAutofitTest; }
 	else if (name == "org.stappler.xenolith.test.GeneralTemporaryResourceTest") { return LayoutName::GeneralTemporaryResourceTest; }
-	else if (name == "org.stappler.xenolith.test.GeneralShadowTest") { return LayoutName::GeneralShadowTest; }
 	else if (name == "org.stappler.xenolith.test.GeneralScissorTest") { return LayoutName::GeneralScissorTest; }
 
 	else if (name == "org.stappler.xenolith.test.InputTouchTest") { return LayoutName::InputTouchTest; }
@@ -245,6 +248,8 @@ LayoutName getLayoutNameById(StringView name) {
 	else if (name == "org.stappler.xenolith.test.VgTessTest") { return LayoutName::VgTessTest; }
 	else if (name == "org.stappler.xenolith.test.VgIconTest") { return LayoutName::VgIconTest; }
 	else if (name == "org.stappler.xenolith.test.VgIconList") { return LayoutName::VgIconList; }
+	else if (name == "org.stappler.xenolith.test.VgShadowTest") { return LayoutName::VgShadowTest; }
+	else if (name == "org.stappler.xenolith.test.VgSdfTest") { return LayoutName::VgSdfTest; }
 
 	else if (name == "org.stappler.xenolith.test.UtilsStorageTest") { return LayoutName::UtilsStorageTest; }
 	else if (name == "org.stappler.xenolith.test.UtilsNetworkTest") { return LayoutName::UtilsNetworkTest; }
@@ -275,7 +280,6 @@ Rc<Node> makeLayoutNode(LayoutName name) {
 	case LayoutName::GeneralTransparencyTest: return Rc<GeneralTransparencyTest>::create(); break;
 	case LayoutName::GeneralAutofitTest: return Rc<GeneralAutofitTest>::create(); break;
 	case LayoutName::GeneralTemporaryResourceTest: return Rc<GeneralTemporaryResourceTest>::create(); break;
-	case LayoutName::GeneralShadowTest: return Rc<GeneralShadowTest>::create(); break;
 	case LayoutName::GeneralScissorTest: return Rc<GeneralScissorTest>::create(); break;
 
 	case LayoutName::InputTouchTest: return Rc<InputTouchTest>::create(); break;
@@ -290,6 +294,8 @@ Rc<Node> makeLayoutNode(LayoutName name) {
 	case LayoutName::VgTessTest: return Rc<VgTessTest>::create(); break;
 	case LayoutName::VgIconTest: return Rc<VgIconTest>::create(); break;
 	case LayoutName::VgIconList: return Rc<VgIconList>::create(); break;
+	case LayoutName::VgShadowTest: return Rc<VgShadowTest>::create(); break;
+	case LayoutName::VgSdfTest: return Rc<VgSdfTest>::create(); break;
 
 	case LayoutName::UtilsStorageTest: return Rc<UtilsStorageTest>::create(); break;
 	case LayoutName::UtilsNetworkTest: return Rc<UtilsNetworkTest>::create(); break;

@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,51 +20,40 @@
  THE SOFTWARE.
  **/
 
-#ifndef TEST_SRC_TESTS_GENERAL_APPGENERALSHADOWTEST_H_
-#define TEST_SRC_TESTS_GENERAL_APPGENERALSHADOWTEST_H_
+#ifndef TEST_SRC_TESTS_VG_APPVGSDFTEST_H_
+#define TEST_SRC_TESTS_VG_APPVGSDFTEST_H_
 
 #include "AppLayoutTest.h"
-#include "XLIconNames.h"
 #include "XLVectorSprite.h"
-#include "XLGuiLayerRounded.h"
-#include "AppCheckbox.h"
-#include "AppSlider.h"
 
 namespace stappler::xenolith::app {
 
-class GeneralShadowTest : public LayoutTest {
+class VgSdfTest : public LayoutTest {
 public:
 	class LightNormalSelector;
 
-	virtual ~GeneralShadowTest() { }
+	virtual ~VgSdfTest() { }
 
 	virtual bool init() override;
-
+	virtual void onEnter(Scene *) override;
 	virtual void onContentSizeDirty() override;
-
-	virtual void update(const UpdateTime &) override;
-
-	virtual void setDataValue(Value &&) override;
 
 protected:
 	using LayoutTest::init;
 
-	void updateIcon(IconName);
-	void updateScaleValue(float);
+	VectorSprite *_circleSprite = nullptr;
+	VectorSprite *_circleTestSprite = nullptr;
+	VectorSprite *_rectSprite = nullptr;
+	VectorSprite *_rectTestSprite = nullptr;
+	VectorSprite *_roundedRectSprite = nullptr;
+	VectorSprite *_roundedRectTestSprite = nullptr;
 
-	IconName _currentName = IconName::Action_text_rotate_vertical_solid;
-
-	Label *_label = nullptr;
-	Label *_info = nullptr;
-	VectorSprite *_sprite = nullptr;
-
-	AppSliderWithLabel *_sliderScale = nullptr;
+	AppSliderWithLabel *_sliderScaleX = nullptr;
+	AppSliderWithLabel *_sliderScaleY = nullptr;
 	AppSliderWithLabel *_sliderShadow = nullptr;
-	AppSliderWithLabel *_sliderK = nullptr;
-	LightNormalSelector *_normalSelector = nullptr;
-	AppCheckboxWithLabel *_checkboxAmbient = nullptr;
+	AppSliderWithLabel *_sliderRotation = nullptr;
 };
 
 }
 
-#endif /* TEST_SRC_TESTS_GENERAL_APPGENERALSHADOWTEST_H_ */
+#endif /* TEST_SRC_TESTS_VG_APPVGSDFTEST_H_ */

@@ -239,12 +239,11 @@ void CommandList::pushDeferredShadow(const Rc<DeferredVertexResult> &res, const 
 	});
 }
 
-void CommandList::pushSdfGroup(const Mat4 &viewT, const Mat4 &modelT, float value, const Callback<void(CmdSdfGroup2D &)> &cb) {
+void CommandList::pushSdfGroup(const Mat4 &modelT, float value, const Callback<void(CmdSdfGroup2D &)> &cb) {
 	_pool->perform([&] {
 		auto cmd = Command::create(_pool->getPool(), CommandType::SdfGroup2D, CommandFlags::None);
 		auto cmdData = (CmdSdfGroup2D *)cmd->data;
 
-		cmdData->viewTransform = viewT;
 		cmdData->modelTransform = modelT;
 		cmdData->value = value;
 		cmdData->state = _currentState;

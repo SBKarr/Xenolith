@@ -31,8 +31,12 @@
 
 #else
 
+#include "XLGl.h"
+
 #define XL_GLSL_IN
 #define XL_GLSL_INLINE inline
+
+namespace stappler::xenolith::gl::glsl {
 
 using vec2 = Vec2;
 using vec3 = Vec3;
@@ -58,6 +62,38 @@ using math::clamp;
 template <typename T>
 inline T sign(const T &value) {
 	return std::copysign(T(1), value);
+}
+
+template <typename T>
+inline float length(const T &value) {
+	return value.length();
+}
+
+template <typename T>
+inline T abs(const T &value) {
+	return value.getAbs();
+}
+
+template <typename T>
+inline auto lessThanEqual(const T &v1, const T &v2) {
+	return geom::lessThanEqual(v1, v2);
+}
+
+template <typename T>
+inline bool all(const T &v) {
+	return v.all();
+}
+
+template <typename T>
+inline bool any(const T &v) {
+	return v.any();
+}
+
+template <typename T>
+inline bool none(const T &v) {
+	return v.none();
+}
+
 }
 
 #endif
