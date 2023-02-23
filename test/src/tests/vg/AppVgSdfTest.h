@@ -47,6 +47,10 @@ protected:
 	VectorSprite *_rectTestSprite = nullptr;
 	VectorSprite *_roundedRectSprite = nullptr;
 	VectorSprite *_roundedRectTestSprite = nullptr;
+	VectorSprite *_triangleSprite = nullptr;
+	VectorSprite *_triangleTestSprite = nullptr;
+	VectorSprite *_polygonSprite = nullptr;
+	VectorSprite *_polygonTestSprite = nullptr;
 
 	AppSliderWithLabel *_sliderScaleX = nullptr;
 	AppSliderWithLabel *_sliderScaleY = nullptr;

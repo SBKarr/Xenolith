@@ -31,6 +31,7 @@ namespace stappler::xenolith::shaders {
 #include "embedded/sdf_circles.comp"
 #include "embedded/sdf_rects.comp"
 #include "embedded/sdf_rounded_rects.comp"
+#include "embedded/sdf_polygons.comp"
 #include "embedded/sdf_shadows.frag"
 #include "embedded/sdf_image.comp"
 #include "embedded/shadow_merge.frag"
@@ -43,6 +44,7 @@ SpanView<uint32_t> SdfTrianglesComp(sdf_triangles_comp, sizeof(sdf_triangles_com
 SpanView<uint32_t> SdfCirclesComp(sdf_circles_comp, sizeof(sdf_circles_comp) / sizeof(uint32_t));
 SpanView<uint32_t> SdfRectsComp(sdf_rects_comp, sizeof(sdf_rects_comp) / sizeof(uint32_t));
 SpanView<uint32_t> SdfRoundedRectsComp(sdf_rounded_rects_comp, sizeof(sdf_rounded_rects_comp) / sizeof(uint32_t));
+SpanView<uint32_t> SdfPolygonsComp(sdf_polygons_comp, sizeof(sdf_polygons_comp) / sizeof(uint32_t));
 SpanView<uint32_t> SdfShadowsFrag(sdf_shadows_frag, sizeof(sdf_shadows_frag) / sizeof(uint32_t));
 SpanView<uint32_t> SdfImageComp(sdf_image_comp, sizeof(sdf_image_comp) / sizeof(uint32_t));
 SpanView<uint32_t> ShadowMergeFrag(shadow_merge_frag, sizeof(shadow_merge_frag) / sizeof(uint32_t));

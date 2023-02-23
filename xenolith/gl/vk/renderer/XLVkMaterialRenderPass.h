@@ -49,7 +49,7 @@ public:
 
 	virtual ~MaterialPass() { }
 
-	virtual bool init(StringView, RenderOrdering, size_t subpassCount = 1);
+	virtual bool init(StringView, RenderOrdering, size_t subpassCount = 1) override;
 
 	const ShadowLightDataAttachment *getLights() const { return _lights; }
 	const ShadowImageArrayAttachment *getArray() const { return _array; }

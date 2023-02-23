@@ -99,6 +99,24 @@ struct RoundedRect2DIndex {
 	float opacity;
 };
 
+struct Polygon2DData {
+	vec2 bbMin;
+	vec2 bbMax;
+	uint origin;
+	uint count;
+	float value;
+	float opacity;
+};
+
+struct Polygon2DIndex {
+	uint origin;
+	uint count;
+	uint transform;
+	uint padding;
+	float value;
+	float opacity;
+};
+
 XL_GLSL_INLINE float triangle2d(XL_GLSL_IN vec2 p, XL_GLSL_IN vec2 a, XL_GLSL_IN vec2 b, XL_GLSL_IN vec2 c) {
 	vec2 e0 = b - a;
 	vec2 e1 = c - b;

@@ -53,6 +53,32 @@ protected:
 	float _radius = 0.0f;
 };
 
+class VgSdfTestTriangle : public VectorSprite {
+public:
+	virtual ~VgSdfTestTriangle() { }
+
+	virtual bool init(bool);
+
+	virtual void pushShadowCommands(RenderFrameInfo &, NodeFlags flags, const Mat4 &,
+			SpanView<gl::TransformedVertexData>) override;
+
+protected:
+	bool _sdfShadow = false;
+};
+
+class VgSdfTestPolygon : public VectorSprite {
+public:
+	virtual ~VgSdfTestPolygon() { }
+
+	virtual bool init(bool);
+
+	virtual void pushShadowCommands(RenderFrameInfo &, NodeFlags flags, const Mat4 &,
+			SpanView<gl::TransformedVertexData>) override;
+
+protected:
+	bool _sdfShadow = false;
+};
+
 bool VgSdfTestCircle::init(bool value) {
 	if (!VectorSprite::init(Size2(16, 16))) {
 		return false;
@@ -113,28 +139,103 @@ void VgSdfTestRect::pushShadowCommands(RenderFrameInfo &frame, NodeFlags flags, 
 	}
 }
 
+bool VgSdfTestPolygon::init(bool value) {
+	if (!VectorSprite::init(Size2(16, 20))) {
+		return false;
+	}
+
+	_sdfShadow = value;
+	_image->addPath()->moveTo(0.0f, 0.0f).lineTo(16, 20).lineTo(0, 20).lineTo(16, 0).closePath().setAntialiased(false);
+
+	setShadowIndex(4.0f);
+	setColor(Color::Grey_100);
+	setAnchorPoint(Anchor::Middle);
+
+	return true;
+}
+
+void VgSdfTestPolygon::pushShadowCommands(RenderFrameInfo &frame, NodeFlags flags, const Mat4 &t, SpanView<gl::TransformedVertexData> data) {
+	if (_sdfShadow) {
+		frame.shadows->pushSdfGroup(t, _shadowIndex, [&] (gl::CmdSdfGroup2D &cmd) {
+			Vec2 points[4] = {
+				Vec2(0, 0),
+				Vec2(_contentSize),
+				Vec2(0, _contentSize.height),
+				Vec2(_contentSize.width, 0),
+			};
+			cmd.addPolygon2D(points);
+		});
+	} else {
+		VectorSprite::pushShadowCommands(frame, flags, t, data);
+	}
+}
+
+bool VgSdfTestTriangle::init(bool value) {
+	if (!VectorSprite::init(Size2(16, 16))) {
+		return false;
+	}
+
+	_sdfShadow = value;
+	_image->addPath()->moveTo(0.0f, 0.0f).lineTo(8.0f, 16.0f).lineTo(16.0f, 0.0f).closePath().setAntialiased(false);
+
+	setShadowIndex(4.0f);
+	setColor(Color::Grey_100);
+	setAnchorPoint(Anchor::Middle);
+
+	return true;
+}
+
+void VgSdfTestTriangle::pushShadowCommands(RenderFrameInfo &frame, NodeFlags flags, const Mat4 &t, SpanView<gl::TransformedVertexData> data) {
+	if (_sdfShadow) {
+		frame.shadows->pushSdfGroup(t, _shadowIndex, [&] (gl::CmdSdfGroup2D &cmd) {
+			cmd.addTriangle2D(Vec2(0, 0), Vec2(0, 0), Vec2(_contentSize.width / 2.0f, _contentSize.height), Vec2(_contentSize.width, 0));
+		});
+	} else {
+		VectorSprite::pushShadowCommands(frame, flags, t, data);
+	}
+}
+
 bool VgSdfTest::init() {
 	if (!LayoutTest::init(LayoutName::VgSdfTest, "")) {
 		return false;
 	}
+
+	bool testsVisible = false;
 
 	_circleSprite = addChild(Rc<VgSdfTestCircle>::create(true));
 	_circleSprite->setContentSize(Size2(64, 64));
 
 	_circleTestSprite = addChild(Rc<VgSdfTestCircle>::create(false));
 	_circleTestSprite->setContentSize(Size2(64, 64));
+	_circleTestSprite->setVisible(testsVisible);
 
 	_rectSprite = addChild(Rc<VgSdfTestRect>::create(true));
 	_rectSprite->setContentSize(Size2(64, 32));
 
 	_rectTestSprite = addChild(Rc<VgSdfTestRect>::create(false));
 	_rectTestSprite->setContentSize(Size2(64, 32));
+	_rectTestSprite->setVisible(testsVisible);
 
 	_roundedRectSprite = addChild(Rc<VgSdfTestRect>::create(true, 2.0f));
 	_roundedRectSprite->setContentSize(Size2(64, 32));
 
 	_roundedRectTestSprite = addChild(Rc<VgSdfTestRect>::create(false, 2.0f));
 	_roundedRectTestSprite->setContentSize(Size2(64, 32));
+	_roundedRectTestSprite->setVisible(testsVisible);
+
+	_triangleSprite = addChild(Rc<VgSdfTestTriangle>::create(true));
+	_triangleSprite->setContentSize(Size2(64, 64));
+
+	_triangleTestSprite = addChild(Rc<VgSdfTestTriangle>::create(false));
+	_triangleTestSprite->setContentSize(Size2(64, 64));
+	_triangleTestSprite->setVisible(testsVisible);
+
+	_polygonSprite = addChild(Rc<VgSdfTestPolygon>::create(true));
+	_polygonSprite->setContentSize(Size2(64, 80));
+
+	_polygonTestSprite = addChild(Rc<VgSdfTestPolygon>::create(false));
+	_polygonTestSprite->setContentSize(Size2(64, 80));
+	_polygonTestSprite->setVisible(testsVisible);
 
 	float initialScale = 1.0f;
 	float initialShadow = 4.0f;
@@ -150,6 +251,10 @@ bool VgSdfTest::init() {
 		_rectTestSprite->setScaleX(val * 2.9f + 0.1f);
 		_roundedRectSprite->setScaleX(val * 2.9f + 0.1f);
 		_roundedRectTestSprite->setScaleX(val * 2.9f + 0.1f);
+		_triangleSprite->setScaleX(val * 2.9f + 0.1f);
+		_triangleTestSprite->setScaleX(val * 2.9f + 0.1f);
+		_polygonSprite->setScaleX(val * 2.9f + 0.1f);
+		_polygonTestSprite->setScaleX(val * 2.9f + 0.1f);
 		_sliderScaleX->setString(toString("Scale X: ", val * 2.9f + 0.1f));
 	}));
 	_sliderScaleX->setAnchorPoint(Anchor::TopLeft);
@@ -163,6 +268,10 @@ bool VgSdfTest::init() {
 		_rectTestSprite->setScaleY(val * 2.9f + 0.1f);
 		_roundedRectSprite->setScaleY(val * 2.9f + 0.1f);
 		_roundedRectTestSprite->setScaleY(val * 2.9f + 0.1f);
+		_triangleSprite->setScaleY(val * 2.9f + 0.1f);
+		_triangleTestSprite->setScaleY(val * 2.9f + 0.1f);
+		_polygonSprite->setScaleY(val * 2.9f + 0.1f);
+		_polygonTestSprite->setScaleY(val * 2.9f + 0.1f);
 		_sliderScaleY->setString(toString("Scale Y: ", val * 2.9f + 0.1f));
 	}));
 	_sliderScaleY->setAnchorPoint(Anchor::TopLeft);
@@ -176,6 +285,10 @@ bool VgSdfTest::init() {
 		_rectTestSprite->setShadowIndex(val * maxShadow);
 		_roundedRectSprite->setShadowIndex(val * maxShadow);
 		_roundedRectTestSprite->setShadowIndex(val * maxShadow);
+		_triangleSprite->setShadowIndex(val * maxShadow);
+		_triangleTestSprite->setShadowIndex(val * maxShadow);
+		_polygonSprite->setShadowIndex(val * maxShadow);
+		_polygonTestSprite->setShadowIndex(val * maxShadow);
 		_sliderShadow->setString(toString("Shadow: ", _circleSprite->getShadowIndex()));
 	}));
 	_sliderShadow->setAnchorPoint(Anchor::TopLeft);
@@ -189,6 +302,10 @@ bool VgSdfTest::init() {
 		_rectTestSprite->setRotation(val * numbers::pi * 2.0f);
 		_roundedRectSprite->setRotation(val * numbers::pi * 2.0f);
 		_roundedRectTestSprite->setRotation(val * numbers::pi * 2.0f);
+		_triangleSprite->setRotation(val * numbers::pi * 2.0f);
+		_triangleTestSprite->setRotation(val * numbers::pi * 2.0f);
+		_polygonSprite->setRotation(val * numbers::pi * 2.0f);
+		_polygonTestSprite->setRotation(val * numbers::pi * 2.0f);
 		_sliderRotation->setString(toString("Rotation: ", val * numbers::pi * 2.0f));
 	}));
 	_sliderRotation->setAnchorPoint(Anchor::TopLeft);
@@ -214,14 +331,20 @@ void VgSdfTest::onContentSizeDirty() {
 	_sliderShadow->setPosition(Vec2(16.0f, _contentSize.height - 16.0f - 48.0f));
 	_sliderRotation->setPosition(Vec2(384.0f + 16.0f, _contentSize.height - 16.0f - 48.0f));
 
-	_circleSprite->setPosition(Vec2(_contentSize / 2.0f) + Vec2(_contentSize.width / 4.0f, 100.0f));
-	_circleTestSprite->setPosition(Vec2(_contentSize / 2.0f) + Vec2(-_contentSize.width / 4.0f, 100.0f));
+	_circleSprite->setPosition(Vec2(_contentSize / 2.0f) + Vec2(_contentSize.width / 3.0f, 100.0f));
+	_circleTestSprite->setPosition(Vec2(_contentSize / 2.0f) + Vec2(-_contentSize.width / 3.0f, 100.0f));
 
-	_rectSprite->setPosition(Vec2(_contentSize / 2.0f) + Vec2(_contentSize.width / 4.0f, 0.0f));
-	_rectTestSprite->setPosition(Vec2(_contentSize / 2.0f) + Vec2(-_contentSize.width / 4.0f, 0.0f));
+	_rectSprite->setPosition(Vec2(_contentSize / 2.0f) + Vec2(_contentSize.width / 3.0f, 0.0f));
+	_rectTestSprite->setPosition(Vec2(_contentSize / 2.0f) + Vec2(-_contentSize.width / 3.0f, 0.0f));
 
-	_roundedRectSprite->setPosition(Vec2(_contentSize / 2.0f) + Vec2(_contentSize.width / 4.0f, -100.0f));
-	_roundedRectTestSprite->setPosition(Vec2(_contentSize / 2.0f) + Vec2(-_contentSize.width / 4.0f, -100.0f));
+	_roundedRectSprite->setPosition(Vec2(_contentSize / 2.0f) + Vec2(_contentSize.width / 3.0f, -100.0f));
+	_roundedRectTestSprite->setPosition(Vec2(_contentSize / 2.0f) + Vec2(-_contentSize.width / 3.0f, -100.0f));
+
+	_triangleSprite->setPosition(Vec2(_contentSize / 2.0f) + Vec2(_contentSize.width / 6.0f, 100.0f));
+	_triangleTestSprite->setPosition(Vec2(_contentSize / 2.0f) + Vec2(-_contentSize.width / 6.0f, 100.0f));
+
+	_polygonSprite->setPosition(Vec2(_contentSize / 2.0f) + Vec2(_contentSize.width / 6.0f, -40.0f));
+	_polygonTestSprite->setPosition(Vec2(_contentSize / 2.0f) + Vec2(-_contentSize.width / 6.0f, -40.0f));
 }
 
 }

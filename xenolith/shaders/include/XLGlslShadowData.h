@@ -63,7 +63,7 @@ struct ShadowData {
 	uint rectsCount;
 	uint roundedRectsCount;
 
-	uint polygonCount;
+	uint polygonsCount;
 	uint groupsCount;
 	uint circleGridSizeOffset;
 	uint circleGridIndexOffset;

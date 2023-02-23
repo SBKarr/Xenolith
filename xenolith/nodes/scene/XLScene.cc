@@ -109,20 +109,27 @@ void Scene::renderRequest(const Rc<FrameRequest> &req) {
 		req->setOutput(q->getInputAttachment<vk::ShadowSdfImageAttachment>(), dir->getView(),
 				[] (const Rc<gl::View> &view, renderqueue::FrameAttachmentData &data, bool success) {
 			view->captureImage([] (const gl::ImageInfo &info, BytesView view) {
-				Bitmap bmp;
-				bmp.alloc(info.extent.width, info.extent.height, bitmap::PixelFormat::A8);
+				Bitmap bmpSdf;
+				bmpSdf.alloc(info.extent.width, info.extent.height, bitmap::PixelFormat::A8);
 
-				auto d = bmp.dataPtr();
+				Bitmap bmpHeight;
+				bmpHeight.alloc(info.extent.width, info.extent.height, bitmap::PixelFormat::A8);
+
+				auto d1 = bmpSdf.dataPtr();
+				auto d2 = bmpHeight.dataPtr();
 
 				while (!view.empty()) {
 					auto value = view.readFloat16() / 16.0f;
 
-					*d = uint8_t(value * 255.0f);
-					++ d;
-					view.readFloat16();
+					*d1 = uint8_t(value * 255.0f);
+					++ d1;
+
+					*d2 = uint8_t((view.readFloat16() / 20.0f) * 255.0f);
+					++ d2;
 				}
 
-				bmp.save(toString(Time::now().toMicros(), ".png"));
+				bmpSdf.save(toString("sdf-", Time::now().toMicros(), ".png"));
+				bmpHeight.save(toString("height-", Time::now().toMicros(), ".png"));
 
 				std::cout << info.extent << "\n";
 			}, data.image->getImage(), data.image->getLayout());

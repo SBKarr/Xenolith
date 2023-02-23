@@ -41,13 +41,12 @@ public:
 	virtual void setDataValue(Value &&) override;
 
 protected:
+	using Node::init;
+
 	LayoutName _layout = LayoutName::Root;
 	LayoutName _layoutRoot = LayoutName::Root;
 	Node *_backButton = nullptr;
 	Label *_infoLabel = nullptr;
-
-private:
-	using Node::init;
 };
 
 }

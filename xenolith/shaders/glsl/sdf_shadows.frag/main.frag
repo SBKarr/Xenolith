@@ -6,7 +6,7 @@
 #include "XLGlslShadowData.h"
 #include "XLGlslSdfData.h"
 
-#define OUTPUT_BUFFER_LAYOUT_SIZE 6
+#define OUTPUT_BUFFER_LAYOUT_SIZE 7
 
 layout (constant_id = 0) const int SAMPLERS_ARRAY_SIZE = 2;
 
@@ -44,6 +44,10 @@ layout(set = 0, binding = 3) buffer RoundedRectsBuffer {
 	RoundedRect2DData rects[];
 } roundedRectsBuffer[OUTPUT_BUFFER_LAYOUT_SIZE];
 
+layout(set = 0, binding = 3) buffer PolygonBuffer {
+	Polygon2DData polygons[];
+} polygonsBuffer[OUTPUT_BUFFER_LAYOUT_SIZE];
+
 layout(input_attachment_index = 0, set = 0, binding = 4) uniform subpassInput inputDepth;
 
 layout(set = 0, binding = 5) uniform texture2D sdfImage;
@@ -64,7 +68,7 @@ uint hit(in vec2 p, float h) {
 	for (uint i = 0; i < gridSizeBuffer[1].grid[s_cellIdx]; ++ i) {
 		idx = gridIndexBuffer[2].index[targetOffset + i];
 		// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
-		if (trianglesBuffer[0].triangles[idx].value > h + 0.02) {
+		if (trianglesBuffer[0].triangles[idx].value > h + 0.1) {
 			if (all(greaterThan(p, trianglesBuffer[0].triangles[idx].bbMin)) && all(lessThan(p, trianglesBuffer[0].triangles[idx].bbMax))) {
 				return 1;
 			}
@@ -75,7 +79,7 @@ uint hit(in vec2 p, float h) {
 	for (uint i = 0; i < gridSizeBuffer[1].grid[shadowData.circleGridSizeOffset + s_cellIdx]; ++ i) {
 		idx = gridIndexBuffer[2].index[targetOffset + i];
 		// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
-		if (circlesBuffer[3].circles[idx].value > h + 0.02) {
+		if (circlesBuffer[3].circles[idx].value > h + 0.1) {
 			if (all(greaterThan(p, circlesBuffer[3].circles[idx].bbMin)) && all(lessThan(p, circlesBuffer[3].circles[idx].bbMax))) {
 				return 1;
 			}
@@ -86,19 +90,30 @@ uint hit(in vec2 p, float h) {
 	for (uint i = 0; i < gridSizeBuffer[1].grid[shadowData.rectGridSizeOffset + s_cellIdx]; ++ i) {
 		idx = gridIndexBuffer[2].index[targetOffset + i];
 		// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
-		if (rectsBuffer[4].rects[idx].value > h + 0.02) {
+		if (rectsBuffer[4].rects[idx].value > h + 0.1) {
 			if (all(greaterThan(p, rectsBuffer[4].rects[idx].bbMin)) && all(lessThan(p, rectsBuffer[4].rects[idx].bbMax))) {
 				return 1;
 			}
 		}
 	}
 	
-	targetOffset = shadowData.roundedRectGridIndexOffset + s_cellIdx * shadowData.circlesCount;
+	targetOffset = shadowData.roundedRectGridIndexOffset + s_cellIdx * shadowData.roundedRectsCount;
 	for (uint i = 0; i < gridSizeBuffer[1].grid[shadowData.roundedRectGridSizeOffset + s_cellIdx]; ++ i) {
 		idx = gridIndexBuffer[2].index[targetOffset + i];
 		// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
-		if (roundedRectsBuffer[5].rects[idx].value > h + 0.02) {
+		if (roundedRectsBuffer[5].rects[idx].value > h + 0.1) {
 			if (all(greaterThan(p, roundedRectsBuffer[5].rects[idx].bbMin)) && all(lessThan(p, roundedRectsBuffer[5].rects[idx].bbMax))) {
+				return 1;
+			}
+		}
+	}
+	
+	targetOffset = shadowData.polygonGridIndexOffset + s_cellIdx * shadowData.polygonsCount;
+	for (uint i = 0; i < gridSizeBuffer[1].grid[shadowData.polygonGridSizeOffset + s_cellIdx]; ++ i) {
+		idx = gridIndexBuffer[2].index[targetOffset + i];
+		// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
+		if (polygonsBuffer[6].polygons[idx].value > h + 0.1) {
+			if (all(greaterThan(p, polygonsBuffer[6].polygons[idx].bbMin)) && all(lessThan(p, polygonsBuffer[6].polygons[idx].bbMax))) {
 				return 1;
 			}
 		}
@@ -116,6 +131,7 @@ void main() {
 
 	if (sdfValue.y < depth + 0.1) {
 		outColor = shadowData.discardColor;
+		//outColor = vec4(0.75, 1, 1, 1);
 		return;
 	}
 
@@ -138,6 +154,7 @@ void main() {
 		outColor = vec4(textureColor.xyz, 1.0);
 	} else {
 		outColor = shadowData.discardColor;
+		//outColor = vec4(1, 0.75, 1, 1);
 	}
 
 }

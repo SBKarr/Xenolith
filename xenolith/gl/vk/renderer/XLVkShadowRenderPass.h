@@ -105,6 +105,7 @@ public:
 	static constexpr StringView SdfCirclesComp = "SdfCirclesComp";
 	static constexpr StringView SdfRectsComp = "SdfRectsComp";
 	static constexpr StringView SdfRoundedRectsComp = "SdfRoundedRectsComp";
+	static constexpr StringView SdfPolygonsComp = "SdfPolygonsComp";
 	static constexpr StringView SdfImageComp = "SdfImageComp";
 
 	static bool makeDefaultRenderQueue(renderqueue::Queue::Builder &, Extent2 extent);
@@ -148,8 +149,10 @@ public:
 	uint32_t getCirclesCount() const { return _circlesCount; }
 	uint32_t getRectsCount() const { return _rectsCount; }
 	uint32_t getRoundedRectsCount() const { return _roundedRectsCount; }
-	uint32_t getPolygonCount() const { return _polygonCount; }
+	uint32_t getPolygonsCount() const { return _polygonsCount; }
 	float getMaxValue() const { return _maxValue; }
+
+	const Rc<DeviceBuffer> &getVertexes() const { return _vertexes; }
 
 protected:
 	virtual bool loadVertexes(FrameHandle &, const Rc<gl::CommandList> &);
@@ -160,11 +163,12 @@ protected:
 	Rc<DeviceBuffer> _circles;
 	Rc<DeviceBuffer> _rects;
 	Rc<DeviceBuffer> _roundedRects;
+	Rc<DeviceBuffer> _polygons;
 	uint32_t _trianglesCount = 0;
 	uint32_t _circlesCount = 0;
 	uint32_t _rectsCount = 0;
 	uint32_t _roundedRectsCount = 0;
-	uint32_t _polygonCount = 0;
+	uint32_t _polygonsCount = 0;
 	float _maxValue = 0.0f;
 };
 
@@ -210,6 +214,7 @@ public:
 	const Rc<DeviceBuffer> &getCircles() const { return _circles; }
 	const Rc<DeviceBuffer> &getRects() const { return _rects; }
 	const Rc<DeviceBuffer> &getRoundedRects() const { return _roundedRects; }
+	const Rc<DeviceBuffer> &getPolygons() const { return _polygons; }
 	const Rc<DeviceBuffer> &getGridSize() const { return _gridSize; }
 	const Rc<DeviceBuffer> &getGridIndex() const { return _gridIndex; }
 
@@ -218,6 +223,7 @@ protected:
 	Rc<DeviceBuffer> _circles;
 	Rc<DeviceBuffer> _rects;
 	Rc<DeviceBuffer> _roundedRects;
+	Rc<DeviceBuffer> _polygons;
 	Rc<DeviceBuffer> _gridSize;
 	Rc<DeviceBuffer> _gridIndex;
 };

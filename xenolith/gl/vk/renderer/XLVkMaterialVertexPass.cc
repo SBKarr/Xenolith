@@ -555,9 +555,11 @@ struct VertexMaterialDrawPlan {
 							val.offset.z = pathIt->second;
 						}
 
-						auto f16 = halffloat::encode(cmd.cmd->depthValue);
-						auto value = halffloat::decode(f16);
-						val.shadow = Vec4(value, value, value, value);
+						if (cmd.cmd->depthValue > 0.0f) {
+							auto f16 = halffloat::encode(cmd.cmd->depthValue);
+							auto value = halffloat::decode(f16);
+							val.shadow = Vec4(value, value, value, 1.0);
+						}
 
 						pushVertexes(writeTarget, it->first, it->second, cmd.cmd, val, iit.data.get());
 					}

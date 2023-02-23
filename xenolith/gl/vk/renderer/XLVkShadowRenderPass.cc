@@ -133,14 +133,14 @@ void ShadowLightDataAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame
 	_shadowData.circlesCount = data->circlesCount = vertexes->getCirclesCount();
 	_shadowData.rectsCount = data->rectsCount = vertexes->getRectsCount();
 	_shadowData.roundedRectsCount = data->roundedRectsCount = vertexes->getRoundedRectsCount();
-	_shadowData.polygonCount = data->polygonCount = vertexes->getPolygonCount();
+	_shadowData.polygonsCount = data->polygonsCount = vertexes->getPolygonsCount();
 
 	_shadowData.groupsCount = data->groupsCount =
 			(data->trianglesCount > 0 ? 1 : 0)
 			+ (data->circlesCount > 0 ? 1 : 0)
 			+ (data->rectsCount > 0 ? 1 : 0)
 			+ (data->roundedRectsCount > 0 ? 1 : 0)
-			+ (data->polygonCount > 0 ? 1 : 0);
+			+ (data->polygonsCount > 0 ? 1 : 0);
 
 	_shadowData.circleGridSizeOffset = data->circleGridSizeOffset = data->gridWidth * data->gridHeight
 			* (data->trianglesCount > 0 ? 1 : 0);
@@ -194,7 +194,7 @@ uint32_t ShadowLightDataAttachmentHandle::getLightsCount() const {
 
 uint32_t ShadowLightDataAttachmentHandle::getObjectsCount() const {
 	return _shadowData.trianglesCount + _shadowData.circlesCount + _shadowData.rectsCount
-			+ _shadowData.roundedRectsCount + _shadowData.polygonCount;
+			+ _shadowData.roundedRectsCount + _shadowData.polygonsCount;
 }
 
 ShadowVertexAttachmentHandle::~ShadowVertexAttachmentHandle() { }
@@ -229,6 +229,7 @@ bool ShadowVertexAttachmentHandle::isDescriptorDirty(const PassHandle &, const P
 	case 3: return _circles; break;
 	case 4: return _rects; break;
 	case 5: return _roundedRects; break;
+	case 6: return _polygons; break;
 	default: break;
 	}
 	return false;
@@ -272,6 +273,12 @@ bool ShadowVertexAttachmentHandle::writeDescriptor(const QueuePassHandle &, Desc
 		info.range = _roundedRects->getSize();
 		return true;
 		break;
+	case 6:
+		info.buffer = _polygons;
+		info.offset = 0;
+		info.range = _polygons->getSize();
+		return true;
+		break;
 	default:
 		break;
 	}
@@ -286,6 +293,12 @@ struct ShadowDrawPlan {
 	struct PlanCommandInfo {
 		const gl::CmdShadow *cmd;
 		SpanView<gl::TransformedVertexData> vertexes;
+	};
+
+	struct PladSdfCommand {
+		const gl::CmdSdfGroup2D *cmd;
+		uint32_t triangles = 0;
+		uint32_t objects = 0;
 	};
 
 	ShadowDrawPlan(renderqueue::FrameHandle &fhandle) : pool(fhandle.getPool()->getPool()) {
@@ -334,19 +347,30 @@ struct ShadowDrawPlan {
 
 	void pushSdf(const gl::Command *c, const gl::CmdSdfGroup2D *cmd) {
 		uint32_t objects = 0;
+		uint32_t triangles = 0;
 		for (auto &it : cmd->data) {
 			switch (it.type) {
 			case gl::SdfShape::Circle2D: ++ circles; ++ objects; ++ vertexes; break;
 			case gl::SdfShape::Rect2D: ++ rects; ++ objects; ++ vertexes; break;
 			case gl::SdfShape::RoundedRect2D: ++ roundedRects; ++ objects; vertexes += 2; break;
-			case gl::SdfShape::Triangle2D:
+			case gl::SdfShape::Triangle2D: vertexes += 3; indexes += 3; ++ triangles; break;
+			case gl::SdfShape::Polygon2D: {
+				auto data = (gl::SdfPolygon2D *)it.bytes.data();
+				vertexes += data->points.size(); ++ triangles;
+				++ polygons;
 				break;
+			}
 			default: break;
 			}
 		}
-		if (objects > 0) {
-			++ transforms;
-			sdfCommands.emplace_front(cmd);
+		if (objects > 0 || triangles > 0) {
+			if (objects > 0) {
+				++ transforms;
+			}
+			if (triangles > 0) {
+				++ transforms;
+			}
+			sdfCommands.emplace_front(PladSdfCommand{cmd, triangles, objects});
 		}
 	}
 
@@ -357,8 +381,9 @@ struct ShadowDrawPlan {
 	uint32_t circles = 0;
 	uint32_t rects = 0;
 	uint32_t roundedRects = 0;
+	uint32_t polygons = 0;
 	std::forward_list<PlanCommandInfo> commands;
-	std::forward_list<const gl::CmdSdfGroup2D *> sdfCommands;
+	std::forward_list<PladSdfCommand> sdfCommands;
 };
 
 struct ShadowBufferMap {
@@ -441,7 +466,10 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 	_roundedRects = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
 			gl::BufferInfo(info, std::max(plan.roundedRects, uint32_t(1)) * sizeof(gl::glsl::RoundedRect2DIndex)));
 
-	if (!_vertexes || !_indexes || !_transforms || !_circles || !_rects || !_roundedRects) {
+	_polygons = pool->spawn(AllocationUsage::DeviceLocalHostVisible,
+			gl::BufferInfo(info, std::max(plan.polygons, uint32_t(1)) * sizeof(gl::glsl::Polygon2DIndex)));
+
+	if (!_vertexes || !_indexes || !_transforms || !_circles || !_rects || !_roundedRects || !_polygons) {
 		return false;
 	}
 
@@ -451,6 +479,7 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 	ShadowBufferMap circlesMap(_circles, fhandle.isPersistentMapping());
 	ShadowBufferMap rectsMap(_rects, fhandle.isPersistentMapping());
 	ShadowBufferMap roundedRectsMap(_roundedRects, fhandle.isPersistentMapping());
+	ShadowBufferMap polygonsMap(_polygons, fhandle.isPersistentMapping());
 
 	gl::TransformObject val;
 	memcpy(transformMap.region.ptr, &val, sizeof(gl::TransformObject));
@@ -460,6 +489,7 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 	uint32_t circleOffset = 0;
 	uint32_t rectOffset = 0;
 	uint32_t roundedRectOffset = 0;
+	uint32_t polygonsOffset = 0;
 
 	uint32_t materialVertexes = 0;
 	uint32_t materialIndexes = 0;
@@ -504,12 +534,26 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 		}
 	}
 
-	auto pushSdf = [&] (const gl::CmdSdfGroup2D *cmd) {
+	auto pushSdf = [&] (const gl::CmdSdfGroup2D *cmd, uint32_t triangles, uint32_t objects) {
 		auto target = (Vec4 *)vertexesMap.region.ptr + vertexOffset;
-		gl::TransformObject transform(cmd->modelTransform.getInversed());
-		cmd->modelTransform.getScale(&transform.padding.x);
 
-		memcpy(transformMap.region.ptr + sizeof(gl::TransformObject) * transformIdx, &transform, sizeof(gl::TransformObject));
+		uint32_t transformTriangles = 0;
+		uint32_t transformObjects = 0;
+
+		if (triangles > 0) {
+			gl::TransformObject transform(cmd->modelTransform);
+			memcpy(transformMap.region.ptr + sizeof(gl::TransformObject) * transformIdx, &transform, sizeof(gl::TransformObject));
+			transformTriangles = transformIdx;
+			++ transformIdx;
+		}
+
+		if (objects > 0) {
+			gl::TransformObject transform(cmd->modelTransform.getInversed());
+			cmd->modelTransform.getScale(&transform.padding.x);
+			memcpy(transformMap.region.ptr + sizeof(gl::TransformObject) * transformIdx, &transform, sizeof(gl::TransformObject));
+			transformObjects = transformIdx;
+			++ transformIdx;
+		}
 
 		for (auto &it : cmd->data) {
 			switch (it.type) {
@@ -521,7 +565,7 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 
 				gl::Circle2DIndex index;
 				index.origin = vertexOffset;
-				index.transform = transformIdx;
+				index.transform = transformObjects;
 				index.value = cmd->value;
 				index.opacity = cmd->opacity;
 
@@ -539,7 +583,7 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 
 				gl::Rect2DIndex index;
 				index.origin = vertexOffset;
-				index.transform = transformIdx;
+				index.transform = transformObjects;
 				index.value = cmd->value;
 				index.opacity = cmd->opacity;
 
@@ -558,7 +602,7 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 
 				gl::glsl::RoundedRect2DIndex index;
 				index.origin = vertexOffset;
-				index.transform = transformIdx;
+				index.transform = transformObjects;
 				index.value = cmd->value;
 				index.opacity = cmd->opacity;
 
@@ -568,23 +612,69 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 				vertexOffset += 2;
 				break;
 			}
-			case gl::SdfShape::Triangle2D:
+			case gl::SdfShape::Triangle2D: {
+				auto data = (gl::SdfTriangle2D *)it.bytes.data();
+				Vec4 vertexes[3] = {
+					Vec4(data->origin + data->a, 0.0f, 1.0f),
+					Vec4(data->origin + data->b, 0.0f, 1.0f),
+					Vec4(data->origin + data->c, 0.0f, 1.0f),
+				};
+				memcpy(target, vertexes, sizeof(Vec4) * 3);
+				target += 3;
+
+				gl::Triangle2DIndex triangle({
+					vertexOffset,
+					vertexOffset + 1,
+					vertexOffset + 2,
+					transformTriangles,
+					cmd->value,
+					cmd->opacity
+				});
+
+				memcpy((gl::Triangle2DIndex *)indexesMap.region.ptr + indexOffset, &triangle, sizeof(gl::Triangle2DIndex));
+
+				++ indexOffset;
+				vertexOffset += 3;
 				break;
+			}
+			case gl::SdfShape::Polygon2D: {
+				auto data = (gl::SdfPolygon2D *)it.bytes.data();
+				for (auto &it : data->points) {
+					Vec4 pt(it, 0, 1);
+					memcpy(target++, &pt, sizeof(Vec4));
+				}
+
+				gl::glsl::Polygon2DIndex polygon({
+					vertexOffset,
+					uint32_t(data->points.size()),
+					transformTriangles,
+					uint32_t(0),
+					cmd->value,
+					cmd->opacity
+				});
+
+				memcpy((gl::glsl::Polygon2DIndex *)polygonsMap.region.ptr + polygonsOffset, &polygon, sizeof(gl::glsl::Polygon2DIndex));
+
+				vertexOffset += data->points.size();
+				++ polygonsOffset;
+				break;
+			}
 			default: break;
 			}
 		}
 
-		++ transformIdx;
+		_maxValue = std::max(_maxValue, cmd->value);
 	};
 
 	for (auto &cmd : plan.sdfCommands) {
-		pushSdf(cmd);
+		pushSdf(cmd.cmd, cmd.triangles, cmd.objects);
 	}
 
 	_trianglesCount = plan.indexes / 3;
 	_circlesCount = plan.circles;
 	_rectsCount = plan.rects;
 	_roundedRectsCount = plan.roundedRects;
+	_polygonsCount = plan.polygons;
 
 	return true;
 }
@@ -601,6 +691,8 @@ void ShadowTrianglesAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame
 			std::max(uint32_t(1), data.rectsCount) * sizeof(gl::Rect2DData)));
 	_roundedRects = pool->spawn(AllocationUsage::DeviceLocal, gl::BufferInfo(gl::BufferUsage::StorageBuffer,
 			std::max(uint32_t(1), data.roundedRectsCount) * sizeof(gl::glsl::RoundedRect2DData)));
+	_polygons = pool->spawn(AllocationUsage::DeviceLocal, gl::BufferInfo(gl::BufferUsage::StorageBuffer,
+			std::max(uint32_t(1), data.polygonsCount) * sizeof(gl::glsl::Polygon2DData)));
 	_gridSize = pool->spawn(AllocationUsage::DeviceLocal, gl::BufferInfo(gl::BufferUsage::StorageBuffer,
 			data.gridWidth * data.gridHeight * data.groupsCount * sizeof(uint32_t)));
 	_gridIndex = pool->spawn(AllocationUsage::DeviceLocal, gl::BufferInfo(gl::BufferUsage::StorageBuffer,
@@ -616,6 +708,7 @@ bool ShadowTrianglesAttachmentHandle::isDescriptorDirty(const PassHandle &, cons
 	case 3: return _circles; break;
 	case 4: return _rects; break;
 	case 5: return _roundedRects; break;
+	case 6: return _polygons; break;
 	default:
 		break;
 	}
@@ -658,6 +751,12 @@ bool ShadowTrianglesAttachmentHandle::writeDescriptor(const QueuePassHandle &, D
 		info.buffer = _roundedRects;
 		info.offset = 0;
 		info.range = _roundedRects->getSize();
+		return true;
+		break;
+	case 6:
+		info.buffer = _polygons;
+		info.offset = 0;
+		info.range = _polygons->getSize();
 		return true;
 		break;
 	default:
