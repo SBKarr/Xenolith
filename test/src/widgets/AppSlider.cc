@@ -33,7 +33,7 @@ bool AppSlider::init(float value, Function<void(float)> &&cb) {
 	_value = value;
 	_callback = move(cb);
 
-	_foreground = addChild(Rc<Layer>::create(Color::Grey_500), 1);
+	_foreground = addChild(Rc<Layer>::create(Color::Grey_500), ZOrder(1));
 	_foreground->setPosition(Vec2::ZERO);
 	_foreground->setAnchorPoint(Anchor::BottomLeft);
 

@@ -87,6 +87,11 @@ void Surface::setStyle(const SurfaceStyle &style, float duration) {
 	}
 }
 
+void Surface::setStyleDirtyCallback(Function<void(const SurfaceStyleData &)> &&cb) {
+	_styleDirtyCallback = move(cb);
+	_styleDirty = true;
+}
+
 bool Surface::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 	if (!_visible) {
 		return false;
@@ -120,10 +125,18 @@ bool Surface::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 }
 
 void Surface::applyStyle(const SurfaceStyleData &style) {
+	if (style.colorElevation.a == 0.0f) {
+		setImage(nullptr);
+		setColor(style.colorElevation, false);
+		setShadowIndex(style.shadowValue);
+		_styleDirty = false;
+		return;
+	}
+
 	auto radius = std::min(std::min(_contentSize.width / 2.0f, _contentSize.height / 2.0f), style.cornerRadius);
 
-	if (radius != _realCornerRadius || _contentSize != _image->getImageSize()
-			|| _outlineValue != style.outlineValue || _fillValue != style.colorElevation.a) {
+	if (radius != _realCornerRadius || _contentSize != _image->getImageSize() || _outlineValue != style.outlineValue
+			|| _fillValue != style.colorElevation.a || style.shapeFamily != _realShapeFamily) {
 		auto img = Rc<VectorImage>::create(_contentSize);
 		auto path = img->addPath();
 		if (radius > 0.0f) {
@@ -176,11 +189,16 @@ void Surface::applyStyle(const SurfaceStyleData &style) {
 				.setAntialiased(true);
 		}
 
+		_realShapeFamily = style.shapeFamily;
 		_realCornerRadius = radius;
 		_outlineValue = style.outlineValue;
 		_fillValue = style.colorElevation.a;
 
 		setImage(move(img));
+	}
+
+	if (_styleDirtyCallback) {
+		_styleDirtyCallback(style);
 	}
 
 	setColor(style.colorElevation, false);
@@ -198,6 +216,36 @@ RenderingLevel Surface::getRealRenderingLevel() const {
 		l = RenderingLevel::Surface;
 	}
 	return l;
+}
+
+void Surface::pushShadowCommands(RenderFrameInfo &frame, NodeFlags flags, const Mat4 &t, SpanView<gl::TransformedVertexData> data) {
+	if (_realCornerRadius > 0.0f) {
+		frame.shadows->pushSdfGroup(t, _shadowIndex, [&] (gl::CmdSdfGroup2D &cmd) {
+			switch (_realShapeFamily) {
+			case ShapeFamily::RoundedCorners:
+				cmd.addRoundedRect2D(Rect(Vec2(0, 0), _contentSize), _realCornerRadius);
+				break;
+			case ShapeFamily::CutCorners: {
+				Vec2 points[8] = {
+					Vec2(0.0f, _realCornerRadius),
+					Vec2(_realCornerRadius, 0.0f),
+					Vec2(_contentSize.width - _realCornerRadius, 0.0f),
+					Vec2(_contentSize.width, _realCornerRadius),
+					Vec2(_contentSize.width, _contentSize.height - _realCornerRadius),
+					Vec2(_contentSize.width - _realCornerRadius, _contentSize.height),
+					Vec2(_realCornerRadius, _contentSize.height),
+					Vec2(0.0f, _contentSize.height - _realCornerRadius)
+				};
+				cmd.addPolygon2D(points);
+				break;
+			}
+			}
+		});
+	} else {
+		frame.shadows->pushSdfGroup(t, _shadowIndex, [&] (gl::CmdSdfGroup2D &cmd) {
+			cmd.addRect2D(Rect(Vec2(0, 0), _contentSize));
+		});
+	}
 }
 
 bool BackgroundSurface::init() {

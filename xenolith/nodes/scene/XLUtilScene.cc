@@ -163,7 +163,7 @@ bool UtilScene::isFpsVisible() const {
 }
 
 void UtilScene::initialize(Application *app) {
-	_fps = addChild(Rc<FpsDisplay>::create(app->getFontController()), Node::ZOrderMax);
+	_fps = _content->addChild(Rc<FpsDisplay>::create(app->getFontController()), Node::ZOrderMax);
 
 	auto l = addInputListener(Rc<InputListener>::create());
 	l->addKeyRecognizer([this] (const GestureData &ev) {

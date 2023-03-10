@@ -325,6 +325,13 @@ struct InputEventData {
 		case InputEventName::FocusGain:
 			return false;
 			break;
+#if ANDROID
+		case InputEventName::KeyPressed:
+		case InputEventName::KeyReleased:
+		case InputEventName::KeyRepeated:
+			return false;
+			break;
+#endif
 		default:
 			break;
 		}

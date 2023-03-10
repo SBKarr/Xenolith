@@ -39,9 +39,9 @@ class ActionManager;
 class Node : public Ref {
 public:
 	/* Nodes with transparent zOrder will not be added into zPath */
-	static constexpr int16_t ZOrderTransparent = minOf<int16_t>();
-	static constexpr int16_t ZOrderMax = maxOf<int16_t>();
-	static constexpr int16_t ZOrderMin = minOf<int16_t>() + 1;
+	static constexpr ZOrder ZOrderTransparent = ZOrder::min();
+	static constexpr ZOrder ZOrderMax = ZOrder::max();
+	static constexpr ZOrder ZOrderMin = ZOrder::min() + ZOrder(1);
 
 	static bool isParent(Node *parent, Node *node);
 	static Mat4 getChainNodeToParentTransform(Node *parent, Node *node, bool withParent);
@@ -52,8 +52,8 @@ public:
 
 	virtual bool init();
 
-	virtual void setLocalZOrder(int16_t localZOrder);
-	virtual int16_t getLocalZOrder() const { return _zOrder; }
+	virtual void setLocalZOrder(ZOrder localZOrder);
+	virtual ZOrder getLocalZOrder() const { return _zOrder; }
 
 	virtual void setScale(float scale);
 	virtual void setScale(const Vec2 &);
@@ -127,8 +127,8 @@ public:
 	}
 
 	virtual void addChildNode(Node *child);
-	virtual void addChildNode(Node *child, int16_t localZOrder);
-	virtual void addChildNode(Node *child, int16_t localZOrder, uint64_t tag);
+	virtual void addChildNode(Node *child, ZOrder localZOrder);
+	virtual void addChildNode(Node *child, ZOrder localZOrder, uint64_t tag);
 
 	virtual Node* getChildByTag(uint64_t tag) const;
 
@@ -143,7 +143,7 @@ public:
 	virtual void removeChildByTag(uint64_t tag, bool cleanup = true);
 	virtual void removeAllChildren(bool cleanup = true);
 
-	virtual void reorderChild(Node *child, int32_t localZOrder);
+	virtual void reorderChild(Node *child, ZOrder localZOrder);
 
 	/**
 	 * Sorts the children array once before drawing, instead of every time when a child is added or reordered.
@@ -355,7 +355,7 @@ protected:
 	Value _dataValue;
 
 	uint64_t _tag = InvalidTag;
-	int16_t _zOrder = 0;
+	ZOrder _zOrder = ZOrder(0);
 
 	Vec2 _skew;
 	Vec2 _anchorPoint;

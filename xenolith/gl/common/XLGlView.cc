@@ -87,6 +87,8 @@ void View::performOnThread(Function<void()> &&func, Ref *target, bool immediate)
 		if (_running) {
 			_callbacks.emplace_back(move(func), target);
 			wakeup();
+		} else if (!_init) {
+			_callbacks.emplace_back(move(func), target);
 		}
 	}
 }
@@ -222,13 +224,27 @@ void View::setFrameInterval(uint64_t value) {
 	}, this, true);
 }
 
-void View::setNavigationEmpty(bool value) {
-	performOnThread([this, value] {
-		_navigationEmpty = value;
+void View::setReadyForNextFrame() {
+
+}
+
+void View::retainBackButton() {
+	performOnThread([this] {
+		++ _backButtonCounter;
 	}, this, true);
 }
 
-void View::setReadyForNextFrame() {
+void View::releaseBackButton() {
+	performOnThread([this] {
+		-- _backButtonCounter;
+	}, this, true);
+}
+
+void View::setDecorationTone(float) {
+
+}
+
+void View::setDecorationVisible(bool) {
 
 }
 

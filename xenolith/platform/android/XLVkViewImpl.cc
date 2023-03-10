@@ -26,6 +26,22 @@
 
 namespace stappler::xenolith::platform::graphic {
 
+static int flag_SYSTEM_UI_FLAG_LAYOUT_STABLE;
+static int flag_SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+static int flag_SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
+static int flag_SYSTEM_UI_FLAG_HIDE_NAVIGATION;
+static int flag_SYSTEM_UI_FLAG_FULLSCREEN;
+static int flag_SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+static int flag_SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+static int flag_SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+
+static int flag_FLAG_TRANSLUCENT_STATUS;
+static int flag_FLAG_TRANSLUCENT_NAVIGATION;
+static int flag_FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS;
+static int flag_FLAG_FULLSCREEN;
+static int flag_FLAG_LAYOUT_INSET_DECOR;
+static int flag_FLAG_LAYOUT_IN_SCREEN;
+
 ViewImpl::ViewImpl() { }
 
 ViewImpl::~ViewImpl() { }
@@ -44,6 +60,7 @@ bool ViewImpl::init(gl::Loop &loop, gl::Device &dev, gl::ViewInfo &&info) {
 	_options.presentImmediate = true;
 	_options.acquireImageImmediately = true;
 	_options.renderOnDemand = true;
+
 	return true;
 }
 
@@ -185,6 +202,58 @@ void ViewImpl::setContentPadding(const Padding &padding) {
 	setReadyForNextFrame();
 }
 
+void ViewImpl::setActivity(NativeActivity *activity) {
+	_activity = activity;
+
+	auto env = _activity->activity->env;
+
+	jclass activityClass = env->FindClass("android/app/NativeActivity");
+	jclass windowClass = env->FindClass("android/view/Window");
+	jclass viewClass = env->FindClass("android/view/View");
+	jclass layoutClass = env->FindClass("android/view/WindowManager$LayoutParams");
+	jmethodID getWindow = env->GetMethodID(activityClass, "getWindow", "()Landroid/view/Window;");
+	jmethodID clearFlags = env->GetMethodID(windowClass, "clearFlags", "(I)V");
+	jmethodID addFlags = env->GetMethodID(windowClass, "addFlags", "(I)V");
+
+	jobject windowObj = env->CallObjectMethod(_activity->activity->clazz, getWindow);
+
+	jfieldID id_SYSTEM_UI_FLAG_LAYOUT_STABLE = env->GetStaticFieldID(viewClass, "SYSTEM_UI_FLAG_LAYOUT_STABLE", "I");
+	jfieldID id_SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION = env->GetStaticFieldID(viewClass, "SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION", "I");
+	jfieldID id_SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN = env->GetStaticFieldID(viewClass, "SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN", "I");
+	jfieldID id_SYSTEM_UI_FLAG_HIDE_NAVIGATION = env->GetStaticFieldID(viewClass, "SYSTEM_UI_FLAG_HIDE_NAVIGATION", "I");
+	jfieldID id_SYSTEM_UI_FLAG_FULLSCREEN = env->GetStaticFieldID(viewClass, "SYSTEM_UI_FLAG_FULLSCREEN", "I");
+	jfieldID id_SYSTEM_UI_FLAG_IMMERSIVE_STICKY = env->GetStaticFieldID(viewClass, "SYSTEM_UI_FLAG_IMMERSIVE_STICKY", "I");
+	jfieldID id_SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR = env->GetStaticFieldID(viewClass, "SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR", "I");
+	jfieldID id_SYSTEM_UI_FLAG_LIGHT_STATUS_BAR = env->GetStaticFieldID(viewClass, "SYSTEM_UI_FLAG_LIGHT_STATUS_BAR", "I");
+
+	flag_SYSTEM_UI_FLAG_LAYOUT_STABLE = env->GetStaticIntField(viewClass, id_SYSTEM_UI_FLAG_LAYOUT_STABLE);
+	flag_SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION = env->GetStaticIntField(viewClass, id_SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+	flag_SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN = env->GetStaticIntField(viewClass, id_SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+	flag_SYSTEM_UI_FLAG_HIDE_NAVIGATION = env->GetStaticIntField(viewClass, id_SYSTEM_UI_FLAG_HIDE_NAVIGATION);
+	flag_SYSTEM_UI_FLAG_FULLSCREEN = env->GetStaticIntField(viewClass, id_SYSTEM_UI_FLAG_FULLSCREEN);
+	flag_SYSTEM_UI_FLAG_IMMERSIVE_STICKY = env->GetStaticIntField(viewClass, id_SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+	flag_SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR = env->GetStaticIntField(viewClass, id_SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+	flag_SYSTEM_UI_FLAG_LIGHT_STATUS_BAR = env->GetStaticIntField(viewClass, id_SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+
+	jfieldID id_FLAG_TRANSLUCENT_STATUS = env->GetStaticFieldID(layoutClass, "FLAG_TRANSLUCENT_STATUS", "I");
+	jfieldID id_FLAG_TRANSLUCENT_NAVIGATION = env->GetStaticFieldID(layoutClass, "FLAG_TRANSLUCENT_NAVIGATION", "I");
+	jfieldID id_FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS = env->GetStaticFieldID(layoutClass, "FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS", "I");
+	jfieldID id_FLAG_FULLSCREEN = env->GetStaticFieldID(layoutClass, "FLAG_FULLSCREEN", "I");
+	jfieldID id_FLAG_LAYOUT_INSET_DECOR = env->GetStaticFieldID(layoutClass, "FLAG_LAYOUT_INSET_DECOR", "I");
+	jfieldID id_FLAG_LAYOUT_IN_SCREEN = env->GetStaticFieldID(layoutClass, "FLAG_LAYOUT_IN_SCREEN", "I");
+
+	flag_FLAG_TRANSLUCENT_STATUS = env->GetStaticIntField(layoutClass, id_FLAG_TRANSLUCENT_STATUS);
+	flag_FLAG_TRANSLUCENT_NAVIGATION = env->GetStaticIntField(layoutClass, id_FLAG_TRANSLUCENT_NAVIGATION);
+	flag_FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS = env->GetStaticIntField(layoutClass, id_FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+	flag_FLAG_FULLSCREEN = env->GetStaticIntField(layoutClass, id_FLAG_FULLSCREEN);
+	flag_FLAG_LAYOUT_INSET_DECOR = env->GetStaticIntField(layoutClass, id_FLAG_LAYOUT_INSET_DECOR);
+	flag_FLAG_LAYOUT_IN_SCREEN = env->GetStaticIntField(layoutClass, id_FLAG_LAYOUT_IN_SCREEN);
+
+	env->CallVoidMethod(windowObj, clearFlags, flag_FLAG_TRANSLUCENT_NAVIGATION | flag_FLAG_TRANSLUCENT_STATUS);
+	env->CallVoidMethod(windowObj, addFlags, flag_FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
+		| flag_FLAG_LAYOUT_INSET_DECOR | flag_FLAG_LAYOUT_IN_SCREEN);
+}
+
 bool ViewImpl::pollInput(bool frameReady) {
 	if (!_nativeWindow) {
 		return false;
@@ -197,6 +266,109 @@ gl::SurfaceInfo ViewImpl::getSurfaceOptions() const {
 	auto info = View::getSurfaceOptions();
 	info.currentExtent = _identityExtent;
 	return info;
+}
+
+void ViewImpl::setDecorationTone(float value) {
+	performOnThread([this, value] {
+		doSetDecorationTone(value);
+	});
+}
+
+void ViewImpl::setDecorationVisible(bool value) {
+	performOnThread([this, value] {
+		doSetDecorationVisible(value);
+	});
+}
+
+void ViewImpl::doSetDecorationTone(float value) {
+	_decorationTone = value;
+	updateDecorations();
+}
+
+void ViewImpl::doSetDecorationVisible(bool value) {
+	_decorationVisible = value;
+	updateDecorations();
+}
+
+void ViewImpl::updateDecorations() {
+	if (!_activity) {
+		return;
+	}
+
+	auto env = _activity->activity->env;
+
+	jclass activityClass = env->FindClass("android/app/NativeActivity");
+	jclass windowClass = env->FindClass("android/view/Window");
+	jclass viewClass = env->FindClass("android/view/View");
+	jmethodID getWindow = env->GetMethodID(activityClass, "getWindow", "()Landroid/view/Window;");
+	jmethodID getDecorView = env->GetMethodID(windowClass, "getDecorView", "()Landroid/view/View;");
+	jmethodID setSystemUiVisibility = env->GetMethodID(viewClass, "setSystemUiVisibility", "(I)V");
+	jmethodID getSystemUiVisibility = env->GetMethodID(viewClass, "getSystemUiVisibility", "()I");
+	jmethodID setNavigationBarColor = env->GetMethodID(windowClass, "setNavigationBarColor", "(I)V");
+	jmethodID setStatusBarColor = env->GetMethodID(windowClass, "setStatusBarColor", "(I)V");
+	jmethodID clearFlags = env->GetMethodID(windowClass, "clearFlags", "(I)V");
+	jmethodID addFlags = env->GetMethodID(windowClass, "addFlags", "(I)V");
+
+	jobject windowObj = env->CallObjectMethod(_activity->activity->clazz, getWindow);
+	jobject decorViewObj = env->CallObjectMethod(windowObj, getDecorView);
+
+	// Get current immersiveness
+	const int currentVisibility = env->CallIntMethod(decorViewObj, getSystemUiVisibility);
+	int updatedVisibility = currentVisibility;
+	updatedVisibility |= flag_SYSTEM_UI_FLAG_LAYOUT_STABLE;
+	if (_decorationVisible) {
+		updatedVisibility = updatedVisibility & ~flag_SYSTEM_UI_FLAG_FULLSCREEN;
+		env->CallVoidMethod(windowObj, clearFlags, flag_FLAG_FULLSCREEN);
+	} else {
+		updatedVisibility = updatedVisibility | flag_SYSTEM_UI_FLAG_FULLSCREEN;
+		//env->CallVoidMethod(windowObj, addFlags, flag_FLAG_FULLSCREEN);
+	}
+	if (_decorationTone < 0.5f) {
+		env->CallVoidMethod(windowObj, setNavigationBarColor, jint(0xFFFFFFFF));
+		env->CallVoidMethod(windowObj, setStatusBarColor, jint(0xFFFFFFFF));
+		updatedVisibility = updatedVisibility | flag_SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+		updatedVisibility = updatedVisibility | flag_SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+	} else {
+		env->CallVoidMethod(windowObj, setNavigationBarColor, jint(0xFF000000));
+		env->CallVoidMethod(windowObj, setStatusBarColor, jint(0xFF000000));
+		updatedVisibility = updatedVisibility & ~flag_SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+		updatedVisibility = updatedVisibility & ~flag_SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+	}
+
+	log::vtext("ViewImpl", "setDecorationVisible ", _decorationVisible);
+	if (currentVisibility != updatedVisibility) {
+		log::vtext("ViewImpl", "updatedVisibility ", updatedVisibility);
+		env->CallVoidMethod(decorViewObj, setSystemUiVisibility, updatedVisibility);
+	}
+
+	doCheckError();
+
+	env->DeleteLocalRef(windowObj);
+	env->DeleteLocalRef(decorViewObj);
+}
+
+void ViewImpl::doCheckError() {
+	if (!_activity) {
+		return;
+	}
+
+	auto env = _activity->activity->env;
+	if (env->ExceptionCheck()) {
+		// Read exception msg
+		jthrowable e = env->ExceptionOccurred();
+		env->ExceptionClear(); // clears the exception; e seems to remain valid
+		jclass clazz = env->GetObjectClass(e);
+		jmethodID getMessage = env->GetMethodID(clazz, "getMessage", "()Ljava/lang/String;");
+		jstring message = (jstring) env->CallObjectMethod(e, getMessage);
+
+		const char *mstr = env->GetStringUTFChars(message, NULL);
+		log::text("JNI", mstr);
+
+		env->ReleaseStringUTFChars(message, mstr);
+		env->DeleteLocalRef(message);
+		env->DeleteLocalRef(clazz);
+		env->DeleteLocalRef(e);
+	}
 }
 
 }

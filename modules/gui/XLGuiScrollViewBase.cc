@@ -35,15 +35,15 @@ bool ScrollViewBase::init(Layout layout) {
 
 	_layout = layout;
 
-	_listener = addInputListener(Rc<InputListener>::create());
-	_listener->addTapRecognizer([this] (const GestureTap &tap) {
+	_inputListener = addInputListener(Rc<InputListener>::create());
+	_inputListener->addTapRecognizer([this] (const GestureTap &tap) {
 		if (tap.event == GestureEvent::Activated) {
 			onTap(tap.count, tap.pos);
 		}
 		return false;
 	}, InputListener::makeButtonMask({InputMouseButton::Touch}));
 
-	_listener->addPressRecognizer([this] (const GesturePress &s) -> bool {
+	_inputListener->addPressRecognizer([this] (const GesturePress &s) -> bool {
 		switch (s.event) {
 		case GestureEvent::Began: return onPressBegin(s.pos); break;
 		case GestureEvent::Activated: return onLongPress(s.pos, s.time, s.tickCount); break;
@@ -53,7 +53,7 @@ bool ScrollViewBase::init(Layout layout) {
 		return false;
 	}, TimeInterval::milliseconds(425), true);
 
-	_listener->addSwipeRecognizer([this] (const GestureSwipe &s) -> bool {
+	_inputListener->addSwipeRecognizer([this] (const GestureSwipe &s) -> bool {
 		switch (s.event) {
 		case GestureEvent::Began: return onSwipeEventBegin(s.midpoint, s.delta, s.velocity); break;
 		case GestureEvent::Activated: return onSwipeEvent(s.midpoint, s.delta, s.velocity); break;
@@ -65,7 +65,7 @@ bool ScrollViewBase::init(Layout layout) {
 		return false;
 	});
 
-	_listener->addScrollRecognizer([this] (const GestureScroll &w) -> bool {
+	_inputListener->addScrollRecognizer([this] (const GestureScroll &w) -> bool {
 		auto pos = getScrollPosition();
 		onSwipeBegin();
 		if (_layout == Vertical) {
@@ -152,10 +152,10 @@ void ScrollViewBase::onTransformDirty(const Mat4 &parentTransform) {
 }
 
 void ScrollViewBase::setEnabled(bool value) {
-	_listener->setEnabled(value);
+	_inputListener->setEnabled(value);
 }
 bool ScrollViewBase::isEnabled() const {
-	return _listener->isEnabled();
+	return _inputListener->isEnabled();
 }
 bool ScrollViewBase::isInMotion() const {
 	return _movement == Movement::Manual;
@@ -267,9 +267,9 @@ float ScrollViewBase::getNodeScrollPosition(Vec2 pos) const {
 	return (isVertical())?(pos.y):(pos.x);
 }
 
-bool ScrollViewBase::addScrollNode(Node *node, Vec2 pos, Size2 size, int z, StringView name) {
+bool ScrollViewBase::addScrollNode(Node *node, Vec2 pos, Size2 size, ZOrder z, StringView name) {
 	updateScrollNode(node, pos, size, z, name);
-	if (z) {
+	if (z != ZOrder(0)) {
 		_root->addChild(node, z);
 	} else {
 		_root->addChild(node);
@@ -277,7 +277,7 @@ bool ScrollViewBase::addScrollNode(Node *node, Vec2 pos, Size2 size, int z, Stri
 	return true;
 }
 
-void ScrollViewBase::updateScrollNode(Node *node, Vec2 pos, Size2 size, int z, StringView name) {
+void ScrollViewBase::updateScrollNode(Node *node, Vec2 pos, Size2 size, ZOrder z, StringView name) {
 	auto p = node->getParent();
 	if (p == _root || p == nullptr) {
 		auto cs = Size2(isnan(size.width)?_root->getContentSize().width:size.width,
@@ -286,10 +286,7 @@ void ScrollViewBase::updateScrollNode(Node *node, Vec2 pos, Size2 size, int z, S
 		node->setContentSize(cs);
 		node->setPosition((isVertical()?Vec2(pos.x,-pos.y):pos));
 		node->setAnchorPoint(getAnchorPointForNode());
-		//if (!name.empty()) {
-		//	node->setName(name);
-		//}
-		if (z) {
+		if (z != ZOrder(0)) {
 			node->setLocalZOrder(z);
 		}
 	}

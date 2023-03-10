@@ -26,7 +26,7 @@
 
 #include "MaterialSurface.h"
 #include "MaterialColorScheme.h"
-#include "AppLayoutTest.h"
+#include "AppMaterialTest.h"
 #include "AppMaterialColorPicker.h"
 #include "AppSlider.h"
 #include "XLGuiLayerRounded.h"
@@ -52,7 +52,7 @@ protected:
 	material::ColorRole _name;
 };
 
-class MaterialColorPickerTest : public LayoutTest {
+class MaterialColorPickerTest : public MaterialTest {
 public:
 	virtual ~MaterialColorPickerTest() { }
 
@@ -64,7 +64,7 @@ public:
 	virtual void onContentSizeDirty() override;
 
 protected:
-	using LayoutTest::init;
+	using MaterialTest::init;
 
 	void updateColor(material::ColorHCT &&);
 

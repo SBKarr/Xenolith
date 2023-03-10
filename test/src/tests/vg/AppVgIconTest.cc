@@ -35,7 +35,7 @@ bool VgIconTest::init() {
 	do {
 		auto image = Rc<VectorImage>::create(Size2(24, 24));
 
-		_sprite = addChild(Rc<VectorSprite>::create(move(image)), 0);
+		_sprite = addChild(Rc<VectorSprite>::create(move(image)), ZOrder(0));
 		_sprite->setContentSize(Size2(256, 256));
 		_sprite->setAnchorPoint(Anchor::Middle);
 		_sprite->setColor(Color::Black);
@@ -47,7 +47,7 @@ bool VgIconTest::init() {
 	do {
 		auto image = Rc<VectorImage>::create(Size2(24, 24));
 
-		_triangles = addChild(Rc<VectorSprite>::create(move(image)), 1);
+		_triangles = addChild(Rc<VectorSprite>::create(move(image)), ZOrder(1));
 		_triangles->setContentSize(Size2(256, 256));
 		_triangles->setAnchorPoint(Anchor::Middle);
 		_triangles->setColor(Color::Green_500);
@@ -58,7 +58,7 @@ bool VgIconTest::init() {
 		_triangles->setScale(initialScale);
 	} while (0);
 
-	_spriteLayer = addChild(Rc<LayerRounded>::create(Color::Grey_100, 20.0f), -1);
+	_spriteLayer = addChild(Rc<LayerRounded>::create(Color::Grey_100, 20.0f), ZOrder(-1));
 	_spriteLayer->setContentSize(Size2(256, 256));
 	_spriteLayer->setAnchorPoint(Anchor::Middle);
 	_spriteLayer->setShadowIndex(1.0);

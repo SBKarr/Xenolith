@@ -16,7 +16,7 @@ void emplaceIntoGrid(const in int i, const in int j, const in uint gID) {
 	if (i >= 0 && i < shadowData.gridWidth && j >= 0 && j < shadowData.gridHeight) {
 		uint gridId = (j) * shadowData.gridWidth + i;
 		uint target = atomicAdd(GRID_SIZE_BUFFER[shadowData.roundedRectGridSizeOffset + gridId], 1);
-		GRID_INDEX_BUFFER[shadowData.roundedRectGridIndexOffset + gridId * shadowData.circlesCount + target] = gID;
+		GRID_INDEX_BUFFER[shadowData.roundedRectGridIndexOffset + gridId * shadowData.roundedRectsCount + target] = gID;
 	}
 }
 

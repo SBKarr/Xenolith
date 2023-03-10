@@ -200,10 +200,11 @@ bool VgSdfTest::init() {
 		return false;
 	}
 
-	bool testsVisible = false;
+	bool testsVisible = true;
 
 	_circleSprite = addChild(Rc<VgSdfTestCircle>::create(true));
 	_circleSprite->setContentSize(Size2(64, 64));
+	_circleSprite->setVisible(true);
 
 	_circleTestSprite = addChild(Rc<VgSdfTestCircle>::create(false));
 	_circleTestSprite->setContentSize(Size2(64, 64));
@@ -211,6 +212,7 @@ bool VgSdfTest::init() {
 
 	_rectSprite = addChild(Rc<VgSdfTestRect>::create(true));
 	_rectSprite->setContentSize(Size2(64, 32));
+	_rectSprite->setVisible(true);
 
 	_rectTestSprite = addChild(Rc<VgSdfTestRect>::create(false));
 	_rectTestSprite->setContentSize(Size2(64, 32));
@@ -218,6 +220,7 @@ bool VgSdfTest::init() {
 
 	_roundedRectSprite = addChild(Rc<VgSdfTestRect>::create(true, 2.0f));
 	_roundedRectSprite->setContentSize(Size2(64, 32));
+	_roundedRectSprite->setVisible(true);
 
 	_roundedRectTestSprite = addChild(Rc<VgSdfTestRect>::create(false, 2.0f));
 	_roundedRectTestSprite->setContentSize(Size2(64, 32));
@@ -225,6 +228,7 @@ bool VgSdfTest::init() {
 
 	_triangleSprite = addChild(Rc<VgSdfTestTriangle>::create(true));
 	_triangleSprite->setContentSize(Size2(64, 64));
+	_triangleSprite->setVisible(true);
 
 	_triangleTestSprite = addChild(Rc<VgSdfTestTriangle>::create(false));
 	_triangleTestSprite->setContentSize(Size2(64, 64));
@@ -232,6 +236,7 @@ bool VgSdfTest::init() {
 
 	_polygonSprite = addChild(Rc<VgSdfTestPolygon>::create(true));
 	_polygonSprite->setContentSize(Size2(64, 80));
+	_polygonSprite->setVisible(true);
 
 	_polygonTestSprite = addChild(Rc<VgSdfTestPolygon>::create(false));
 	_polygonTestSprite->setContentSize(Size2(64, 80));

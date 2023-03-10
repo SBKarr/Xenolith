@@ -112,7 +112,7 @@ bool ScrollView::init(Layout l) {
 		return false;
 	}
 
-	_indicator = addChild(Rc<LayerRounded>::create(Color4F(1.0f, 1.0f, 1.0f, 0.0f), 2.0f), 1);
+	_indicator = addChild(Rc<LayerRounded>::create(Color4F(1.0f, 1.0f, 1.0f, 0.0f), 2.0f), ZOrder(1));
 	_indicator->setAnchorPoint(Vec2(1, 0));
 
 	_overflowFront = addChild(Rc<Overscroll>::create());

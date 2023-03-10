@@ -35,7 +35,7 @@ bool InputTextContainer::init() {
 		return false;
 	}
 
-	_label = addChild(Rc<TypescaleLabel>::create(TypescaleRole::BodyLarge), 1);
+	_label = addChild(Rc<TypescaleLabel>::create(TypescaleRole::BodyLarge), ZOrder(1));
 	_label->setAnchorPoint(Anchor::BottomLeft);
 
 	_caret = _label->addChild(Rc<Layer>::create());

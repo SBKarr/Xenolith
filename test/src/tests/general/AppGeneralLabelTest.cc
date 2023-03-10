@@ -29,7 +29,7 @@ bool GeneralLabelTest::init() {
 	if (!LayoutTest::init(LayoutName::GeneralLabelTest, "Test for rich label functions")) {
 		return false;
 	}
-	_label = addChild(Rc<Label>::create(), 5);
+	_label = addChild(Rc<Label>::create(), ZOrder(5));
 	_label->setScale(0.5f);
 	_label->setAnchorPoint(Anchor::Middle);
 	_label->setColor(Color::Green_500, true);
@@ -38,7 +38,7 @@ bool GeneralLabelTest::init() {
 	_label->appendTextWithStyle("Hello", Label::Style({font::FontStyle::Italic}));
 	_label->appendTextWithStyle("World", Label::Style({font::FontWeight::Bold}));
 
-	_label2 = addChild(Rc<Label>::create(), 5);
+	_label2 = addChild(Rc<Label>::create(), ZOrder(5));
 	_label2->setAnchorPoint(Anchor::Middle);
 	_label2->setColor(Color::BlueGrey_500, true);
 	_label2->setOpacity(0.75f);

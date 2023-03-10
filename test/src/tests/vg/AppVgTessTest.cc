@@ -210,7 +210,7 @@ bool VgContourSwitcherButton::init(uint32_t idx, Function<void()> &&cb) {
 		.addOval(Rect(0, 0, 10, 10))
 		.setAntialiased(false);
 
-	_indicator = addChild(Rc<VectorSprite>::create(move(image)), 1);
+	_indicator = addChild(Rc<VectorSprite>::create(move(image)), ZOrder(1));
 	_indicator->setColor(VgTessCanvas::getColorForIndex(_index));
 	_indicator->setAnchorPoint(Anchor::MiddleRight);
 	_indicator->setContentSize(Size2(16.0f, 16.0f));

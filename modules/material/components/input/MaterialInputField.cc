@@ -33,7 +33,7 @@ bool InputField::init(InputFieldStyle fieldStyle) {
 	switch (fieldStyle) {
 	case InputFieldStyle::Filled:
 		style.nodeStyle = NodeStyle::Filled;
-		style.colorRule = ColorRole::SurfaceVariant;
+		style.colorRole = ColorRole::SurfaceVariant;
 		break;
 	case InputFieldStyle::Outlined:
 		style.nodeStyle = NodeStyle::Outlined;
@@ -49,24 +49,24 @@ bool InputField::init(InputFieldStyle fieldStyle, const SurfaceStyle &surfaceSty
 		return false;
 	}
 
-	_container = addChild(Rc<InputTextContainer>::create(), 1);
+	_container = addChild(Rc<InputTextContainer>::create(), ZOrder(1));
 	_container->setAnchorPoint(Anchor::BottomLeft);
 
-	_labelText = addChild(Rc<TypescaleLabel>::create(TypescaleRole::BodyLarge), 1);
+	_labelText = addChild(Rc<TypescaleLabel>::create(TypescaleRole::BodyLarge), ZOrder(1));
 	_labelText->setAnchorPoint(Anchor::MiddleLeft);
 
-	_supportingText = addChild(Rc<TypescaleLabel>::create(TypescaleRole::BodySmall), 1);
+	_supportingText = addChild(Rc<TypescaleLabel>::create(TypescaleRole::BodySmall), ZOrder(1));
 	_supportingText->setAnchorPoint(Anchor::TopLeft);
 
-	_leadingIcon = addChild(Rc<IconSprite>::create(IconName::None), 1);
+	_leadingIcon = addChild(Rc<IconSprite>::create(IconName::None), ZOrder(1));
 	_leadingIcon->setAnchorPoint(Anchor::MiddleLeft);
 	_leadingIcon->setContentSize(Size2(24.0f, 24.0f));
 
-	_trailingIcon = addChild(Rc<IconSprite>::create(IconName::None), 1);
+	_trailingIcon = addChild(Rc<IconSprite>::create(IconName::None), ZOrder(1));
 	_trailingIcon->setAnchorPoint(Anchor::MiddleRight);
 	_trailingIcon->setContentSize(Size2(24.0f, 24.0f));
 
-	_indicator = addChild(Rc<Surface>::create(SurfaceStyle(ColorRole::OnSurfaceVariant, NodeStyle::Filled)), 1);
+	_indicator = addChild(Rc<Surface>::create(SurfaceStyle(ColorRole::OnSurfaceVariant, NodeStyle::Filled)), ZOrder(1));
 	_indicator->setAnchorPoint(Anchor::BottomLeft);
 
 	_inputListener = addInputListener(Rc<InputListener>::create());
@@ -242,7 +242,7 @@ void InputField::updateInputEnabled() {
 	}), EasingType::Standard), InputEnabledLabelActionTag);
 
 	auto indicatorStyle = _indicator->getStyleTarget();
-	indicatorStyle.colorRule = _focused ? ColorRole::Primary : ColorRole::OnSurfaceVariant;
+	indicatorStyle.colorRole = _focused ? ColorRole::Primary : ColorRole::OnSurfaceVariant;
 
 	_indicator->setStyle(indicatorStyle, _activityAnimationDuration);
 }

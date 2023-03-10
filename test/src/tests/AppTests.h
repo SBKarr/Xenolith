@@ -63,32 +63,30 @@ enum class LayoutName {
 
 	UtilsStorageTest = 256 * 5,
 	UtilsNetworkTest,
+	UtilsAssetTest,
 
 	MaterialColorPickerTest = 256 * 6,
 	MaterialDynamicFontTest,
 	MaterialNodeTest,
 	MaterialButtonTest,
 	MaterialInputFieldTest,
+	MaterialToolbarTest,
 };
 
 struct MenuData {
 	LayoutName layout;
+	LayoutName root;
+	String id;
 	String title;
+	Function<Rc<SceneLayout>(LayoutName)> constructor;
 };
-
-extern Vector<MenuData> s_rootMenu;
-extern Vector<MenuData> s_generalTestsMenu;
-extern Vector<MenuData> s_inputTestsMenu;
-extern Vector<MenuData> s_actionTestsMenu;
-extern Vector<MenuData> s_vgTestsMenu;
-extern Vector<MenuData> s_utilsTestsMenu;
-extern Vector<MenuData> s_materialTestsMenu;
 
 LayoutName getRootLayoutForLayout(LayoutName);
 StringView getLayoutNameId(LayoutName);
+StringView getLayoutNameTitle(LayoutName);
 LayoutName getLayoutNameById(StringView);
 
-Rc<Node> makeLayoutNode(LayoutName);
+Rc<SceneLayout> makeLayoutNode(LayoutName);
 
 }
 

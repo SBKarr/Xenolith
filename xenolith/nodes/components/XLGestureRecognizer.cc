@@ -758,8 +758,7 @@ bool GestureKeyRecognizer::isKeyPressed(InputKeyCode code) const {
 
 bool GestureKeyRecognizer::addEvent(const InputEvent &event, float density) {
 	_pressedKeys.set(toInt(event.data.key.keycode));
-	_callback(GestureData{GestureEvent::Began, &event});
-	return true;
+	return _callback(GestureData{GestureEvent::Began, &event});
 }
 
 bool GestureKeyRecognizer::removeEvent(const InputEvent &event, bool success, float density) {

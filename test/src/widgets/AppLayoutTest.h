@@ -24,11 +24,28 @@
 #define TEST_SRC_WIDGETS_APPLAYOUTTEST_H_
 
 #include "AppTests.h"
-#include "XLNode.h"
+#include "XLSceneLayout.h"
 
 namespace stappler::xenolith::app {
 
-class LayoutTest : public Node {
+class LayoutTestBackButton : public VectorSprite {
+public:
+	virtual bool init(Function<void()> &&);
+
+	virtual void onContentSizeDirty() override;
+
+protected:
+	using VectorSprite::init;
+
+	void handleMouseEnter();
+	void handleMouseLeave();
+	bool handlePress();
+
+	Layer *_background = nullptr;
+	Function<void()> _callback;
+};
+
+class LayoutTest : public SceneLayout {
 public:
 	virtual ~LayoutTest() { }
 

@@ -85,7 +85,7 @@ bool VgShadowTest::LightNormalSelector::init() {
 	}
 
 	_point = addChild(Rc<LightNormalSelectorPoint>::create());
-	_point->setLocalZOrder(1);
+	_point->setLocalZOrder(ZOrder(1));
 	_point->setColor(Color::Red_500);
 	_point->setAnchorPoint(Anchor::Middle);
 
@@ -168,7 +168,7 @@ bool VgShadowTest::init() {
 	do {
 		auto image = Rc<VectorImage>::create(Size2(24, 24));
 
-		_sprite = addChild(Rc<VectorSprite>::create(move(image)), 0);
+		_sprite = addChild(Rc<VectorSprite>::create(move(image)), ZOrder(0));
 		_sprite->setContentSize(Size2(256, 256));
 		_sprite->setAnchorPoint(Anchor::Middle);
 		_sprite->setColor(Color::Grey_100);

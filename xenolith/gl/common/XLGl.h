@@ -388,8 +388,8 @@ struct alignas(16) TransformedVertexData {
 	Rc<VertexData> data;
 
 	TransformedVertexData() = default;
-	TransformedVertexData(const Mat4 &mat, Rc<VertexData> &&data)
-	: mat(mat), data(move(data)) { }
+	TransformedVertexData(const Mat4 &mat, Rc<VertexData> &&data) : mat(mat), data(move(data)) { }
+	TransformedVertexData(const Mat4 &mat, const Rc<VertexData> &data) : mat(mat), data(data) { }
 };
 
 class DeferredVertexResult : public Ref {

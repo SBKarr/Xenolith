@@ -258,6 +258,10 @@ void Sprite::setSamplerIndex(uint16_t idx) {
 	}
 }
 
+void Sprite::pushShadowCommands(RenderFrameInfo &frame, NodeFlags flags, const Mat4 &t, SpanView<gl::TransformedVertexData> data) {
+	frame.shadows->pushShadowArray(data, _shadowIndex);
+}
+
 void Sprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 	auto data = _vertexes.pop();
 	Mat4 newMV;
@@ -273,7 +277,8 @@ void Sprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 	}
 
 	if (_shadowIndex > 0.0f) {
-		frame.shadows->pushShadowArray(Rc<gl::VertexData>(data), newMV, _shadowIndex);
+		gl::TransformedVertexData transformData{newMV, data};
+		pushShadowCommands(frame, flags, newMV, makeSpanView(&transformData, 1));
 	}
 	frame.commands->pushVertexArray(move(data), newMV, frame.zPath, _materialId, _realRenderingLevel, _shadowIndex, _commandFlags);
 }

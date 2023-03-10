@@ -30,3 +30,4 @@
 #include "AppSlider.cc"
 #include "AppMaterialColorPicker.cc"
 #include "AppMaterialBackground.cc"
+#include "AppMaterialTest.cc"

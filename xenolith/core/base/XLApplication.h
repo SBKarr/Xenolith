@@ -34,6 +34,10 @@ THE SOFTWARE.
 #include "XLStorageServer.h"
 #endif
 
+#if MODULE_XENOLITH_ASSET
+#include "XLAssetLibrary.h"
+#endif
+
 namespace stappler::xenolith {
 
 class ResourceCache;
@@ -61,6 +65,7 @@ public:
 		String launchUrl;
 
 		Size2 screenSize = Size2(1024, 768);
+		Padding viewDecoration;
 		bool isPhone = false;
 		bool isFixed = false;
 		float density = 1.0f;
@@ -117,14 +122,14 @@ public:
 
 	/* If current thread is main thread: executes function/task
 	   If not: adds function/task to main thread queue */
-	void performOnMainThread(const Function<void()> &func, Ref *target = nullptr, bool onNextFrame = false) const;
+	void performOnMainThread(Function<void()> &&func, Ref *target = nullptr, bool onNextFrame = false) const;
 
 	/* If current thread is main thread: executes function/task
 	   If not: adds function/task to main thread queue */
     void performOnMainThread(Rc<thread::Task> &&task, bool onNextFrame = false) const;
 
 	/* Performs action in this thread, task will be constructed in place */
-	void perform(const ExecuteCallback &, const CompleteCallback & = nullptr, Ref * = nullptr) const;
+	void perform(ExecuteCallback &&, CompleteCallback && = nullptr, Ref * = nullptr) const;
 
 	/* Performs task in thread, identified by id */
     void perform(Rc<thread::Task> &&task) const;
@@ -136,7 +141,7 @@ public:
 	void performAsync(Rc<Task> &&task) const;
 
     /* Spawn exclusive thread for task */
-	void performAsync(const ExecuteCallback &, const CompleteCallback & = nullptr, Ref * = nullptr) const;
+	void performAsync(ExecuteCallback &&, CompleteCallback && = nullptr, Ref * = nullptr) const;
 
 	/* "Single-threaded" mode allow you to perform async tasks on single thread.
 	 When "perform" function is called, task and all subsequent callbacks will be
@@ -252,6 +257,9 @@ public:
 	const Rc<storage::Server> &getStorageServer() const { return _storageServer; }
 
 protected:
+	virtual bool onStorageLoaded(storage::Server *);
+	virtual void onStorageDisposed(storage::Server *);
+
 	Value _dbParams;
 	storage::StorageRoot _storageRoot;
 	Rc<storage::Server> _storageServer;
@@ -266,6 +274,9 @@ protected:
 #endif
 
 #if MODULE_XENOLITH_ASSET
+public:
+	const Rc<storage::AssetLibrary> &getAssetLibrary() const { return _assetLibrary; }
+
 protected:
 	Rc<storage::AssetLibrary> _assetLibrary;
 #endif

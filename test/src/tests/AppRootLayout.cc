@@ -29,15 +29,15 @@
 
 namespace stappler::xenolith::app {
 
-bool RootLayout::init() {
-	if (!LayoutMenu::init(LayoutName::Root, s_rootMenu)) {
+bool RootLayout::init(LayoutName, Vector<LayoutName> &&layouts) {
+	if (!LayoutMenu::init(LayoutName::Root, move(layouts))) {
 		return false;
 	}
 
 	return true;
 }
 
-void RootLayout::makeScrollList(ScrollController *controller, const Vector<MenuData> &items) {
+void RootLayout::makeScrollList(ScrollController *controller, Vector<LayoutName> &&items) {
 	controller->addItem([] (const ScrollController::Item &item) {
 		auto s = Rc<Sprite>::create("xenolith-2-480.png");
 		s->setAutofit(Sprite::Autofit::Contain);
@@ -45,7 +45,7 @@ void RootLayout::makeScrollList(ScrollController *controller, const Vector<MenuD
 		return s;
 	}, 300.0f);
 
-	LayoutMenu::makeScrollList(controller, items);
+	LayoutMenu::makeScrollList(controller, move(items));
 }
 
 }

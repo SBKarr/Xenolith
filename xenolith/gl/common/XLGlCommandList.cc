@@ -116,7 +116,7 @@ bool CommandList::init(const Rc<PoolRef> &pool) {
 	return true;
 }
 
-void CommandList::pushVertexArray(Rc<VertexData> &&vert, const Mat4 &t, SpanView<int16_t> zPath,
+void CommandList::pushVertexArray(Rc<VertexData> &&vert, const Mat4 &t, SpanView<ZOrder> zPath,
 		gl::MaterialId material, RenderingLevel level, float depthValue, CommandFlags flags) {
 	_pool->perform([&] {
 		auto cmd = Command::create(_pool->getPool(), CommandType::VertexArray, flags);
@@ -130,7 +130,7 @@ void CommandList::pushVertexArray(Rc<VertexData> &&vert, const Mat4 &t, SpanView
 
 		cmdData->vertexes = makeSpanView(p, 1);
 
-		while (!zPath.empty() && zPath.back() == 0) {
+		while (!zPath.empty() && zPath.back() == ZOrder(0)) {
 			zPath.pop_back();
 		}
 
@@ -144,7 +144,7 @@ void CommandList::pushVertexArray(Rc<VertexData> &&vert, const Mat4 &t, SpanView
 	});
 }
 
-void CommandList::pushVertexArray(SpanView<TransformedVertexData> data, SpanView<int16_t> zPath,
+void CommandList::pushVertexArray(SpanView<TransformedVertexData> data, SpanView<ZOrder> zPath,
 		gl::MaterialId material, RenderingLevel level, float depthValue, CommandFlags flags) {
 	_pool->perform([&] {
 		auto cmd = Command::create(_pool->getPool(), CommandType::VertexArray, flags);
@@ -152,7 +152,7 @@ void CommandList::pushVertexArray(SpanView<TransformedVertexData> data, SpanView
 
 		cmdData->vertexes = data;
 
-		while (!zPath.empty() && zPath.back() == 0) {
+		while (!zPath.empty() && zPath.back() == ZOrder(0)) {
 			zPath.pop_back();
 		}
 
@@ -167,7 +167,7 @@ void CommandList::pushVertexArray(SpanView<TransformedVertexData> data, SpanView
 }
 
 void CommandList::pushDeferredVertexResult(const Rc<DeferredVertexResult> &res, const Mat4 &viewT, const Mat4 &modelT, bool normalized,
-		SpanView<int16_t> zPath, gl::MaterialId material, RenderingLevel level, float depthValue, CommandFlags flags) {
+		SpanView<ZOrder> zPath, gl::MaterialId material, RenderingLevel level, float depthValue, CommandFlags flags) {
 	_pool->perform([&] {
 		auto cmd = Command::create(_pool->getPool(), CommandType::Deferred, flags);
 		auto cmdData = (CmdDeferred *)cmd->data;
@@ -177,7 +177,7 @@ void CommandList::pushDeferredVertexResult(const Rc<DeferredVertexResult> &res, 
 		cmdData->modelTransform = modelT;
 		cmdData->normalized = normalized;
 
-		while (!zPath.empty() && zPath.back() == 0) {
+		while (!zPath.empty() && zPath.back() == ZOrder(0)) {
 			zPath.pop_back();
 		}
 

@@ -30,7 +30,7 @@ bool InputTapPressTestNode::init(StringView text) {
 		return false;
 	}
 
-	_label = addChild(Rc<Label>::create(), 1);
+	_label = addChild(Rc<Label>::create(), ZOrder(1));
 	_label->setString(toString(text, ": ", _index));
 	_label->setAnchorPoint(Anchor::Middle);
 	_label->setFontSize(24);

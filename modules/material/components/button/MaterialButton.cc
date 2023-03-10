@@ -38,17 +38,17 @@ bool Button::init(const SurfaceStyle &style) {
 		return false;
 	}
 
-	_label = addChild(Rc<TypescaleLabel>::create(TypescaleRole::LabelLarge), 1);
+	_label = addChild(Rc<TypescaleLabel>::create(TypescaleRole::LabelLarge), ZOrder(1));
 	_label->setAnchorPoint(Anchor::MiddleLeft);
 	_label->setOnContentSizeDirtyCallback([this] {
 		updateSizeFromContent();
 	});
 
-	_leadingIcon = addChild(Rc<IconSprite>::create(IconName::None), 1);
+	_leadingIcon = addChild(Rc<IconSprite>::create(IconName::None), ZOrder(1));
 	_leadingIcon->setAnchorPoint(Anchor::MiddleLeft);
 	_leadingIcon->setContentSize(Size2(18.0f, 18.0f));
 
-	_trailingIcon = addChild(Rc<IconSprite>::create(IconName::None), 1);
+	_trailingIcon = addChild(Rc<IconSprite>::create(IconName::None), ZOrder(1));
 	_trailingIcon->setAnchorPoint(Anchor::MiddleLeft);
 	_trailingIcon->setContentSize(Size2(18.0f, 18.0f));
 
@@ -59,7 +59,7 @@ bool Button::init(const SurfaceStyle &style) {
 		return true;
 	});
 	_inputListener->addPressRecognizer([this] (const GesturePress &press) {
-		if (!_enabled) {
+		if (!_enabled || (_menuButtonListener->getSubscription() && !isMenuSourceButtonEnabled())) {
 			return false;
 		}
 
@@ -93,23 +93,17 @@ bool Button::init(const SurfaceStyle &style) {
 		return true;
 	});
 
+	_menuButtonListener = addComponent(Rc<DataListener<MenuSourceButton>>::create([this] (SubscriptionFlags flags) {
+		updateMenuButtonSource();
+	}));
+
 	return true;
 }
 
 void Button::onContentSizeDirty() {
 	Surface::onContentSizeDirty();
 
-	float contentWidth = ((_styleTarget.nodeStyle == NodeStyle::Text) ? 24.0f : 48.0f) + _label->getContentSize().width;
-	if (_styleTarget.nodeStyle == NodeStyle::Text && (getLeadingIconName() != IconName::None || getTrailingIconName() != IconName::None)) {
-		contentWidth += 16.0f;
-	}
-	if (getLeadingIconName() != IconName::None) {
-		contentWidth += _leadingIcon->getContentSize().width;
-	}
-	if (getTrailingIconName() != IconName::None) {
-		contentWidth += _trailingIcon->getContentSize().width;
-	}
-
+	float contentWidth = getWidthForContent();
 	float offset = (_contentSize.width - contentWidth) / 2.0f;
 
 	Vec2 target(offset + (_styleTarget.nodeStyle == NodeStyle::Text ? 12.0f : 16.0f), _contentSize.height / 2.0f);
@@ -141,6 +135,18 @@ bool Button::isFollowContentSize() const {
 	return _followContentSize;
 }
 
+void Button::setSwallowEvents(bool value) {
+	if (value) {
+		_inputListener->setSwallowAllEvents();
+	} else {
+		_inputListener->clearSwallowAllEvents();
+	}
+}
+
+bool Button::isSwallowEvents() const {
+	return _inputListener->isSwallowAllEvents();
+}
+
 void Button::setEnabled(bool value) {
 	if (value != _enabled) {
 		_enabled = value;
@@ -149,12 +155,32 @@ void Button::setEnabled(bool value) {
 	}
 }
 
+bool Button::isMenuSourceButtonEnabled() const {
+	if (!_menuButtonListener) {
+		return false;
+	}
+
+	return _menuButtonListener->getSubscription()->getCallback() != nullptr || _menuButtonListener->getSubscription()->getNextMenu();
+}
+
 void Button::setText(StringView text) {
 	_label->setString(text);
 }
 
 StringView Button::getText() const {
 	return _label->getString8();
+}
+
+void Button::setIconSize(float value) {
+	if (value != getIconSize()) {
+		_leadingIcon->setContentSize(Size2(value, value));
+		_trailingIcon->setContentSize(Size2(value, value));
+		updateSizeFromContent();
+	}
+}
+
+float Button::getIconSize() const {
+	return _leadingIcon->getContentSize().width;
 }
 
 void Button::setLeadingIconName(IconName name) {
@@ -191,13 +217,31 @@ void Button::setDoubleTapCallback(Function<void()> &&cb) {
 	_callbackDoubleTap = move(cb);
 }
 
+void Button::setMenuSourceButton(Rc<MenuSourceButton> &&button) {
+	if (button != _menuButtonListener->getSubscription()) {
+		if (auto b = _menuButtonListener->getSubscription()) {
+			b->onNodeDetached(this);
+		}
+		_menuButtonListener->setSubscription(button.get());
+		updateMenuButtonSource();
+		if (button) {
+			button->onNodeAttached(this);
+		}
+	}
+}
+
 void Button::updateSizeFromContent() {
 	if (!_followContentSize) {
 		_contentSizeDirty = true;
 		return;
 	}
 
-	Size2 targetSize = _label->getContentSize();
+	Size2 targetSize;
+	if (!_label->empty()) {
+		targetSize = _label->getContentSize();
+	} else {
+		targetSize.height = getIconSize();
+	}
 	targetSize.width = getWidthForContent();
 	targetSize.height += 24.0f;
 
@@ -206,9 +250,9 @@ void Button::updateSizeFromContent() {
 
 void Button::updateActivityState() {
 	auto style = getStyleTarget();
-	if (!_enabled) {
+	if (!_enabled || (_menuButtonListener->getSubscription() && !isMenuSourceButtonEnabled())) {
 		style.activityState = ActivityState::Disabled;
-	} else if (_pressed) {
+	} else if (_pressed || _selected) {
 		style.activityState = ActivityState::Pressed;
 	} else if (_mouseOver) {
 		style.activityState = ActivityState::Hovered;
@@ -221,6 +265,13 @@ void Button::updateActivityState() {
 }
 
 void Button::handleTap() {
+	if (auto btn = _menuButtonListener->getSubscription()) {
+		auto &cb = btn->getCallback();
+		if (cb) {
+			cb(this, btn);
+		}
+		return;
+	}
 	if (_callbackTap) {
 		auto id = retain();
 		_callbackTap();
@@ -245,10 +296,16 @@ void Button::handleDoubleTap() {
 }
 
 float Button::getWidthForContent() const {
-	float contentWidth = ((_styleTarget.nodeStyle == NodeStyle::Text) ? 24.0f : 48.0f) + _label->getContentSize().width;
-	if (_styleTarget.nodeStyle == NodeStyle::Text && (getLeadingIconName() != IconName::None || getTrailingIconName() != IconName::None)) {
-		contentWidth += 16.0f;
+	float contentWidth = 0.0f;
+	if (!_label->empty()) {
+		contentWidth = ((_styleTarget.nodeStyle == NodeStyle::Text) ? 24.0f : 48.0f) + _label->getContentSize().width;
+		if (_styleTarget.nodeStyle == NodeStyle::Text && (getLeadingIconName() != IconName::None || getTrailingIconName() != IconName::None)) {
+			contentWidth += 16.0f;
+		}
+	} else {
+		contentWidth = 24.0f;
 	}
+
 	if (getLeadingIconName() != IconName::None) {
 		contentWidth += _leadingIcon->getContentSize().width;
 	}
@@ -256,6 +313,21 @@ float Button::getWidthForContent() const {
 		contentWidth += _trailingIcon->getContentSize().width;
 	}
 	return contentWidth;
+}
+
+void Button::updateMenuButtonSource() {
+	if (auto btn = _menuButtonListener->getSubscription()) {
+		_selected = btn->isSelected();
+		_floatingMenuSource = btn->getNextMenu();
+
+		setLeadingIconName(btn->getNameIcon());
+		setTrailingIconName(btn->getValueIcon());
+		setText(btn->getName());
+	} else {
+		_selected = false;
+		_floatingMenuSource = nullptr;
+	}
+	updateActivityState();
 }
 
 }

@@ -33,10 +33,10 @@ bool MaterialButtonTest::init() {
 		return false;
 	}
 
-	_background = addChild(Rc<MaterialBackground>::create(Color::Red_500), -1);
+	_background = addChild(Rc<MaterialBackground>::create(Color::Red_500), ZOrder(-1));
 	_background->setAnchorPoint(Anchor::Middle);
 
-	_label = _background->addChild(Rc<material::TypescaleLabel>::create(material::TypescaleRole::HeadlineSmall), 1);
+	_label = _background->addChild(Rc<material::TypescaleLabel>::create(material::TypescaleRole::HeadlineSmall), ZOrder(1));
 	_label->setString("None");
 	_label->setAnchorPoint(Anchor::Middle);
 
@@ -50,7 +50,7 @@ bool MaterialButtonTest::init() {
 
 	uint32_t i = 1;
 	for (auto it : styles) {
-		auto btn = _background->addChild(Rc<material::Button>::create(it),1);
+		auto btn = _background->addChild(Rc<material::Button>::create(it), ZOrder(1));
 		btn->setText(toString("Button", i));
 		btn->setAnchorPoint(Anchor::Middle);
 		btn->setTapCallback([this, i] { _label->setString(toString("Button", i, " Tap")); });
@@ -59,7 +59,7 @@ bool MaterialButtonTest::init() {
 		btn->setLeadingIconName(IconName::Navigation_check_solid);
 		_buttons.emplace_back(btn);
 
-		btn = _background->addChild(Rc<material::Button>::create(it), 1);
+		btn = _background->addChild(Rc<material::Button>::create(it), ZOrder(1));
 		btn->setText(toString("Button", i));
 		btn->setAnchorPoint(Anchor::Middle);
 		btn->setEnabled(false);

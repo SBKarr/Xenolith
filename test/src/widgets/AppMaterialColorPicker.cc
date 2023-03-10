@@ -40,7 +40,7 @@ bool MaterialColorPicker::init(Type type, const material::ColorHCT &color, Funct
 	case Type::Tone: _value = _targetColor.data.tone / 100.0f; break;
 	}
 
-	_label = addChild(Rc<material::TypescaleLabel>::create(material::TypescaleRole::TitleLarge), 1);
+	_label = addChild(Rc<material::TypescaleLabel>::create(material::TypescaleRole::TitleLarge), ZOrder(1));
 	_label->setFontSize(20);
 	_label->setAnchorPoint(Anchor::MiddleLeft);
 	_label->setString(makeString());

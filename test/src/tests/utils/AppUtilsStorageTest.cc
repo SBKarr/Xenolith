@@ -179,14 +179,14 @@ bool UtilsStorageTest::init() {
 
 	_container = Rc<UtilsStorageTestComponentContainer>::create();
 
-	_background = addChild(Rc<MaterialBackground>::create(Color::BlueGrey_500), 1);
+	_background = addChild(Rc<MaterialBackground>::create(Color::BlueGrey_500), ZOrder(1));
 	_background->setAnchorPoint(Anchor::Middle);
 
-	_inputKey = _background->addChild(Rc<material::InputField>::create(), 1);
+	_inputKey = _background->addChild(Rc<material::InputField>::create(), ZOrder(1));
 	_inputKey->setLabelText("Username");
 	_inputKey->setAnchorPoint(Anchor::TopRight);
 
-	_inputValue = _background->addChild(Rc<material::InputField>::create(), 1);
+	_inputValue = _background->addChild(Rc<material::InputField>::create(), ZOrder(1));
 	_inputValue->setLabelText("Password");
 	_inputValue->setAnchorPoint(Anchor::TopLeft);
 

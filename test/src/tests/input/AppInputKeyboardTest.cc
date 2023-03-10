@@ -330,7 +330,7 @@ bool InputKeyboardTest::init() {
 	}), Node::ZOrderMax);
 	_handleUpdateCheckbox->setAnchorPoint(Anchor::MiddleBottom);
 
-	_onScreenKeyboard = addChild(Rc<InputKeyboardOnScreenKeyboard>::create(), 10);
+	_onScreenKeyboard = addChild(Rc<InputKeyboardOnScreenKeyboard>::create(), ZOrder(10));
 	_onScreenKeyboard->setAnchorPoint(Anchor::Middle);
 
 	scheduleUpdate();

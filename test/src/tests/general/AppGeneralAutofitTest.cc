@@ -53,14 +53,14 @@ bool GeneralAutofitTestNode::init() {
 	_background->setAnchorPoint(Anchor::Middle);
 
 	for (size_t i = 0; i < 5; ++ i) {
-		_layers[i] = addChild(Rc<Layer>::create(Color::Teal_500), 1);
+		_layers[i] = addChild(Rc<Layer>::create(Color::Teal_500), ZOrder(1));
 		_layers[i]->setAnchorPoint(Anchor::Middle);
 
-		_sprites[i] = addChild(Rc<Sprite>::create("xenolith-2-480.png"), 2);
+		_sprites[i] = addChild(Rc<Sprite>::create("xenolith-2-480.png"), ZOrder(2));
 		_sprites[i]->setAnchorPoint(Anchor::Middle);
 		_sprites[i]->setAutofit(Sprite::Autofit(i));
 
-		_labels[i] = addChild(Rc<Label>::create(), 3);
+		_labels[i] = addChild(Rc<Label>::create(), ZOrder(3));
 		_labels[i]->setAnchorPoint(Anchor::MiddleBottom);
 		_labels[i]->setColor(Color::Red_500, true);
 		_labels[i]->setFontSize(20);
@@ -132,7 +132,7 @@ bool GeneralAutofitTest::init() {
 	_nodeAutofit = addChild(Rc<GeneralAutofitTestNode>::create());
 	_nodeAutofit->setAnchorPoint(Anchor::Middle);
 
-	_nodeResize = addChild(Rc<GeneralAutofitTestResize>::create(), 1);
+	_nodeResize = addChild(Rc<GeneralAutofitTestResize>::create(), ZOrder(1));
 	_nodeResize->setAnchorPoint(Anchor::Middle);
 	_nodeResize->setColor(Color::Grey_400);
 	_nodeResize->setContentSize(Size2(48, 48));

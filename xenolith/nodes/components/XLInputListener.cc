@@ -134,6 +134,10 @@ void InputListener::clearSwallowEvent(InputEventName event) {
 	_swallowEvents.reset(toInt(event));
 }
 
+bool InputListener::isSwallowAllEvents() const {
+	return _swallowEvents.all();
+}
+
 void InputListener::setTouchFilter(const EventFilter &filter) {
 	_eventFilter = filter;
 }

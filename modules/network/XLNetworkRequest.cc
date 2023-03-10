@@ -60,10 +60,14 @@ bool Handle::init(Method method, StringView url) {
 
 bool Handle::prepare(Context *ctx) {
 	if (_mtime > 0) {
-		ctx->headers = curl_slist_append(ctx->headers, toString("If-Modified-Since: ", Time::microseconds(_mtime).toHttp<Interface>()).data());
+		auto httpTime = Time::microseconds(_mtime).toHttp<Interface>();
+		ctx->headers = curl_slist_append(ctx->headers, toString("If-Modified-Since: ", httpTime).data());
+		std::cout << toString("If-Modified-Since: ", httpTime) << "\n";
 	}
+
 	if (!_etag.empty()) {
 		ctx->headers = curl_slist_append(ctx->headers, toString("If-None-Match: ", _etag).data());
+		std::cout << toString("If-None-Match: ", _etag) << "\n";
 	}
 
 	if (!_sharegroup.empty() && ctx->share) {
@@ -79,8 +83,13 @@ bool Handle::finalize(Context *ctx, bool ret) {
 	_success = ctx->success;
 
 	if (getResponseCode() < 300) {
-		_mtime = Time::fromHttp(getReceivedHeaderString("Last-Modified")).toMicroseconds();
-		_etag = getReceivedHeaderString("ETag").str<Interface>();
+		auto httpTime = getReceivedHeaderString("Last-Modified");
+		auto eTag = getReceivedHeaderString("ETag");
+
+		std::cout << httpTime << " " << eTag << "\n";
+
+		_mtime = Time::fromHttp(httpTime).toMicroseconds();
+		_etag = eTag.str<Interface>();
 	} else {
 		auto &f = getReceiveDataSource();
 		if (auto str = std::get_if<String>(&f)) {
@@ -165,9 +174,9 @@ size_t Request::handleReceive(char *buf, size_t nbytes) {
 	return nbytes;
 }
 
-void Request::notifyOnComplete() {
+void Request::notifyOnComplete(bool success) {
 	if (_onComplete) {
-		_onComplete(*this);
+		_onComplete(*this, success);
 	}
 	_running = false;
 	_handle._request = nullptr;
@@ -186,94 +195,5 @@ void Request::notifyOnDownloadProgress(int64_t total, int64_t now) {
 		_onDownloadProgress(*this, total, now);
 	}
 }
-
-/*bool DataHandle::init(StringView url, const data::Value &data, data::EncodeFormat format) {
-	if (data.empty()) {
-		return init(Method::Get, url);
-	} else {
-		return init(Method::Post, url, data, format);
-	}
-}
-
-bool DataHandle::init(Method method, StringView url, const data::Value &data, data::EncodeFormat format) {
-	if (!Handle::init(method, url)) {
-		return false;
-	}
-
-	if ((method == Method::Post || method == Method::Put) && !data.isNull()) {
-		setSendData(data, format);
-	}
-
-	return true;
-}
-
-bool DataHandle::init(Method method, StringView url, FilePath file, StringView type) {
-	if (!Handle::init(method, url)) {
-		return false;
-	}
-
-	if ((method == Method::Post || method == Method::Put) && !file.get().empty()) {
-		addHeader("Content-Type", type);
-		setSendFile(file.get());
-	}
-
-	return true;
-}
-
-void DataHandle::perform(Application *app, DataCompleteCallback &&cb) {
-	if (!cb) {
-		return Handle::perform(app, nullptr);
-	} else {
-		return Handle::perform(app, [this, cb = move(cb)] (Handle &handle) {
-			data::Value data;
-			if (!_data.empty()) {
-				data = data::read(_data);
-			}
-			cb(handle, data);
-		});
-	}
-}
-
-bool DataHandle::prepare(Context *ctx, const Callback<bool(CURL *)> &onBeforePerform) {
-	bool hasAccept = false;
-	for (auto &it : _sendedHeaders) {
-		auto l = string::tolower(StringView(it).sub(0, "Accept:"_len));
-		if (StringView(l).starts_with("accept:")) {
-			hasAccept = true;
-		}
-	}
-	if (!hasAccept) {
-		ctx->headers = curl_slist_append(ctx->headers, "Accept: application/cbor, application/json");
-	}
-
-	setReceiveCallback([&] (char *ptr, size_t size) -> size_t {
-		if (_data.empty()) {
-			if (auto size = getReceivedHeaderInt("Content-Length")) {
-				_data.resize(size);
-			}
-		}
-		if (_data.size() < _offset + size) {
-			_data.resize(_offset + size);
-		}
-
-		auto target = _data.data() + _offset;
-		memcpy(target, ptr, size);
-		_offset += size;
-		return size;
-	});
-
-	return Handle::prepare(ctx, onBeforePerform);
-}
-
-AssetHandle::~AssetHandle() { }
-
-bool AssetHandle::init(Rc<storage::Asset> &&, StringView tmp) {
-	// TODO
-	return true;
-}
-
-Rc<storage::Asset> AssetHandle::getAsset() const {
-	return _asset;
-}*/
 
 }

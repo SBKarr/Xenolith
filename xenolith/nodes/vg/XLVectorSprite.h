@@ -83,7 +83,7 @@ protected:
 	using Sprite::init;
 
 	virtual void pushShadowCommands(RenderFrameInfo &, NodeFlags flags, const Mat4 &,
-			SpanView<gl::TransformedVertexData> = SpanView<gl::TransformedVertexData>());
+			SpanView<gl::TransformedVertexData> = SpanView<gl::TransformedVertexData>()) override;
 	virtual void pushCommands(RenderFrameInfo &, NodeFlags flags) override;
 
 	virtual void initVertexes() override;

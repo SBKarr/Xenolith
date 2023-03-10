@@ -119,7 +119,7 @@ bool ButtonWithLabel::init(StringView str, Function<void()> &&cb) {
 		return false;
 	}
 
-	_label = addChild(Rc<Label>::create(), 1);
+	_label = addChild(Rc<Label>::create(), ZOrder(1));
 	_label->setAnchorPoint(Anchor::Middle);
 	_label->setFontSize(20);
 	_label->setString(str);

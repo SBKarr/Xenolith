@@ -42,7 +42,7 @@ bool GeneralZOrderTest::init() {
 	};
 
 	for (size_t i = 0; i < 5; ++ i) {
-		_layers[i] = addChild(Rc<Layer>::create(), indexes[i]);
+		_layers[i] = addChild(Rc<Layer>::create(), ZOrder(indexes[i]));
 		_layers[i]->setContentSize(Size2(300, 300));
 		_layers[i]->setColor(colors[i]);
 		_layers[i]->setAnchorPoint(Anchor::Middle);

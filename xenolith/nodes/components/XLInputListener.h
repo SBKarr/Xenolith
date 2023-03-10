@@ -88,6 +88,8 @@ public:
 	void clearSwallowAllEvents();
 	void clearSwallowEvent(InputEventName);
 
+	bool isSwallowAllEvents() const;
+
 	void setTouchFilter(const EventFilter &);
 
 	bool shouldSwallowEvent(const InputEvent &) const;

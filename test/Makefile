@@ -41,7 +41,8 @@ LOCAL_MODULES ?= \
 	xenolith_gui \
 	xenolith_storage \
 	xenolith_network \
-	xenolith_material
+	xenolith_material \
+	xenolith_asset
 
 # Android config
 LOCAL_ANDROID_MK := proj.android/app/Android.mk # path to root Android.mk

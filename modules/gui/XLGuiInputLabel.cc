@@ -801,7 +801,7 @@ TextInputType InputLabel::getInputTypeValue() const {
 }
 
 
-void InputLabelContainer::setLabel(Rc<InputLabel> &&l, int16_t zIndex) {
+void InputLabelContainer::setLabel(Rc<InputLabel> &&l, ZOrder zIndex) {
 	if (_label) {
 		_label->removeFromParent();
 		_label = nullptr;

@@ -40,6 +40,7 @@ bool View::init(Loop &loop, Device &dev, gl::ViewInfo &&info) {
 	_instance = (Instance *)loop.getGlInstance().get();
 	_device = &dev;
 	_director = Rc<Director>::create(_loop->getApplication(), this);
+	_constraints.contentPadding = _loop->getApplication()->getData().viewDecoration;
 	if (_onCreated) {
 		_loop->getApplication()->performOnMainThread([this] {
 			_onCreated(_director);
@@ -51,6 +52,7 @@ bool View::init(Loop &loop, Device &dev, gl::ViewInfo &&info) {
 }
 
 void View::threadInit() {
+	_init = true;
 	_running = true;
 	_avgFrameInterval.reset(0);
 

@@ -34,6 +34,8 @@ enum class IconName : uint16_t {
 	None = 0,
 	Empty,
 
+	Dynamic_Loader,
+
 	Action_3d_rotation_outline,
 	Action_3d_rotation_solid,
 	Action_accessibility_new_outline,

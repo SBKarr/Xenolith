@@ -96,7 +96,7 @@ bool VgIconListPopup::init() {
 		return false;
 	}
 
-	_label = addChild(Rc<Label>::create(), 1);
+	_label = addChild(Rc<Label>::create(), ZOrder(1));
 	_label->setAnchorPoint(Anchor::Middle);
 	_label->setFontSize(20);
 	_label->setOnContentSizeDirtyCallback([this] {
@@ -146,14 +146,14 @@ bool VgIconList::init() {
 					}
 				}
 			});
-		}, 72.0f, 0, toString("Icon: ", i));
+		}, 72.0f, 0);
 	}
 
 	controller->setRebuildCallback([this] (ScrollController *c) {
 		return rebuildScroll(c);
 	});
 
-	_popup = addChild(Rc<VgIconListPopup>::create(), 1);
+	_popup = addChild(Rc<VgIconListPopup>::create(), ZOrder(1));
 	_popup->setContentSize(Size2(192.0f, 32.0f));
 
 	auto l = addInputListener(Rc<InputListener>::create());

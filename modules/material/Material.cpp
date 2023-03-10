@@ -25,15 +25,26 @@
 
 #include "base/MaterialCam16.cc"
 #include "base/MaterialColorScheme.cc"
+#include "base/MaterialDataSource.cc"
 #include "base/MaterialStyleContainer.cc"
 #include "base/MaterialEasing.cc"
 #include "base/MaterialSurface.cc"
 #include "base/MaterialLabel.cc"
 #include "base/MaterialIconSprite.cc"
+#include "base/MaterialLayerSurface.cc"
 #include "base/MaterialSurfaceInterior.cc"
 #include "base/MaterialSurfaceStyle.cc"
+#include "base/MaterialMenuSource.cc"
 
-#include "components/MaterialButton.cc"
+#include "components/appbar/MaterialAppBar.cc"
+#include "components/button/MaterialButton.cc"
 
 #include "components/input/MaterialInputTextContainer.cc"
 #include "components/input/MaterialInputField.cc"
+
+#include "components/scroll/MaterialDataScroll.cc"
+#include "components/scroll/MaterialDataScrollHandlerFixed.cc"
+#include "components/scroll/MaterialDataScrollHandlerSlice.cc"
+
+#include "layout/MaterialDecoratedLayout.cc"
+#include "layout/MaterialFlexibleLayout.cc"

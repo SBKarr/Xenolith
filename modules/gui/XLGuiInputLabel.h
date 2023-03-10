@@ -64,7 +64,7 @@ public:
 		return ptr.get();
 	}
 
-	virtual void setLabel(Rc<InputLabel> &&, int16_t zIndex = 0);
+	virtual void setLabel(Rc<InputLabel> &&, ZOrder zIndex = ZOrder(0));
 	virtual InputLabel *getLabel() const;
 
 	virtual void update(const UpdateTime &time) override;

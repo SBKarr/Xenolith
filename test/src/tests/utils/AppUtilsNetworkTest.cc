@@ -30,7 +30,7 @@ bool UtilsNetworkTest::init() {
 		return false;
 	}
 
-	_background = addChild(Rc<MaterialBackground>::create(Color::BlueGrey_500), 1);
+	_background = addChild(Rc<MaterialBackground>::create(Color::BlueGrey_500), ZOrder(1));
 	_background->setAnchorPoint(Anchor::Middle);
 
 	_runButton = _background->addChild(Rc<material::Button>::create(material::NodeStyle::Filled));
@@ -70,7 +70,7 @@ void UtilsNetworkTest::performTest() {
 		return true;
 	}, this);
 
-	req->perform(_director->getApplication(), [this] (const network::Request &req) {
+	req->perform(_director->getApplication(), [this] (const network::Request &req, bool success) {
 		StringStream stream;
 		auto data = data::read<Interface>(req.getData());
 

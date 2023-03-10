@@ -59,6 +59,7 @@ THE SOFTWARE.
 
 #define MODULE_XENOLITH_STORAGE 1
 #define MODULE_XENOLITH_NETWORK 1
+#define MODULE_XENOLITH_ASSET 1
 
 #endif
 
@@ -115,6 +116,7 @@ class EventHandlerNode;
 
 class Application;
 class Director;
+class Scheduler;
 
 class Node;
 class DynamicStateNode;
@@ -126,6 +128,10 @@ class Action;
 class ActionInterval;
 class ActionInstant;
 class ActionProgress;
+
+class Scene;
+class SceneContent;
+class SceneLayout;
 
 using Task = thread::Task;
 

@@ -55,6 +55,8 @@ public:
 	using Ref::release;
 	using Ref::retain;
 
+	using TaskQueue::perform;
+
 protected:
 	Application *_application = nullptr;
 };

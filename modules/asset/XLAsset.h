@@ -26,54 +26,15 @@
 
 #include "XLNetworkRequest.h"
 #include "XLDefine.h"
-#include "SPSyncRWLock.h"
+#include "XLStorageServer.h"
+#include "SPSubscription.h"
 
 namespace stappler::xenolith::storage {
 
-class Asset;
 class AssetLibrary;
+struct AssetDownloadData;
 
-/*class AssetFile : public Ref {
-public:
-	~AssetFile();
-
-	bool init(Asset *);
-
-	Bytes readFile() const;
-	filesystem::ifile open() const;
-
-	void remove();
-
-	bool match(const Asset *) const;
-	bool exists() const { return _exists; }
-	operator bool() const { return _exists; }
-
-	uint64_t getCTime() const { return _ctime; }
-	uint64_t getMTime() const { return _mtime; }
-	uint64_t getAssetId() const { return _id; }
-	size_t getSize() const { return _size; }
-
-	StringView getPath() const { return _path; }
-	StringView getUrl() const { return _url; }
-	StringView getContentType() const { return _contentType; }
-	StringView getETag() const { return _etag; }
-
-protected:
-	friend class Asset;
-
-	bool _exists = false;
-	uint64_t _ctime = 0;
-	uint64_t _mtime = 0;
-	uint64_t _id = 0;
-	size_t _size = 0;
-
-	String _url;
-	String _path;
-	String _contentType;
-	String _etag;
-};*/
-
-class Asset : public data::Subscription {
+class Asset : public Subscription {
 public:
 	enum Update : uint8_t {
 		CacheDataUpdated = 2,
@@ -83,41 +44,56 @@ public:
 		DownloadCompleted,
 		DownloadSuccessful,
 		DownloadFailed,
-		WriteLocked,
-		ReadLocked,
-		Unlocked,
 	};
 
-	struct Data {
-		bool success = false;
+	struct VersionData {
+		bool complete = false;
+		bool download = false; // is download active for file
+		bool isFile = true; // is direct file access available (so, path can be opened with filesystem::open)
+		bool isLocal = false;
+		int64_t id = 0;
 		Time ctime; // creation time
 		Time mtime; // last modification time
-		Time atime; // last access time (if supported)
 		size_t size = 0; // file size
-		uint64_t version = 0; // version id (if available)
-
-		bool download = false; // is download active for file
 		float progress = 0.0f; // download progress
 
-		bool isFile = true; // is direct file access available (so, path can be opened with filesystem::open)
 		String path;
+		String contentType;
+		String etag;
 	};
 
-	Asset(AssetLibrary *, const db::mem::Value &);
+	Asset(AssetLibrary *, const db::Value &);
 	virtual ~Asset();
 
 	// try to read asset data, returns false if no data available
 	// also can fail with callback (.success = false, BytesView()) with no data
-	bool read(Function<void(Data, BytesView)> &&);
+	bool read(Callback<void(VersionData, BytesView)> &&);
 
 	// get info about asset
-	bool info(Function<void(Data)> &&);
+	bool info(Callback<void(VersionData)> &&);
 
 	int64_t getId() const { return _id; }
 	StringView getUrl() const { return _url; }
+	Time getTouch() const { return _touch; }
+	TimeInterval getTtl() const { return _ttl; }
 
-	/*bool download();
+	bool download();
+	void touch(Time t = Time::now());
 	void clear();
+
+	bool isDownloadInProgress() const;
+	float getProgress() const;
+
+	bool isStorageDirty() const { return _dirty; }
+	void setStorageDirty(bool value) { _dirty = value; }
+
+	void setData(const Value &d);
+	void setData(Value &&d);
+	const Value &getData() const { return _data; }
+
+	Value encode() const;
+
+	/*
 	void checkFile();
 
 	bool isReadAvailable() const;
@@ -128,19 +104,6 @@ public:
 	StringView getCachePath() const { return _cachePath; }
 	StringView getContentType() const { return _contentType; }
 
-	bool isDownloadInProgress() const { return _downloadInProgress; }
-	float getProgress() const { return _progress; }
-
-	uint64_t getMTime() const { return _mtime; }
-	size_t getSize() const { return _size; }
-	StringView getETag() const { return _etag; }
-
-	Time getTouch() const { return _touch; }
-	TimeInterval getTtl() const { return _ttl; }
-
-	void setData(const data::Value &d) { _data = d; _storageDirty = true; }
-	void setData(data::Value &&d) { _data = std::move(d); _storageDirty = true; }
-	const data::Value &getData() const { return _data; }
 
 	bool isFileExists() const { return _fileExisted; }
 	bool isFileUpdate() const { return _fileUpdate; }
@@ -153,46 +116,40 @@ public:
 	void save();
 	void touch();
 
-	bool isStorageDirty() const { return _storageDirty; }
-	void setStorageDirty(bool value) { _storageDirty = value; }
-
-	// Rc<AssetFile> cloneFile();*/
+	 */
 
 protected:
 	friend class AssetLibrary;
 
-	/*void update(Update);
-	bool swapFiles(const StringView &file, const StringView &ct, const StringView &etag, uint64_t mtime, size_t size);
-	void touchWithTime(Time t);
+	void update(Update);
 
-	virtual void onLocked(Lock) override;
+	void parseVersions(const db::Value &);
+	bool startNewDownload(Time ctime, StringView etag);
+	bool resumeDownload(VersionData &);
 
+	void setDownloadProgress(int64_t, float progress);
+	void setDownloadComplete(VersionData &, bool success);
+	void setFileValidated(bool success);
+	void replaceVersion(VersionData &);
+
+	// called from network thread
+	void addVersion(AssetDownloadData *);
 
 	String _path;
-	String _cachePath;
-	String _contentType;
-
-	Time _touch;
-	TimeInterval _ttl;
-
-	uint64_t _mtime = 0;
-	size_t _size = 0;
-	String _etag;
-
-	float _progress = 0;
-
-	bool _storageDirty = false;
-
-	bool _fileExisted = false;
-	bool _unupdated = false;
-	bool _waitFileSwap = false;
-	bool _downloadInProgress = false;
-	bool _fileUpdate = false;*/
-
-	int64_t _id = 0;
+	String _cache;
 	String _url;
-	data::Value _data;
+	TimeInterval _ttl;
+	Time _touch;
+	Time _mtime;
+	int64_t _id = 0;
+	int64_t _downloadId = 0;
+
+	Vector<VersionData> _versions;
+
+	Value _data;
 	AssetLibrary *_library = nullptr;
+	bool _download = false;
+	bool _dirty = true;
 };
 
 }

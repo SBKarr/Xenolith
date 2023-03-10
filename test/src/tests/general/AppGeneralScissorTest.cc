@@ -42,7 +42,7 @@ bool GeneralScissorTest::init() {
 	_layer = _node->addChild(Rc<Layer>::create(Color::Red_500));
 	_layer->setAnchorPoint(Anchor::Middle);
 
-	_nodeResize = addChild(Rc<GeneralAutofitTestResize>::create(), 1);
+	_nodeResize = addChild(Rc<GeneralAutofitTestResize>::create(), ZOrder(1));
 	_nodeResize->setAnchorPoint(Anchor::Middle);
 	_nodeResize->setColor(Color::Grey_400);
 	_nodeResize->setContentSize(Size2(48, 48));

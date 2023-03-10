@@ -30,6 +30,7 @@ THE SOFTWARE.
 #include "XLRenderQueueFrameHandle.h"
 #include "XLVkMaterialRenderPass.h"
 #include "XLVkShadowRenderPass.h"
+#include "XLSceneContent.h"
 
 namespace stappler::xenolith {
 
@@ -47,9 +48,7 @@ bool Scene::init(Application *app, RenderQueue::Builder &&builder, const gl::Fra
 	_application = app;
 	_queue = makeQueue(move(builder));
 
-	auto content = Rc<DynamicStateNode>::create();
-	Node::addChildNode(content, 0, content->getTag());
-	_content = content;
+	_content = addChild(Rc<SceneContent>::create());
 
 	setFrameConstraints(_constraints);
 
@@ -211,10 +210,12 @@ void Scene::onContentSizeDirty() {
 	setAnchorPoint(Anchor::Middle);
 	setPosition(Vec2((_contentSize * _constraints.density) / 2.0f));
 
-	_content->setPosition(Vec2(_constraints.contentPadding.left, _constraints.contentPadding.bottom) / _constraints.density);
-	_content->setContentSize(Size2(_contentSize.width - _constraints.contentPadding.horizontal() / _constraints.density,
-			_contentSize.height - _constraints.contentPadding.vertical() / _constraints.density));
+	auto padding = _constraints.contentPadding / _constraints.density;
+
+	_content->setPosition(Vec2(padding.left, padding.bottom));
+	_content->setContentSize(Size2(_contentSize.width - padding.horizontal(), _contentSize.height - padding.vertical()));
 	_content->setAnchorPoint(Anchor::BottomLeft);
+	_content->setDecorationPadding(padding);
 
 	_cacheDirty = true;
 
@@ -442,18 +443,6 @@ void Scene::specializeRequest(const Rc<FrameRequest> &req) {
 	}
 
 	req->setQueue(_queue);
-}
-
-void Scene::addChildNode(Node *child) {
-	_content->addChildNode(child);
-}
-
-void Scene::addChildNode(Node *child, int16_t localZOrder) {
-	_content->addChildNode(child, localZOrder);
-}
-
-void Scene::addChildNode(Node *child, int16_t localZOrder, uint64_t tag) {
-	_content->addChildNode(child, localZOrder, tag);
 }
 
 const Size2& Scene::getContentSize() const {

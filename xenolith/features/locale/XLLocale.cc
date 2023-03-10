@@ -51,7 +51,51 @@ public:
 		"yesterday",
 		"jan", "feb", "mar", "apr", "may", "jun",
 		"jul", "aug", "sep", "oct", "nov", "dec"
-	}, _pool(p) { }
+	}, _pool(p) {
+		define("ru-ru", {
+			pair("SystemSearch", "Найти"),
+			pair("SystemFontSize", "Размер шрифта"),
+			pair("SystemTheme", "Оформление"),
+			pair("SystemThemeLight", "Светлая тема"),
+			pair("SystemThemeNeutral", "Нейтральная тема"),
+			pair("SystemThemeDark", "Темная тема"),
+			pair("SystemMore", "Ещё"),
+			pair("SystemRestore", "Восстановить"),
+			pair("SystemRemoved", "Удалено"),
+			pair("SystemCopy", "Копировать"),
+			pair("SystemCut", "Вырезать"),
+			pair("SystemPaste", "Вставить"),
+			pair("SystemTapExit", "Нажмите ещё раз для выхода"),
+
+			pair("SystemErrorOverflowChars", "Слишком много символов"),
+			pair("SystemErrorInvalidChar", "Недопустимый символ"),
+
+			pair("Shortcut:Megabytes", "Мб"),
+			pair("Shortcut:Pages", "с"),
+		});
+
+		define("en-us", {
+			pair("SystemSearch", "Search"),
+			pair("SystemFontSize", "Font size"),
+			pair("SystemTheme", "Theme"),
+			pair("SystemThemeLight", "Light theme"),
+			pair("SystemThemeNeutral", "Neutral theme"),
+			pair("SystemThemeDark", "Dark theme"),
+			pair("SystemMore", "More"),
+			pair("SystemRestore", "Restore"),
+			pair("SystemRemoved", "Removed"),
+			pair("SystemCopy", "Copy"),
+			pair("SystemCut", "Cut"),
+			pair("SystemPaste", "Paste"),
+			pair("SystemTapExit", "Tap one more time to exit"),
+
+			pair("SystemErrorOverflowChars", "Too many characters"),
+			pair("SystemErrorInvalidChar", "Invalid character"),
+
+			pair("Shortcut:Megabytes", "Mb"),
+			pair("Shortcut:Pages", "p"),
+		});
+	}
 
 	void define(const StringView &locale, LocaleInitList &&init) {
 		memory::pool::push(_pool);

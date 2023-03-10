@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,14 +20,24 @@
  THE SOFTWARE.
  **/
 
-#include "MaterialScene.h"
+#ifndef MODULES_MATERIAL_COMPONENTS_SCROLL_MATERIALDATASCROLLHANDLERFIXED_H_
+#define MODULES_MATERIAL_COMPONENTS_SCROLL_MATERIALDATASCROLLHANDLERFIXED_H_
 
-MaterialScene::MaterialScene() {
-	// TODO Auto-generated constructor stub
+#include "MaterialDataScroll.h"
+
+namespace stappler::xenolith::material {
+
+class DataScrollHandlerFixed : public DataScroll::Handler {
+public:
+	virtual ~DataScrollHandlerFixed() { }
+
+	virtual bool init(DataScroll *, float);
+	virtual ItemMap run(Request t, DataMap &&) override;
+
+protected:
+	float _dataSize = 0.0f;
+};
 
 }
 
-MaterialScene::~MaterialScene() {
-	// TODO Auto-generated destructor stub
-}
-
+#endif /* MODULES_MATERIAL_COMPONENTS_SCROLL_MATERIALDATASCROLLHANDLERFIXED_H_ */

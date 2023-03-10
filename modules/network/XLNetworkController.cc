@@ -71,7 +71,7 @@ struct Controller::Data final : thread::ThreadInterface<Interface> {
 
 	void onUploadProgress(Handle *, int64_t total, int64_t now);
 	void onDownloadProgress(Handle *, int64_t total, int64_t now);
-	bool onComplete(Handle *);
+	bool onComplete(Handle *, bool success);
 
 	void sign(NetworkHandle &, Context &) const;
 
@@ -173,8 +173,8 @@ bool Controller::Data::worker() {
 			auto it = _handles.find(e);
 			if (it != _handles.end()) {
 				it->second.context.code = msg->data.result;
-				finalize(*it->second.handle, &it->second.context, nullptr);
-				if (!onComplete(it->second.handle)) {
+				auto ret = finalize(*it->second.handle, &it->second.context, nullptr);
+				if (!onComplete(it->second.handle, ret)) {
 					_handles.erase(it);
 					return false;
 				}
@@ -239,10 +239,10 @@ void Controller::Data::onDownloadProgress(Handle *handle, int64_t total, int64_t
 	});
 }
 
-bool Controller::Data::onComplete(Handle *handle) {
-	_application->performOnMainThread([handle] {
+bool Controller::Data::onComplete(Handle *handle, bool success) {
+	_application->performOnMainThread([handle, success] {
 		auto req = handle->getReqeust();
-		req->notifyOnComplete();
+		req->notifyOnComplete(success);
 	});
 	return true;
 }

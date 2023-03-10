@@ -34,6 +34,7 @@ THE SOFTWARE.
 namespace stappler::xenolith {
 
 class SceneLight;
+class SceneContent;
 
 class Scene : public Node {
 public:
@@ -59,6 +60,8 @@ public:
 	const Rc<RenderQueue> &getRenderQueue() const { return _queue; }
 	Director *getDirector() const { return _director; }
 
+	SceneContent *getContent() const { return _content; }
+
 	virtual void onPresented(Director *);
 	virtual void onFinished(Director *);
 
@@ -79,10 +82,6 @@ public:
 	virtual void revokeImages(const Vector<uint64_t> &);
 
 	virtual void specializeRequest(const Rc<FrameRequest> &req);
-
-	virtual void addChildNode(Node *child) override;
-	virtual void addChildNode(Node *child, int16_t localZOrder) override;
-	virtual void addChildNode(Node *child, int16_t localZOrder, uint64_t tag) override;
 
 	virtual const Size2& getContentSize() const override;
 
@@ -106,6 +105,7 @@ public:
 
 protected:
 	using Node::init;
+	using Node::addChild; // запрет добавлять ноды напрямую на сцену
 
 	struct SubpassData {
 		renderqueue::SubpassData *subpass;
@@ -150,7 +150,7 @@ protected:
 
 	Application *_application = nullptr;
 	Director *_director = nullptr;
-	DynamicStateNode *_content = nullptr;
+	SceneContent *_content = nullptr;
 
 	Rc<RenderQueue> _queue;
 

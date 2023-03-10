@@ -71,7 +71,7 @@ public:
 	virtual const OverscrollCallback &getOverscrollCallback() const;
 
 	virtual Node *getRoot() const { return _root; }
-	virtual InputListener *getInputListener() const { return _listener; }
+	virtual InputListener *getInputListener() const { return _inputListener; }
 
 	virtual bool addComponentItem(Component *) override;
 
@@ -100,8 +100,8 @@ public:
 	virtual float getNodeScrollSize(Size2) const;
 	virtual float getNodeScrollPosition(Vec2) const;
 
-	virtual bool addScrollNode(Node *, Vec2 pos, Size2 size, int z, StringView name);
-	virtual void updateScrollNode(Node *, Vec2 pos, Size2 size, int z, StringView name);
+	virtual bool addScrollNode(Node *, Vec2 pos, Size2 size, ZOrder z, StringView name);
+	virtual void updateScrollNode(Node *, Vec2 pos, Size2 size, ZOrder z, StringView name);
 	virtual bool removeScrollNode(Node *);
 
 	virtual float getDistanceFromStart() const;
@@ -193,7 +193,7 @@ protected:
 	ScrollFilterCallback _scrollFilter = nullptr;
 	ScrollCallback _scrollCallback = nullptr;
 	OverscrollCallback _overscrollCallback = nullptr;
-	InputListener *_listener = nullptr;
+	InputListener *_inputListener = nullptr;
 	ScrollController *_controller;
 
 	Rc<ActionInterval> _animationAction;

@@ -96,7 +96,7 @@ bool Node::init() {
 	return true;
 }
 
-void Node::setLocalZOrder(int16_t z) {
+void Node::setLocalZOrder(ZOrder z) {
 	if (_zOrder == z) {
 		return;
 	}
@@ -288,11 +288,11 @@ void Node::addChildNode(Node *child) {
 	addChildNode(child, child->_zOrder, child->_tag);
 }
 
-void Node::addChildNode(Node *child, int16_t localZOrder) {
+void Node::addChildNode(Node *child, ZOrder localZOrder) {
 	addChildNode(child, localZOrder, child->_tag);
 }
 
-void Node::addChildNode(Node *child, int16_t localZOrder, uint64_t tag) {
+void Node::addChildNode(Node *child, ZOrder localZOrder, uint64_t tag) {
 	XLASSERT( child != nullptr, "Argument must be non-nil");
 	XLASSERT( child->_parent == nullptr, "child already added. It can't be added again");
 
@@ -396,7 +396,7 @@ void Node::removeAllChildren(bool cleanup) {
 	_children.clear();
 }
 
-void Node::reorderChild(Node * child, int32_t localZOrder) {
+void Node::reorderChild(Node * child, ZOrder localZOrder) {
 	XLASSERT( child != nullptr, "Child must be non-nil");
 	_reorderChildDirty = true;
 	child->setLocalZOrder(localZOrder);
@@ -1049,7 +1049,7 @@ bool Node::visitDraw(RenderFrameInfo &info, NodeFlags parentFlags) {
 		for (; i < _children.size(); i++) {
 			auto node = _children.at(i);
 
-			if (node && node->_zOrder < 0)
+			if (node && node->_zOrder < ZOrder(0))
 				node->visitDraw(info, flags);
 			else
 				break;

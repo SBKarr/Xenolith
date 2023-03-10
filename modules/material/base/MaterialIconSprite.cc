@@ -61,6 +61,14 @@ bool IconSprite::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 	return VectorSprite::visitDraw(frame, parentFlags);
 }
 
+void IconSprite::animate() {
+	// TODO
+}
+
+void IconSprite::animate(float targetProgress, float duration) {
+	// TODO
+}
+
 void IconSprite::updateIcon() {
 	_image->clear();
 	switch (_iconName) {

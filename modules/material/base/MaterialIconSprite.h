@@ -40,6 +40,9 @@ public:
 
 	virtual bool visitDraw(RenderFrameInfo &, NodeFlags parentFlags) override;
 
+	virtual void animate();
+	virtual void animate(float targetProgress, float duration);
+
 protected:
 	using VectorSprite::init;
 

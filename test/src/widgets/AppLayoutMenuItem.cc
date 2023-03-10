@@ -32,7 +32,7 @@ bool LayoutMenuItem::init(StringView str, Function<void()> &&cb) {
 		return false;
 	}
 
-	_label = addChild(Rc<Label>::create(str), 2);
+	_label = addChild(Rc<Label>::create(str), ZOrder(2));
 	_label->setAlignment(Label::Alignment::Center);
 	_label->setFontWeight(Label::FontWeight::Normal);
 	_label->setAnchorPoint(Anchor::Middle);

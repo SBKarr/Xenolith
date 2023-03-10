@@ -48,263 +48,182 @@
 #include "vg/AppVgSdfTest.cc"
 #include "utils/AppUtilsStorageTest.cc"
 #include "utils/AppUtilsNetworkTest.cc"
+#include "utils/AppUtilsAssetTest.cc"
 #include "material/AppMaterialColorPickerTest.cc"
 #include "material/AppMaterialDynamicFontTest.cc"
 #include "material/AppMaterialNodeTest.cc"
 #include "material/AppMaterialButtonTest.cc"
 #include "material/AppMaterialInputFieldTest.cc"
+#include "material/AppMaterialToolbarTest.cc"
 #include "config/AppConfigMenu.cc"
 #include "config/AppConfigPresentModeSwitcher.cc"
 
 namespace stappler::xenolith::app {
 
-Vector<MenuData> s_rootMenu({
-	MenuData{LayoutName::GeneralTests, "General tests"},
-	MenuData{LayoutName::InputTests, "Input tests"},
-	MenuData{LayoutName::ActionTests, "Action tests"},
-	MenuData{LayoutName::VgTests, "VG tests"},
-	MenuData{LayoutName::UtilsTests, "Utils tests"},
-	MenuData{LayoutName::MaterialTests, "Material tests"},
-	MenuData{LayoutName::Config, "Config"},
-});
+static Vector<MenuData> s_layouts {
+	MenuData{LayoutName::Root, LayoutName::Root, "org.stappler.xenolith.test.Root", "Root",
+		[] (LayoutName name) { return Rc<RootLayout>::create(name, Vector<LayoutName>{
+			LayoutName::GeneralTests,
+			LayoutName::InputTests,
+			LayoutName::ActionTests,
+			LayoutName::VgTests,
+			LayoutName::UtilsTests,
+			LayoutName::MaterialTests,
+			LayoutName::Config,
+		}); }},
+	MenuData{LayoutName::GeneralTests, LayoutName::Root, "org.stappler.xenolith.test.GeneralTests", "General tests",
+		[] (LayoutName name) { return Rc<LayoutMenu>::create(name, Vector<LayoutName>{
+			LayoutName::GeneralUpdateTest,
+			LayoutName::GeneralZOrderTest,
+			LayoutName::GeneralLabelTest,
+			LayoutName::GeneralTransparencyTest,
+			LayoutName::GeneralAutofitTest,
+			LayoutName::GeneralTemporaryResourceTest,
+			LayoutName::GeneralScissorTest,
+		}); }},
+	MenuData{LayoutName::InputTests, LayoutName::Root, "org.stappler.xenolith.test.InputTests", "Input tests",
+		[] (LayoutName name) { return Rc<LayoutMenu>::create(name, Vector<LayoutName>{
+			LayoutName::InputTouchTest,
+			LayoutName::InputKeyboardTest,
+			LayoutName::InputTapPressTest,
+			LayoutName::InputSwipeTest,
+			LayoutName::InputTextTest,
+		}); }},
+	MenuData{LayoutName::ActionTests, LayoutName::Root, "org.stappler.xenolith.test.ActionTests", "Action tests",
+		[] (LayoutName name) { return Rc<LayoutMenu>::create(name, Vector<LayoutName>{
+			LayoutName::ActionEaseTest,
+			LayoutName::ActionMaterialTest,
+		}); }},
+	MenuData{LayoutName::VgTests, LayoutName::Root, "org.stappler.xenolith.test.VgTests", "VG tests",
+		[] (LayoutName name) { return Rc<LayoutMenu>::create(name, Vector<LayoutName>{
+			LayoutName::VgTessTest,
+			LayoutName::VgIconTest,
+			LayoutName::VgIconList,
+			LayoutName::VgShadowTest,
+			LayoutName::VgSdfTest,
+		}); }},
+	MenuData{LayoutName::UtilsTests, LayoutName::Root, "org.stappler.xenolith.test.UtilsTests", "Utils tests",
+		[] (LayoutName name) { return Rc<LayoutMenu>::create(name, Vector<LayoutName>{
+			LayoutName::UtilsStorageTest,
+			LayoutName::UtilsNetworkTest,
+			LayoutName::UtilsAssetTest
+		}); }},
+	MenuData{LayoutName::MaterialTests, LayoutName::Root, "org.stappler.xenolith.test.MaterialTests", "Material tests",
+		[] (LayoutName name) { return Rc<LayoutMenu>::create(name, Vector<LayoutName>{
+			LayoutName::MaterialColorPickerTest,
+			LayoutName::MaterialDynamicFontTest,
+			LayoutName::MaterialNodeTest,
+			LayoutName::MaterialButtonTest,
+			LayoutName::MaterialInputFieldTest,
+			LayoutName::MaterialToolbarTest,
+		}); }},
 
-Vector<MenuData> s_generalTestsMenu({
-	MenuData{LayoutName::GeneralUpdateTest, "Update test"},
-	MenuData{LayoutName::GeneralZOrderTest, "Z order test"},
-	MenuData{LayoutName::GeneralLabelTest, "Label test"},
-	MenuData{LayoutName::GeneralTransparencyTest, "Transparency test"},
-	MenuData{LayoutName::GeneralAutofitTest, "Autofit test"},
-	MenuData{LayoutName::GeneralTemporaryResourceTest, "Temporary resource test"},
-	MenuData{LayoutName::GeneralScissorTest, "Scissor test"},
-});
+	MenuData{LayoutName::Config, LayoutName::Root, "org.stappler.xenolith.test.Config", "Config",
+		[] (LayoutName name) { return Rc<ConfigMenu>::create(); }},
+	MenuData{LayoutName::GeneralUpdateTest, LayoutName::GeneralTests, "org.stappler.xenolith.test.GeneralUpdateTest", "Update test",
+		[] (LayoutName name) { return Rc<GeneralUpdateTest>::create(); }},
+	MenuData{LayoutName::GeneralZOrderTest, LayoutName::GeneralTests, "org.stappler.xenolith.test.GeneralZOrderTest", "Z Order test",
+		[] (LayoutName name) { return Rc<GeneralZOrderTest>::create(); }},
+	MenuData{LayoutName::GeneralLabelTest, LayoutName::GeneralTests, "org.stappler.xenolith.test.GeneralLabelTest", "Label test",
+		[] (LayoutName name) { return Rc<GeneralLabelTest>::create(); }},
+	MenuData{LayoutName::GeneralTransparencyTest, LayoutName::GeneralTests, "org.stappler.xenolith.test.GeneralTransparencyTest", "Transparency Test",
+		[] (LayoutName name) { return Rc<GeneralTransparencyTest>::create(); }},
+	MenuData{LayoutName::GeneralAutofitTest, LayoutName::GeneralTests, "org.stappler.xenolith.test.GeneralAutofitTest", "Autofit Test",
+		[] (LayoutName name) { return Rc<GeneralAutofitTest>::create(); }},
+	MenuData{LayoutName::GeneralTemporaryResourceTest, LayoutName::GeneralTests, "org.stappler.xenolith.test.GeneralTemporaryResourceTest", "Temporary Resource Test",
+		[] (LayoutName name) { return Rc<GeneralTemporaryResourceTest>::create(); }},
+	MenuData{LayoutName::GeneralScissorTest, LayoutName::GeneralTests, "org.stappler.xenolith.test.GeneralScissorTest", "Scissor Test",
+		[] (LayoutName name) { return Rc<GeneralScissorTest>::create(); }},
 
-Vector<MenuData> s_inputTestsMenu({
-	MenuData{LayoutName::InputTouchTest, "Touch test"},
-	MenuData{LayoutName::InputKeyboardTest, "Keyboard test"},
-	MenuData{LayoutName::InputTapPressTest, "Tap/Press test"},
-	MenuData{LayoutName::InputSwipeTest, "Swipe test"},
-	MenuData{LayoutName::InputTextTest, "Text test"},
-});
+	MenuData{LayoutName::InputTouchTest, LayoutName::InputTests, "org.stappler.xenolith.test.InputTouchTest", "Touch test",
+		[] (LayoutName name) { return Rc<InputTouchTest>::create(); }},
+	MenuData{LayoutName::InputKeyboardTest, LayoutName::InputTests, "org.stappler.xenolith.test.InputKeyboardTest", "Keyboard test",
+		[] (LayoutName name) { return Rc<InputKeyboardTest>::create(); }},
+	MenuData{LayoutName::InputTapPressTest, LayoutName::InputTests, "org.stappler.xenolith.test.InputTapPressTest", "Tap Press test",
+		[] (LayoutName name) { return Rc<InputTapPressTest>::create(); }},
+	MenuData{LayoutName::InputSwipeTest, LayoutName::InputTests, "org.stappler.xenolith.test.InputSwipeTest", "Swipe Test",
+		[] (LayoutName name) { return Rc<InputSwipeTest>::create(); }},
+	MenuData{LayoutName::InputTextTest, LayoutName::InputTests, "org.stappler.xenolith.test.InputTextTest", "Text Test",
+		[] (LayoutName name) { return Rc<InputTextTest>::create(); }},
 
-Vector<MenuData> s_actionTestsMenu({
-	MenuData{LayoutName::ActionEaseTest, "Ease test"},
-	MenuData{LayoutName::ActionMaterialTest, "Material test"},
-});
+	MenuData{LayoutName::ActionEaseTest, LayoutName::ActionTests, "org.stappler.xenolith.test.ActionEaseTest", "Ease test",
+		[] (LayoutName name) { return Rc<ActionEaseTest>::create(); }},
+	MenuData{LayoutName::ActionMaterialTest, LayoutName::ActionTests, "org.stappler.xenolith.test.ActionMaterialTest", "Material test",
+		[] (LayoutName name) { return Rc<ActionMaterialTest>::create(); }},
 
-Vector<MenuData> s_vgTestsMenu({
-	MenuData{LayoutName::VgTessTest, "Tess test"},
-	MenuData{LayoutName::VgIconTest, "Icon test"},
-	MenuData{LayoutName::VgIconList, "Icon list"},
-	MenuData{LayoutName::VgShadowTest, "Shadow test"},
-	MenuData{LayoutName::VgSdfTest, "SDF test"},
-});
+	MenuData{LayoutName::VgTessTest, LayoutName::VgTests, "org.stappler.xenolith.test.VgTessTest", "Tess test",
+		[] (LayoutName name) { return Rc<VgTessTest>::create(); }},
+	MenuData{LayoutName::VgIconTest, LayoutName::VgTests, "org.stappler.xenolith.test.VgIconTest", "Icon test",
+		[] (LayoutName name) { return Rc<VgIconTest>::create(); }},
+	MenuData{LayoutName::VgIconList, LayoutName::VgTests, "org.stappler.xenolith.test.VgIconList", "Icon list",
+		[] (LayoutName name) { return Rc<VgIconList>::create(); }},
+	MenuData{LayoutName::VgShadowTest, LayoutName::VgTests, "org.stappler.xenolith.test.VgShadowTest", "Shadow Test",
+		[] (LayoutName name) { return Rc<VgShadowTest>::create(); }},
+	MenuData{LayoutName::VgSdfTest, LayoutName::VgTests, "org.stappler.xenolith.test.VgSdfTest", "SDF Test",
+		[] (LayoutName name) { return Rc<VgSdfTest>::create(); }},
 
-Vector<MenuData> s_utilsTestsMenu({
-	MenuData{LayoutName::UtilsStorageTest, "Storage test"},
-	MenuData{LayoutName::UtilsNetworkTest, "Network test"},
-});
+	MenuData{LayoutName::UtilsStorageTest, LayoutName::UtilsTests, "org.stappler.xenolith.test.UtilsStorageTest", "Storage test",
+		[] (LayoutName name) { return Rc<UtilsStorageTest>::create(); }},
+	MenuData{LayoutName::UtilsNetworkTest, LayoutName::UtilsTests, "org.stappler.xenolith.test.UtilsNetworkTest", "Network test",
+		[] (LayoutName name) { return Rc<UtilsNetworkTest>::create(); }},
+	MenuData{LayoutName::UtilsAssetTest, LayoutName::UtilsTests, "org.stappler.xenolith.test.UtilsAssetTest", "Asset test",
+		[] (LayoutName name) { return Rc<UtilsAssetTest>::create(); }},
 
-Vector<MenuData> s_materialTestsMenu({
-	MenuData{LayoutName::MaterialColorPickerTest, "Color picker test"},
-	MenuData{LayoutName::MaterialDynamicFontTest, "Dynamic font"},
-	MenuData{LayoutName::MaterialNodeTest, "Node test"},
-	MenuData{LayoutName::MaterialButtonTest, "Button test"},
-	MenuData{LayoutName::MaterialInputFieldTest, "Input field test"},
-});
+	MenuData{LayoutName::MaterialColorPickerTest, LayoutName::MaterialTests, "org.stappler.xenolith.test.MaterialColorPickerTest", "Color picker test",
+		[] (LayoutName name) { return Rc<MaterialColorPickerTest>::create(); }},
+	MenuData{LayoutName::MaterialDynamicFontTest, LayoutName::MaterialTests, "org.stappler.xenolith.test.MaterialDynamicFontTest", "Dynamic font test",
+		[] (LayoutName name) { return Rc<MaterialDynamicFontTest>::create(); }},
+	MenuData{LayoutName::MaterialNodeTest, LayoutName::MaterialTests, "org.stappler.xenolith.test.MaterialNodeTest", "Node test",
+		[] (LayoutName name) { return Rc<MaterialNodeTest>::create(); }},
+	MenuData{LayoutName::MaterialButtonTest, LayoutName::MaterialTests, "org.stappler.xenolith.test.MaterialButtonTest", "Button test",
+		[] (LayoutName name) { return Rc<MaterialButtonTest>::create(); }},
+	MenuData{LayoutName::MaterialInputFieldTest, LayoutName::MaterialTests, "org.stappler.xenolith.test.MaterialInputFieldTest", "Input field test",
+		[] (LayoutName name) { return Rc<MaterialInputFieldTest>::create(); }},
+	MenuData{LayoutName::MaterialToolbarTest, LayoutName::MaterialTests, "org.stappler.xenolith.test.MaterialToolbarTest", "Toolbar test",
+		[] (LayoutName name) { return Rc<MaterialToolbarTest>::create(); }},
+};
 
 LayoutName getRootLayoutForLayout(LayoutName name) {
-	switch (name) {
-	case LayoutName::Root:
-	case LayoutName::GeneralTests:
-	case LayoutName::InputTests:
-	case LayoutName::ActionTests:
-	case LayoutName::VgTests:
-	case LayoutName::UtilsTests:
-	case LayoutName::MaterialTests:
-	case LayoutName::Config:
-		return LayoutName::Root;
-		break;
-
-	case LayoutName::GeneralUpdateTest:
-	case LayoutName::GeneralZOrderTest:
-	case LayoutName::GeneralLabelTest:
-	case LayoutName::GeneralTransparencyTest:
-	case LayoutName::GeneralAutofitTest:
-	case LayoutName::GeneralTemporaryResourceTest:
-	case LayoutName::GeneralScissorTest:
-		return LayoutName::GeneralTests;
-		break;
-
-	case LayoutName::InputTouchTest:
-	case LayoutName::InputKeyboardTest:
-	case LayoutName::InputTapPressTest:
-	case LayoutName::InputSwipeTest:
-	case LayoutName::InputTextTest:
-		return LayoutName::InputTests;
-		break;
-
-	case LayoutName::ActionEaseTest:
-	case LayoutName::ActionMaterialTest:
-		return LayoutName::ActionTests;
-		break;
-
-	case LayoutName::VgTessTest:
-	case LayoutName::VgIconTest:
-	case LayoutName::VgIconList:
-	case LayoutName::VgShadowTest:
-	case LayoutName::VgSdfTest:
-		return LayoutName::VgTests;
-		break;
-
-	case LayoutName::UtilsStorageTest:
-	case LayoutName::UtilsNetworkTest:
-		return LayoutName::UtilsTests;
-		break;
-
-	case LayoutName::MaterialColorPickerTest:
-	case LayoutName::MaterialDynamicFontTest:
-	case LayoutName::MaterialNodeTest:
-	case LayoutName::MaterialButtonTest:
-	case LayoutName::MaterialInputFieldTest:
-		return LayoutName::MaterialTests;
-		break;
+	for (auto &it : s_layouts) {
+		if (it.layout == name) {
+			return it.root;
+		}
 	}
 	return LayoutName::Root;
 }
 
 StringView getLayoutNameId(LayoutName name) {
-	switch (name) {
-	case LayoutName::Root: return "org.stappler.xenolith.test.Root"; break;
-	case LayoutName::GeneralTests: return "org.stappler.xenolith.test.GeneralTests"; break;
-	case LayoutName::InputTests: return "org.stappler.xenolith.test.InputTests"; break;
-	case LayoutName::ActionTests: return "org.stappler.xenolith.test.ActionTests"; break;
-	case LayoutName::VgTests: return "org.stappler.xenolith.test.VgTests"; break;
-	case LayoutName::UtilsTests: return "org.stappler.xenolith.test.UtilsTests"; break;
-	case LayoutName::MaterialTests: return "org.stappler.xenolith.test.MaterialTests"; break;
-	case LayoutName::Config: return "org.stappler.xenolith.test.Config"; break;
+	for (auto &it : s_layouts) {
+		if (it.layout == name) {
+			return it.id;
+		}
+	}
+	return StringView();
+}
 
-	case LayoutName::GeneralUpdateTest: return "org.stappler.xenolith.test.GeneralUpdateTest"; break;
-	case LayoutName::GeneralZOrderTest: return "org.stappler.xenolith.test.GeneralZOrderTest"; break;
-	case LayoutName::GeneralLabelTest: return "org.stappler.xenolith.test.GeneralLabelTest"; break;
-	case LayoutName::GeneralTransparencyTest: return "org.stappler.xenolith.test.GeneralTransparencyTest"; break;
-	case LayoutName::GeneralAutofitTest: return "org.stappler.xenolith.test.GeneralAutofitTest"; break;
-	case LayoutName::GeneralTemporaryResourceTest: return "org.stappler.xenolith.test.GeneralTemporaryResourceTest"; break;
-	case LayoutName::GeneralScissorTest: return "org.stappler.xenolith.test.GeneralScissorTest"; break;
-
-	case LayoutName::InputTouchTest: return "org.stappler.xenolith.test.InputTouchTest"; break;
-	case LayoutName::InputKeyboardTest: return "org.stappler.xenolith.test.InputKeyboardTest"; break;
-	case LayoutName::InputTapPressTest: return "org.stappler.xenolith.test.InputTapPressTest"; break;
-	case LayoutName::InputSwipeTest: return "org.stappler.xenolith.test.InputSwipeTest"; break;
-	case LayoutName::InputTextTest: return "org.stappler.xenolith.test.InputTextTest"; break;
-
-	case LayoutName::ActionEaseTest: return "org.stappler.xenolith.test.ActionEaseTest"; break;
-	case LayoutName::ActionMaterialTest: return "org.stappler.xenolith.test.ActionMaterialTest"; break;
-
-	case LayoutName::VgTessTest: return "org.stappler.xenolith.test.VgTessTest"; break;
-	case LayoutName::VgIconTest: return "org.stappler.xenolith.test.VgIconTest"; break;
-	case LayoutName::VgIconList: return "org.stappler.xenolith.test.VgIconList"; break;
-	case LayoutName::VgShadowTest: return "org.stappler.xenolith.test.VgShadowTest"; break;
-	case LayoutName::VgSdfTest: return "org.stappler.xenolith.test.VgSdfTest"; break;
-
-	case LayoutName::UtilsStorageTest: return "org.stappler.xenolith.test.UtilsStorageTest"; break;
-	case LayoutName::UtilsNetworkTest: return "org.stappler.xenolith.test.UtilsNetworkTest"; break;
-
-	case LayoutName::MaterialColorPickerTest: return "org.stappler.xenolith.test.MaterialColorPickerTest"; break;
-	case LayoutName::MaterialDynamicFontTest: return "org.stappler.xenolith.test.MaterialDynamicFontTest"; break;
-	case LayoutName::MaterialNodeTest: return "org.stappler.xenolith.test.MaterialNodeTest"; break;
-	case LayoutName::MaterialButtonTest: return "org.stappler.xenolith.test.MaterialButtonTest"; break;
-	case LayoutName::MaterialInputFieldTest: return "org.stappler.xenolith.test.MaterialInputFieldTest"; break;
+StringView getLayoutNameTitle(LayoutName name) {
+	for (auto &it : s_layouts) {
+		if (it.layout == name) {
+			return it.title;
+		}
 	}
 	return StringView();
 }
 
 LayoutName getLayoutNameById(StringView name) {
-	if (name == "org.stappler.xenolith.test.Root") { return LayoutName::Root; }
-	else if (name == "org.stappler.xenolith.test.GeneralTests") { return LayoutName::GeneralTests; }
-	else if (name == "org.stappler.xenolith.test.InputTests") { return LayoutName::InputTests; }
-	else if (name == "org.stappler.xenolith.test.ActionTests") { return LayoutName::ActionTests; }
-	else if (name == "org.stappler.xenolith.test.VgTests") { return LayoutName::VgTests; }
-	else if (name == "org.stappler.xenolith.test.UtilsTests") { return LayoutName::UtilsTests; }
-	else if (name == "org.stappler.xenolith.test.MaterialTests") { return LayoutName::MaterialTests; }
-	else if (name == "org.stappler.xenolith.test.Config") { return LayoutName::Config; }
-
-	else if (name == "org.stappler.xenolith.test.GeneralUpdateTest") { return LayoutName::GeneralUpdateTest; }
-	else if (name == "org.stappler.xenolith.test.GeneralZOrderTest") { return LayoutName::GeneralZOrderTest; }
-	else if (name == "org.stappler.xenolith.test.GeneralLabelTest") { return LayoutName::GeneralLabelTest; }
-	else if (name == "org.stappler.xenolith.test.GeneralTransparencyTest") { return LayoutName::GeneralTransparencyTest; }
-	else if (name == "org.stappler.xenolith.test.GeneralAutofitTest") { return LayoutName::GeneralAutofitTest; }
-	else if (name == "org.stappler.xenolith.test.GeneralTemporaryResourceTest") { return LayoutName::GeneralTemporaryResourceTest; }
-	else if (name == "org.stappler.xenolith.test.GeneralScissorTest") { return LayoutName::GeneralScissorTest; }
-
-	else if (name == "org.stappler.xenolith.test.InputTouchTest") { return LayoutName::InputTouchTest; }
-	else if (name == "org.stappler.xenolith.test.InputKeyboardTest") { return LayoutName::InputKeyboardTest; }
-	else if (name == "org.stappler.xenolith.test.InputTapPressTest") { return LayoutName::InputTapPressTest; }
-	else if (name == "org.stappler.xenolith.test.InputSwipeTest") { return LayoutName::InputSwipeTest; }
-	else if (name == "org.stappler.xenolith.test.InputTextTest") { return LayoutName::InputTextTest; }
-
-	else if (name == "org.stappler.xenolith.test.ActionEaseTest") { return LayoutName::ActionEaseTest; }
-	else if (name == "org.stappler.xenolith.test.ActionMaterialTest") { return LayoutName::ActionMaterialTest; }
-
-	else if (name == "org.stappler.xenolith.test.VgTessTest") { return LayoutName::VgTessTest; }
-	else if (name == "org.stappler.xenolith.test.VgIconTest") { return LayoutName::VgIconTest; }
-	else if (name == "org.stappler.xenolith.test.VgIconList") { return LayoutName::VgIconList; }
-	else if (name == "org.stappler.xenolith.test.VgShadowTest") { return LayoutName::VgShadowTest; }
-	else if (name == "org.stappler.xenolith.test.VgSdfTest") { return LayoutName::VgSdfTest; }
-
-	else if (name == "org.stappler.xenolith.test.UtilsStorageTest") { return LayoutName::UtilsStorageTest; }
-	else if (name == "org.stappler.xenolith.test.UtilsNetworkTest") { return LayoutName::UtilsNetworkTest; }
-
-	else if (name == "org.stappler.xenolith.test.MaterialColorPickerTest") { return LayoutName::MaterialColorPickerTest; }
-	else if (name == "org.stappler.xenolith.test.MaterialDynamicFontTest") { return LayoutName::MaterialDynamicFontTest; }
-	else if (name == "org.stappler.xenolith.test.MaterialNodeTest") { return LayoutName::MaterialNodeTest; }
-	else if (name == "org.stappler.xenolith.test.MaterialButtonTest") { return LayoutName::MaterialButtonTest; }
-	else if (name == "org.stappler.xenolith.test.MaterialInputFieldTest") { return LayoutName::MaterialInputFieldTest; }
-
+	for (auto &it : s_layouts) {
+		if (it.id == name) {
+			return it.layout;
+		}
+	}
 	return LayoutName::Root;
 }
 
-Rc<Node> makeLayoutNode(LayoutName name) {
-	switch (name) {
-	case LayoutName::Root: return Rc<RootLayout>::create(); break;
-	case LayoutName::GeneralTests: return Rc<LayoutMenu>::create(name, s_generalTestsMenu); break;
-	case LayoutName::InputTests: return Rc<LayoutMenu>::create(name, s_inputTestsMenu); break;
-	case LayoutName::ActionTests: return Rc<LayoutMenu>::create(name, s_actionTestsMenu); break;
-	case LayoutName::VgTests: return Rc<LayoutMenu>::create(name, s_vgTestsMenu); break;
-	case LayoutName::UtilsTests: return Rc<LayoutMenu>::create(name, s_utilsTestsMenu); break;
-	case LayoutName::MaterialTests: return Rc<LayoutMenu>::create(name, s_materialTestsMenu); break;
-	case LayoutName::Config: return Rc<ConfigMenu>::create(); break;
-
-	case LayoutName::GeneralUpdateTest: return Rc<GeneralUpdateTest>::create(); break;
-	case LayoutName::GeneralZOrderTest: return Rc<GeneralZOrderTest>::create(); break;
-	case LayoutName::GeneralLabelTest: return Rc<GeneralLabelTest>::create(); break;
-	case LayoutName::GeneralTransparencyTest: return Rc<GeneralTransparencyTest>::create(); break;
-	case LayoutName::GeneralAutofitTest: return Rc<GeneralAutofitTest>::create(); break;
-	case LayoutName::GeneralTemporaryResourceTest: return Rc<GeneralTemporaryResourceTest>::create(); break;
-	case LayoutName::GeneralScissorTest: return Rc<GeneralScissorTest>::create(); break;
-
-	case LayoutName::InputTouchTest: return Rc<InputTouchTest>::create(); break;
-	case LayoutName::InputKeyboardTest: return Rc<InputKeyboardTest>::create(); break;
-	case LayoutName::InputTapPressTest: return Rc<InputTapPressTest>::create(); break;
-	case LayoutName::InputSwipeTest: return Rc<InputSwipeTest>::create(); break;
-	case LayoutName::InputTextTest: return Rc<InputTextTest>::create(); break;
-
-	case LayoutName::ActionEaseTest: return Rc<ActionEaseTest>::create(); break;
-	case LayoutName::ActionMaterialTest: return Rc<ActionMaterialTest>::create(); break;
-
-	case LayoutName::VgTessTest: return Rc<VgTessTest>::create(); break;
-	case LayoutName::VgIconTest: return Rc<VgIconTest>::create(); break;
-	case LayoutName::VgIconList: return Rc<VgIconList>::create(); break;
-	case LayoutName::VgShadowTest: return Rc<VgShadowTest>::create(); break;
-	case LayoutName::VgSdfTest: return Rc<VgSdfTest>::create(); break;
-
-	case LayoutName::UtilsStorageTest: return Rc<UtilsStorageTest>::create(); break;
-	case LayoutName::UtilsNetworkTest: return Rc<UtilsNetworkTest>::create(); break;
-
-	case LayoutName::MaterialColorPickerTest: return Rc<MaterialColorPickerTest>::create(); break;
-	case LayoutName::MaterialDynamicFontTest: return Rc<MaterialDynamicFontTest>::create(); break;
-	case LayoutName::MaterialNodeTest: return Rc<MaterialNodeTest>::create(); break;
-	case LayoutName::MaterialButtonTest: return Rc<MaterialButtonTest>::create(); break;
-	case LayoutName::MaterialInputFieldTest: return Rc<MaterialInputFieldTest>::create(); break;
+Rc<SceneLayout> makeLayoutNode(LayoutName name) {
+	for (auto &it : s_layouts) {
+		if (it.layout == name) {
+			return it.constructor(name);
+		}
 	}
 	return nullptr;
 }

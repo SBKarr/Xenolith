@@ -64,7 +64,7 @@ void Scheduler::update(const UpdateTime &time) {
 	_list.foreach([&] (void *target, int64_t priority, SchedulerCallback &cb) {
 		_currentTarget = target;
 		_currentNode = &cb;
-		if (!cb.paused) {
+		if (!cb.paused && cb.callback) {
 			cb.callback(time);
 		}
 		_currentNode = nullptr;

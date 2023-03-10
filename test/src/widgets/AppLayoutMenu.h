@@ -26,14 +26,15 @@
 #include "AppTests.h"
 #include "XLGuiScrollView.h"
 #include "XLLayer.h"
+#include "XLSceneLayout.h"
 
 namespace stappler::xenolith::app {
 
-class LayoutMenu : public Node {
+class LayoutMenu : public SceneLayout {
 public:
 	virtual ~LayoutMenu() { }
 
-	virtual bool init(LayoutName, const Vector<MenuData> &);
+	virtual bool init(LayoutName, Vector<LayoutName> &&);
 
 	virtual void onContentSizeDirty() override;
 
@@ -42,9 +43,9 @@ public:
 protected:
 	using Node::init;
 
-	virtual void makeScrollList(ScrollController *, const Vector<MenuData> &);
+	virtual void makeScrollList(ScrollController *, Vector<LayoutName> &&);
 
-	Rc<Node> makeItem(const ScrollController::Item &item, const MenuData &);
+	Rc<Node> makeItem(const ScrollController::Item &item, LayoutName name);
 
 	LayoutName _layout = LayoutName::Root;
 	LayoutName _layoutRoot = LayoutName::Root;

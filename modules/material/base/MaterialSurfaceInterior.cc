@@ -24,6 +24,7 @@
 
 #include "MaterialStyleContainer.h"
 #include "MaterialSurface.h"
+#include "MaterialLayerSurface.h"
 #include "XLRenderFrameInfo.h"
 
 namespace stappler::xenolith::material {
@@ -52,7 +53,7 @@ bool SurfaceInterior::init(SurfaceStyle &&style) {
 void SurfaceInterior::onAdded(Node *owner) {
 	Component::onAdded(owner);
 
-	_ownerIsMaterialNode = (dynamic_cast<Surface *>(_owner) != nullptr);
+	_ownerIsMaterialNode = ((dynamic_cast<Surface *>(_owner) != nullptr) || (dynamic_cast<LayerSurface *>(_owner) != nullptr));
 }
 
 void SurfaceInterior::visit(RenderFrameInfo &info, NodeFlags parentFlags) {

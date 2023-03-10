@@ -26,22 +26,13 @@
 #include "XLAsset.h"
 #include "XLEventHeader.h"
 #include "XLStorageServer.h"
+#include "XLStorageComponent.h"
 
 namespace stappler::xenolith::storage {
 
-class AssetStorage;
+class AssetComponent;
 
-class AssetStorageServer : public Server {
-public:
-	virtual bool init(AssetLibrary *, const data::Value &params);
-
-	AssetStorage *getStorage() const { return _storage; }
-
-protected:
-	AssetStorage *_storage = nullptr;
-};
-
-class AssetLibrary : public Ref {
+class AssetLibrary : public ComponentContainer {
 public:
 	static EventHeader onLoaded;
 
@@ -52,83 +43,73 @@ public:
 		String url;
 		AssetCallback callback;
 		TimeInterval ttl;
+		Rc<Ref> ref;
 
-		AssetRequest(StringView, AssetCallback &&, TimeInterval);
+		AssetRequest(StringView url, AssetCallback &&cb, TimeInterval ttl, Rc<Ref> &&ref)
+		: url(AssetLibrary::getAssetUrl(url)), callback(move(cb)), ttl(ttl), ref(move(ref)) { }
 	};
 
-	static String getTempPath(StringView);
+	struct AssetMultiRequest {
+		Vector<AssetRequest> vec;
+		AssetVecCallback callback;
+		Rc<Ref> ref;
+
+		AssetMultiRequest(Vector<AssetRequest> &&vec, AssetVecCallback &&cb, Rc<Ref> &&ref)
+		: vec(move(vec)), callback(move(cb)), ref(move(ref)) { }
+	};
+
+	static String getAssetPath(int64_t);
 	static String getAssetUrl(StringView);
 
 	virtual ~AssetLibrary();
 
-	bool init(Application *, const data::Value &dbParams);
+	bool init(Application *, const Value &dbParams);
 
-	void onComponentLoaded();
-	void onComponentDisposed();
+	void update(uint64_t clock);
 
-	void setServerDate(const Time &t);
+	virtual void handleStorageInit(storage::ComponentLoader &loader) override;
+	virtual void handleStorageDisposed(const db::Transaction &t) override;
 
-	// acquire single asset with url and ttl
-	// asset can be:
-	// - network asset, url started with some network scheme (`http://`. `https://`)
-	// - application asset, url started with `app://`
-	// - file asset, url started with `/` (absolute path) or '%` (app-relative path)
-	// all others urls converted into app urls
-	bool acquireAsset(StringView url, AssetCallback &&cb, TimeInterval ttl = TimeInterval());
-
-	// acquire multiple assets with optional single competition callback
-	bool acquireAssets(const SpanView<AssetRequest> &, AssetVecCallback && = nullptr);
-
-	Application *getApplication() const { return _application; }
+	bool acquireAsset(StringView url, AssetCallback &&cb, TimeInterval ttl = TimeInterval(), Rc<Ref> && = nullptr);
+	bool acquireAssets(SpanView<AssetRequest>, AssetVecCallback && = nullptr, Rc<Ref> && = nullptr);
 
 	Asset *getLiveAsset(StringView) const;
 	Asset *getLiveAsset(int64_t) const;
 
-	/*
-
-	bool isLoaded() const { return _loaded; }
-
-	bool isLiveAsset(uint64_t) const;
-	bool isLiveAsset(const StringView &url, const StringView &path) const;
-
-	void updateAssets();
-
-	void addAssetFile(const StringView &, const StringView &, uint64_t asset, uint64_t ctime);
-	void removeAssetFile(const StringView &);
-
-	void finalize();*/
+	Application *getApplication() const { return _application; }
 
 protected:
 	friend class Asset;
+	friend class AssetComponent;
+
+	int64_t addVersion(const db::Transaction &t, int64_t assetId, const Asset::VersionData &);
+	void eraseVersion(int64_t);
+
+	void setAssetDownload(int64_t id, bool value);
+	void setVersionComplete(int64_t id, bool value);
 
 	void removeAsset(Asset *);
 
 	network::Handle * downloadAsset(Asset *);
 
-	friend class AssetStorage;
-
 	void cleanup();
 
-	// void removeDownload(network::AssetHandle *);
-
-	Time getCorrectTime() const;
-
-	void notifyAssetCallbacks(Rc<Asset> &&);
+	void handleLibraryLoaded(Vector<Rc<Asset>> &&assets);
+	void handleAssetLoaded(Rc<Asset> &&);
 
 	bool _loaded = false;
-	int64_t _dt = 0;
+	Map<String, Vector<Pair<AssetCallback, Rc<Ref>>>> _callbacks;
 
-	Vector<AssetRequest> _tmpRequests;
-	Vector<Pair<Vector<AssetRequest>, AssetVecCallback>> _tmpMultiRequest;
-
-	Map<String, Vector<AssetCallback>> _callbacks;
-
+	Vector<Rc<Asset>> _liveAssets;
 	Map<StringView, Asset *> _assetsByUrl;
 	Map<uint64_t, Asset *> _assetsById;
-	Map<Asset *, Rc<network::AssetHandle>> _downloads;
 
 	Application *_application = nullptr;
-	Rc<AssetStorageServer> _server;
+	AssetComponent *_component = nullptr;
+	Rc<Server> _server;
+
+	Vector<AssetRequest> _tmpRequests;
+	Vector<AssetMultiRequest> _tmpMultiRequest;
 };
 
 }

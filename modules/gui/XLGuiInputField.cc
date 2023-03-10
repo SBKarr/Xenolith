@@ -32,7 +32,7 @@ bool InputField::init() {
 
 	setCascadeOpacityEnabled(true);
 
-	_node = addChild(Rc<InputLabelContainer>::create(), 1);
+	_node = addChild(Rc<InputLabelContainer>::create(), ZOrder(1));
 	_node->setAnchorPoint(Vec2(0.0f, 0.0f));
 	_node->setLabel(makeLabel());
 	_label = _node->getLabel();

@@ -20,15 +20,19 @@
  THE SOFTWARE.
  **/
 
-#ifndef MODULES_MATERIAL_COMPONENTS_MATERIALBUTTON_H_
-#define MODULES_MATERIAL_COMPONENTS_MATERIALBUTTON_H_
+#ifndef MODULES_MATERIAL_COMPONENTS_BUTTON_MATERIALBUTTON_H_
+#define MODULES_MATERIAL_COMPONENTS_BUTTON_MATERIALBUTTON_H_
 
 #include "MaterialSurface.h"
 #include "MaterialIconSprite.h"
+#include "MaterialMenuSource.h"
+#include "XLSubscriptionListener.h"
 
 namespace stappler::xenolith::material {
 
 class TypescaleLabel;
+class MenuSource;
+class MenuSourceButton;
 
 class Button : public Surface {
 public:
@@ -45,11 +49,18 @@ public:
 	virtual void setFollowContentSize(bool);
 	virtual bool isFollowContentSize() const;
 
+	virtual void setSwallowEvents(bool);
+	virtual bool isSwallowEvents() const;
+
 	virtual void setEnabled(bool);
 	virtual bool isEnabled() const { return _enabled; }
+	virtual bool isMenuSourceButtonEnabled() const;
 
 	virtual void setText(StringView);
 	virtual StringView getText() const;
+
+	virtual void setIconSize(float);
+	virtual float getIconSize() const;
 
 	virtual void setLeadingIconName(IconName);
 	virtual IconName getLeadingIconName() const;
@@ -61,6 +72,8 @@ public:
 	virtual void setLongPressCallback(Function<void()> &&);
 	virtual void setDoubleTapCallback(Function<void()> &&);
 
+	virtual void setMenuSourceButton(Rc<MenuSourceButton> &&);
+
 protected:
 	virtual void updateSizeFromContent();
 	virtual void updateActivityState();
@@ -71,10 +84,15 @@ protected:
 
 	virtual float getWidthForContent() const;
 
+	virtual void updateMenuButtonSource();
+
 	InputListener *_inputListener = nullptr;
 	TypescaleLabel *_label = nullptr;
 	IconSprite *_leadingIcon = nullptr;
 	IconSprite *_trailingIcon = nullptr;
+
+	Rc<MenuSource> _floatingMenuSource;
+	DataListener<MenuSourceButton> *_menuButtonListener = nullptr;
 
 	Function<void()> _callbackTap;
 	Function<void()> _callbackLongPress;
@@ -86,9 +104,10 @@ protected:
 	bool _enabled = true;
 	bool _focused = false;
 	bool _pressed = false;
+	bool _selected = false;
 	bool _longPressInit = false;
 };
 
 }
 
-#endif /* MODULES_MATERIAL_COMPONENTS_MATERIALBUTTON_H_ */
+#endif /* MODULES_MATERIAL_COMPONENTS_BUTTON_MATERIALBUTTON_H_ */

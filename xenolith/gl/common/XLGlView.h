@@ -127,10 +127,14 @@ public:
 	uint64_t getFrameInterval() const;
 	void setFrameInterval(uint64_t);
 
-	void setNavigationEmpty(bool);
-	bool isNavigationEmpty() const { return _navigationEmpty; }
-
 	virtual void setReadyForNextFrame();
+
+	virtual void retainBackButton();
+	virtual void releaseBackButton();
+	uint64_t getBackButtonCounter() const { return _backButtonCounter; }
+
+	virtual void setDecorationTone(float); // 0.0 - 1.0
+	virtual void setDecorationVisible(bool);
 
 protected:
 	virtual void wakeup() = 0;
@@ -144,6 +148,7 @@ protected:
 	bool _threadStarted = false;
 	bool _navigationEmpty = true;
 
+	std::atomic<bool> _init = false;
 	std::atomic<bool> _running = false;
 
 	Rc<Director> _director;
@@ -169,6 +174,7 @@ protected:
 	std::atomic<uint64_t> _lastFrameInterval = 0;
 	math::MovingAverage<20, uint64_t> _avgFrameInterval;
 	std::atomic<uint64_t> _avgFrameIntervalValue = 0;
+	uint64_t _backButtonCounter = 0;
 };
 
 }

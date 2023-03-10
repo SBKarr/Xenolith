@@ -40,8 +40,8 @@ bool GeneralTransparencyTest::init() {
 		Color::Teal_500
 	};
 
-	int16_t indexes[5] = {
-		4, 3, 5, 2, 1
+	ZOrder indexes[5] = {
+		ZOrder(4), ZOrder(3), ZOrder(5), ZOrder(2), ZOrder(1)
 	};
 
 	String strings[5] = {
@@ -59,7 +59,7 @@ bool GeneralTransparencyTest::init() {
 		_layers[i]->setOpacity(0.5f);
 		_layers[i]->setAnchorPoint(Anchor::Middle);
 
-		_labels[i] = addChild(Rc<Label>::create(), 10 + indexes[i]);
+		_labels[i] = addChild(Rc<Label>::create(), ZOrder(10) + indexes[i]);
 		_labels[i]->setAnchorPoint(Anchor::Middle);
 		_labels[i]->setFontSize(28);
 		_labels[i]->setString(strings[i]);

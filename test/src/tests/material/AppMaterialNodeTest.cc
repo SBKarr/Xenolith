@@ -50,7 +50,7 @@ bool MaterialNodeWithLabel::init(const material::SurfaceStyle &style, StringView
 }
 
 bool MaterialNodeWithLabel::initialize(StringView str) {
-	_label = addChild(Rc<material::TypescaleLabel>::create(material::TypescaleRole::TitleLarge, str), 1);
+	_label = addChild(Rc<material::TypescaleLabel>::create(material::TypescaleRole::TitleLarge, str), ZOrder(1));
 	_label->setAnchorPoint(Anchor::Middle);
 
 	return true;
@@ -67,12 +67,12 @@ bool MaterialNodeTest::init() {
 		return false;
 	}
 
-	_background = addChild(Rc<MaterialBackground>::create(Color::Red_500), -1);
+	_background = addChild(Rc<MaterialBackground>::create(Color::Red_500), ZOrder(-1));
 	_background->setAnchorPoint(Anchor::Middle);
 
 	_nodeElevation = _background->addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
 		material::ColorRole::Primary, material::Elevation::Level1
-	}, "Elevation"), 1);
+	}, "Elevation"), ZOrder(1));
 	_nodeElevation->setContentSize(Size2(160.0f, 100.0f));
 	_nodeElevation->setAnchorPoint(Anchor::Middle);
 
@@ -86,8 +86,8 @@ bool MaterialNodeTest::init() {
 
 
 	_nodeShadow = _background->addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
-		material::ColorRole::Primary, material::Elevation::Level1, material::NodeStyle::SurfaceTonalElevated
-	}, "Shadow"), 1);
+		material::ColorRole::Primary, material::Elevation::Level3, material::NodeStyle::SurfaceTonalElevated
+	}, "Shadow"), ZOrder(1));
 	_nodeShadow->setContentSize(Size2(160.0f, 100.0f));
 	_nodeShadow->setAnchorPoint(Anchor::Middle);
 
@@ -101,8 +101,9 @@ bool MaterialNodeTest::init() {
 
 
 	_nodeCornerRounded = _background->addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
-		material::Elevation::Level5, material::ShapeFamily::RoundedCorners, material::ShapeStyle::ExtraSmall
-	}, "Rounded"), 1);
+		material::Elevation::Level3, material::ShapeFamily::RoundedCorners, material::ShapeStyle::ExtraSmall,
+		material::NodeStyle::SurfaceTonalElevated
+	}, "Rounded"), ZOrder(1));
 	_nodeCornerRounded->setContentSize(Size2(160.0f, 100.0f));
 	_nodeCornerRounded->setAnchorPoint(Anchor::Middle);
 
@@ -116,8 +117,9 @@ bool MaterialNodeTest::init() {
 
 
 	_nodeCornerCut = _background->addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
-		material::Elevation::Level5, material::ShapeFamily::CutCorners, material::ShapeStyle::ExtraSmall
-	}, "Cut"), 1);
+		material::Elevation::Level3, material::ShapeFamily::CutCorners, material::ShapeStyle::ExtraSmall,
+		material::NodeStyle::SurfaceTonalElevated
+	}, "Cut"), ZOrder(1));
 	_nodeCornerCut->setContentSize(Size2(160.0f, 100.0f));
 	_nodeCornerCut->setAnchorPoint(Anchor::Middle);
 
@@ -131,8 +133,8 @@ bool MaterialNodeTest::init() {
 
 
 	_nodeStyle = _background->addChild(Rc<MaterialNodeWithLabel>::create(material::SurfaceStyle{
-		material::Elevation::Level5, material::NodeStyle::Outlined, material::ShapeStyle::Full, material::ActivityState::Enabled
-	}, "Style"), 1);
+		material::Elevation::Level5, material::NodeStyle::SurfaceTonalElevated, material::ShapeStyle::Full, material::ActivityState::Enabled
+	}, "Style"), ZOrder(1));
 	_nodeStyle->setContentSize(Size2(160.0f, 100.0f));
 	_nodeStyle->setAnchorPoint(Anchor::Middle);
 

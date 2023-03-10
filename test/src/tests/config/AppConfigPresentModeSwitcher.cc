@@ -41,12 +41,12 @@ bool ConfigSwitcher::init(AppDelegate *app, uint32_t selected, Function<void(uin
 	_selectedMode = selected;
 	_values = getValueList(app);
 
-	_label = addChild(Rc<Label>::create(), 2);
+	_label = addChild(Rc<Label>::create(), ZOrder(2));
 	_label->setFontSize(20);
 	_label->setAnchorPoint(Anchor::Middle);
 	_label->setColor(Color::Black);
 
-	_left = addChild(Rc<VectorSprite>::create(Size2(24, 24)), 2);
+	_left = addChild(Rc<VectorSprite>::create(Size2(24, 24)), ZOrder(2));
 	_left->setAnchorPoint(Anchor::MiddleLeft);
 	_left->setColor(Color::Grey_400);
 	getIconData(IconName::Hardware_keyboard_arrow_left_solid, [&] (BytesView bytes) {
@@ -54,7 +54,7 @@ bool ConfigSwitcher::init(AppDelegate *app, uint32_t selected, Function<void(uin
 	});
 	_left->setContentSize(Size2(40, 40));
 
-	_right = addChild(Rc<VectorSprite>::create(Size2(24, 24)), 2);
+	_right = addChild(Rc<VectorSprite>::create(Size2(24, 24)), ZOrder(2));
 	_right->setAnchorPoint(Anchor::MiddleRight);
 	_right->setColor(Color::Grey_400);
 	getIconData(IconName::Hardware_keyboard_arrow_right_solid, [&] (BytesView bytes) {
@@ -63,7 +63,7 @@ bool ConfigSwitcher::init(AppDelegate *app, uint32_t selected, Function<void(uin
 	_right->setContentSize(Size2(40, 40));
 
 	InputListener *l = nullptr;
-	_layerLeft = addChild(Rc<Layer>::create(SimpleGradient(Color::Grey_100)), 1);
+	_layerLeft = addChild(Rc<Layer>::create(SimpleGradient(Color::Grey_100)), ZOrder(1));
 	_layerLeft->setAnchorPoint(Anchor::MiddleLeft);
 	l = _layerLeft->addInputListener(Rc<InputListener>::create());
 	l->addMouseOverRecognizer([this] (const GestureData &data) {
@@ -78,7 +78,7 @@ bool ConfigSwitcher::init(AppDelegate *app, uint32_t selected, Function<void(uin
 		return true;
 	});
 
-	_layerRight = addChild(Rc<Layer>::create(SimpleGradient(Color::Grey_100)), 1);
+	_layerRight = addChild(Rc<Layer>::create(SimpleGradient(Color::Grey_100)), ZOrder(1));
 	_layerRight->setAnchorPoint(Anchor::MiddleRight);
 	l = _layerRight->addInputListener(Rc<InputListener>::create());
 	l->addMouseOverRecognizer([this] (const GestureData &data) {
@@ -100,7 +100,7 @@ bool ConfigSwitcher::init(AppDelegate *app, uint32_t selected, Function<void(uin
 		if (it == _selectedMode) {
 			_presentIndex = idx;
 		}
-		auto l = addChild(Rc<Layer>::create(it == _selectedMode ? Color::Red_500 : Color::Red_100), 2);
+		auto l = addChild(Rc<Layer>::create(it == _selectedMode ? Color::Red_500 : Color::Red_100), ZOrder(2));
 		l->setAnchorPoint(Anchor::MiddleBottom);
 		l->setContentSize(Size2(8.0f, 8.0f));
 		l->setTag(it);
@@ -253,7 +253,7 @@ void ConfigPresentModeSwitcher::updateAppData(AppDelegate *app) {
 		if (it == _selectedMode) {
 			_presentIndex = idx;
 		}
-		auto l = addChild(Rc<Layer>::create(it == _selectedMode ? Color::Red_500 : Color::Red_100), 2);
+		auto l = addChild(Rc<Layer>::create(it == _selectedMode ? Color::Red_500 : Color::Red_100), ZOrder(2));
 		l->setAnchorPoint(Anchor::MiddleBottom);
 		l->setContentSize(Size2(8.0f, 8.0f));
 		l->setTag(it);

@@ -64,57 +64,69 @@ uint s_cellIdx;
 
 uint hit(in vec2 p, float h) {
 	uint idx;
-	uint targetOffset = s_cellIdx * shadowData.trianglesCount;
-	for (uint i = 0; i < gridSizeBuffer[1].grid[s_cellIdx]; ++ i) {
-		idx = gridIndexBuffer[2].index[targetOffset + i];
-		// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
-		if (trianglesBuffer[0].triangles[idx].value > h + 0.1) {
-			if (all(greaterThan(p, trianglesBuffer[0].triangles[idx].bbMin)) && all(lessThan(p, trianglesBuffer[0].triangles[idx].bbMax))) {
-				return 1;
+	uint targetOffset;
+	
+	if (shadowData.trianglesCount > 0) {
+		targetOffset = s_cellIdx * shadowData.trianglesCount;
+		for (uint i = 0; i < gridSizeBuffer[1].grid[s_cellIdx]; ++ i) {
+			idx = gridIndexBuffer[2].index[targetOffset + i];
+			// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
+			if (trianglesBuffer[0].triangles[idx].value > h + 0.1) {
+				if (all(greaterThan(p, trianglesBuffer[0].triangles[idx].bbMin)) && all(lessThan(p, trianglesBuffer[0].triangles[idx].bbMax))) {
+					return 1;
+				}
 			}
 		}
 	}
 
-	targetOffset = shadowData.circleGridIndexOffset + s_cellIdx * shadowData.circlesCount;
-	for (uint i = 0; i < gridSizeBuffer[1].grid[shadowData.circleGridSizeOffset + s_cellIdx]; ++ i) {
-		idx = gridIndexBuffer[2].index[targetOffset + i];
-		// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
-		if (circlesBuffer[3].circles[idx].value > h + 0.1) {
-			if (all(greaterThan(p, circlesBuffer[3].circles[idx].bbMin)) && all(lessThan(p, circlesBuffer[3].circles[idx].bbMax))) {
-				return 1;
+	if (shadowData.circlesCount > 0) {
+		targetOffset = shadowData.circleGridIndexOffset + s_cellIdx * shadowData.circlesCount;
+		for (uint i = 0; i < gridSizeBuffer[1].grid[shadowData.circleGridSizeOffset + s_cellIdx]; ++ i) {
+			idx = gridIndexBuffer[2].index[targetOffset + i];
+			// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
+			if (circlesBuffer[3].circles[idx].value > h + 0.1) {
+				if (all(greaterThan(p, circlesBuffer[3].circles[idx].bbMin)) && all(lessThan(p, circlesBuffer[3].circles[idx].bbMax))) {
+					return 1;
+				}
 			}
 		}
 	}
 
-	targetOffset = shadowData.rectGridIndexOffset + s_cellIdx * shadowData.rectsCount;
-	for (uint i = 0; i < gridSizeBuffer[1].grid[shadowData.rectGridSizeOffset + s_cellIdx]; ++ i) {
-		idx = gridIndexBuffer[2].index[targetOffset + i];
-		// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
-		if (rectsBuffer[4].rects[idx].value > h + 0.1) {
-			if (all(greaterThan(p, rectsBuffer[4].rects[idx].bbMin)) && all(lessThan(p, rectsBuffer[4].rects[idx].bbMax))) {
-				return 1;
+	if (shadowData.rectsCount > 0) {
+		targetOffset = shadowData.rectGridIndexOffset + s_cellIdx * shadowData.rectsCount;
+		for (uint i = 0; i < gridSizeBuffer[1].grid[shadowData.rectGridSizeOffset + s_cellIdx]; ++ i) {
+			idx = gridIndexBuffer[2].index[targetOffset + i];
+			// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
+			if (rectsBuffer[4].rects[idx].value > h + 0.1) {
+				if (all(greaterThan(p, rectsBuffer[4].rects[idx].bbMin)) && all(lessThan(p, rectsBuffer[4].rects[idx].bbMax))) {
+					return 1;
+				}
 			}
 		}
 	}
 	
-	targetOffset = shadowData.roundedRectGridIndexOffset + s_cellIdx * shadowData.roundedRectsCount;
-	for (uint i = 0; i < gridSizeBuffer[1].grid[shadowData.roundedRectGridSizeOffset + s_cellIdx]; ++ i) {
-		idx = gridIndexBuffer[2].index[targetOffset + i];
-		// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
-		if (roundedRectsBuffer[5].rects[idx].value > h + 0.1) {
-			if (all(greaterThan(p, roundedRectsBuffer[5].rects[idx].bbMin)) && all(lessThan(p, roundedRectsBuffer[5].rects[idx].bbMax))) {
-				return 1;
+	if (shadowData.roundedRectsCount > 0) {
+		targetOffset = shadowData.roundedRectGridIndexOffset + s_cellIdx * shadowData.roundedRectsCount;
+		for (uint i = 0; i < gridSizeBuffer[1].grid[shadowData.roundedRectGridSizeOffset + s_cellIdx]; ++ i) {
+			idx = gridIndexBuffer[2].index[targetOffset + i];
+			// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
+			if (roundedRectsBuffer[5].rects[idx].value > h + 0.1) {
+				if (all(greaterThan(p, roundedRectsBuffer[5].rects[idx].bbMin)) && all(lessThan(p, roundedRectsBuffer[5].rects[idx].bbMax))) {
+					return 1;
+				}
 			}
 		}
 	}
 	
-	targetOffset = shadowData.polygonGridIndexOffset + s_cellIdx * shadowData.polygonsCount;
-	for (uint i = 0; i < gridSizeBuffer[1].grid[shadowData.polygonGridSizeOffset + s_cellIdx]; ++ i) {
-		idx = gridIndexBuffer[2].index[targetOffset + i];
-		// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
-		if (polygonsBuffer[6].polygons[idx].value > h + 0.1) {
-			if (all(greaterThan(p, polygonsBuffer[6].polygons[idx].bbMin)) && all(lessThan(p, polygonsBuffer[6].polygons[idx].bbMax))) {
-				return 1;
+	if (shadowData.polygonsCount > 0) {
+		targetOffset = shadowData.polygonGridIndexOffset + s_cellIdx * shadowData.polygonsCount;
+		for (uint i = 0; i < gridSizeBuffer[1].grid[shadowData.polygonGridSizeOffset + s_cellIdx]; ++ i) {
+			idx = gridIndexBuffer[2].index[targetOffset + i];
+			// value кодируется как f32, а h как f16, без коррекции точности будет мерцать
+			if (polygonsBuffer[6].polygons[idx].value > h + 0.1) {
+				if (all(greaterThan(p, polygonsBuffer[6].polygons[idx].bbMin)) && all(lessThan(p, polygonsBuffer[6].polygons[idx].bbMax))) {
+					return 1;
+				}
 			}
 		}
 	}
@@ -131,7 +143,7 @@ void main() {
 
 	if (sdfValue.y < depth + 0.1) {
 		outColor = shadowData.discardColor;
-		//outColor = vec4(0.75, 1, 1, 1);
+		//outColor = vec4(1, sdfValue.y / 20.0f, 1, 1);
 		return;
 	}
 

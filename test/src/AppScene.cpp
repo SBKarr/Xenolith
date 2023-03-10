@@ -34,6 +34,8 @@
 #include "XLVkMaterialRenderPass.h"
 #include "XLVkMaterialShadowPass.h"
 #include "XLFontLibrary.h"
+#include "XLSceneContent.h"
+#include "XLSceneLayout.h"
 
 #include "AppRootLayout.h"
 #include "AppDelegate.h"
@@ -64,18 +66,20 @@ bool AppScene::init(Application *app, const gl::FrameContraints &constraints) {
 
 	filesystem::mkdir(filesystem::cachesPath<Interface>());
 
+	Rc<SceneLayout> l;
 	auto dataPath = filesystem::cachesPath<Interface>("org.stappler.xenolith.test.AppScene.cbor");
 	if (auto d = data::readFile<Interface>(dataPath)) {
 		auto layoutName = getLayoutNameById(d.getString("id"));
 
-		_layout = addChild(makeLayoutNode(layoutName));
+		l = makeLayoutNode(layoutName);
+		_content->pushLayout(l);
 		if (!d.getValue("data").empty()) {
-			_layout->setDataValue(move(d.getValue("data")));
+			l->setDataValue(move(d.getValue("data")));
 		}
 	}
 
-	if (!_layout) {
-		_layout = addChild(Rc<RootLayout>::create());
+	if (!l) {
+		_content->pushLayout(makeLayoutNode(LayoutName::Root));
 	}
 
 	scheduleUpdate();
@@ -105,27 +109,12 @@ void AppScene::onExit() {
 	UtilScene::onExit();
 }
 
-void AppScene::onContentSizeDirty() {
-	UtilScene::onContentSizeDirty();
-
-	if (_layout) {
-		_layout->setAnchorPoint(Anchor::Middle);
-		_layout->setPosition(_content->getContentSize() / 2.0f);
-		_layout->setContentSize(_content->getContentSize());
-	}
-}
-
 void AppScene::render(RenderFrameInfo &info) {
 	UtilScene::render(info);
 }
 
-void AppScene::runLayout(LayoutName l, Rc<Node> &&node) {
-	if (_layout) {
-		_layout->removeFromParent(true);
-		_layout = nullptr;
-	}
-
-	_layout = addChild(move(node));
+void AppScene::runLayout(LayoutName l, Rc<SceneLayout> &&node) {
+	_content->replaceLayout(node);
 	_contentSizeDirty = true;
 }
 

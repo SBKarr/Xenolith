@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -26,7 +27,7 @@
 
 namespace stappler::xenolith::app {
 
-bool LayoutMenu::init(LayoutName layout, const Vector<MenuData> &items) {
+bool LayoutMenu::init(LayoutName layout, Vector<LayoutName> &&items) {
 	if (!Node::init()) {
 		return false;
 	}
@@ -34,12 +35,22 @@ bool LayoutMenu::init(LayoutName layout, const Vector<MenuData> &items) {
 	_layout = layout;
 	_layoutRoot = getRootLayoutForLayout(_layout);
 
+	if (_layoutRoot != _layout) {
+		_backButtonCallback = [this] {
+			if (_scene) {
+				((AppScene *)_scene)->runLayout(_layoutRoot, makeLayoutNode(_layoutRoot));
+				return true;
+			}
+			return false;
+		};
+	}
+
 	_scrollView = addChild(Rc<ScrollView>::create(ScrollView::Vertical));
 	_scrollView->setAnchorPoint(Anchor::MiddleTop);
 	_scrollView->setIndicatorColor(Color::Grey_500);
 	auto controller = _scrollView->setController(Rc<ScrollController>::create());
 
-	makeScrollList(controller, items);
+	makeScrollList(controller, move(items));
 
 	setName(getLayoutNameId(_layout));
 
@@ -61,15 +72,14 @@ void LayoutMenu::onEnter(Scene *scene) {
 	}
 }
 
-void LayoutMenu::makeScrollList(ScrollController *controller, const Vector<MenuData> &items) {
+void LayoutMenu::makeScrollList(ScrollController *controller, Vector<LayoutName> &&items) {
 	controller->addPlaceholder(24.0f);
 
 	if (_layout != _layoutRoot) {
 		controller->addItem([this] (const ScrollController::Item &item) {
 			return Rc<LayoutMenuItem>::create("Move back", [this] {
-				auto scene = dynamic_cast<AppScene *>(_scene);
-				if (scene) {
-					scene->runLayout(_layoutRoot, makeLayoutNode(_layoutRoot));
+				if (_backButtonCallback) {
+					_backButtonCallback();
 				}
 			});
 		}, 48.0f);
@@ -84,11 +94,11 @@ void LayoutMenu::makeScrollList(ScrollController *controller, const Vector<MenuD
 	controller->addPlaceholder(24.0f);
 }
 
-Rc<Node> LayoutMenu::makeItem(const ScrollController::Item &item, const MenuData &data) {
-	return Rc<LayoutMenuItem>::create(data.title, [this, data] {
+Rc<Node> LayoutMenu::makeItem(const ScrollController::Item &item, LayoutName name) {
+	return Rc<LayoutMenuItem>::create(getLayoutNameTitle(name), [this, name] {
 		auto scene = dynamic_cast<AppScene *>(_scene);
 		if (scene) {
-			scene->runLayout(data.layout, makeLayoutNode(data.layout));
+			scene->runLayout(name, makeLayoutNode(name));
 		}
 	});
 }

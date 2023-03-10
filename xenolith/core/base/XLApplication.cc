@@ -81,6 +81,28 @@ int Application::parseOptionString(Value &ret, const StringView &str, int argc, 
 		ret.setBool(true, "renderdoc");
 	} else if (str == "novalidation") {
 		ret.setBool(true, "novalidation");
+	} else if (str.starts_with("decor=")) {
+		auto values = str.sub(6);
+		float f[4] = { nan(), nan(), nan(), nan() };
+		uint32_t i = 0;
+		values.split<StringView::Chars<','>>([&] (StringView val) {
+			if (i < 4) {
+				f[i] = val.readFloat().get(nan());
+			}
+			++ i;
+		});
+		if (!isnan(f[0])) {
+			if (isnan(f[1])) {
+				f[1] = f[0];
+			}
+			if (isnan(f[2])) {
+				f[2] = f[0];
+			}
+			if (isnan(f[3])) {
+				f[3] = f[1];
+			}
+			ret.setValue(Value{Value(f[0]), Value(f[1]), Value(f[2]), Value(f[3])}, "decor");
+		}
 	}
 	return 1;
 }
@@ -200,6 +222,10 @@ int Application::run(Value &&data, const Callback<void(Application *)> &onStarte
 			_data.renderdoc = true;
 		} else if (it.first == "novalidation") {
 			_data.validation = false;
+		} else if (it.first == "decor") {
+			_data.viewDecoration = Padding(
+				it.second.getDouble(0), it.second.getDouble(1),
+				it.second.getDouble(2), it.second.getDouble(3));
 		}
 	}
 
@@ -225,7 +251,7 @@ int Application::run(Value &&data, const Callback<void(Application *)> &onStarte
 
 	_storageServer = Rc<storage::Server>::create(this, _dbParams);
 
-	if (!_storageServer) {
+	if (!_storageServer || !onStorageLoaded(_storageServer)) {
 		log::text("Application", "Fail to launch application: onBuildStorage failed");
 		memory::pool::pop();
 		return 1;
@@ -241,9 +267,9 @@ int Application::run(Value &&data, const Callback<void(Application *)> &onStarte
 	filesystem::mkdir(libpath);
 
 	_assetLibrary = Rc<storage::AssetLibrary>::create(this, Value({
-		pair("driver", data::Value("sqlite")),
-		pair("dbname", data::Value(toString(libpath, "/assets.v2.db"))),
-		pair("serverName", data::Value("AssetStorage"))
+		pair("driver", Value("sqlite")),
+		pair("dbname", Value(filesystem::cachesPath<Interface>("assets.sqlite"))),
+		pair("serverName", Value("AssetStorage"))
 	}));
 #endif
 
@@ -341,6 +367,7 @@ int Application::run(Value &&data, const Callback<void(Application *)> &onStarte
 	}
 
 #if MODULE_XENOLITH_STORAGE
+	onStorageDisposed(_storageServer);
 	_storageServer = nullptr;
 #endif
 
@@ -422,7 +449,7 @@ void Application::update(uint64_t clock, uint64_t dt) {
 	if (!_isNetworkOnline) {
 		_updateTimer += dt;
 		if (_updateTimer >= 10'000'000) {
-			_updateTimer = -10'000'000;
+			_updateTimer -= 10'000'000;
 			setNetworkOnline(platform::network::_isNetworkOnline());
 		}
 	}
@@ -438,6 +465,12 @@ void Application::update(uint64_t clock, uint64_t dt) {
 	if (_fontLibrary) {
 		_fontLibrary->update(clock);
 	}
+
+#if MODULE_XENOLITH_ASSET
+	if (_assetLibrary) {
+		_assetLibrary->update(clock);
+	}
+#endif
 
 	memory::pool::pop();
 	memory::pool::clear(_updatePool);
@@ -555,11 +588,11 @@ bool Application::isOnMainThread() const {
 	return _threadId == std::this_thread::get_id();
 }
 
-void Application::performOnMainThread(const Function<void()> &func, Ref *target, bool onNextFrame) const {
+void Application::performOnMainThread(Function<void()> &&func, Ref *target, bool onNextFrame) const {
 	if (!_queue || ((isOnMainThread() || _singleThreaded) && !onNextFrame)) {
 		func();
 	} else {
-		_queue->onMainThread(Rc<thread::Task>::create([func] (const thread::Task &, bool success) {
+		_queue->onMainThread(Rc<thread::Task>::create([func = move(func)] (const thread::Task &, bool success) {
 			if (success) { func(); }
 		}, target));
 	}
@@ -573,8 +606,8 @@ void Application::performOnMainThread(Rc<thread::Task> &&task, bool onNextFrame)
 	}
 }
 
-void Application::perform(const ExecuteCallback &exec, const CompleteCallback &complete, Ref *obj) const {
-	perform(Rc<Task>::create(exec, complete, obj));
+void Application::perform(ExecuteCallback &&exec, CompleteCallback &&complete, Ref *obj) const {
+	perform(Rc<Task>::create(move(exec), move(complete), obj));
 }
 
 void Application::perform(Rc<thread::Task> &&task) const {
@@ -604,8 +637,8 @@ void Application::performAsync(Rc<Task> &&task) const {
 	}
 }
 
-void Application::performAsync(const ExecuteCallback &exec, const CompleteCallback &complete, Ref *obj) const {
-	performAsync(Rc<Task>::create(exec, complete, obj));
+void Application::performAsync(ExecuteCallback &&exec, CompleteCallback &&complete, Ref *obj) const {
+	performAsync(Rc<Task>::create(move(exec), move(complete), obj));
 }
 
 void Application::setSingleThreaded(bool value) {
@@ -673,5 +706,15 @@ const Rc<ResourceCache> &Application::getResourceCache() const {
 void Application::updateDefaultFontController(font::FontController::Builder &builder) {
 
 }
+
+#if MODULE_XENOLITH_STORAGE
+bool Application::onStorageLoaded(storage::Server *) {
+	return true;
+}
+
+void Application::onStorageDisposed(storage::Server *) {
+
+}
+#endif
 
 }

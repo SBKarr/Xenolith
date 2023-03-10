@@ -26,24 +26,6 @@
 
 namespace stappler::xenolith::app {
 
-class LayoutTestBackButton : public VectorSprite {
-public:
-	virtual bool init(Function<void()> &&);
-
-	virtual void onContentSizeDirty() override;
-
-protected:
-	using VectorSprite::init;
-
-	void handleMouseEnter();
-	void handleMouseLeave();
-	bool handlePress();
-
-	Layer *_background = nullptr;
-	Function<void()> _callback;
-};
-
-
 bool LayoutTestBackButton::init(Function<void()> &&cb) {
 	auto image = Rc<VectorImage>::create(Size2(24.0f, 24.0f));
 
@@ -55,7 +37,7 @@ bool LayoutTestBackButton::init(Function<void()> &&cb) {
 		return false;
 	}
 
-	_background = addChild(Rc<Layer>::create(Color::Grey_100), -1);
+	_background = addChild(Rc<Layer>::create(Color::Grey_100), ZOrder(-1));
 	_background->setAnchorPoint(Anchor::Middle);
 
 	setColor(Color::Grey_600);
@@ -127,6 +109,16 @@ bool LayoutTest::init(LayoutName layout, StringView text) {
 
 	_layout = layout;
 	_layoutRoot = getRootLayoutForLayout(layout);
+
+	if (_layoutRoot != _layout) {
+		_backButtonCallback = [this] {
+			if (_scene) {
+				((AppScene *)_scene)->runLayout(_layoutRoot, makeLayoutNode(_layoutRoot));
+				return true;
+			}
+			return false;
+		};
+	}
 
 	_backButton = addChild(Rc<LayoutTestBackButton>::create([this] {
 		auto scene = dynamic_cast<AppScene *>(_scene);

@@ -80,40 +80,40 @@ struct SurfaceStyle {
 	static SurfaceStyle Background;
 	static constexpr uint32_t PrimarySchemeTag = maxOf<uint32_t>();
 
-	SurfaceStyle() = default;
+	constexpr SurfaceStyle() = default;
 
 	template<typename ... Args>
-	SurfaceStyle(Args && ... args) {
+	constexpr SurfaceStyle(Args && ... args) {
 		define(std::forward<Args>(args)...);
 	}
 
-	void setup(const SurfaceStyle &value) { *this = value; }
-	void setup(uint32_t value) { schemeTag = value; }
-	void setup(ColorRole value) { colorRule = value; }
-	void setup(Elevation value) { elevation = value; }
-	void setup(ShapeFamily value) { shapeFamily = value; }
-	void setup(ShapeStyle value) { shapeStyle = value; }
-	void setup(NodeStyle value) { nodeStyle = value; }
-	void setup(ActivityState value) { activityState = value; }
+	constexpr void setup(const SurfaceStyle &value) { *this = value; }
+	constexpr void setup(uint32_t value) { schemeTag = value; }
+	constexpr void setup(ColorRole value) { colorRole = value; }
+	constexpr void setup(Elevation value) { elevation = value; }
+	constexpr void setup(ShapeFamily value) { shapeFamily = value; }
+	constexpr void setup(ShapeStyle value) { shapeStyle = value; }
+	constexpr void setup(NodeStyle value) { nodeStyle = value; }
+	constexpr void setup(ActivityState value) { activityState = value; }
 
 	template <typename T>
-	void define(T && t) {
+	constexpr void define(T && t) {
 		setup(std::forward<T>(t));
 	}
 
 	template <typename T, typename ... Args>
-	void define(T && t, Args && ... args) {
+	constexpr void define(T && t, Args && ... args) {
 		define(std::forward<T>(t));
 		define(std::forward<Args>(args)...);
 	}
 
 	bool apply(SurfaceStyleData &data, const Size2 &contentSize, const StyleContainer *);
 
-	bool operator==(const SurfaceStyle &) const = default;
-	bool operator!=(const SurfaceStyle &) const = default;
+	constexpr bool operator==(const SurfaceStyle &) const = default;
+	constexpr bool operator!=(const SurfaceStyle &) const = default;
 
 	uint32_t schemeTag = PrimarySchemeTag;
-	ColorRole colorRule = ColorRole::Primary;
+	ColorRole colorRole = ColorRole::Primary;
 	Elevation elevation = Elevation::Level0;
 	ShapeFamily shapeFamily = ShapeFamily::RoundedCorners;
 	ShapeStyle shapeStyle = ShapeStyle::None;

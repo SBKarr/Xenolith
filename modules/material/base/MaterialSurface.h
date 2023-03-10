@@ -48,6 +48,9 @@ public:
 	virtual void setStyle(const SurfaceStyle &);
 	virtual void setStyle(const SurfaceStyle &, float duration);
 
+	virtual void setStyleDirtyCallback(Function<void(const SurfaceStyleData &)> &&);
+	virtual const Function<void(const SurfaceStyleData &)> &getStyleDirtyCallback() const { return _styleDirtyCallback; }
+
 	virtual bool visitDraw(RenderFrameInfo &, NodeFlags parentFlags) override;
 
 protected:
@@ -55,6 +58,9 @@ protected:
 
 	virtual StyleContainer *getStyleContainerForFrame(RenderFrameInfo &) const;
 	virtual RenderingLevel getRealRenderingLevel() const override;
+
+	virtual void pushShadowCommands(RenderFrameInfo &, NodeFlags flags, const Mat4 &,
+			SpanView<gl::TransformedVertexData> = SpanView<gl::TransformedVertexData>()) override;
 
 	SurfaceInterior *_interior = nullptr;
 
@@ -65,6 +71,9 @@ protected:
 	SurfaceStyleData _styleDataTarget;
 	SurfaceStyleData _styleDataCurrent;
 
+	Function<void(const SurfaceStyleData &)> _styleDirtyCallback;
+
+	ShapeFamily _realShapeFamily = ShapeFamily::RoundedCorners;
 	float _fillValue = 0.0f;
 	float _outlineValue = 0.0f;
 	float _styleProgress = 0.0f;

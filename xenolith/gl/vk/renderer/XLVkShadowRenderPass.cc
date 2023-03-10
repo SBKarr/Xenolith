@@ -286,7 +286,7 @@ bool ShadowVertexAttachmentHandle::writeDescriptor(const QueuePassHandle &, Desc
 }
 
 bool ShadowVertexAttachmentHandle::empty() const {
-	return !_indexes || !_vertexes || !_transforms || !_circles || !_rects;
+	return !_indexes || !_vertexes || !_transforms || !_circles || !_rects || !_roundedRects || !_polygons;
 }
 
 struct ShadowDrawPlan {

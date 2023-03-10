@@ -34,6 +34,12 @@
 
 #include <android/log.h>
 
+namespace stappler::xenolith::platform {
+
+struct NativeActivity;
+
+}
+
 namespace stappler::xenolith::platform::graphic {
 
 class ViewImpl : public vk::View {
@@ -62,6 +68,10 @@ public:
 	void stopWindow();
 
 	void setContentPadding(const Padding &);
+	void setActivity(NativeActivity *);
+
+	virtual void setDecorationTone(float) override;
+	virtual void setDecorationVisible(bool) override;
 
 protected:
 	using vk::View::init;
@@ -69,9 +79,18 @@ protected:
 	virtual bool pollInput(bool frameReady) override;
 	virtual gl::SurfaceInfo getSurfaceOptions() const override;
 
+	void doSetDecorationTone(float);
+    void doSetDecorationVisible(bool);
+	void updateDecorations();
+    void doCheckError();
+
 	bool _started = false;
 	ANativeWindow *_nativeWindow = nullptr;
 	Extent2 _identityExtent;
+	NativeActivity *_activity = nullptr;
+
+	float _decorationTone = 0.0f;
+	bool _decorationVisible = true;
 };
 
 }

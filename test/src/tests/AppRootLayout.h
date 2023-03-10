@@ -32,12 +32,12 @@ class RootLayout : public LayoutMenu {
 public:
 	virtual ~RootLayout() { }
 
-	virtual bool init() override;
+	virtual bool init(LayoutName, Vector<LayoutName> &&) override;
 
 protected:
 	using LayoutMenu::init;
 
-	virtual void makeScrollList(ScrollController *, const Vector<MenuData> &) override;
+	virtual void makeScrollList(ScrollController *, Vector<LayoutName> &&) override;
 
 	ScrollView *_scrollView = nullptr;
 };

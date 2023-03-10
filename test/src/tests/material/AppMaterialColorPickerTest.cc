@@ -36,12 +36,12 @@ bool MaterialColorSchemeNode::init(material::ColorRole name) {
 	}
 
 	_name = name;
-	_labelName = addChild(Rc<Label>::create(), 1);
+	_labelName = addChild(Rc<Label>::create(), ZOrder(1));
 	_labelName->setFontSize(14);
 	_labelName->setAnchorPoint(Anchor::TopLeft);
 	_labelName->setOpacity(1.0f);
 
-	_labelDesc = addChild(Rc<Label>::create(), 1);
+	_labelDesc = addChild(Rc<Label>::create(), ZOrder(1));
 	_labelDesc->setFontSize(14);
 	_labelDesc->setAnchorPoint(Anchor::BottomRight);
 	_labelDesc->setOpacity(1.0f);
@@ -137,7 +137,7 @@ void MaterialColorSchemeNode::updateLabels() {
 }
 
 bool MaterialColorPickerTest::init() {
-	if (!LayoutTest::init(LayoutName::MaterialColorPickerTest, "")) {
+	if (!MaterialTest::init(LayoutName::MaterialColorPickerTest, "")) {
 		return false;
 	}
 
@@ -150,7 +150,7 @@ bool MaterialColorPickerTest::init() {
 		material::ColorRole::Primary
 	}));
 
-	_background = addChild(Rc<material::Surface>::create(material::SurfaceStyle::Background), -1);
+	_background = addChild(Rc<material::Surface>::create(material::SurfaceStyle::Background), ZOrder(-1));
 	_background->setAnchorPoint(Anchor::Middle);
 
 	_lightCheckbox = addChild(Rc<AppCheckboxWithLabel>::create("Dark theme", false, [this] (bool value) {
@@ -189,7 +189,7 @@ bool MaterialColorPickerTest::init() {
 	_tonePicker->setAnchorPoint(Anchor::TopLeft);
 	_tonePicker->setContentSize(Size2(240.0f, 24.0f));
 
-	_spriteLayer = addChild(Rc<LayerRounded>::create(_colorHct, 20.0f), -1);
+	_spriteLayer = addChild(Rc<LayerRounded>::create(_colorHct, 20.0f), ZOrder(-1));
 	_spriteLayer->setContentSize(Size2(98, 98));
 	_spriteLayer->setAnchorPoint(Anchor::TopLeft);
 
@@ -205,32 +205,32 @@ bool MaterialColorPickerTest::init() {
 }
 
 void MaterialColorPickerTest::onEnter(Scene *scene) {
-	LayoutTest::onEnter(scene);
+	MaterialTest::onEnter(scene);
 }
 
 void MaterialColorPickerTest::onExit() {
-	LayoutTest::onExit();
+	MaterialTest::onExit();
 }
 
 void MaterialColorPickerTest::onContentSizeDirty() {
-	LayoutTest::onContentSizeDirty();
+	MaterialTest::onContentSizeDirty();
 
 	_background->setContentSize(_contentSize);
 	_background->setPosition(_contentSize / 2.0f);
 
-	_lightCheckbox->setPosition(Vec2(16.0f, _contentSize.height - 128.0f));
-	_contentCheckbox->setPosition(Vec2(240.0f, _contentSize.height - 128.0f));
+	_lightCheckbox->setPosition(Vec2(16.0f, _contentSize.height - _decorationPadding.top - 128.0f));
+	_contentCheckbox->setPosition(Vec2(240.0f, _contentSize.height - _decorationPadding.top - 128.0f));
 
 	_huePicker->setContentSize(Size2(std::min(std::max(160.0f, _contentSize.width - 200.0f - 98.0f - 48.0f), 360.0f), 24.0f));
 	_chromaPicker->setContentSize(Size2(std::min(std::max(160.0f, _contentSize.width - 200.0f - 98.0f - 48.0f), 360.0f), 24.0f));
 	_tonePicker->setContentSize(Size2(std::min(std::max(160.0f, _contentSize.width - 200.0f - 98.0f - 48.0f), 360.0f), 24.0f));
 
-	_huePicker->setPosition(Vec2(_spriteLayer->getContentSize().width + 32.0f, _contentSize.height - 16.0f));
-	_chromaPicker->setPosition(Vec2(_spriteLayer->getContentSize().width + 32.0f, _contentSize.height - 16.0f - 36.0f));
-	_tonePicker->setPosition(Vec2(_spriteLayer->getContentSize().width + 32.0f, _contentSize.height - 16.0f - 72.0f));
-	_spriteLayer->setPosition(Vec2(16.0f, _contentSize.height - 16.0f));
+	_huePicker->setPosition(Vec2(_spriteLayer->getContentSize().width + 32.0f, _contentSize.height - _decorationPadding.top - 16.0f));
+	_chromaPicker->setPosition(Vec2(_spriteLayer->getContentSize().width + 32.0f, _contentSize.height - _decorationPadding.top - 16.0f - 36.0f));
+	_tonePicker->setPosition(Vec2(_spriteLayer->getContentSize().width + 32.0f, _contentSize.height - _decorationPadding.top - 16.0f - 72.0f));
+	_spriteLayer->setPosition(Vec2(16.0f, _contentSize.height - _decorationPadding.top - 16.0f));
 
-	Vec2 origin(16.0f, _contentSize.height - 164.0f);
+	Vec2 origin(16.0f, _contentSize.height - _decorationPadding.top - 164.0f);
 	Size2 size((_contentSize.width - 32.0f) / 4.0f, 48.0f);
 
 	for (auto i = toInt(material::ColorRole::Primary); i < toInt(material::ColorRole::Max); ++ i) {

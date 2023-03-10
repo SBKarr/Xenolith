@@ -44,8 +44,6 @@ using Method = stappler::network::Method;
 class Handle final : public NetworkHandle {
 public:
 	using Context = stappler::network::Context<Interface>;
-	using CompleteCallback = Function<void(const Handle &)>;
-	using ProgressCallback = Function<void(const Handle &, int64_t total, int64_t now)>;
 
 	virtual ~Handle() { }
 
@@ -93,7 +91,7 @@ protected:
 
 class Request : public Ref {
 public:
-	using CompleteCallback = Function<void(const Request &)>;
+	using CompleteCallback = Function<void(const Request &, bool)>;
 	using ProgressCallback = Function<void(const Request &, int64_t total, int64_t now)>;
 
 	virtual ~Request();
@@ -126,7 +124,7 @@ protected:
 	void handleHeader(StringView, StringView);
 	size_t handleReceive(char *, size_t);
 
-	void notifyOnComplete();
+	void notifyOnComplete(bool);
 	void notifyOnUploadProgress(int64_t total, int64_t now);
 	void notifyOnDownloadProgress(int64_t total, int64_t now);
 
@@ -145,37 +143,6 @@ protected:
 	size_t _nbytes = 0;
 	Bytes _data;
 };
-
-/*class DataHandle : public Handle {
-public:
-	using DataCompleteCallback = Function<void(Handle &, data::Value &)>;
-
-	virtual ~DataHandle() { }
-
-	virtual bool init(StringView url, const data::Value &data = data::Value(), data::EncodeFormat = data::EncodeFormat::Cbor);
-	virtual bool init(Method method, StringView url, const data::Value &data = data::Value(), data::EncodeFormat = data::EncodeFormat::Cbor);
-	virtual bool init(Method method, StringView url, FilePath file, StringView type = StringView());
-
-	virtual void perform(Application *, DataCompleteCallback &&cb);
-
-protected:
-	virtual bool prepare(Context *, const Callback<bool(CURL *)> &onBeforePerform) override;
-
-	Bytes _data;
-	size_t _offset = 0;
-};
-
-class AssetHandle : public Handle {
-public:
-	virtual ~AssetHandle();
-
-	virtual bool init(Rc<storage::Asset> &&, StringView tmp);
-
-	Rc<storage::Asset> getAsset() const;
-
-protected:
-	Rc<storage::Asset> _asset;
-};*/
 
 }
 

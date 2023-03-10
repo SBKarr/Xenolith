@@ -372,11 +372,9 @@ int NativeActivity::handleInputEvent(AInputEvent *event) {
 	auto source = AInputEvent_getSource(event);
 	switch (type) {
 	case AINPUT_EVENT_TYPE_KEY:
-		stappler::log::format("NativeActivity", "New key event");
 		return handleKeyEvent(event);
 		break;
 	case AINPUT_EVENT_TYPE_MOTION:
-		stappler::log::format("NativeActivity", "New motion event");
 		return handleMotionEvent(event);
 		break;
 	}
@@ -392,7 +390,7 @@ int NativeActivity::handleKeyEvent(AInputEvent *event) {
 	auto scanCode = AKeyEvent_getKeyCode(event);
 
 	if (keyCode == AKEYCODE_BACK) {
-		if (rootView->isNavigationEmpty()) {
+		if (rootView->getBackButtonCounter() == 0) {
 			return 0;
 		}
 	}
@@ -424,7 +422,7 @@ int NativeActivity::handleKeyEvent(AInputEvent *event) {
 
 	Vector<InputEventData> events;
 
-	bool isCanceled = (flags & AKEY_EVENT_FLAG_CANCELED) | (flags & AKEY_EVENT_FLAG_CANCELED_LONG_PRESS);
+	bool isCanceled = (flags & AKEY_EVENT_FLAG_CANCELED) != 0 | (flags & AKEY_EVENT_FLAG_CANCELED_LONG_PRESS) != 0;
 
 	switch (action) {
 	case AKEY_EVENT_ACTION_DOWN: {
@@ -439,7 +437,7 @@ int NativeActivity::handleKeyEvent(AInputEvent *event) {
 	}
 	case AKEY_EVENT_ACTION_UP: {
 		auto &ev = events.emplace_back(InputEventData{uint32_t(keyCode),
-			isCanceled ? InputEventName::KeyReleased : InputEventName::KeyCanceled, InputMouseButton::Touch, _activeModifiers,
+			isCanceled ? InputEventName::KeyCanceled : InputEventName::KeyReleased, InputMouseButton::Touch, _activeModifiers,
 			_hoverLocation.x, _hoverLocation.y});
 		ev.key.keycode = s_keycodes[keyCode];
 		ev.key.compose = InputKeyComposeState::Nothing;
@@ -666,6 +664,7 @@ const Rc<graphic::ViewImpl> &NativeActivity::waitForView() {
 			return rootViewTmp != nullptr;
 		});
 		rootView = move(rootViewTmp);
+        rootView->setActivity(this);
 	}
 	return rootView;
 }

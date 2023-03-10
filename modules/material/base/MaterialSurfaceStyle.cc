@@ -61,7 +61,7 @@ bool SurfaceStyle::apply(SurfaceStyleData &data, const Size2 &contentSize, const
 
 	switch (nodeStyle) {
 	case NodeStyle::SurfaceTonal:
-		targetColorHCT = scheme->values(colorRule);
+		targetColorHCT = scheme->values(colorRole);
 		targetColorBackground = scheme->values(ColorRole::Surface);
 		targetColorOn = scheme->values(ColorScheme::getColorRoleOn(ColorRole::Surface, scheme->type));
 		hasBlendElevation = true;
@@ -87,7 +87,7 @@ bool SurfaceStyle::apply(SurfaceStyleData &data, const Size2 &contentSize, const
 		}
 		break;
 	case NodeStyle::SurfaceTonalElevated:
-		targetColorHCT = scheme->values(colorRule);
+		targetColorHCT = scheme->values(colorRole);
 		targetColorBackground = scheme->values(ColorRole::Surface);
 		targetColorOn = scheme->values(ColorScheme::getColorRoleOn(ColorRole::Surface, scheme->type));
 		hasBlendElevation = hasShadow = true;
@@ -115,7 +115,7 @@ bool SurfaceStyle::apply(SurfaceStyleData &data, const Size2 &contentSize, const
 	case NodeStyle::Elevated:
 		targetColorHCT = scheme->values(ColorRole::Surface);
 		targetColorBackground = scheme->values(ColorRole::Surface);
-		targetColorOn = scheme->values(colorRule);
+		targetColorOn = scheme->values(colorRole);
 		switch (activityState) {
 		case ActivityState::Enabled: break;
 		case ActivityState::Disabled:
@@ -142,9 +142,9 @@ bool SurfaceStyle::apply(SurfaceStyleData &data, const Size2 &contentSize, const
 		hasShadow = true;
 		break;
 	case NodeStyle::Filled:
-		targetColorHCT = scheme->values(colorRule);
-		targetColorBackground = scheme->values(colorRule);
-		targetColorOn = scheme->values(ColorScheme::getColorRoleOn(colorRule, scheme->type));
+		targetColorHCT = scheme->values(colorRole);
+		targetColorBackground = scheme->values(colorRole);
+		targetColorOn = scheme->values(ColorScheme::getColorRoleOn(colorRole, scheme->type));
 		switch (activityState) {
 		case ActivityState::Enabled: break;
 		case ActivityState::Disabled:
@@ -154,25 +154,25 @@ bool SurfaceStyle::apply(SurfaceStyleData &data, const Size2 &contentSize, const
 			targetElevationValue = 0.12f;
 			break;
 		case ActivityState::Hovered:
-			targetColorHCT = scheme->values(ColorScheme::getColorRoleOn(colorRule, scheme->type));
+			targetColorHCT = scheme->values(ColorScheme::getColorRoleOn(colorRole, scheme->type));
 			targetElevation = Elevation(toInt(targetElevation) + 1);
 			targetElevationValue = 0.08f;
 			hasShadow = true;
 			break;
 		case ActivityState::Focused:
-			targetColorHCT = scheme->values(ColorScheme::getColorRoleOn(colorRule, scheme->type));
+			targetColorHCT = scheme->values(ColorScheme::getColorRoleOn(colorRole, scheme->type));
 			targetElevationValue = 0.12f;
 			break;
 		case ActivityState::Pressed:
-			targetColorHCT = scheme->values(ColorScheme::getColorRoleOn(colorRule, scheme->type));
+			targetColorHCT = scheme->values(ColorScheme::getColorRoleOn(colorRole, scheme->type));
 			targetElevationValue = 0.12f;
 			break;
 		}
 		break;
 	case NodeStyle::FilledElevated:
-		targetColorHCT = scheme->values(colorRule);
-		targetColorBackground = scheme->values(colorRule);
-		targetColorOn = scheme->values(ColorScheme::getColorRoleOn(colorRule, scheme->type));
+		targetColorHCT = scheme->values(colorRole);
+		targetColorBackground = scheme->values(colorRole);
+		targetColorOn = scheme->values(ColorScheme::getColorRoleOn(colorRole, scheme->type));
 		hasShadow = true;
 		switch (activityState) {
 		case ActivityState::Enabled: break;
@@ -184,16 +184,16 @@ bool SurfaceStyle::apply(SurfaceStyleData &data, const Size2 &contentSize, const
 			targetElevationValue = 0.12f;
 			break;
 		case ActivityState::Hovered:
-			targetColorHCT = scheme->values(ColorScheme::getColorRoleOn(colorRule, scheme->type));
+			targetColorHCT = scheme->values(ColorScheme::getColorRoleOn(colorRole, scheme->type));
 			targetElevation = Elevation(toInt(targetElevation) + 1);
 			targetElevationValue = 0.08f;
 			break;
 		case ActivityState::Focused:
-			targetColorHCT = scheme->values(ColorScheme::getColorRoleOn(colorRule, scheme->type));
+			targetColorHCT = scheme->values(ColorScheme::getColorRoleOn(colorRole, scheme->type));
 			targetElevationValue = 0.12f;
 			break;
 		case ActivityState::Pressed:
-			targetColorHCT = scheme->values(ColorScheme::getColorRoleOn(colorRule, scheme->type));
+			targetColorHCT = scheme->values(ColorScheme::getColorRoleOn(colorRole, scheme->type));
 			targetElevationValue = 0.12f;
 			break;
 		}
@@ -258,7 +258,7 @@ bool SurfaceStyle::apply(SurfaceStyleData &data, const Size2 &contentSize, const
 	case NodeStyle::Outlined:
 		targetColorHCT = scheme->values(ColorRole::Outline, 0.0f);
 		targetColorBackground = scheme->values(ColorRole::Outline, 0.0f);
-		targetColorOn = scheme->values(colorRule, 1.0f);
+		targetColorOn = scheme->values(colorRole, 1.0f);
 		targetOutlineValue = 1.0f;
 		switch (activityState) {
 		case ActivityState::Enabled: break;
@@ -271,23 +271,23 @@ bool SurfaceStyle::apply(SurfaceStyleData &data, const Size2 &contentSize, const
 			break;
 		case ActivityState::Hovered:
 			targetElevationValue = 0.08f;
-			targetColorHCT = scheme->values(colorRule, 1.0f);
+			targetColorHCT = scheme->values(colorRole, 1.0f);
 			targetElevation = Elevation(toInt(targetElevation) + 1);
 			break;
 		case ActivityState::Focused:
 			targetElevationValue = 0.12f;
-			targetColorHCT = scheme->values(colorRule, 1.0f);
+			targetColorHCT = scheme->values(colorRole, 1.0f);
 			break;
 		case ActivityState::Pressed:
 			targetElevationValue = 0.12f;
-			targetColorHCT = scheme->values(colorRule, 1.0f);
+			targetColorHCT = scheme->values(colorRole, 1.0f);
 			break;
 		}
 		break;
 	case NodeStyle::Text:
 		targetColorHCT = scheme->values(ColorRole::Surface, 0.0f);
-		targetColorBackground = scheme->values(colorRule, 0.0f);
-		targetColorOn = scheme->values(colorRule);
+		targetColorBackground = scheme->values(colorRole, 0.0f);
+		targetColorOn = scheme->values(colorRole);
 		switch (activityState) {
 		case ActivityState::Enabled: break;
 		case ActivityState::Disabled:
@@ -297,18 +297,18 @@ bool SurfaceStyle::apply(SurfaceStyleData &data, const Size2 &contentSize, const
 		case ActivityState::Hovered:
 			targetElevationValue = 0.08f;
 			targetColorHCT = scheme->values(ColorRole::Surface, 1.0f);
-			targetColorHCT = scheme->values(colorRule, 1.0f);
+			targetColorHCT = scheme->values(colorRole, 1.0f);
 			targetElevation = Elevation(toInt(targetElevation) + 1);
 			break;
 		case ActivityState::Focused:
 			targetElevationValue = 0.12f;
 			targetColorHCT = scheme->values(ColorRole::Surface, 1.0f);
-			targetColorHCT = scheme->values(colorRule, 1.0f);
+			targetColorHCT = scheme->values(colorRole, 1.0f);
 			break;
 		case ActivityState::Pressed:
 			targetElevationValue = 0.12f;
 			targetColorHCT = scheme->values(ColorRole::Surface, 1.0f);
-			targetColorHCT = scheme->values(colorRule, 1.0f);
+			targetColorHCT = scheme->values(colorRole, 1.0f);
 			break;
 		}
 		break;

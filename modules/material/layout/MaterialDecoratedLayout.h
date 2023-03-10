@@ -1,5 +1,5 @@
 /**
- Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -20,22 +20,39 @@
  THE SOFTWARE.
  **/
 
-#ifndef MODULES_MATERIAL_MATERIALSCENE_H_
-#define MODULES_MATERIAL_MATERIALSCENE_H_
+#ifndef MODULES_MATERIAL_LAYOUT_MATERIALDECORATEDLAYOUT_H_
+#define MODULES_MATERIAL_LAYOUT_MATERIALDECORATEDLAYOUT_H_
 
-#include "Material.h"
-#include "XLUtilScene.h"
+#include "MaterialLayerSurface.h"
+#include "XLSceneLayout.h"
+#include "XLGuiScrollView.h"
 
 namespace stappler::xenolith::material {
 
-class MaterialScene : public UtilScene {
+class DecoratedLayout : public SceneLayout {
 public:
-	virtual ~MaterialScene() { }
+	virtual ~DecoratedLayout() { }
 
+	virtual bool init(ColorRole decorationColorRole = ColorRole::PrimaryContainer);
+	virtual void onContentSizeDirty() override;
+
+	virtual void setDecorationColorRole(ColorRole);
+	virtual ColorRole getDecorationColorRole() const;
+
+	virtual void setViewDecorationTracked(bool value);
+	virtual bool isViewDecorationTracked() const;
 
 protected:
+	virtual void updateStatusBar(const SurfaceStyleData &style);
+
+	LayerSurface *_decorationLeft = nullptr;
+	LayerSurface *_decorationRight = nullptr;
+	LayerSurface *_decorationTop = nullptr;
+	LayerSurface *_decorationBottom = nullptr;
+	LayerSurface *_background = nullptr;
+	bool _viewDecorationTracked = false;
 };
 
 }
 
-#endif /* MODULES_MATERIAL_MATERIALSCENE_H_ */
+#endif /* MODULES_MATERIAL_LAYOUT_MATERIALDECORATEDLAYOUT_H_ */

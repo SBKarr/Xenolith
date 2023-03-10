@@ -89,7 +89,7 @@ bool DynamicStateNode::visitDraw(RenderFrameInfo &info, NodeFlags parentFlags) {
 		for (; i < _children.size(); i++) {
 			auto node = _children.at(i);
 
-			if (node && node->getLocalZOrder() < 0)
+			if (node && node->getLocalZOrder() < ZOrder(0))
 				node->visitDraw(info, flags);
 			else
 				break;

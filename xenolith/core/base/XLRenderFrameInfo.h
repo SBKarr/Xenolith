@@ -32,7 +32,7 @@ namespace stappler::xenolith {
 class InputListenerStorage;
 
 struct RenderFrameInfo {
-	memory::vector<int16_t> zPath;
+	memory::vector<ZOrder> zPath;
 	memory::vector<Mat4> viewProjectionStack;
 	memory::vector<Mat4> modelTransformStack;
 	memory::pool_t *pool;

@@ -53,7 +53,7 @@ bool InputTouchTest::init() {
 		return true;
 	});
 
-	_cursor = addChild(Rc<Layer>::create(Color::Blue_500), 10);
+	_cursor = addChild(Rc<Layer>::create(Color::Blue_500), ZOrder(10));
 	_cursor->setContentSize(Size2(10, 10));
 	_cursor->setAnchorPoint(Anchor::Middle);
 
@@ -63,7 +63,7 @@ bool InputTouchTest::init() {
 void InputTouchTest::handleClick(const Vec2 &loc) {
 	Color color(Color::Tone(_accum ++ % 16), Color::Level::b500);
 
-	auto node = addChild(Rc<Layer>::create(color), 9);
+	auto node = addChild(Rc<Layer>::create(color), ZOrder(9));
 
 	node->setContentSize(Size2(50, 50));
 	node->setAnchorPoint(Anchor::Middle);

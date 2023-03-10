@@ -216,7 +216,7 @@ struct VertexMaterialDrawPlan {
 	uint32_t excludeVertexes = 0;
 	uint32_t excludeIndexes = 0;
 
-	Map<SpanView<int16_t>, float, ZIndexLess> paths;
+	Map<SpanView<ZOrder>, float, ZIndexLess> paths;
 
 	// fill write plan
 	MaterialWritePlan globalWritePlan;
@@ -228,7 +228,7 @@ struct VertexMaterialDrawPlan {
 	std::unordered_map<gl::MaterialId, MaterialWritePlan> surfaceWritePlan;
 
 	// write plan for transparent objects, that should be drawn in order
-	Map<SpanView<int16_t>, std::unordered_map<gl::MaterialId, MaterialWritePlan>, ZIndexLess> transparentWritePlan;
+	Map<SpanView<ZOrder>, std::unordered_map<gl::MaterialId, MaterialWritePlan>, ZIndexLess> transparentWritePlan;
 
 	std::forward_list<Vector<gl::TransformedVertexData>> deferredTmp;
 

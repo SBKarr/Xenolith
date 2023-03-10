@@ -39,12 +39,12 @@ public:
 	using RebuildCallback = Function<bool(ScrollController *)>; // return true if item was rebuilded
 
 	struct Item {
-		Item(NodeFunction &&, Vec2 pos, Size2 size, int zIndex, StringView);
+		Item(NodeFunction &&, Vec2 pos, Size2 size, ZOrder zIndex, StringView);
 
 		NodeFunction nodeFunction = nullptr;
 		Size2 size;
 		Vec2 pos;
-		int zIndex;
+		ZOrder zIndex;
 		String name;
 
 		Node *node = nullptr;
@@ -84,9 +84,9 @@ public:
 	virtual bool rebuildObjects();
 
 	virtual size_t size() const;
-	virtual size_t addItem(NodeFunction &&, Size2 size, Vec2 pos, int zIndex = 0, StringView tag = StringView());
-	virtual size_t addItem(NodeFunction &&, float size, float pos, int zIndex = 0, StringView tag = StringView());
-	virtual size_t addItem(NodeFunction &&, float size = 0.0f, int zIndex = 0, StringView tag = StringView());
+	virtual size_t addItem(NodeFunction &&, Size2 size, Vec2 pos, ZOrder zIndex = ZOrder(0), StringView tag = StringView());
+	virtual size_t addItem(NodeFunction &&, float size, float pos, ZOrder zIndex = ZOrder(0), StringView tag = StringView());
+	virtual size_t addItem(NodeFunction &&, float size = 0.0f, ZOrder zIndex = ZOrder(0), StringView tag = StringView());
 
 	virtual size_t addPlaceholder(Size2 size, Vec2 pos);
 	virtual size_t addPlaceholder(float size, float pos);

@@ -32,26 +32,26 @@ bool GeneralTemporaryResourceTest::init() {
 		return false;
 	}
 
-	_label = addChild(Rc<Label>::create(), 1);
+	_label = addChild(Rc<Label>::create(), ZOrder(1));
 	_label->setAnchorPoint(Anchor::Middle);
 	_label->setFontSize(20);
 	_label->setString("Not loaded");
 	_label->setColor(Color::Grey_500);
 	_label->setFontWeight(Label::FontWeight::Bold);
 
-	_sprite = addChild(Rc<Sprite>::create(), 1);
+	_sprite = addChild(Rc<Sprite>::create(), ZOrder(1));
 	_sprite->setAutofit(Sprite::Autofit::Contain);
 	_sprite->setAnchorPoint(Anchor::Middle);
 
 	_slider = addChild(Rc<AppSliderWithLabel>::create("0.0", 0.0f, [this] (float val) {
 		setResourceTimeout(val);
-	}), 2);
+	}), ZOrder(2));
 	_slider->setPrefix("Timeout");
 	_slider->setAnchorPoint(Anchor::Middle);
 
 	_checkbox = addChild(Rc<AppCheckboxWithLabel>::create("Show/hide", true, [this] (bool val) {
 		switchVisibility(val);
-	}), 2);
+	}), ZOrder(2));
 	_checkbox->setAnchorPoint(Anchor::Middle);
 
 	auto l = addComponent(Rc<EventListener>::create());
@@ -140,7 +140,7 @@ void GeneralTemporaryResourceTest::switchVisibility(bool val) {
 			if (_resource) {
 				StringView name("external://resources/xenolith-2-480.png");
 				if (auto tex = _resource->acquireTexture(name)) {
-					_sprite = addChild(Rc<Sprite>::create(move(tex)), 1);
+					_sprite = addChild(Rc<Sprite>::create(move(tex)), ZOrder(1));
 					_sprite->setAutofit(Sprite::Autofit::Contain);
 					_sprite->setAnchorPoint(Anchor::Middle);
 					_sprite->setContentSize(_contentSize * 0.75f);

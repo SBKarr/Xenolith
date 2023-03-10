@@ -230,7 +230,7 @@ void ConfigMenu::makeScrollList(ScrollController *controller) {
 		return Rc<ConfigApplyButton>::create(!_applyData.empty(), [this] () {
 			applyConfig();
 		});
-	}, 42.0f, 0, "apply");
+	}, 42.0f, ZOrder(0));
 
 	controller->addItem([this] (const ScrollController::Item &item) -> Rc<Node> {
 		auto app = (AppDelegate *)_director->getApplication();

@@ -85,7 +85,7 @@ protected:
 		InputListener *current = nullptr;
 		bool exclusiveDirty = true;
 
-		void handle();
+		void handle(bool removeOnFail);
 		void clear(bool cancel);
 	};
 
@@ -132,8 +132,8 @@ bool InputListenerStorage::foreach(const Callback &cb) {
 		}
 	}
 
-	it = _preSceneEvents->rbegin();
-	end = _preSceneEvents->rend();
+	it = _postSceneEvents->rbegin();
+	end = _postSceneEvents->rend();
 
 	for (;it != end; ++ it) {
 		if (!cb(*it)) {

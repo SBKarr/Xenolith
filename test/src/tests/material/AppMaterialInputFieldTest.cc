@@ -30,7 +30,7 @@ bool MaterialInputFieldTest::init() {
 		return false;
 	}
 
-	_background = addChild(Rc<MaterialBackground>::create(Color::Red_500), -1);
+	_background = addChild(Rc<MaterialBackground>::create(Color::Red_500), ZOrder(-1));
 	_background->setAnchorPoint(Anchor::Middle);
 
 	_field = _background->addChild(Rc<material::InputField>::create());

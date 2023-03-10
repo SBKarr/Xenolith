@@ -26,7 +26,7 @@
 
 namespace stappler::xenolith {
 
-ScrollController::Item::Item(NodeFunction &&f, Vec2 pos, Size2 size, int z, StringView name)
+ScrollController::Item::Item(NodeFunction &&f, Vec2 pos, Size2 size, ZOrder z, StringView name)
 : nodeFunction(move(f)), size(size), pos(pos), zIndex(z), name(name.str<Interface>()) { }
 
 ScrollController::~ScrollController() { }
@@ -263,13 +263,13 @@ void ScrollController::onNextObject(Item &h, float pos, float size) {
 	}
 }
 
-size_t ScrollController::addItem(NodeFunction &&fn, Size2 size, Vec2 vec, int z, StringView tag) {
+size_t ScrollController::addItem(NodeFunction &&fn, Size2 size, Vec2 vec, ZOrder z, StringView tag) {
 	_nodes.emplace_back(move(fn), vec, size, z, tag);
 	_infoDirty = true;
 	return _nodes.size() - 1;
 }
 
-size_t ScrollController::addItem(NodeFunction &&fn, float size, float pos, int z, StringView tag) {
+size_t ScrollController::addItem(NodeFunction &&fn, float size, float pos, ZOrder z, StringView tag) {
 	if (!_scroll) {
 		return std::numeric_limits<size_t>::max();
 	}
@@ -279,7 +279,7 @@ size_t ScrollController::addItem(NodeFunction &&fn, float size, float pos, int z
 	return _nodes.size() - 1;
 }
 
-size_t ScrollController::addItem(NodeFunction &&fn, float size, int zIndex, StringView tag) {
+size_t ScrollController::addItem(NodeFunction &&fn, float size, ZOrder zIndex, StringView tag) {
 	if (!_scroll) {
 		return std::numeric_limits<size_t>::max();
 	}

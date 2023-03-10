@@ -178,14 +178,14 @@ bool VgTessCanvas::init(Function<void()> &&cb) {
 	_cursor->setPosition(Vec2(200.0f, 200.0f));
 	_cursor->setVisible(false);
 
-	_pathFill = addChild(Rc<VectorSprite>::create(Size2(0, 0)), 1);
+	_pathFill = addChild(Rc<VectorSprite>::create(Size2(0, 0)), ZOrder(1));
 	_pathFill->setColor(Color::Blue_100);
 	_pathFill->setPosition(Vec2(0.0f, 0.0f));
 	_pathFill->setVisible(false);
 	_pathFill->setOpacity(1.0f);
 	_pathFill->setRenderingLevel(RenderingLevel::Transparent);
 
-	_pathLines = addChild(Rc<VectorSprite>::create(Size2(0, 0)), 2);
+	_pathLines = addChild(Rc<VectorSprite>::create(Size2(0, 0)), ZOrder(2));
 	_pathLines->setColor(Color::Green_500);
 	_pathLines->setPosition(Vec2(0.0f, 0.0f));
 	_pathLines->setLineWidth(1.0f);
@@ -200,7 +200,7 @@ bool VgTessCanvas::init(Function<void()> &&cb) {
 				Vec2 point(it.getDouble(0), it.getDouble(1));
 				auto pt = Rc<VgTessPoint>::create(point, c.points.size());
 
-				c.points.emplace_back(addChild(move(pt), 10));
+				c.points.emplace_back(addChild(move(pt), ZOrder(10)));
 			}
 		};
 
@@ -402,7 +402,7 @@ void VgTessCanvas::onActionTouch(const InputEvent &ev) {
 		auto &c = _contours[_contourSelected];
 		auto pt = Rc<VgTessPoint>::create(loc, c.points.size());
 		pt->setColor(getColorForIndex(_contourSelected));
-		c.points.emplace_back(addChild(move(pt), 10));
+		c.points.emplace_back(addChild(move(pt), ZOrder(10)));
 		updatePoints();
 	}
 }

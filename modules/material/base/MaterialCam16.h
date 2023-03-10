@@ -234,7 +234,7 @@ struct Cam16 {
 	// ViewingConditions::DEFAULT is constexpr, some calculation may be optimized
 
 	static Cam16 create(const Color4F &color) {
-		const Float red_l = linearized(color.a);
+		const Float red_l = linearized(color.r);
 		const Float green_l = linearized(color.g);
 		const Float blue_l = linearized(color.b);
 

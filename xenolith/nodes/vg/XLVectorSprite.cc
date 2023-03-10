@@ -103,39 +103,45 @@ bool VectorSprite::init(FilePath path) {
 }
 
 Rc<VectorPathRef> VectorSprite::addPath(StringView id, StringView cache, Mat4 pos) {
-	return _image->addPath(id, cache, pos);
+	return _image ? _image->addPath(id, cache, pos) : nullptr;
 }
 
 Rc<VectorPathRef> VectorSprite::addPath(const VectorPath & path, StringView id, StringView cache, Mat4 pos) {
-	return _image->addPath(path, id, cache, pos);
+	return _image ? _image->addPath(path, id, cache, pos) : nullptr;
 }
 
 Rc<VectorPathRef> VectorSprite::addPath(VectorPath && path, StringView id, StringView cache, Mat4 pos) {
-	return _image->addPath(move(path), id, cache, pos);
+	return _image ? _image->addPath(move(path), id, cache, pos) : nullptr;
 }
 
 Rc<VectorPathRef> VectorSprite::getPath(StringView id) {
-	return _image->getPath(id);
+	return _image ? _image->getPath(id) : nullptr;
 }
 
 void VectorSprite::removePath(const Rc<VectorPathRef> &path) {
-	_image->removePath(path);
+	if (_image) {
+		_image->removePath(path);
+	}
 }
 
 void VectorSprite::removePath(StringView id) {
-	_image->removePath(id);
+	if (_image) {
+		_image->removePath(id);
+	}
 }
 
 void VectorSprite::clear() {
-	_image->clear();
+	if (_image) {
+		_image->clear();
+	}
 }
 
 void VectorSprite::setImage(Rc<VectorImage> &&img) {
-	XL_ASSERT(img, "Image should not be nullptr");
-
 	if (_image != img) {
 		_image = move(img);
-		_image->setDirty();
+		if (_image) {
+			_image->setDirty();
+		}
 	}
 }
 
@@ -146,7 +152,9 @@ const Rc<VectorImage> &VectorSprite::getImage() const {
 void VectorSprite::setQuality(float val) {
 	if (_quality != val) {
 		_quality = val;
-		_image->setDirty();
+		if (_image) {
+			_image->setDirty();
+		}
 	}
 }
 
@@ -156,7 +164,7 @@ void VectorSprite::onTransformDirty(const Mat4 &parent) {
 }
 
 bool VectorSprite::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
-	if (_image->isDirty()) {
+	if (_image && _image->isDirty()) {
 		_vertexesDirty = true;
 	}
 	return Sprite::visitDraw(frame, parentFlags);
@@ -210,6 +218,10 @@ void VectorSprite::pushShadowCommands(RenderFrameInfo &frame, NodeFlags flags, c
 }
 
 void VectorSprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
+	if (!_image) {
+		return;
+	}
+
 	if (!_deferredResult && (!_result || _result->data.empty())) {
 		return;
 	}
@@ -271,6 +283,10 @@ void VectorSprite::initVertexes() {
 }
 
 void VectorSprite::updateVertexes() {
+	if (!_image) {
+		return;
+	}
+
 	Vec3 viewScale;
 	_modelViewTransform.decompose(&viewScale, nullptr, nullptr);
 

@@ -44,18 +44,15 @@ public:
 
 	virtual void onEnter(Scene *) override;
 	virtual void onExit() override;
-	virtual void onContentSizeDirty() override;
 
 	virtual void render(RenderFrameInfo &info) override;
 
-	void runLayout(LayoutName l, Rc<Node> &&);
+	void runLayout(LayoutName l, Rc<SceneLayout> &&);
 
 	void setActiveLayoutId(StringView, Value && = Value());
 
 protected:
 	using UtilScene::init;
-
-	Node *_layout = nullptr;
 };
 
 }

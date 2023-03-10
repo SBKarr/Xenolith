@@ -103,6 +103,8 @@ struct Server::ServerData : public thread::ThreadInterface<Interface> {
 	// accessed from main thread only, std memory model
 	mem_std::Map<StringView, Rc<ComponentContainer>> appComponents;
 
+	const db::Transaction *currentTransaction = nullptr;
+
 	ServerData();
 	virtual ~ServerData();
 
@@ -210,7 +212,7 @@ bool Server::removeComponentContainer(const Rc<ComponentContainer> &comp) {
 	perform([this, comp] (const Server &serv, const db::Transaction &t) -> bool {
 		_data->removeComponent(comp, t);
 		return true;
-	});
+	}, comp);
 	_data->appComponents.erase(it);
 	comp->handleComponentsUnloaded(*this);
 	return true;
@@ -671,8 +673,12 @@ bool Server::touch(const Scheme &scheme, const Value & obj) const {
 }
 
 bool Server::perform(Function<bool(const Server &, const db::Transaction &)> &&cb, Ref *ref) const {
-	_data->queue.push(0, false, ServerData::TaskCallback(move(cb), ref));
-	_data->condition.notify_one();
+	if (std::this_thread::get_id() == _data->thread.get_id()) {
+		_data->execute(ServerData::TaskCallback(move(cb), ref));
+	} else {
+		_data->queue.push(0, false, ServerData::TaskCallback(move(cb), ref));
+		_data->condition.notify_one();
+	}
 	return true;
 }
 
@@ -731,13 +737,23 @@ bool Server::ServerData::init() {
 }
 
 bool Server::ServerData::execute(const TaskCallback &task) {
+	if (currentTransaction) {
+		if (!task.callback) {
+			return false;
+		}
+		return task.callback(*server, *currentTransaction);
+	}
+
 	bool ret = false;
 
 	memory::pool::push(threadPool);
 
 	driver->performWithStorage(handle, [&] (const db::Adapter &adapter) {
 		adapter.performWithTransaction([&] (const db::Transaction &t) {
-			return task.callback(*server, t);
+			currentTransaction = &t;
+			auto ret = task.callback(*server, t);
+			currentTransaction = nullptr;
+			return ret;
 		});
 	});
 
@@ -747,6 +763,7 @@ bool Server::ServerData::execute(const TaskCallback &task) {
 
 		driver->performWithStorage(handle, [&] (const db::Adapter &adapter) {
 			adapter.performWithTransaction([&] (const db::Transaction &t) {
+				currentTransaction = &t;
 				for (auto &it : *tmp) {
 					it(t);
 				}
@@ -827,6 +844,19 @@ bool Server::ServerData::worker() {
 
 void Server::ServerData::threadDispose() {
 	memory::pool::push(threadPool);
+
+	while (!queue.empty()) {
+		TaskCallback task;
+		do {
+			queue.pop_direct([&] (memory::PriorityQueue<TaskCallback>::PriorityType, TaskCallback &&cb) {
+				task = move(cb);
+			});
+		} while (0);
+
+		if (task.callback) {
+			execute(task);
+		}
+	}
 
 	if (driver->isValid(handle)) {
 		driver->performWithStorage(handle, [&] (const db::Adapter &adapter) {
@@ -933,12 +963,12 @@ bool ServerComponentLoader::run(ComponentContainer *comp) {
 	_components->container = comp;
 	_data->components.emplace(comp, _components);
 
+	db::Scheme::initSchemes(_components->schemes);
+	_transaction->getAdapter().init(_data->interfaceConfig, _components->schemes);
+
 	for (auto &it : _components->components) {
 		it.second->handleChildInit(*_server, *_transaction);
 	}
-
-	db::Scheme::initSchemes(_components->schemes);
-	_transaction->getAdapter().init(_data->interfaceConfig, _components->schemes);
 
 	_pool = nullptr;
 	_components = nullptr;

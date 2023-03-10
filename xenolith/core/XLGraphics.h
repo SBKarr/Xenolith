@@ -29,6 +29,7 @@
 namespace stappler::xenolith {
 
 using OpacityValue = ValueWrapper<uint8_t, class OpacityTag>;
+using ZOrder = ValueWrapper<int16_t, class OpacityTag>;
 
 enum class NodeFlags {
 	None,
@@ -263,11 +264,11 @@ struct MaterialInfo {
 };
 
 struct ZIndexLess {
-	bool operator()(const SpanView<int16_t> &l, const SpanView<int16_t> &r) const noexcept {
+	bool operator()(const SpanView<ZOrder> &l, const SpanView<ZOrder> &r) const noexcept {
 		auto len = std::max(l.size(), r.size());
 		for (size_t i = 0; i < len; ++ i) {
-			auto valL = (i < l.size()) ? l.at(i) : 0;
-			auto valR = (i < r.size()) ? r.at(i) : 0;
+			auto valL = (i < l.size()) ? l.at(i) : ZOrder(0);
+			auto valR = (i < r.size()) ? r.at(i) : ZOrder(0);
 
 			if (valL != valR) {
 				return valL < valR;
