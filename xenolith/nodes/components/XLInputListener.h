@@ -45,6 +45,9 @@ public:
 	using DefaultEventFilter = std::function<bool(const InputEvent &)>;
 	using EventFilter = Function<bool(const InputEvent &, const DefaultEventFilter &)>;
 
+	static EventMask EventMaskTouch;
+	static EventMask EventMaskKeyboard;
+
 	static ButtonMask makeButtonMask(std::initializer_list<InputMouseButton> &&);
 	static EventMask makeEventMask(std::initializer_list<InputEventName> &&);
 	static KeyMask makeKeyMask(std::initializer_list<InputKeyCode> &&);
@@ -83,12 +86,17 @@ public:
 	void setExclusiveForTouch(uint32_t eventId);
 
 	void setSwallowEvents(EventMask &&);
+	void setSwallowEvents(const EventMask &);
 	void setSwallowAllEvents();
 	void setSwallowEvent(InputEventName);
 	void clearSwallowAllEvents();
 	void clearSwallowEvent(InputEventName);
+	void clearSwallowEvents(const EventMask &);
 
 	bool isSwallowAllEvents() const;
+	bool isSwallowAllEvents(const EventMask &) const;
+	bool isSwallowAnyEvents(const EventMask &) const;
+	bool isSwallowEvent(InputEventName) const;
 
 	void setTouchFilter(const EventFilter &);
 
@@ -103,6 +111,7 @@ public:
 			bool continuous = false, ButtonMask && = makeButtonMask({InputMouseButton::Touch}));
 	GestureRecognizer *addSwipeRecognizer(InputCallback<GestureSwipe> &&, float threshold = TapDistanceAllowed, bool sendThreshold = false,
 			ButtonMask && = makeButtonMask({InputMouseButton::Touch}));
+	GestureRecognizer *addPinchRecognizer(InputCallback<GesturePinch> &&, ButtonMask && = makeButtonMask({InputMouseButton::Touch}));
 	GestureRecognizer *addScrollRecognizer(InputCallback<GestureScroll> &&);
 	GestureRecognizer *addMoveRecognizer(InputCallback<GestureData> &&, bool withinNode = true);
 	GestureRecognizer *addMouseOverRecognizer(InputCallback<GestureData> &&, float padding = 0.0f);

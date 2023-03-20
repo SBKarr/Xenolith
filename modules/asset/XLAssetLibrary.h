@@ -66,6 +66,7 @@ public:
 	bool init(Application *, const Value &dbParams);
 
 	void update(uint64_t clock);
+	void finalize();
 
 	virtual void handleStorageInit(storage::ComponentLoader &loader) override;
 	virtual void handleStorageDisposed(const db::Transaction &t) override;

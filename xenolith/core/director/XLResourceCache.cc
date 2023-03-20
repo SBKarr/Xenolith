@@ -54,6 +54,10 @@ bool Texture::init(const gl::ImageData *data, const Rc<TemporaryResource> &tmp) 
 	return true;
 }
 
+void Texture::invalidate() {
+	//_temporary = nullptr;
+}
+
 StringView Texture::getName() const {
 	if (_dynamic) {
 		return _dynamic->getInfo().key;
@@ -140,15 +144,36 @@ void Texture::onExit(Scene *scene) {
 XL_DECLARE_EVENT_CLASS(TemporaryResource, onLoaded);
 
 TemporaryResource::~TemporaryResource() {
-	_resource->clear();
-	_resource = nullptr;
+	if (_resource) {
+		_resource->clear();
+		_resource = nullptr;
+	}
 }
 
-bool TemporaryResource::init(Rc<renderqueue::Resource> &&res, TimeInterval timeout) {
+bool TemporaryResource::init(Rc<renderqueue::Resource> &&res, TimeInterval timeout, TemporaryResourceFlags flags) {
 	_atime = Application::getClockStatic();
 	_timeout = timeout;
 	_resource = move(res);
+	_name = _resource->getName().str<Interface>();
+
+	if ((flags & TemporaryResourceFlags::Loaded) != TemporaryResourceFlags::None) {
+		setLoaded(true);
+	}
+
+	if ((flags & TemporaryResourceFlags::RemoveOnClear) != TemporaryResourceFlags::None) {
+		_removeOnClear = true;
+	}
+
 	return true;
+}
+
+void TemporaryResource::invalidate() {
+	for (auto &it : _textures) {
+		it.second->invalidate();
+	}
+
+	_scenes.clear();
+	_resource = nullptr;
 }
 
 Rc<Texture> TemporaryResource::acquireTexture(StringView str) {
@@ -223,7 +248,7 @@ void TemporaryResource::onExit(Scene *, Texture *) {
 	-- _users;
 }
 
-void TemporaryResource::clear() {
+bool TemporaryResource::clear() {
 	Vector<uint64_t> ids;
 	for (auto &it : _textures) {
 		if (it.first->image) {
@@ -240,6 +265,7 @@ void TemporaryResource::clear() {
 	_scenes.clear();
 
 	setLoaded(false);
+	return _removeOnClear;
 }
 
 StringView TemporaryResource::getName() const {
@@ -274,15 +300,28 @@ bool ResourceCache::init() {
 }
 
 void ResourceCache::invalidate() {
+	for (auto &it : _temporaries) {
+		it.second->invalidate();
+	}
 	_images.clear();
+	_temporaries.clear();
+	_resources.clear();
 }
 
 void ResourceCache::update(Director *dir, const UpdateTime &time) {
-	for (auto &it : _temporaries) {
-		if (it.second->getUsersCount() > 0 && !it.second->isRequested()) {
-			compileResource(dir, it.second);
-		} else if (it.second->isDeprecated(time)) {
-			clearResource(dir, it.second);
+	auto it = _temporaries.begin();
+	while (it != _temporaries.end()) {
+		if (it->second->getUsersCount() > 0 && !it->second->isRequested()) {
+			compileResource(dir, it->second);
+			++ it;
+		} else if (it->second->isDeprecated(time)) {
+			if (clearResource(dir, it->second)) {
+				it = _temporaries.erase(it);
+			} else {
+				++ it;
+			}
+		} else {
+			++ it;
 		}
 	}
 }
@@ -338,30 +377,57 @@ const gl::ImageData *ResourceCache::getSolidImage() const {
 	return nullptr;
 }
 
-Rc<Texture> ResourceCache::addExternalImageByRef(StringView key, gl::ImageInfo &&info, BytesView data, TimeInterval ival) {
+Rc<Texture> ResourceCache::addExternalImageByRef(StringView key, gl::ImageInfo &&info, BytesView data, TimeInterval ival, TemporaryResourceFlags flags) {
+	auto it = _temporaries.find(key);
+	if (it != _temporaries.end()) {
+		if (auto tex = it->second->acquireTexture(key)) {
+			return tex;
+		}
+		log::vtext("ResourceCache", "Resource '", key, "' already exists, but no texture '", key, "' found");
+		return nullptr;
+	}
+
 	renderqueue::Resource::Builder builder(key);
 	if (auto d = builder.addImageByRef(key, move(info), data)) {
-		if (auto tmp = addTemporaryResource(Rc<renderqueue::Resource>::create(move(builder)), ival)) {
+		if (auto tmp = addTemporaryResource(Rc<renderqueue::Resource>::create(move(builder)), ival, flags)) {
 			return Rc<Texture>::create(d, tmp);
 		}
 	}
 	return nullptr;
 }
 
-Rc<Texture> ResourceCache::addExternalImage(StringView key, gl::ImageInfo &&info, FilePath data, TimeInterval ival) {
+Rc<Texture> ResourceCache::addExternalImage(StringView key, gl::ImageInfo &&info, FilePath data, TimeInterval ival, TemporaryResourceFlags flags) {
+	auto it = _temporaries.find(key);
+	if (it != _temporaries.end()) {
+		if (auto tex = it->second->acquireTexture(key)) {
+			return tex;
+		}
+		log::vtext("ResourceCache", "Resource '", key, "' already exists, but no texture '", key, "' found");
+		return nullptr;
+	}
+
 	renderqueue::Resource::Builder builder(key);
 	if (auto d = builder.addImage(key, move(info), data)) {
-		if (auto tmp = addTemporaryResource(Rc<renderqueue::Resource>::create(move(builder)), ival)) {
+		if (auto tmp = addTemporaryResource(Rc<renderqueue::Resource>::create(move(builder)), ival, flags)) {
 			return Rc<Texture>::create(d, tmp);
 		}
 	}
 	return nullptr;
 }
 
-Rc<Texture> ResourceCache::addExternalImage(StringView key, gl::ImageInfo &&info, BytesView data, TimeInterval ival) {
+Rc<Texture> ResourceCache::addExternalImage(StringView key, gl::ImageInfo &&info, BytesView data, TimeInterval ival, TemporaryResourceFlags flags) {
+	auto it = _temporaries.find(key);
+	if (it != _temporaries.end()) {
+		if (auto tex = it->second->acquireTexture(key)) {
+			return tex;
+		}
+		log::vtext("ResourceCache", "Resource '", key, "' already exists, but no texture '", key, "' found");
+		return nullptr;
+	}
+
 	renderqueue::Resource::Builder builder(key);
 	if (auto d = builder.addImage(key, move(info), data)) {
-		if (auto tmp = addTemporaryResource(Rc<renderqueue::Resource>::create(move(builder)), ival)) {
+		if (auto tmp = addTemporaryResource(Rc<renderqueue::Resource>::create(move(builder)), ival, flags)) {
 			return Rc<Texture>::create(d, tmp);
 		}
 	}
@@ -370,18 +436,28 @@ Rc<Texture> ResourceCache::addExternalImage(StringView key, gl::ImageInfo &&info
 }
 
 Rc<Texture> ResourceCache::addExternalImage(StringView key, gl::ImageInfo &&info,
-		const memory::function<void(const gl::ImageData::DataCallback &)> &cb, TimeInterval ival) {
+		const memory::function<void(uint8_t *, uint64_t, const gl::ImageData::DataCallback &)> &cb,
+		TimeInterval ival, TemporaryResourceFlags flags) {
+	auto it = _temporaries.find(key);
+	if (it != _temporaries.end()) {
+		if (auto tex = it->second->acquireTexture(key)) {
+			return tex;
+		}
+		log::vtext("ResourceCache", "Resource '", key, "' already exists, but no texture '", key, "' found");
+		return nullptr;
+	}
+
 	renderqueue::Resource::Builder builder(key);
 	if (auto d = builder.addImage(key, move(info), cb)) {
-		if (auto tmp = addTemporaryResource(Rc<renderqueue::Resource>::create(move(builder)), ival)) {
+		if (auto tmp = addTemporaryResource(Rc<renderqueue::Resource>::create(move(builder)), ival, flags)) {
 			return Rc<Texture>::create(d, tmp);
 		}
 	}
 	return nullptr;
 }
 
-Rc<TemporaryResource> ResourceCache::addTemporaryResource(Rc<renderqueue::Resource> &&res, TimeInterval ival) {
-	auto tmp = Rc<TemporaryResource>::create(move(res), ival);
+Rc<TemporaryResource> ResourceCache::addTemporaryResource(Rc<renderqueue::Resource> &&res, TimeInterval ival, TemporaryResourceFlags flags) {
+	auto tmp = Rc<TemporaryResource>::create(move(res), ival, flags);
 	auto it = _temporaries.find(tmp->getName());
 	if (it != _temporaries.end()) {
 		_temporaries.erase(it);
@@ -424,8 +500,8 @@ void ResourceCache::compileResource(Director *dir, TemporaryResource *res) {
 	});
 }
 
-void ResourceCache::clearResource(Director *dir, TemporaryResource *res) {
-	res->clear();
+bool ResourceCache::clearResource(Director *dir, TemporaryResource *res) {
+	return res->clear();
 }
 
 }

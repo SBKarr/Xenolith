@@ -38,6 +38,7 @@
 #include "input/AppInputTapPressTest.cc"
 #include "input/AppInputSwipeTest.cc"
 #include "input/AppInputTextTest.cc"
+#include "input/AppInputPinchTest.cc"
 #include "action/AppActionEaseTest.cc"
 #include "action/AppActionMaterialTest.cc"
 #include "vg/AppVgTessCanvas.cc"
@@ -46,6 +47,7 @@
 #include "vg/AppVgIconList.cc"
 #include "vg/AppVgShadowTest.cc"
 #include "vg/AppVgSdfTest.cc"
+#include "vg/AppVgDynamicIcons.cc"
 #include "utils/AppUtilsStorageTest.cc"
 #include "utils/AppUtilsNetworkTest.cc"
 #include "utils/AppUtilsAssetTest.cc"
@@ -88,6 +90,7 @@ static Vector<MenuData> s_layouts {
 			LayoutName::InputTapPressTest,
 			LayoutName::InputSwipeTest,
 			LayoutName::InputTextTest,
+			LayoutName::InputPinchTest,
 		}); }},
 	MenuData{LayoutName::ActionTests, LayoutName::Root, "org.stappler.xenolith.test.ActionTests", "Action tests",
 		[] (LayoutName name) { return Rc<LayoutMenu>::create(name, Vector<LayoutName>{
@@ -101,6 +104,7 @@ static Vector<MenuData> s_layouts {
 			LayoutName::VgIconList,
 			LayoutName::VgShadowTest,
 			LayoutName::VgSdfTest,
+			LayoutName::VgDynamicIcons,
 		}); }},
 	MenuData{LayoutName::UtilsTests, LayoutName::Root, "org.stappler.xenolith.test.UtilsTests", "Utils tests",
 		[] (LayoutName name) { return Rc<LayoutMenu>::create(name, Vector<LayoutName>{
@@ -145,6 +149,8 @@ static Vector<MenuData> s_layouts {
 		[] (LayoutName name) { return Rc<InputSwipeTest>::create(); }},
 	MenuData{LayoutName::InputTextTest, LayoutName::InputTests, "org.stappler.xenolith.test.InputTextTest", "Text Test",
 		[] (LayoutName name) { return Rc<InputTextTest>::create(); }},
+	MenuData{LayoutName::InputPinchTest, LayoutName::InputTests, "org.stappler.xenolith.test.InputPinchTest", "Pinch Test",
+		[] (LayoutName name) { return Rc<InputPinchTest>::create(); }},
 
 	MenuData{LayoutName::ActionEaseTest, LayoutName::ActionTests, "org.stappler.xenolith.test.ActionEaseTest", "Ease test",
 		[] (LayoutName name) { return Rc<ActionEaseTest>::create(); }},
@@ -161,6 +167,8 @@ static Vector<MenuData> s_layouts {
 		[] (LayoutName name) { return Rc<VgShadowTest>::create(); }},
 	MenuData{LayoutName::VgSdfTest, LayoutName::VgTests, "org.stappler.xenolith.test.VgSdfTest", "SDF Test",
 		[] (LayoutName name) { return Rc<VgSdfTest>::create(); }},
+	MenuData{LayoutName::VgDynamicIcons, LayoutName::VgTests, "org.stappler.xenolith.test.VgDynamicIcons", "Dynamic icons",
+		[] (LayoutName name) { return Rc<VgDynamicIcons>::create(); }},
 
 	MenuData{LayoutName::UtilsStorageTest, LayoutName::UtilsTests, "org.stappler.xenolith.test.UtilsStorageTest", "Storage test",
 		[] (LayoutName name) { return Rc<UtilsStorageTest>::create(); }},

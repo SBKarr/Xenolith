@@ -283,7 +283,7 @@ StringView getInputKeyCodeKeyName(InputKeyCode code) {
 	case InputKeyCode::RIGHT_BRACKET: return StringView("AD12"); break;
 	case InputKeyCode::GRAVE_ACCENT: return StringView("TLDE"); break;
 
-		/* Function keys */
+	// Function keys
 	case InputKeyCode::F1: return StringView("FK01"); break;
 	case InputKeyCode::F2: return StringView("FK02"); break;
 	case InputKeyCode::F3: return StringView("FK03"); break;
@@ -319,9 +319,37 @@ StringView getInputKeyCodeKeyName(InputKeyCode code) {
 	return StringView();
 }
 
+StringView getInputEventName(InputEventName name) {
+	switch (name) {
+	case InputEventName::None: return StringView("None"); break;
+	case InputEventName::Begin: return StringView("Begin"); break;
+	case InputEventName::Move: return StringView("Move"); break;
+	case InputEventName::End: return StringView("End"); break;
+	case InputEventName::Cancel: return StringView("Cancel"); break;
+	case InputEventName::MouseMove: return StringView("MouseMove"); break;
+	case InputEventName::Scroll: return StringView("Scroll"); break;
+
+	case InputEventName::Background: return StringView("Background"); break;
+	case InputEventName::PointerEnter: return StringView("PointerEnter"); break;
+	case InputEventName::FocusGain: return StringView("FocusGain"); break;
+
+	case InputEventName::KeyPressed: return StringView("KeyPressed"); break;
+	case InputEventName::KeyRepeated: return StringView("KeyRepeated"); break;
+	case InputEventName::KeyReleased: return StringView("KeyReleased"); break;
+	case InputEventName::KeyCanceled: return StringView("KeyCanceled"); break;
+	default: break;
+	}
+	return StringView();
+}
+
 std::ostream &operator<<(std::ostream &stream, InputKeyCode code) {
 	stream << "InputKeyCode(" << toInt(code) << ", "
 			<< getInputKeyCodeName(code) << ", " << getInputKeyCodeKeyName(code) << ")";
+	return stream;
+}
+
+std::ostream &operator<<(std::ostream &stream, InputEventName name) {
+	stream << "InputEventName(" << getInputEventName(name) << ")";
 	return stream;
 }
 

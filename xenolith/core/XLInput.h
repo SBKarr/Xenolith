@@ -96,7 +96,8 @@ enum class InputModifier : uint32_t {
 
 	// boolean value for switch event (background/focus)
 	ValueFalse = None,
-	ValueTrue = uint32_t(1) << uint32_t(31)
+	ValueTrue = uint32_t(1) << uint32_t(31),
+	Unmanaged = ValueTrue
 };
 
 SP_DEFINE_ENUM_AS_MASK(InputModifier)
@@ -478,8 +479,10 @@ struct TextCursor {
 
 StringView getInputKeyCodeName(InputKeyCode);
 StringView getInputKeyCodeKeyName(InputKeyCode);
+StringView getInputEventName(InputEventName);
 
 std::ostream &operator<<(std::ostream &, InputKeyCode);
+std::ostream &operator<<(std::ostream &, InputEventName);
 
 constexpr const TextCursor TextCursor::InvalidCursor(maxOf<uint32_t>(), 0.0f);
 

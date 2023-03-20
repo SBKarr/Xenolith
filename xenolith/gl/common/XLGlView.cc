@@ -139,7 +139,7 @@ void View::handleInputEvents(Vector<InputEventData> &&events) {
 			}
 			_director->getInputDispatcher()->handleInputEvent(event);
 		}
-	}, this);
+	}, this, true);
 	setReadyForNextFrame();
 }
 

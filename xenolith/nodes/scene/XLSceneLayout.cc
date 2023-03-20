@@ -25,6 +25,8 @@
 
 namespace stappler::xenolith {
 
+SceneLayout::~SceneLayout() { }
+
 void SceneLayout::setDecorationMask(DecorationMask mask) {
 	if (_decorationMask != mask) {
 		_decorationMask = mask;

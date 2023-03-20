@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -490,6 +491,13 @@ void GestureSwipeRecognizer::cancel() {
 
 bool GestureSwipeRecognizer::addEvent(const InputEvent &event, float density) {
 	if (GestureRecognizer::addEvent(event, density)) {
+		Vec2 accum;
+		for (auto &it : _events) {
+			accum = accum + it.currentLocation;
+		}
+		accum /= float(_events.size());
+
+		_gesture.midpoint = accum;
 		_currentTouch = event.data.id;
 		_lastTime = Time::now();
 		return true;
@@ -637,6 +645,107 @@ bool GestureSwipeRecognizer::renewEvent(const InputEvent &event, float density) 
 	}
 }
 
+bool GesturePinchRecognizer::init(InputCallback &&cb, ButtonMask &&btn) {
+	if (!GestureRecognizer::init()) {
+		return false;
+	}
+
+	if (cb) {
+		_maxEvents = 2;
+		_callback = move(cb);
+		_buttonMask = move(btn);
+
+		// enable all touch events
+		_eventMask.set(toInt(InputEventName::Begin));
+		_eventMask.set(toInt(InputEventName::Move));
+		_eventMask.set(toInt(InputEventName::End));
+		_eventMask.set(toInt(InputEventName::Cancel));
+		return true;
+	}
+	return false;
+}
+
+void GesturePinchRecognizer::cancel() {
+	GestureRecognizer::cancel();
+	_gesture.cleanup();
+	_velocity.dropValues();
+	_lastTime.clear();
+}
+
+bool GesturePinchRecognizer::addEvent(const InputEvent &event, float density) {
+	if (GestureRecognizer::addEvent(event, density)) {
+		if (_events.size() == 2) {
+			_gesture.cleanup();
+			_gesture.first = _events.at(0).currentLocation;
+			_gesture.second = _events.at(1).currentLocation;
+			_gesture.center = _gesture.first.getMidpoint(_gesture.second);
+			_gesture.distance = _gesture.prevDistance = _gesture.startDistance = _gesture.first.getDistance(_gesture.second);
+			_gesture.scale = _gesture.distance / _gesture.startDistance;
+			_gesture.event = GestureEvent::Began;
+			_gesture.input = &_events.at(0);
+			_lastTime = Time::now();
+			if (_callback) {
+				_callback(_gesture);
+			}
+		}
+		return true;
+	} else {
+		return false;
+	}
+}
+
+bool GesturePinchRecognizer::removeEvent(const InputEvent &event, bool successful, float density) {
+	bool ret = false;
+	if (GestureRecognizer::removeEvent(event, successful, density)) {
+		if (_events.size() == 1) {
+			_gesture.event = successful ? GestureEvent::Ended : GestureEvent::Cancelled;
+			if (_callback) {
+				_callback(_gesture);
+			}
+            _gesture.cleanup();
+			_lastTime.clear();
+			_velocity.dropValues();
+		}
+		ret = true;
+	}
+	return ret;
+}
+
+bool GesturePinchRecognizer::renewEvent(const InputEvent &event, float density) {
+	if (GestureRecognizer::renewEvent(event, density)) {
+		if (_events.size() == 2) {
+			auto &first = _events.at(0);
+			auto &second = _events.at(1);
+			if (event.data.id == first.data.id || event.data.id == second.data.id) {
+				auto scale = _gesture.scale;
+
+				_gesture.first = _events.at(0).currentLocation;
+				_gesture.second = _events.at(1).currentLocation;
+				_gesture.center = _gesture.first.getMidpoint(_gesture.second);
+				_gesture.prevDistance = _events.at(0).previousLocation.getDistance(_events.at(1).previousLocation);
+				_gesture.distance = _gesture.first.getDistance(_gesture.second);
+				_gesture.scale = _gesture.distance / _gesture.startDistance;
+
+				auto t = Time::now();
+				float tm = (float)1000000LL / (float)((t - _lastTime).toMicroseconds());
+				if (tm > 80) {
+					tm = 80;
+				}
+				_velocity.addValue((scale - _gesture.scale) * tm);
+				_gesture.velocity = _velocity.getAverage();
+
+				_gesture.event = GestureEvent::Activated;
+				if (_callback) {
+					_callback(_gesture);
+				}
+
+				_lastTime = t;
+			}
+		}
+	}
+	return false;
+}
+
 bool GestureScrollRecognizer::init(InputCallback &&cb) {
 	if (!GestureRecognizer::init()) {
 		return false;
@@ -666,6 +775,7 @@ bool GestureScrollRecognizer::handleInputEvent(const InputEvent &event, float de
 	_gesture.event = GestureEvent::Cancelled;
 	return true;
 }
+
 
 bool GestureMoveRecognizer::init(InputCallback &&cb, bool withinNode) {
 	if (!GestureRecognizer::init()) {
@@ -757,8 +867,11 @@ bool GestureKeyRecognizer::isKeyPressed(InputKeyCode code) const {
 }
 
 bool GestureKeyRecognizer::addEvent(const InputEvent &event, float density) {
-	_pressedKeys.set(toInt(event.data.key.keycode));
-	return _callback(GestureData{GestureEvent::Began, &event});
+	if (_keyMask.test(toInt(event.data.key.keycode))) {
+		_pressedKeys.set(toInt(event.data.key.keycode));
+		return _callback(GestureData{GestureEvent::Began, &event});
+	}
+	return false;
 }
 
 bool GestureKeyRecognizer::removeEvent(const InputEvent &event, bool success, float density) {

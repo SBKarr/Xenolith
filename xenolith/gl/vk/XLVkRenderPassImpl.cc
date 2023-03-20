@@ -80,6 +80,7 @@ bool RenderPassImpl::Data::cleanup(Device &dev) {
 
 bool RenderPassImpl::init(Device &dev, PassData &data) {
 	_type = data.renderPass->getType();
+	_name = data.key.str<Interface>();
 	switch (_type) {
 	case gl::RenderPassType::Graphics:
 		return initGraphicsPass(dev, data);

@@ -85,6 +85,78 @@ void LayerSurface::setStyle(const SurfaceStyle &style, float duration) {
 	}
 }
 
+void LayerSurface::setColorRole(ColorRole value) {
+	if (_styleTarget.colorRole != value) {
+		if (_styleOrigin == _styleTarget) {
+			_styleTarget.colorRole = _styleOrigin.colorRole = value;
+			_styleDirty = true;
+		} else {
+			_styleTarget.colorRole = value;
+			_styleDirty = true;
+		}
+	}
+}
+
+void LayerSurface::setElevation(Elevation value) {
+	if (_styleTarget.elevation != value) {
+		if (_styleOrigin == _styleTarget) {
+			_styleTarget.elevation = _styleOrigin.elevation = value;
+			_styleDirty = true;
+		} else {
+			_styleTarget.elevation = value;
+			_styleDirty = true;
+		}
+	}
+}
+
+void LayerSurface::setShapeFamily(ShapeFamily value) {
+	if (_styleTarget.shapeFamily != value) {
+		if (_styleOrigin == _styleTarget) {
+			_styleTarget.shapeFamily = _styleOrigin.shapeFamily = value;
+			_styleDirty = true;
+		} else {
+			_styleTarget.shapeFamily = value;
+			_styleDirty = true;
+		}
+	}
+}
+
+void LayerSurface::setShapeStyle(ShapeStyle value) {
+	if (_styleTarget.shapeStyle != value) {
+		if (_styleOrigin == _styleTarget) {
+			_styleTarget.shapeStyle = _styleOrigin.shapeStyle = value;
+			_styleDirty = true;
+		} else {
+			_styleTarget.shapeStyle = value;
+			_styleDirty = true;
+		}
+	}
+}
+
+void LayerSurface::setNodeStyle(NodeStyle value) {
+	if (_styleTarget.nodeStyle != value) {
+		if (_styleOrigin == _styleTarget) {
+			_styleTarget.nodeStyle = _styleOrigin.nodeStyle = value;
+			_styleDirty = true;
+		} else {
+			_styleTarget.nodeStyle = value;
+			_styleDirty = true;
+		}
+	}
+}
+
+void LayerSurface::setActivityState(ActivityState value) {
+	if (_styleTarget.activityState != value) {
+		if (_styleOrigin == _styleTarget) {
+			_styleTarget.activityState = _styleOrigin.activityState = value;
+			_styleDirty = true;
+		} else {
+			_styleTarget.activityState = value;
+			_styleDirty = true;
+		}
+	}
+}
+
 void LayerSurface::setStyleDirtyCallback(Function<void(const SurfaceStyleData &)> &&cb) {
 	_styleDirtyCallback = move(cb);
 	_styleDirty = true;
@@ -101,10 +173,10 @@ bool LayerSurface::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 	}
 
 	if (style) {
-		if (_styleTarget.apply(_styleDataTarget, _contentSize, style)) {
+		if (_styleTarget.apply(_styleDataTarget, _contentSize, style, getSurfaceInteriorForFrame(frame))) {
 			_styleDirty = true;
 		}
-		if (_styleOrigin.apply(_styleDataOrigin, _contentSize, style)) {
+		if (_styleOrigin.apply(_styleDataOrigin, _contentSize, style, getSurfaceInteriorForFrame(frame))) {
 			_styleDirty = true;
 		}
 	}
@@ -136,6 +208,10 @@ StyleContainer *LayerSurface::getStyleContainerForFrame(RenderFrameInfo &frame) 
 	return frame.getComponent<StyleContainer>(StyleContainer::ComponentFrameTag);
 }
 
+SurfaceInterior *LayerSurface::getSurfaceInteriorForFrame(RenderFrameInfo &frame) const {
+	return frame.getComponent<SurfaceInterior>(SurfaceInterior::ComponentFrameTag);
+}
+
 RenderingLevel LayerSurface::getRealRenderingLevel() const {
 	auto l = xenolith::Layer::getRealRenderingLevel();
 	if (l == RenderingLevel::Transparent) {
@@ -145,7 +221,8 @@ RenderingLevel LayerSurface::getRealRenderingLevel() const {
 }
 
 void LayerSurface::pushShadowCommands(RenderFrameInfo &frame, NodeFlags flags, const Mat4 &t, SpanView<gl::TransformedVertexData> data) {
-	frame.shadows->pushSdfGroup(t, _shadowIndex, [&] (gl::CmdSdfGroup2D &cmd) {
+	auto shadowIndex = frame.shadowStack.back();
+	frame.shadows->pushSdfGroup(t, shadowIndex, [&] (gl::CmdSdfGroup2D &cmd) {
 		cmd.addRect2D(Rect(Vec2(0, 0), _contentSize));
 	});
 }

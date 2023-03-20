@@ -525,6 +525,51 @@ void MoveTo::update(float time) {
 	_target->setPosition(progress(_startPosition, _endPosition, time));
 }
 
+bool ScaleTo::init(float duration, float scale) {
+	if (!ActionInterval::init(duration)) {
+		return false;
+	}
+
+	_endScale = Vec3(scale, scale, scale);
+	return true;
+}
+
+bool ScaleTo::init(float duration, const Vec3 &scale) {
+	if (!ActionInterval::init(duration)) {
+		return false;
+	}
+
+	_endScale = scale;
+	return true;
+}
+
+void ScaleTo::startWithTarget(Node *target) {
+	ActionInterval::startWithTarget(target);
+	_startScale = target->getScale();
+}
+
+void ScaleTo::update(float time) {
+	_target->setScale(progress(_startScale, _endScale, time));
+}
+
+bool ResizeTo::init(float duration, const Size2 &size) {
+	if (!ActionInterval::init(duration)) {
+		return false;
+	}
+
+	_endSize = size;
+	return true;
+}
+
+void ResizeTo::startWithTarget(Node *target) {
+	ActionInterval::startWithTarget(target);
+	_startSize = target->getContentSize();
+}
+
+void ResizeTo::update(float time) {
+	_target->setContentSize(progress(_startSize, _endSize, time));
+}
+
 bool FadeTo::init(float duration, float target) {
 	if (!ActionInterval::init(duration)) {
 		return false;

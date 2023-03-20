@@ -130,8 +130,11 @@ void AssetComponent::cleanup(const db::Transaction &t) {
 }
 
 db::Value AssetComponent::getAsset(const db::Transaction &t, StringView url) const {
-	if (auto v = _assets.select(t, db::Query().select("url", db::Value(url)))) {
-		return db::Value(v.getValue(0));
+	if (auto v = _assets.select(t, db::Query().select("url", db::Value(url))).getValue(0)) {
+		if (auto versions = _versions.select(t, db::Query().select("asset", v.getValue("__oid")))) {
+			v.setValue(move(versions), "versions");
+		}
+		return db::Value(move(v));
 	}
 	return db::Value();
 }
@@ -191,6 +194,17 @@ void AssetLibrary::update(uint64_t clock) {
 			++ it;
 		}
 	}
+}
+
+void AssetLibrary::finalize() {
+	update(0);
+	_liveAssets.clear();
+	_assetsByUrl.clear();
+	_assetsById.clear();
+	_callbacks.clear();
+
+	_server->removeComponentContainer(this);
+	_server = nullptr;
 }
 
 void AssetLibrary::handleStorageInit(storage::ComponentLoader &loader) {
@@ -354,6 +368,7 @@ int64_t AssetLibrary::addVersion(const db::Transaction &t, int64_t assetId, cons
 		pair("size", db::Value(data.size)),
 		pair("type", db::Value(data.contentType)),
 	}));
+	std::cout << data::EncodeFormat::Pretty << version << "\n";
 	return version.getInteger("__oid");
 }
 

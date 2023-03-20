@@ -65,7 +65,8 @@ void SurfaceInterior::visit(RenderFrameInfo &info, NodeFlags parentFlags) {
 			return;
 		}
 
-		_assignedStyle.apply(_interiorStyle, _owner->getContentSize(), style);
+		_assignedStyle.apply(_interiorStyle, _owner->getContentSize(), style,
+				info.getComponent<SurfaceInterior>(SurfaceInterior::ComponentFrameTag));
 	}
 }
 

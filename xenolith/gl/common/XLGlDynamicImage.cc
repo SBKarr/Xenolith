@@ -111,9 +111,9 @@ void DynamicImage::acquireData(const Callback<void(BytesView)> &cb) {
 	if (!_data.data.empty()) {
 		cb(_data.data);
 	} else if (_data.stdCallback) {
-		_data.stdCallback(cb);
+		_data.stdCallback(nullptr, 0, cb);
 	} else if (_data.memCallback) {
-		_data.memCallback(cb);
+		_data.memCallback(nullptr, 0, cb);
 	}
 }
 
@@ -144,8 +144,8 @@ const ImageData * DynamicImage::Builder::setImage(StringView key, ImageInfo &&in
 	_data->_keyData = key.str<Interface>();
 	static_cast<ImageInfo &>(_data->_data) = info;
 	_data->_data.key = _data->_keyData;
-	_data->_data.stdCallback = [npath, format = info.format] (const ImageData::DataCallback &dcb) {
-		Resource::loadImageFileData(npath, format, dcb);
+	_data->_data.stdCallback = [npath, format = info.format] (uint8_t *ptr, uint64_t size, const ImageData::DataCallback &dcb) {
+		Resource::loadImageFileData(ptr, size, npath, format, dcb);
 	};;
 	_data->_data.atlas = move(atlas);
 	return &_data->_data;
@@ -162,7 +162,7 @@ const ImageData * DynamicImage::Builder::setImage(StringView key, ImageInfo &&in
 }
 
 const ImageData * DynamicImage::Builder::setImage(StringView key, ImageInfo &&info,
-		Function<void(const ImageData::DataCallback &)> &&cb, Rc<ImageAtlas> &&atlas) {
+		Function<void(uint8_t *, uint64_t, const ImageData::DataCallback &)> &&cb, Rc<ImageAtlas> &&atlas) {
 	_data->_keyData = key.str<Interface>();
 	static_cast<ImageInfo &>(_data->_data) = info;
 	_data->_data.key = _data->_keyData;

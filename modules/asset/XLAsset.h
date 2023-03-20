@@ -34,46 +34,74 @@ namespace stappler::xenolith::storage {
 class AssetLibrary;
 struct AssetDownloadData;
 
+struct AssetVersionData {
+	bool complete = false;
+	bool download = false; // is download active for file
+	uint32_t locked = 0;
+	int64_t id = 0;
+	Time ctime; // creation time
+	Time mtime; // last modification time
+	size_t size = 0; // file size
+	float progress = 0.0f; // download progress
+
+	String path;
+	String contentType;
+	String etag;
+};
+
+class Asset;
+
+class AssetLock : public Ref {
+public:
+	using VersionData = AssetVersionData;
+
+	virtual ~AssetLock();
+
+	int64_t getId() const { return _lockedVersion.id; }
+	Time getCTime() const { return _lockedVersion.ctime; }
+	Time getMTime() const { return _lockedVersion.mtime; }
+	size_t getSize() const { return _lockedVersion.size; }
+
+	StringView getPath() const { return _lockedVersion.path; }
+	StringView getContentType() const { return _lockedVersion.contentType; }
+	StringView getEtag() const { return _lockedVersion.etag; }
+	StringView getCachePath() const;
+
+	const Rc<Asset> &getAsset() const { return _asset; }
+
+protected:
+	friend class Asset;
+
+	AssetLock(Rc<Asset> &&, const VersionData &, Function<void(const VersionData &)> &&);
+
+	VersionData _lockedVersion;
+	Function<void(const VersionData &)> _releaseFunction;
+	Rc<Asset> _asset;
+};
+
 class Asset : public Subscription {
 public:
+	using VersionData = AssetVersionData;
+
 	enum Update : uint8_t {
-		CacheDataUpdated = 2,
-		FileUpdated,
-		DownloadStarted,
-		DownloadProgress,
-		DownloadCompleted,
-		DownloadSuccessful,
-		DownloadFailed,
-	};
-
-	struct VersionData {
-		bool complete = false;
-		bool download = false; // is download active for file
-		bool isFile = true; // is direct file access available (so, path can be opened with filesystem::open)
-		bool isLocal = false;
-		int64_t id = 0;
-		Time ctime; // creation time
-		Time mtime; // last modification time
-		size_t size = 0; // file size
-		float progress = 0.0f; // download progress
-
-		String path;
-		String contentType;
-		String etag;
+		CacheDataUpdated = 1 << 1,
+		DownloadStarted = 1 << 2,
+		DownloadProgress = 1 << 3,
+		DownloadCompleted = 1 << 4,
+		DownloadSuccessful = 1 << 5,
+		DownloadFailed = 1 << 6,
 	};
 
 	Asset(AssetLibrary *, const db::Value &);
 	virtual ~Asset();
 
-	// try to read asset data, returns false if no data available
-	// also can fail with callback (.success = false, BytesView()) with no data
-	bool read(Callback<void(VersionData, BytesView)> &&);
+	const VersionData *getReadableVersion() const;
 
-	// get info about asset
-	bool info(Callback<void(VersionData)> &&);
+	Rc<AssetLock> lockVersion(int64_t);
 
 	int64_t getId() const { return _id; }
 	StringView getUrl() const { return _url; }
+	StringView getCachePath() const { return _cache; }
 	Time getTouch() const { return _touch; }
 	TimeInterval getTtl() const { return _ttl; }
 
@@ -93,12 +121,7 @@ public:
 
 	Value encode() const;
 
-	/*
-	void checkFile();
-
-	bool isReadAvailable() const;
-	bool isDownloadAvailable() const;
-	bool isUpdateAvailable() const;
+	/*bool isUpdateAvailable() const;
 
 	StringView getFilePath() const { return _path; }
 	StringView getCachePath() const { return _cachePath; }
@@ -134,6 +157,9 @@ protected:
 
 	// called from network thread
 	void addVersion(AssetDownloadData *);
+	void dropVersion(const VersionData &);
+
+	void releaseLock(const VersionData &);
 
 	String _path;
 	String _cache;

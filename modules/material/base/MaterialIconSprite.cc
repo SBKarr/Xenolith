@@ -34,6 +34,10 @@ bool IconSprite::init(IconName icon) {
 
 	_iconName = icon;
 
+	if (_iconName != IconName::None) {
+		updateIcon();
+	}
+
 	return true;
 }
 
@@ -42,6 +46,17 @@ void IconSprite::setIconName(IconName name) {
 		_iconName = name;
 		updateIcon();
 	}
+}
+
+void IconSprite::setProgress(float pr) {
+	if (_progress != pr) {
+		_progress = pr;
+		updateIcon();
+	}
+}
+
+float IconSprite::getProgress() const {
+	return _progress;
 }
 
 bool IconSprite::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
@@ -53,8 +68,8 @@ bool IconSprite::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 	if (style) {
 		auto &s = style->getStyle();
 		auto color = s.colorOn.asColor4F();
-		if (color != getColor()) {
-			setColor(color, true);
+		if (color.getColor() != getColor().getColor()) {
+			setColor(color, false);
 		}
 	}
 
@@ -66,27 +81,15 @@ void IconSprite::animate() {
 }
 
 void IconSprite::animate(float targetProgress, float duration) {
-	// TODO
+	stopAllActionsByTag("IconSprite::animate"_tag);
+	runAction(Rc<ActionProgress>::create(duration, _progress, targetProgress, [this] (float value) {
+		setProgress(value);
+	}), "IconSprite::animate"_tag);
 }
 
 void IconSprite::updateIcon() {
 	_image->clear();
-	switch (_iconName) {
-	case IconName::None:
-	case IconName::Empty:
-		break;
-	default:
-		getIconData(_iconName, [&] (BytesView bytes) {
-			auto t = Mat4::IDENTITY;
-			t.scale(1, -1, 1);
-			t.translate(0, -24, 0);
-			// adding icon to tesselator cache with name org.stappler.xenolith.material.icon.*
-			auto path = _image->addPath("", toString("org.stappler.xenolith.material.icon.", xenolith::getIconName(_iconName)))
-					->getPath();
-			path->init(bytes);
-			path->setTransform(t);
-		});
-	}
+	drawIcon(*_image, _iconName, _progress);
 }
 
 }

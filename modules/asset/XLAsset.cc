@@ -29,6 +29,22 @@
 
 namespace stappler::xenolith::storage {
 
+AssetLock::~AssetLock() {
+	if (_releaseFunction) {
+		_releaseFunction(_lockedVersion);
+	}
+	_asset = nullptr;
+}
+
+StringView AssetLock::getCachePath() const {
+	return _asset->getCachePath();
+}
+
+AssetLock::AssetLock(Rc<Asset> &&asset, const VersionData &data, Function<void(const VersionData &)> &&cb)
+: _lockedVersion(data), _releaseFunction(move(cb)), _asset(move(asset)) {
+
+}
+
 Asset::Asset(AssetLibrary *lib, const db::Value &val) : _library(lib) {
 	bool resumeDownload = false;
 	const db::Value *versions = nullptr;
@@ -71,6 +87,30 @@ Asset::~Asset() {
 	_library->removeAsset(this);
 }
 
+const AssetVersionData * Asset::getReadableVersion() const {
+	for (auto &it : _versions) {
+		if (it.complete && filesystem::exists(it.path)) {
+			return &it;
+		}
+	}
+	return nullptr;
+}
+
+Rc<AssetLock> Asset::lockVersion(int64_t id) {
+	for (auto &it : _versions) {
+		if (it.id == id && it.complete) {
+			++ it.locked;
+			auto ret = new AssetLock(this, it, [this] (const VersionData &data) {
+				releaseLock(data);
+			});
+			auto ref = Rc<AssetLock>(ret);
+			ret->release(0);
+			return ref;
+		}
+	}
+	return nullptr;
+}
+
 bool Asset::download() {
 	if (_download) {
 		return true;
@@ -82,8 +122,7 @@ bool Asset::download() {
 			if (resumeDownload(*it)) {
 				return true;
 			} else {
-				filesystem::remove(it->path, true, true);
-				_library->eraseVersion(it->id);
+				dropVersion(*it);
 				it = _versions.erase(it);
 			}
 		} else {
@@ -109,13 +148,13 @@ void Asset::clear() {
 	auto it = _versions.begin();
 	while (it != _versions.end()) {
 		if (it->complete) {
-			filesystem::remove(it->path, true, true);
-			_library->eraseVersion(it->id);
+			dropVersion(*it);
 			it = _versions.erase(it);
 		} else {
 			++ it;
 		}
 	}
+	setDirty(Flags(CacheDataUpdated | DownloadFailed));
 }
 
 bool Asset::isDownloadInProgress() const {
@@ -183,7 +222,6 @@ void Asset::parseVersions(const db::Value &downloads) {
 			if (filesystem::exists(versionPath)) {
 				auto &v = _versions.emplace_back(move(data));
 				v.path = move(versionPath);
-				v.isFile = true;
 				v.download = true;
 
 				paths.emplace(v.path);
@@ -301,7 +339,6 @@ bool Asset::startNewDownload(Time ctime, StringView etag) {
 	_library->setAssetDownload(_id, _download);
 
 	req->perform(_library->getApplication(), [this, data = data.get()] (const network::Request &req, bool success) {
-		std::cout << req.getHandle().getDebugData().str() << "\n";
 		if (data->inputFile) {
 			fclose(data->inputFile);
 			data->inputFile = nullptr;
@@ -400,7 +437,7 @@ void Asset::setDownloadComplete(VersionData &data, bool success) {
 		for (auto &it : _versions) {
 			if (it.id == data.id) {
 				replaceVersion(data);
-				setDirty(Flags(Update::DownloadCompleted));
+				setDirty(Flags(Update::DownloadCompleted | Update::DownloadSuccessful));
 				_library->setVersionComplete(data.id, true);
 				return;
 			}
@@ -409,10 +446,9 @@ void Asset::setDownloadComplete(VersionData &data, bool success) {
 		auto it = _versions.begin();
 		while (it != _versions.end()) {
 			if (it->id == data.id) {
-				_library->eraseVersion(it->id);
-				filesystem::remove(it->path, true, true);
+				dropVersion(*it);
 				it = _versions.erase(it);
-				setDirty(Flags(Update::DownloadFailed));
+				setDirty(Flags(Update::DownloadCompleted | Update::DownloadFailed));
 			} else {
 				++ it;
 			}
@@ -426,13 +462,14 @@ void Asset::setFileValidated(bool success) {
 	_download = false;
 	_library->setAssetDownload(_id, _download);
 	_downloadId = 0;
+
+	setDirty(Flags(CacheDataUpdated));
 }
 
 void Asset::replaceVersion(VersionData &data) {
 	for (auto &it : _versions) {
 		if (it.id != data.id) {
-			filesystem::remove(it.path, true, true);
-			_library->eraseVersion(it.id);
+			dropVersion(it);
 		}
 	}
 
@@ -451,6 +488,24 @@ void Asset::addVersion(AssetDownloadData *data) {
 		}, data);
 		return true;
 	}, data);
+}
+
+void Asset::dropVersion(const VersionData &data) {
+	if (!data.locked) {
+		filesystem::remove(data.path, true, true);
+	}
+	_library->eraseVersion(data.id);
+}
+
+void Asset::releaseLock(const VersionData &data) {
+	for (auto &it : _versions) {
+		if (it.id == data.id) {
+			-- it.locked;
+			return;
+		}
+	}
+
+	filesystem::remove(data.path, true, true);
 }
 
 }

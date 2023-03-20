@@ -35,6 +35,7 @@ struct RenderFrameInfo {
 	memory::vector<ZOrder> zPath;
 	memory::vector<Mat4> viewProjectionStack;
 	memory::vector<Mat4> modelTransformStack;
+	memory::vector<float> shadowStack;
 	memory::pool_t *pool;
 
 	gl::StateId currentStateId;

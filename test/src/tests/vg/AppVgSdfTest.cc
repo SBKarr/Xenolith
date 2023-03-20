@@ -96,7 +96,7 @@ bool VgSdfTestCircle::init(bool value) {
 
 void VgSdfTestCircle::pushShadowCommands(RenderFrameInfo &frame, NodeFlags flags, const Mat4 &t, SpanView<gl::TransformedVertexData> data) {
 	if (_sdfShadow) {
-		frame.shadows->pushSdfGroup(t, _shadowIndex, [&] (gl::CmdSdfGroup2D &cmd) {
+		frame.shadows->pushSdfGroup(t, frame.shadowStack.back(), [&] (gl::CmdSdfGroup2D &cmd) {
 			cmd.addCircle2D(_contentSize / 2.0f, min(_contentSize.width, _contentSize.height) / 2.0f);
 		});
 	} else {
@@ -127,7 +127,7 @@ bool VgSdfTestRect::init(bool value, float radius) {
 
 void VgSdfTestRect::pushShadowCommands(RenderFrameInfo &frame, NodeFlags flags, const Mat4 &t, SpanView<gl::TransformedVertexData> data) {
 	if (_sdfShadow) {
-		frame.shadows->pushSdfGroup(t, _shadowIndex, [&] (gl::CmdSdfGroup2D &cmd) {
+		frame.shadows->pushSdfGroup(t, frame.shadowStack.back(), [&] (gl::CmdSdfGroup2D &cmd) {
 			if (_radius > 0.0f) {
 				cmd.addRoundedRect2D(Rect(Vec2(0, 0), _contentSize), _radius * (_contentSize.width / 16.0f));
 			} else {
@@ -156,7 +156,7 @@ bool VgSdfTestPolygon::init(bool value) {
 
 void VgSdfTestPolygon::pushShadowCommands(RenderFrameInfo &frame, NodeFlags flags, const Mat4 &t, SpanView<gl::TransformedVertexData> data) {
 	if (_sdfShadow) {
-		frame.shadows->pushSdfGroup(t, _shadowIndex, [&] (gl::CmdSdfGroup2D &cmd) {
+		frame.shadows->pushSdfGroup(t, frame.shadowStack.back(), [&] (gl::CmdSdfGroup2D &cmd) {
 			Vec2 points[4] = {
 				Vec2(0, 0),
 				Vec2(_contentSize),
@@ -187,7 +187,7 @@ bool VgSdfTestTriangle::init(bool value) {
 
 void VgSdfTestTriangle::pushShadowCommands(RenderFrameInfo &frame, NodeFlags flags, const Mat4 &t, SpanView<gl::TransformedVertexData> data) {
 	if (_sdfShadow) {
-		frame.shadows->pushSdfGroup(t, _shadowIndex, [&] (gl::CmdSdfGroup2D &cmd) {
+		frame.shadows->pushSdfGroup(t, frame.shadowStack.back(), [&] (gl::CmdSdfGroup2D &cmd) {
 			cmd.addTriangle2D(Vec2(0, 0), Vec2(0, 0), Vec2(_contentSize.width / 2.0f, _contentSize.height), Vec2(_contentSize.width, 0));
 		});
 	} else {

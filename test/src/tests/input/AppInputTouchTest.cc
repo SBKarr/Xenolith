@@ -70,7 +70,7 @@ void InputTouchTest::handleClick(const Vec2 &loc) {
 	node->setPosition(loc);
 
 	auto l = node->addInputListener(Rc<InputListener>::create());
-	l->setSwallowAllEvents();
+	l->setSwallowEvents(InputListener::EventMaskTouch);
 	l->addTouchRecognizer([node] (const GestureData &ev) {
 		std::cout << "Touch (node): " << ev.event << ": " << ev.input->currentLocation << "\n";
 		switch (ev.event) {

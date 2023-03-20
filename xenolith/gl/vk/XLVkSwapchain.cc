@@ -53,7 +53,6 @@ SwapchainHandle::~SwapchainHandle() {
 		}
 	}
 	invalidate();
-	log::text("SwapchainHandle", "~SwapchainHandle");
 }
 
 bool SwapchainHandle::init(Device &dev, const gl::SurfaceInfo &info, const gl::SwapchainConfig &cfg, gl::ImageInfo &&swapchainImageInfo,

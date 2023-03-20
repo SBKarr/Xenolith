@@ -192,7 +192,7 @@ struct BufferData : BufferInfo {
 	using DataCallback = memory::callback<void(BytesView)>;
 
 	BytesView data;
-	memory::function<void(const DataCallback &)> callback = nullptr;
+	memory::function<void(uint8_t *, uint64_t, const DataCallback &)> callback = nullptr;
 	Rc<BufferObject> buffer; // GL implementation-dependent object
 	const Resource *resource = nullptr; // owning resource;
 };
@@ -272,8 +272,8 @@ struct ImageData : ImageInfo {
 	static ImageData make(Rc<ImageObject> &&);
 
 	BytesView data;
-	memory::function<void(const DataCallback &)> memCallback = nullptr;
-	Function<void(const DataCallback &)> stdCallback = nullptr;
+	memory::function<void(uint8_t *, uint64_t, const DataCallback &)> memCallback = nullptr;
+	Function<void(uint8_t *, uint64_t, const DataCallback &)> stdCallback = nullptr;
 	Rc<ImageObject> image; // GL implementation-dependent object
 	Rc<ImageAtlas> atlas;
 	const Resource *resource = nullptr; // owning resource;

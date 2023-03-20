@@ -28,6 +28,8 @@
 
 namespace stappler::xenolith {
 
+class VectorSprite;
+
 class UtilScene : public Scene {
 public:
 	class FpsDisplay;
@@ -46,7 +48,15 @@ public:
 protected:
 	void initialize(Application *app);
 
+	void updateInputEventData(InputEventData &data, const InputEventData &source, Vec2 pos, uint32_t id);
+
+	InputEventData _data1 = InputEventData{maxOf<uint32_t>() - 1};
+	InputEventData _data2 = InputEventData{maxOf<uint32_t>() - 2};
+	InputListener *_listener = nullptr;
 	FpsDisplay *_fps = nullptr;
+	VectorSprite *_pointerReal = nullptr;
+	VectorSprite *_pointerVirtual = nullptr;
+	VectorSprite *_pointerCenter = nullptr;
 };
 
 }

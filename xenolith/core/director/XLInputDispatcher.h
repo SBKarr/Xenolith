@@ -95,7 +95,6 @@ protected:
 	EventHandlersInfo *resetKey(const InputEventData &);
 	void handleKey(const InputEventData &, bool clear);
 
-
 	uint64_t _currentTime = 0;
 	HashMap<uint32_t, EventHandlersInfo> _activeEvents;
 	HashMap<InputKeyCode, EventHandlersInfo> _activeKeys;

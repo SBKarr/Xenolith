@@ -48,6 +48,13 @@ public:
 	virtual void setStyle(const SurfaceStyle &);
 	virtual void setStyle(const SurfaceStyle &, float duration);
 
+	virtual void setColorRole(ColorRole value);
+	virtual void setElevation(Elevation value);
+	virtual void setShapeFamily(ShapeFamily value);
+	virtual void setShapeStyle(ShapeStyle value);
+	virtual void setNodeStyle(NodeStyle value);
+	virtual void setActivityState(ActivityState value);
+
 	virtual void setStyleDirtyCallback(Function<void(const SurfaceStyleData &)> &&);
 	virtual const Function<void(const SurfaceStyleData &)> &getStyleDirtyCallback() const { return _styleDirtyCallback; }
 
@@ -57,6 +64,7 @@ protected:
 	virtual void applyStyle(const SurfaceStyleData &);
 
 	virtual StyleContainer *getStyleContainerForFrame(RenderFrameInfo &) const;
+	virtual SurfaceInterior *getSurfaceInteriorForFrame(RenderFrameInfo &) const;
 	virtual RenderingLevel getRealRenderingLevel() const override;
 
 	virtual void pushShadowCommands(RenderFrameInfo &, NodeFlags flags, const Mat4 &,

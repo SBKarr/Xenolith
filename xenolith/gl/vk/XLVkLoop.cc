@@ -164,9 +164,8 @@ struct Loop::Internal final : memory::AllocPool {
 		}
 	}
 
-	void compileResource(Rc<gl::Resource> &&req, Function<void(bool)> &&cb) {
-		auto h = loop->makeFrame(transferQueue->makeRequest(
-				Rc<TransferResource>::create(device->getAllocator(), move(req), move(cb))), 0);
+	void compileResource(Rc<TransferResource> &&req) {
+		auto h = loop->makeFrame(transferQueue->makeRequest(move(req)), 0);
 		h->update(true);
 	}
 
@@ -546,9 +545,13 @@ void Loop::cancel() {
 	_thread.join();
 }
 
-void Loop::compileResource(Rc<gl::Resource> &&req, Function<void(bool)> &&cb) {
-	performOnGlThread([this, req = move(req), cb = move(cb)] () mutable {
-		_internal->compileResource(move(req), move(cb));
+void Loop::compileResource(Rc<gl::Resource> &&req, Function<void(bool)> &&cb, bool preload) {
+	auto res = Rc<TransferResource>::create(_internal->device->getAllocator(), move(req), move(cb));
+	if (preload) {
+		res->initialize();
+	}
+	performOnGlThread([this, res = move(res)] () mutable {
+		_internal->compileResource(move(res));
 	}, this, true);
 }
 

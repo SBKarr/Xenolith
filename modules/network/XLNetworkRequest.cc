@@ -62,12 +62,10 @@ bool Handle::prepare(Context *ctx) {
 	if (_mtime > 0) {
 		auto httpTime = Time::microseconds(_mtime).toHttp<Interface>();
 		ctx->headers = curl_slist_append(ctx->headers, toString("If-Modified-Since: ", httpTime).data());
-		std::cout << toString("If-Modified-Since: ", httpTime) << "\n";
 	}
 
 	if (!_etag.empty()) {
 		ctx->headers = curl_slist_append(ctx->headers, toString("If-None-Match: ", _etag).data());
-		std::cout << toString("If-None-Match: ", _etag) << "\n";
 	}
 
 	if (!_sharegroup.empty() && ctx->share) {
@@ -85,8 +83,6 @@ bool Handle::finalize(Context *ctx, bool ret) {
 	if (getResponseCode() < 300) {
 		auto httpTime = getReceivedHeaderString("Last-Modified");
 		auto eTag = getReceivedHeaderString("ETag");
-
-		std::cout << httpTime << " " << eTag << "\n";
 
 		_mtime = Time::fromHttp(httpTime).toMicroseconds();
 		_etag = eTag.str<Interface>();

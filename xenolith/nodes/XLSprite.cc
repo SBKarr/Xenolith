@@ -57,6 +57,7 @@ bool Sprite::init(Rc<Texture> &&texture) {
 
 	if (texture) {
 		_texture = move(texture);
+		_isTextureLoaded = _texture->isLoaded();
 	}
 
 	initVertexes();
@@ -98,6 +99,7 @@ void Sprite::setTexture(Rc<Texture> &&tex) {
 			_texture = nullptr;
 			_textureName.clear();
 			_materialDirty = true;
+			_isTextureLoaded = false;
 		} else if (_texture->getName() != tex->getName()) {
 			if (_running) {
 				_texture->onExit(_scene);
@@ -105,6 +107,10 @@ void Sprite::setTexture(Rc<Texture> &&tex) {
 			_texture = move(tex);
 			if (_running) {
 				_texture->onEnter(_scene);
+			}
+			_isTextureLoaded = _texture->isLoaded();
+			if (_isTextureLoaded && _textureLoadedCallback) {
+				_textureLoadedCallback();
 			}
 			_textureName = _texture->getName().str<Interface>();
 			_materialDirty = true;
@@ -115,10 +121,18 @@ void Sprite::setTexture(Rc<Texture> &&tex) {
 			if (_running) {
 				_texture->onEnter(_scene);
 			}
+			_isTextureLoaded = _texture->isLoaded();
+			if (_isTextureLoaded && _textureLoadedCallback) {
+				_textureLoadedCallback();
+			}
 			_textureName = _texture->getName().str<Interface>();
 			_materialDirty = true;
 		}
 	}
+}
+
+const Rc<Texture> &Sprite::getTexture() const {
+	return _texture;
 }
 
 void Sprite::setTextureRect(const Rect &rect) {
@@ -128,8 +142,23 @@ void Sprite::setTextureRect(const Rect &rect) {
 	}
 }
 
+bool Sprite::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
+	if (_texture) {
+		auto loaded = _texture->isLoaded();
+		if (loaded != _isTextureLoaded && loaded) {
+			onTextureLoaded();
+			_isTextureLoaded = loaded;
+		}
+	}
+	return DynamicStateNode::visitDraw(frame, parentFlags);
+}
+
 void Sprite::draw(RenderFrameInfo &frame, NodeFlags flags) {
-	if (_texture && _texture->isLoaded()) {
+	if (!_texture) {
+		return;
+	}
+
+	if (_texture->isLoaded()) {
 		if (_autofit != Autofit::None) {
 			auto size = _texture->getExtent();
 			if (_targetTextureSize != size) {
@@ -200,6 +229,12 @@ void Sprite::onContentSizeDirty() {
 	Node::onContentSizeDirty();
 }
 
+void Sprite::onTextureLoaded() {
+	if (_textureLoadedCallback) {
+		_textureLoadedCallback();
+	}
+}
+
 void Sprite::setColorMode(const ColorMode &mode) {
 	if (_colorMode != mode) {
 		_colorMode = mode;
@@ -258,8 +293,12 @@ void Sprite::setSamplerIndex(uint16_t idx) {
 	}
 }
 
+void Sprite::setTextureLoadedCallback(Function<void()> &&cb) {
+	_textureLoadedCallback = move(cb);
+}
+
 void Sprite::pushShadowCommands(RenderFrameInfo &frame, NodeFlags flags, const Mat4 &t, SpanView<gl::TransformedVertexData> data) {
-	frame.shadows->pushShadowArray(data, _shadowIndex);
+	frame.shadows->pushShadowArray(data, frame.shadowStack.back());
 }
 
 void Sprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
@@ -270,17 +309,16 @@ void Sprite::pushCommands(RenderFrameInfo &frame, NodeFlags flags) {
 		newMV.m[12] = floorf(modelTransform.m[12]);
 		newMV.m[13] = floorf(modelTransform.m[13]);
 		newMV.m[14] = floorf(modelTransform.m[14]);
-
-		newMV = frame.viewProjectionStack.back() * newMV;
 	} else {
-		newMV = frame.viewProjectionStack.back() * frame.modelTransformStack.back();
+		newMV = frame.modelTransformStack.back();
 	}
 
 	if (_shadowIndex > 0.0f) {
 		gl::TransformedVertexData transformData{newMV, data};
 		pushShadowCommands(frame, flags, newMV, makeSpanView(&transformData, 1));
 	}
-	frame.commands->pushVertexArray(move(data), newMV, frame.zPath, _materialId, _realRenderingLevel, _shadowIndex, _commandFlags);
+	frame.commands->pushVertexArray(move(data), frame.viewProjectionStack.back() * newMV,
+			frame.zPath, _materialId, _realRenderingLevel, frame.shadowStack.back(), _commandFlags);
 }
 
 MaterialInfo Sprite::getMaterialInfo() const {

@@ -22,6 +22,7 @@
  **/
 
 #include "XLInputDispatcher.h"
+#include "XLInputListener.h"
 
 namespace stappler::xenolith {
 
@@ -196,11 +197,13 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 			it->handleEvent(ev);
 		}
 		for (auto &it : _activeEvents) {
-			it.second.event.data.x = event.x;
-			it.second.event.data.y = event.y;
-			it.second.event.data.event = InputEventName::Move;
-			it.second.event.data.modifiers = event.modifiers;
-			handleInputEvent(it.second.event.data);
+			if ((it.second.event.data.modifiers & InputModifier::Unmanaged) == InputModifier::None) {
+				it.second.event.data.x = event.x;
+				it.second.event.data.y = event.y;
+				it.second.event.data.event = InputEventName::Move;
+				it.second.event.data.modifiers = event.modifiers;
+				handleInputEvent(it.second.event.data);
+			}
 		}
 		break;
 	}

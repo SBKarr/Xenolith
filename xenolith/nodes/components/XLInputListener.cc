@@ -29,6 +29,21 @@
 
 namespace stappler::xenolith {
 
+InputListener::EventMask InputListener::EventMaskTouch = InputListener::makeEventMask({
+	InputEventName::Begin,
+	InputEventName::Move,
+	InputEventName::End,
+	InputEventName::Cancel,
+	InputEventName::Scroll,
+});
+
+InputListener::EventMask InputListener::EventMaskKeyboard = InputListener::makeEventMask({
+	InputEventName::KeyPressed,
+	InputEventName::KeyRepeated,
+	InputEventName::KeyReleased,
+	InputEventName::KeyCanceled,
+});
+
 InputListener::ButtonMask InputListener::makeButtonMask(std::initializer_list<InputMouseButton> &&il) {
 	ButtonMask ret;
 	for (auto &it : il) {
@@ -115,7 +130,19 @@ void InputListener::setExclusiveForTouch(uint32_t eventId) {
 }
 
 void InputListener::setSwallowEvents(EventMask &&mask) {
-	_swallowEvents = move(mask);
+	if (_swallowEvents.any()) {
+		_swallowEvents |= mask;
+	} else {
+		_swallowEvents = move(mask);
+	}
+}
+
+void InputListener::setSwallowEvents(const EventMask &mask) {
+	if (_swallowEvents.any()) {
+		_swallowEvents |= mask;
+	} else {
+		_swallowEvents = mask;
+	}
 }
 
 void InputListener::setSwallowAllEvents() {
@@ -134,8 +161,24 @@ void InputListener::clearSwallowEvent(InputEventName event) {
 	_swallowEvents.reset(toInt(event));
 }
 
+void InputListener::clearSwallowEvents(const EventMask &event) {
+	_swallowEvents &= ~event;
+}
+
 bool InputListener::isSwallowAllEvents() const {
 	return _swallowEvents.all();
+}
+
+bool InputListener::isSwallowAllEvents(const EventMask &event) const {
+	return (_swallowEvents & event) == event;
+}
+
+bool InputListener::isSwallowAnyEvents(const EventMask &event) const {
+	return (_swallowEvents & event).any();
+}
+
+bool InputListener::isSwallowEvent(InputEventName name) const {
+	return _swallowEvents.test(toInt(name));
 }
 
 void InputListener::setTouchFilter(const EventFilter &filter) {
@@ -204,6 +247,10 @@ GestureRecognizer *InputListener::addPressRecognizer(InputCallback<GesturePress>
 
 GestureRecognizer *InputListener::addSwipeRecognizer(InputCallback<GestureSwipe> &&cb, float threshold, bool sendThreshold, ButtonMask &&mask) {
 	return addRecognizer(Rc<GestureSwipeRecognizer>::create(move(cb), threshold, sendThreshold, move(mask)));
+}
+
+GestureRecognizer *InputListener::addPinchRecognizer(InputCallback<GesturePinch> &&cb, ButtonMask &&mask) {
+	return addRecognizer(Rc<GesturePinchRecognizer>::create(move(cb), move(mask)));
 }
 
 GestureRecognizer *InputListener::addMoveRecognizer(InputCallback<GestureData> &&cb, bool withinNode) {

@@ -137,14 +137,14 @@ bool Button::isFollowContentSize() const {
 
 void Button::setSwallowEvents(bool value) {
 	if (value) {
-		_inputListener->setSwallowAllEvents();
+		_inputListener->setSwallowEvents(InputListener::EventMaskTouch);
 	} else {
-		_inputListener->clearSwallowAllEvents();
+		_inputListener->clearSwallowEvents(InputListener::EventMaskTouch);
 	}
 }
 
 bool Button::isSwallowEvents() const {
-	return _inputListener->isSwallowAllEvents();
+	return _inputListener->isSwallowAllEvents(InputListener::EventMaskTouch);
 }
 
 void Button::setEnabled(bool value) {

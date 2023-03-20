@@ -126,6 +126,8 @@ protected:
 	VkDeviceSize _nonCoherentAtomSize = 1;
 	StagingBuffer _stagingBuffer;
 	Function<void(bool)> _callback;
+
+	bool _initialized = false;
 };
 
 class TransferQueue : public renderqueue::Queue {

@@ -38,6 +38,9 @@ public:
 	virtual IconName getIconName() const { return _iconName; }
 	virtual void setIconName(IconName);
 
+	virtual void setProgress(float);
+	virtual float getProgress() const;
+
 	virtual bool visitDraw(RenderFrameInfo &, NodeFlags parentFlags) override;
 
 	virtual void animate();
@@ -49,6 +52,7 @@ protected:
 	virtual void updateIcon();
 
 	IconName _iconName = IconName::None;
+	float _progress = 0.0f;
 };
 
 }

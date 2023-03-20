@@ -87,6 +87,78 @@ void Surface::setStyle(const SurfaceStyle &style, float duration) {
 	}
 }
 
+void Surface::setColorRole(ColorRole value) {
+	if (_styleTarget.colorRole != value) {
+		if (_styleOrigin == _styleTarget) {
+			_styleTarget.colorRole = _styleOrigin.colorRole = value;
+			_styleDirty = true;
+		} else {
+			_styleTarget.colorRole = value;
+			_styleDirty = true;
+		}
+	}
+}
+
+void Surface::setElevation(Elevation value) {
+	if (_styleTarget.elevation != value) {
+		if (_styleOrigin == _styleTarget) {
+			_styleTarget.elevation = _styleOrigin.elevation = value;
+			_styleDirty = true;
+		} else {
+			_styleTarget.elevation = value;
+			_styleDirty = true;
+		}
+	}
+}
+
+void Surface::setShapeFamily(ShapeFamily value) {
+	if (_styleTarget.shapeFamily != value) {
+		if (_styleOrigin == _styleTarget) {
+			_styleTarget.shapeFamily = _styleOrigin.shapeFamily = value;
+			_styleDirty = true;
+		} else {
+			_styleTarget.shapeFamily = value;
+			_styleDirty = true;
+		}
+	}
+}
+
+void Surface::setShapeStyle(ShapeStyle value) {
+	if (_styleTarget.shapeStyle != value) {
+		if (_styleOrigin == _styleTarget) {
+			_styleTarget.shapeStyle = _styleOrigin.shapeStyle = value;
+			_styleDirty = true;
+		} else {
+			_styleTarget.shapeStyle = value;
+			_styleDirty = true;
+		}
+	}
+}
+
+void Surface::setNodeStyle(NodeStyle value) {
+	if (_styleTarget.nodeStyle != value) {
+		if (_styleOrigin == _styleTarget) {
+			_styleTarget.nodeStyle = _styleOrigin.nodeStyle = value;
+			_styleDirty = true;
+		} else {
+			_styleTarget.nodeStyle = value;
+			_styleDirty = true;
+		}
+	}
+}
+
+void Surface::setActivityState(ActivityState value) {
+	if (_styleTarget.activityState != value) {
+		if (_styleOrigin == _styleTarget) {
+			_styleTarget.activityState = _styleOrigin.activityState = value;
+			_styleDirty = true;
+		} else {
+			_styleTarget.activityState = value;
+			_styleDirty = true;
+		}
+	}
+}
+
 void Surface::setStyleDirtyCallback(Function<void(const SurfaceStyleData &)> &&cb) {
 	_styleDirtyCallback = move(cb);
 	_styleDirty = true;
@@ -103,15 +175,16 @@ bool Surface::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 	}
 
 	if (style) {
-		if (_styleTarget.apply(_styleDataTarget, _contentSize, style)) {
+		if (_styleTarget.apply(_styleDataTarget, _contentSize, style, getSurfaceInteriorForFrame(frame))) {
 			_styleDirty = true;
 		}
-		if (_styleOrigin.apply(_styleDataOrigin, _contentSize, style)) {
+
+		if (_styleOrigin.apply(_styleDataOrigin, _contentSize, style, getSurfaceInteriorForFrame(frame))) {
 			_styleDirty = true;
 		}
 	}
 
-	if (_styleDirty || _contentSizeDirty) {
+	if (_styleDirty || _contentSizeDirty || (_image && _contentSize != _image->getImageSize())) {
 		if (_styleProgress > 0.0f) {
 			_styleDataCurrent = progress(_styleDataOrigin, _styleDataTarget, _styleProgress);
 		} else {
@@ -135,7 +208,7 @@ void Surface::applyStyle(const SurfaceStyleData &style) {
 
 	auto radius = std::min(std::min(_contentSize.width / 2.0f, _contentSize.height / 2.0f), style.cornerRadius);
 
-	if (radius != _realCornerRadius || _contentSize != _image->getImageSize() || _outlineValue != style.outlineValue
+	if (radius != _realCornerRadius || (_image && _contentSize != _image->getImageSize()) || _outlineValue != style.outlineValue
 			|| _fillValue != style.colorElevation.a || style.shapeFamily != _realShapeFamily) {
 		auto img = Rc<VectorImage>::create(_contentSize);
 		auto path = img->addPath();
@@ -210,6 +283,10 @@ StyleContainer *Surface::getStyleContainerForFrame(RenderFrameInfo &frame) const
 	return frame.getComponent<StyleContainer>(StyleContainer::ComponentFrameTag);
 }
 
+SurfaceInterior *Surface::getSurfaceInteriorForFrame(RenderFrameInfo &frame) const {
+	return frame.getComponent<SurfaceInterior>(SurfaceInterior::ComponentFrameTag);
+}
+
 RenderingLevel Surface::getRealRenderingLevel() const {
 	auto l = VectorSprite::getRealRenderingLevel();
 	if (l == RenderingLevel::Transparent) {
@@ -220,7 +297,7 @@ RenderingLevel Surface::getRealRenderingLevel() const {
 
 void Surface::pushShadowCommands(RenderFrameInfo &frame, NodeFlags flags, const Mat4 &t, SpanView<gl::TransformedVertexData> data) {
 	if (_realCornerRadius > 0.0f) {
-		frame.shadows->pushSdfGroup(t, _shadowIndex, [&] (gl::CmdSdfGroup2D &cmd) {
+		frame.shadows->pushSdfGroup(t, frame.shadowStack.back(), [&] (gl::CmdSdfGroup2D &cmd) {
 			switch (_realShapeFamily) {
 			case ShapeFamily::RoundedCorners:
 				cmd.addRoundedRect2D(Rect(Vec2(0, 0), _contentSize), _realCornerRadius);
@@ -242,7 +319,8 @@ void Surface::pushShadowCommands(RenderFrameInfo &frame, NodeFlags flags, const 
 			}
 		});
 	} else {
-		frame.shadows->pushSdfGroup(t, _shadowIndex, [&] (gl::CmdSdfGroup2D &cmd) {
+		//VectorSprite::pushShadowCommands(frame, flags, t, data);
+		frame.shadows->pushSdfGroup(t, frame.shadowStack.back(), [&] (gl::CmdSdfGroup2D &cmd) {
 			cmd.addRect2D(Rect(Vec2(0, 0), _contentSize));
 		});
 	}

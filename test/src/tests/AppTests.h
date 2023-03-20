@@ -51,6 +51,7 @@ enum class LayoutName {
 	InputTapPressTest,
 	InputSwipeTest,
 	InputTextTest,
+	InputPinchTest,
 
 	ActionEaseTest = 256 * 3,
 	ActionMaterialTest,
@@ -60,6 +61,7 @@ enum class LayoutName {
 	VgIconList,
 	VgShadowTest,
 	VgSdfTest,
+	VgDynamicIcons,
 
 	UtilsStorageTest = 256 * 5,
 	UtilsNetworkTest,

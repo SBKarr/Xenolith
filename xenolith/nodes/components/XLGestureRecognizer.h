@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +26,6 @@
 
 #include "XLDefine.h"
 #include "SPMovingAverage.h"
-#include <bitset>
 
 namespace stappler::xenolith {
 
@@ -68,6 +68,8 @@ enum class GestureEvent {
 struct GestureData {
 	GestureEvent event = GestureEvent::Began;
 	const InputEvent *input = nullptr;
+
+	Vec2 location() const { return input->currentLocation; }
 };
 
 struct GestureScroll : GestureData {
@@ -123,10 +125,26 @@ struct GestureSwipe : GestureData {
     }
 };
 
+struct GesturePinch : GestureData {
+	Vec2 first;
+	Vec2 second;
+	Vec2 center;
+	float startDistance = 0.0f;
+	float prevDistance = 0.0f;
+	float distance = 0.0f;
+	float scale = 0.0f;
+	float velocity = 0.0f;
 
-enum class GestureType {
-	Touch = 1 << 0,
-	Scroll = 1 << 1,
+    void cleanup() {
+    	first = Vec2::ZERO;
+    	second = Vec2::ZERO;
+    	center = Vec2::ZERO;
+    	startDistance = 0.0f;
+    	prevDistance = 0.0f;
+    	distance = 0.0f;
+    	scale = 0.0f;
+    	velocity = 0.0f;
+    }
 };
 
 class GestureRecognizer : public Ref {
@@ -276,6 +294,30 @@ protected:
 
 	float _threshold = 6.0f;
 	bool _includeThreshold = true;
+};
+
+class GesturePinchRecognizer : public GestureRecognizer {
+public:
+	using InputCallback = Function<void(const GesturePinch &)>;
+
+	virtual ~GesturePinchRecognizer() { }
+
+	virtual bool init(InputCallback &&, ButtonMask &&);
+
+	virtual void cancel() override;
+
+protected:
+	using GestureRecognizer::init;
+
+	virtual bool addEvent(const InputEvent &, float density) override;
+	virtual bool removeEvent(const InputEvent &, bool successful, float density) override;
+	virtual bool renewEvent(const InputEvent &, float density) override;
+
+	Time _lastTime;
+	math::MovingAverage<3> _velocity;
+
+	GesturePinch _gesture;
+	InputCallback _callback;
 };
 
 class GestureScrollRecognizer : public GestureRecognizer {

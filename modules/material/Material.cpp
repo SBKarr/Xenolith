@@ -27,6 +27,7 @@
 #include "base/MaterialColorScheme.cc"
 #include "base/MaterialDataSource.cc"
 #include "base/MaterialStyleContainer.cc"
+#include "base/MaterialStyleMonitor.cc"
 #include "base/MaterialEasing.cc"
 #include "base/MaterialSurface.cc"
 #include "base/MaterialLabel.cc"
@@ -45,6 +46,7 @@
 #include "components/scroll/MaterialDataScroll.cc"
 #include "components/scroll/MaterialDataScrollHandlerFixed.cc"
 #include "components/scroll/MaterialDataScrollHandlerSlice.cc"
+#include "components/scroll/MaterialDataScrollHandlerGrid.cc"
 
 #include "layout/MaterialDecoratedLayout.cc"
 #include "layout/MaterialFlexibleLayout.cc"

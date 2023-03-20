@@ -383,23 +383,35 @@ static float evaluateCubic(float t, float p1, float p2) {
 		+ std::pow(t, 3.0f); // p3 = 1.0f
 }
 
-float bezieratFunction(float t, float x1, float y1, float x2, float y2) {
-	static constexpr float ErrorBound = 0.001;
+static constexpr float BezieratErrorBound = 0.001f;
 
+static float truncateBorders(float t) {
+	if (std::fabs(t) < BezieratErrorBound) {
+		return 0.0f;
+	} else if (std::fabs(t - 1.0f) < BezieratErrorBound) {
+		return 1.0f;
+	}
+	return t;
+}
+
+float bezieratFunction(float t, float x1, float y1, float x2, float y2) {
     float start = 0.0f;
     float end = 1.0f;
+
+    uint32_t iter = 0;
 
     while (true) {
     	const float midpoint = (start + end) / 2;
     	const float estimate = evaluateCubic(midpoint, x1, x2);
-		if (std::abs(t - estimate) < ErrorBound) {
-			return evaluateCubic(midpoint, y1, y2);
+		if (std::abs(t - estimate) < BezieratErrorBound) {
+			return truncateBorders(evaluateCubic(midpoint, y1, y2));
 		}
 		if (estimate < t) {
 			start = midpoint;
 		} else {
 			end = midpoint;
 		}
+		++ iter;
     }
     return nan();
 }

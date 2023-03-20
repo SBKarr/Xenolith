@@ -34,6 +34,7 @@ public:
 
 	static Id Self;
 
+	using Id = Subscription::Id;
 	using BatchCallback = Function<void(Map<Id, Value> &)>;
 	using BatchSourceCallback = Function<void(const BatchCallback &, Id::Type first, size_t size)>;
 

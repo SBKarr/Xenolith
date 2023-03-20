@@ -48,7 +48,7 @@ public:
 	using BackButtonCallback = Function<bool()>;
 	using Transition = ActionInterval;
 
-	virtual ~SceneLayout() { }
+	virtual ~SceneLayout();
 
 	virtual void setDecorationMask(DecorationMask mask);
 	virtual DecorationMask getDecodationMask() const { return _decorationMask; }

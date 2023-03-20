@@ -767,6 +767,16 @@ VkRect2D MaterialVertexPassHandle::rotateScissor(const gl::FrameContraints &cons
 	default: break;
 	}
 
+	if (scissorRect.offset.x < 0) {
+		scissorRect.extent.width -= scissorRect.offset.x;
+		scissorRect.offset.x = 0;
+	}
+
+	if (scissorRect.offset.y < 0) {
+		scissorRect.extent.height -= scissorRect.offset.y;
+		scissorRect.offset.y = 0;
+	}
+
 	return scissorRect;
 }
 

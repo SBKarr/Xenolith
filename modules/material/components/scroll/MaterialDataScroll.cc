@@ -464,7 +464,6 @@ void DataScroll::onSliceData(DataMap &val, Time time, Request type) {
 
 		auto interval = Time::now() - time;
 		if (interval < _minLoadTime && type != Request::Update) {
-			// TODO - schedule for remaining time
 			auto a = Rc<Sequence>::create(_minLoadTime - interval, [guard = Rc<DataScroll>(this), handlerPtr, itemPtr, dataPtr] {
 				if (guard->isRunning()) {
 					const auto & cb = handlerPtr->get()->getCompleteCallback();
@@ -477,6 +476,7 @@ void DataScroll::onSliceData(DataMap &val, Time time, Request type) {
 				delete itemPtr;
 				delete dataPtr;
 			});
+			runAction(a);
 		} else {
 			const auto & cb = handlerPtr->get()->getCompleteCallback();
 			if (cb) {

@@ -60,7 +60,10 @@ public:
 	const Rc<Instance> &getGlInstance() const { return _glInstance; }
 	const Rc<FrameCache> &getFrameCache() const { return _frameCache; }
 
-	virtual void compileResource(Rc<Resource> &&req, Function<void(bool)> &&) = 0;
+	// in preload mode, resource will be prepared for transfer immediately in caller's thread
+	// (device will allocate transfer buffer then fill it with resource data)
+	// do not use reload with main thread
+	virtual void compileResource(Rc<Resource> &&req, Function<void(bool)> &&, bool preload = false) = 0;
 	virtual void compileMaterials(Rc<MaterialInputData> &&req, const Vector<Rc<DependencyEvent>> & = Vector<Rc<DependencyEvent>>()) = 0;
 	virtual void compileRenderQueue(const Rc<RenderQueue> &req, Function<void(bool)> && = nullptr) = 0;
 	virtual void compileImage(const Rc<DynamicImage> &, Function<void(bool)> && = nullptr) = 0;

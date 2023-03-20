@@ -80,7 +80,7 @@ public:
 	const ImageData * setImage(StringView key, ImageInfo &&, FilePath data, Rc<ImageAtlas> && = nullptr);
 	const ImageData * setImage(StringView key, ImageInfo &&, BytesView data, Rc<ImageAtlas> && = nullptr);
 	const ImageData * setImage(StringView key, ImageInfo &&,
-			Function<void(const ImageData::DataCallback &)> &&cb, Rc<ImageAtlas> && = nullptr);
+			Function<void(uint8_t *, uint64_t, const ImageData::DataCallback &)> &&cb, Rc<ImageAtlas> && = nullptr);
 
 protected:
 	friend class DynamicImage;

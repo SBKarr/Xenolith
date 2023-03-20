@@ -298,6 +298,9 @@ public:
 	virtual void setOpacityModifyRGB(bool value) { }
 	virtual bool isOpacityModifyRGB() const { return false; };
 
+	virtual void setShadowIndex(float value) { _shadowIndex = value; }
+	virtual float getShadowIndex() const { return _shadowIndex; }
+
 	virtual void draw(RenderFrameInfo &, NodeFlags flags);
 
 	// visit on unsorted nodes, commit most of geometry changes
@@ -319,6 +322,8 @@ public:
 	virtual void setOnContentSizeDirtyCallback(Function<void()> &&);
 	virtual void setOnTransformDirtyCallback(Function<void(const Mat4 &)> &&);
 	virtual void setOnReorderChildDirtyCallback(Function<void()> &&);
+
+	float getInputDensity() const { return _inputDensity; }
 
 	Director *getDirector() const { return _director; }
 	Scheduler *getScheduler() const { return _scheduler; }
@@ -365,6 +370,7 @@ protected:
 	Vec3 _scale = Vec3(1.0f, 1.0f, 1.0f);
 	Vec3 _rotation;
 	float _inputDensity = 1.0f;
+	float _shadowIndex = 0.0f;
 
 	// to support HDR, we use float colors;
 	Color4F _displayedColor = Color4F::WHITE;

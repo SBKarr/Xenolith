@@ -87,7 +87,7 @@ protected:
 	 * When the 'stop' method is called, target will be set to nil.
 	 * The target is 'assigned', it is not 'retained'.
 	 */
-	Node *_target = nullptr;
+	Rc<Node> _target;
 	/** The action tag. An identifier of the action. */
 	uint32_t _tag = INVALID_TAG;
 
@@ -403,6 +403,33 @@ public:
 protected:
 	Vec3 _startPosition;
 	Vec3 _endPosition;
+};
+
+class ScaleTo : public ActionInterval {
+public:
+	virtual ~ScaleTo() { }
+
+	virtual bool init(float duration, float scale);
+	virtual bool init(float duration, const Vec3 &scale);
+	virtual void startWithTarget(Node *target) override;
+	virtual void update(float time) override;
+
+protected:
+	Vec3 _startScale;
+	Vec3 _endScale;
+};
+
+class ResizeTo : public ActionInterval {
+public:
+	virtual ~ResizeTo() { }
+
+	virtual bool init(float duration, const Size2 &position);
+	virtual void startWithTarget(Node *target) override;
+	virtual void update(float time) override;
+
+protected:
+	Size2 _startSize;
+	Size2 _endSize;
 };
 
 class FadeTo : public ActionInterval {

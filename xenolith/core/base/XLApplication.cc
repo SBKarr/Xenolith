@@ -310,11 +310,11 @@ int Application::run(Value &&data, const Callback<void(Application *)> &onStarte
 		platform::device::_sleep(100'000);
 
 		if (_glLoop->getReferenceCount() > 1) {
+			log::vtext("gl::Loop", "[rc: ", _glLoop->getReferenceCount(), "]");
 #if SP_REF_DEBUG
 			auto loop = _glLoop.get();
 			_glLoop = nullptr;
 
-			log::vtext("gl::Loop", "Backtrace for ", (void *)loop);
 			loop->foreachBacktrace([] (uint64_t id, Time time, const std::vector<std::string> &vec) {
 				StringStream stream;
 				stream << "[" << id << ":" << time.toHttp<Interface>() << "]:\n";
@@ -346,11 +346,11 @@ int Application::run(Value &&data, const Callback<void(Application *)> &onStarte
 
 	if (_instance) {
 		if (_instance->getReferenceCount() > 1) {
+			log::vtext("gl::Instance", "[rc: ", _instance->getReferenceCount(), "]");
 #if SP_REF_DEBUG
 			auto instance = _instance.get();
 			_instance = nullptr;
 
-			log::vtext("gl::Instance", "Backtrace for ", (void *)instance);
 			instance->foreachBacktrace([] (uint64_t id, Time time, const std::vector<std::string> &vec) {
 				StringStream stream;
 				stream << "[" << id << ":" << time.toHttp<Interface>() << "]:\n";
@@ -365,6 +365,11 @@ int Application::run(Value &&data, const Callback<void(Application *)> &onStarte
 		}
 		_instance = nullptr;
 	}
+
+#if MODULE_XENOLITH_ASSET
+	_assetLibrary->finalize();
+	_assetLibrary = nullptr;
+#endif
 
 #if MODULE_XENOLITH_STORAGE
 	onStorageDisposed(_storageServer);

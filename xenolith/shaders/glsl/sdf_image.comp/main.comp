@@ -38,21 +38,21 @@ float intersectCircle(in vec2 p, uint idx) {
 	const Circle2DData c = CIRCLE_DATA_BUFFER[idx];
 	const TransformObject t = TRANSFORM_BUFFER[c.transform];
 	return (circle2d((t.transform * vec4(p * shadowData.density, 0, 1)).xy, c.origin, c.radius * shadowData.density)
-			< (-0.25 * shadowData.density)) ? c.value : 0.0;
+			< (-0.5 * shadowData.density)) ? c.value : 0.0;
 }
 
 float intersectRect(in vec2 p, uint idx) {
 	const Rect2DData r = RECT_DATA_BUFFER[idx];
 	const TransformObject t = TRANSFORM_BUFFER[r.transform];
 	return (rect2d((t.transform * vec4(p * shadowData.density, 0, 1)).xy, r.origin, r.size * shadowData.density)
-			< -0.25 * shadowData.density) ? r.value : 0.0;
+			< -0.5 * shadowData.density) ? r.value : 0.0;
 }
 
 float intersectRoundedRect(in vec2 p, uint idx) {
 	const RoundedRect2DData r = ROUNDED_RECT_DATA_BUFFER[idx];
 	const TransformObject t = TRANSFORM_BUFFER[r.transform];
 	return (roundedRect2d((t.transform * vec4(p * shadowData.density, 0, 1)).xy, r.origin, r.size * shadowData.density, r.corners * shadowData.density)
-			< -0.25 * shadowData.density) ? r.value : 0.0;
+			< -0.5 * shadowData.density) ? r.value : 0.0;
 }
 
 float intersectPolygon(in vec2 p, uint idx) {
@@ -68,7 +68,7 @@ float intersectPolygon(in vec2 p, uint idx) {
 		bvec3 c = bvec3(p.y >= VERTEX_BUFFER[polygon.origin + i].y, p.y <VERTEX_BUFFER[polygon.origin + j].y, e.x * w.y > e.y * w.x);
 		if ( all(c) || all(not(c)) ) s *= -1.0;
 	}
-	return ((s * sqrt(d)) < -0.25 * shadowData.density) ? polygon.value : 0.0;
+	return ((s * sqrt(d)) < -0.5 * shadowData.density) ? polygon.value : 0.0;
 }
 
 float intersect(in uint cellIdx, in vec2 coord) {
@@ -156,7 +156,7 @@ void main() {
 				const TransformObject t = TRANSFORM_BUFFER[c.transform];
 		  
 				sdf = circle3d((t.transform * vec4(coords * shadowData.density, isect, 1)).xyz, c.origin,
-					c.radius * shadowData.density, c.value, t.padding / shadowData.density) - 0.25;
+					c.radius * shadowData.density, c.value, t.padding / shadowData.density) + 0.25;
 		
 				if (sdf < value) {
 					value = sdf;
@@ -175,7 +175,7 @@ void main() {
 				const TransformObject t = TRANSFORM_BUFFER[r.transform];
 	
 				sdf = rect3d((t.transform * vec4(coords * shadowData.density, isect, 1)).xyz, r.origin,
-					r.size * shadowData.density, r.value, t.padding / shadowData.density) - 0.5;
+					r.size * shadowData.density, r.value, t.padding / shadowData.density) + 0.25;
 	
 				if (sdf < value) {
 					value = sdf;
@@ -194,7 +194,7 @@ void main() {
 				const TransformObject t = TRANSFORM_BUFFER[r.transform];
 	
 				sdf = roundedRect3d((t.transform * vec4(coords * shadowData.density, isect, 1)).xyz, r.origin,
-					r.size * shadowData.density, r.corners * shadowData.density, r.value, t.padding / shadowData.density) - 0.5;
+					r.size * shadowData.density, r.corners * shadowData.density, r.value, t.padding / shadowData.density) + 0.25;
 	
 				if (sdf < value) {
 					value = sdf;

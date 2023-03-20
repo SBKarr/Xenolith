@@ -116,6 +116,8 @@ void ImageAtlas::addObject(uint32_t id, void *data) {
 	_names.emplace(id, off / _objectSize);
 }
 
+ImageObject::~ImageObject() { }
+
 bool ImageObject::init(Device &dev, ClearCallback cb, ObjectType type, ObjectHandle ptr) {
 	if (Object::init(dev, cb, type, ptr)) {
 		_index = s_ImageViewCurrentIndex.fetch_add(1);

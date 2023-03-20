@@ -32,7 +32,7 @@ class Resource : public NamedRef {
 public:
 	class Builder;
 
-	static void loadImageFileData(StringView path, gl::ImageFormat fmt, const gl::ImageData::DataCallback &dcb);
+	static void loadImageFileData(uint8_t *, uint64_t expectedSize, StringView path, gl::ImageFormat fmt, const gl::ImageData::DataCallback &dcb);
 
 	Resource();
 	virtual ~Resource();
@@ -73,13 +73,13 @@ public:
 	const gl::BufferData * addBuffer(StringView key, gl::BufferInfo &&, FilePath data);
 	const gl::BufferData * addBuffer(StringView key, gl::BufferInfo &&, BytesView data);
 	const gl::BufferData * addBuffer(StringView key, gl::BufferInfo &&, size_t,
-			const memory::function<void(const gl::BufferData::DataCallback &)> &cb);
+			const memory::function<void(uint8_t *, uint64_t, const gl::BufferData::DataCallback &)> &cb);
 
 	const gl::ImageData * addImageByRef(StringView key, gl::ImageInfo &&, BytesView data);
 	const gl::ImageData * addImage(StringView key, gl::ImageInfo &&img, FilePath data);
 	const gl::ImageData * addImage(StringView key, gl::ImageInfo &&img, BytesView data);
 	const gl::ImageData * addImage(StringView key, gl::ImageInfo &&img,
-			const memory::function<void(const gl::ImageData::DataCallback &)> &cb);
+			const memory::function<void(uint8_t *, uint64_t, const gl::ImageData::DataCallback &)> &cb);
 
 protected:
 	friend class Resource;

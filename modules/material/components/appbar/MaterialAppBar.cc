@@ -47,7 +47,7 @@ bool AppBar::init(AppBarLayout layout, const SurfaceStyle & style) {
 		}
 		return false;
 	}, TimeInterval::milliseconds(425), true);
-	_inputListener->setSwallowAllEvents();
+	_inputListener->setSwallowEvents(InputListener::EventMaskTouch);
 
 	_actionMenuSourceListener = addComponent(Rc<DataListener<MenuSource>>::create(std::bind(&AppBar::layoutSubviews, this)));
 
@@ -183,14 +183,14 @@ const Function<void()> & AppBar::getNavCallback() const {
 
 void AppBar::setSwallowTouches(bool value) {
 	if (value) {
-		_inputListener->setSwallowAllEvents();
+		_inputListener->setSwallowEvents(InputListener::EventMaskTouch);
 	} else {
-		_inputListener->clearSwallowAllEvents();
+		_inputListener->clearSwallowEvents(InputListener::EventMaskTouch);
 	}
 }
 
 bool AppBar::isSwallowTouches() const {
-	return _inputListener->isSwallowAllEvents();
+	return _inputListener->isSwallowAllEvents(InputListener::EventMaskTouch);
 }
 
 Button *AppBar::getNavNode() const {

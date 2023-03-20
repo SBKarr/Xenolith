@@ -93,6 +93,7 @@ FontLibrary::FontLibrary() {
 }
 
 FontLibrary::~FontLibrary() {
+	_queue = nullptr;
 	if (_library) {
 		FT_Done_FreeType(_library);
 		_library = nullptr;
@@ -273,6 +274,8 @@ void FontLibrary::update(uint64_t clock) {
 void FontLibrary::invalidate() {
 	std::unique_lock uniqueLock(_sharedMutex);
 	_threads.clear();
+
+	_queue = nullptr;
 }
 
 static Bytes openResourceFont(FontLibrary::DefaultFontName name) {
@@ -434,13 +437,20 @@ Rc<FontController> FontLibrary::acquireController(FontController::Builder &&b) {
 					gl::ImageUsage::Sampled | gl::ImageUsage::TransferSrc,
 					gl::RenderPassType::Graphics,
 					gl::ImageFormat::R8_UNORM
-			), [] (const gl::ImageData::DataCallback &cb) {
-				Bytes bytes; bytes.reserve(4);
-				bytes.emplace_back(0);
-				bytes.emplace_back(255);
-				bytes.emplace_back(255);
-				bytes.emplace_back(0);
-				cb(bytes);
+			), [] (uint8_t *ptr, uint64_t, const gl::ImageData::DataCallback &cb) {
+				if (ptr) {
+					ptr[0] = 0;
+					ptr[1] = 255;
+					ptr[2] = 255;
+					ptr[3] = 0;
+				} else {
+					Bytes bytes; bytes.reserve(4);
+					bytes.emplace_back(0);
+					bytes.emplace_back(255);
+					bytes.emplace_back(255);
+					bytes.emplace_back(0);
+					cb(bytes);
+				}
 			}, nullptr);
 		return true;
 	});

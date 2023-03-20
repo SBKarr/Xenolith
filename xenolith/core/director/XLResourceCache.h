@@ -32,6 +32,14 @@ namespace stappler::xenolith {
 class Scene;
 class TemporaryResource;
 
+enum class TemporaryResourceFlags {
+	None = 0,
+	Loaded = 1 << 0,
+	RemoveOnClear = 1 << 1,
+};
+
+SP_DEFINE_ENUM_AS_MASK(TemporaryResourceFlags)
+
 class Texture : public NamedRef {
 public:
 	virtual ~Texture();
@@ -40,6 +48,9 @@ public:
 	bool init(const gl::ImageData *, const Rc<renderqueue::Resource> &);
 	bool init(const gl::ImageData *, const Rc<TemporaryResource> &);
 	bool init(const Rc<gl::DynamicImage> &);
+
+	// invalidate texture from temporary resource
+	void invalidate();
 
 	virtual StringView getName() const;
 	gl::MaterialImage getMaterialImage() const;
@@ -71,7 +82,8 @@ public:
 
 	virtual ~TemporaryResource();
 
-	bool init(Rc<renderqueue::Resource> &&, TimeInterval timeout);
+	bool init(Rc<renderqueue::Resource> &&, TimeInterval timeout, TemporaryResourceFlags flags);
+	void invalidate();
 
 	Rc<Texture> acquireTexture(StringView);
 
@@ -87,7 +99,7 @@ public:
 	void onEnter(Scene *, Texture *);
 	void onExit(Scene *, Texture *);
 
-	void clear();
+	bool clear();
 
 	StringView getName() const;
 
@@ -105,9 +117,11 @@ public:
 protected:
 	bool _requested = false;
 	bool _loaded = false;
+	bool _removeOnClear = false;
 	size_t _users = 0;
 	uint64_t _atime;
 	TimeInterval _timeout;
+	String _name;
 	Rc<renderqueue::Resource> _resource;
 	Map<const gl::ImageData *, Rc<Texture>> _textures;
 	Set<Rc<Scene>> _scenes;
@@ -140,13 +154,18 @@ public:
 	const gl::BufferData * addExternalBuffer(StringView key, gl::BufferInfo &&, size_t,
 			const memory::function<void(const gl::BufferData::DataCallback &)> &cb);*/
 
-	Rc<Texture> addExternalImageByRef(StringView key, gl::ImageInfo &&, BytesView data, TimeInterval = TimeInterval());
-	Rc<Texture> addExternalImage(StringView key, gl::ImageInfo &&, FilePath data, TimeInterval = TimeInterval());
-	Rc<Texture> addExternalImage(StringView key, gl::ImageInfo &&, BytesView data, TimeInterval = TimeInterval());
+	Rc<Texture> addExternalImageByRef(StringView key, gl::ImageInfo &&, BytesView data,
+			TimeInterval = TimeInterval(), TemporaryResourceFlags flags = TemporaryResourceFlags::None);
+	Rc<Texture> addExternalImage(StringView key, gl::ImageInfo &&, FilePath data,
+			TimeInterval = TimeInterval(), TemporaryResourceFlags flags = TemporaryResourceFlags::None);
+	Rc<Texture> addExternalImage(StringView key, gl::ImageInfo &&, BytesView data,
+			TimeInterval = TimeInterval(), TemporaryResourceFlags flags = TemporaryResourceFlags::None);
 	Rc<Texture> addExternalImage(StringView key, gl::ImageInfo &&,
-			const memory::function<void(const gl::ImageData::DataCallback &)> &cb, TimeInterval = TimeInterval());
+			const memory::function<void(uint8_t *, uint64_t, const gl::ImageData::DataCallback &)> &cb,
+			TimeInterval = TimeInterval(), TemporaryResourceFlags flags = TemporaryResourceFlags::None);
 
-	Rc<TemporaryResource> addTemporaryResource(Rc<renderqueue::Resource> &&, TimeInterval = TimeInterval());
+	Rc<TemporaryResource> addTemporaryResource(Rc<renderqueue::Resource> &&, TimeInterval = TimeInterval(),
+			TemporaryResourceFlags flags = TemporaryResourceFlags::None);
 
 	Rc<TemporaryResource> getTemporaryResource(StringView str) const;
 	bool hasTemporaryResource(StringView) const;
@@ -154,7 +173,7 @@ public:
 
 protected:
 	void compileResource(Director *, TemporaryResource *);
-	void clearResource(Director *, TemporaryResource *);
+	bool clearResource(Director *, TemporaryResource *);
 
 	Map<StringView, gl::ImageData> _images;
 	Map<StringView, Rc<renderqueue::Resource>> _resources;

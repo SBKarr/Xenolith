@@ -46,6 +46,8 @@ public:
 	virtual void enableScissor(Padding outline = Padding());
 	virtual void disableScissor();
 	virtual bool isScissorEnabled() const { return _scissorEnabled; }
+
+	virtual void setScissorOutlone(Padding value) { _scissorOutline = value; }
 	virtual Padding getScissorOutline() const { return _scissorOutline; }
 
 protected:

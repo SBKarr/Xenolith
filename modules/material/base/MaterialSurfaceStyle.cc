@@ -29,7 +29,7 @@ namespace stappler::xenolith::material {
 
 SurfaceStyle SurfaceStyle::Background = SurfaceStyle{SurfaceStyle::PrimarySchemeTag, ColorRole::Background, Elevation::Level0};
 
-bool SurfaceStyle::apply(SurfaceStyleData &data, const Size2 &contentSize, const StyleContainer *style) {
+bool SurfaceStyle::apply(SurfaceStyleData &data, const Size2 &contentSize, const StyleContainer *style, const SurfaceInterior *interior) {
 	bool dirty = false;
 
 	if (data.schemeTag != schemeTag) {
@@ -258,7 +258,7 @@ bool SurfaceStyle::apply(SurfaceStyleData &data, const Size2 &contentSize, const
 	case NodeStyle::Outlined:
 		targetColorHCT = scheme->values(ColorRole::Outline, 0.0f);
 		targetColorBackground = scheme->values(ColorRole::Outline, 0.0f);
-		targetColorOn = scheme->values(colorRole, 1.0f);
+		targetColorOn = interior ? interior->getStyle().colorOn.data : scheme->values(colorRole);
 		targetOutlineValue = 1.0f;
 		switch (activityState) {
 		case ActivityState::Enabled: break;
@@ -287,7 +287,7 @@ bool SurfaceStyle::apply(SurfaceStyleData &data, const Size2 &contentSize, const
 	case NodeStyle::Text:
 		targetColorHCT = scheme->values(ColorRole::Surface, 0.0f);
 		targetColorBackground = scheme->values(colorRole, 0.0f);
-		targetColorOn = scheme->values(colorRole);
+		targetColorOn = interior ? interior->getStyle().colorOn.data : scheme->values(colorRole);
 		switch (activityState) {
 		case ActivityState::Enabled: break;
 		case ActivityState::Disabled:

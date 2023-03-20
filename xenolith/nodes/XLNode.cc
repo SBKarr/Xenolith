@@ -250,7 +250,7 @@ void Node::setVisible(bool visible) {
 	}
 	_visible = visible;
 	if (_visible) {
-		_transformInverseDirty = _transformCacheDirty = _transformDirty = true;
+		_contentSizeDirty = _transformInverseDirty = _transformCacheDirty = _transformDirty = true;
 	}
 }
 
@@ -414,9 +414,8 @@ void Node::sortAllChildren() {
 
 void Node::runActionObject(Action *action) {
 	XLASSERT( action != nullptr, "Argument must be non-nil");
-	if (_actionManager) {
-		_actionManager->addAction(action, this, !_running);
-	}
+	XLASSERT(_actionManager, "Action manager should be defined (node should be on scene");
+	_actionManager->addAction(action, this, !_running);
 }
 
 void Node::runActionObject(Action *action, uint32_t tag) {
@@ -427,44 +426,36 @@ void Node::runActionObject(Action *action, uint32_t tag) {
 }
 
 void Node::stopAllActions() {
-	if (_actionManager) {
-		_actionManager->removeAllActionsFromTarget(this);
-	}
+	XLASSERT(_actionManager, "Action manager should be defined (node should be on scene");
+	_actionManager->removeAllActionsFromTarget(this);
 }
 
 void Node::stopAction(Action *action) {
-	if (_actionManager) {
-		_actionManager->removeAction(action);
-	}
+	XLASSERT(_actionManager, "Action manager should be defined (node should be on scene");
+	_actionManager->removeAction(action);
 }
 
 void Node::stopActionByTag(uint32_t tag) {
 	XLASSERT(tag != Action::INVALID_TAG, "Invalid tag");
-	if (_actionManager) {
-		_actionManager->removeActionByTag(tag, this);
-	}
+	XLASSERT(_actionManager, "Action manager should be defined (node should be on scene");
+	_actionManager->removeActionByTag(tag, this);
 }
 
 void Node::stopAllActionsByTag(uint32_t tag) {
 	XLASSERT(tag != Action::INVALID_TAG, "Invalid tag");
-	if (_actionManager) {
-		_actionManager->removeAllActionsByTag(tag, this);
-	}
+	XLASSERT(_actionManager, "Action manager should be defined (node should be on scene");
+	_actionManager->removeAllActionsByTag(tag, this);
 }
 
 Action* Node::getActionByTag(uint32_t tag) {
 	XLASSERT(tag != Action::INVALID_TAG, "Invalid tag");
-	if (_actionManager) {
-		return _actionManager->getActionByTag(tag, this);
-	}
-	return nullptr;
+	XLASSERT(_actionManager, "Action manager should be defined (node should be on scene");
+	return _actionManager->getActionByTag(tag, this);
 }
 
 size_t Node::getNumberOfRunningActions() const {
-	if (_actionManager) {
-		return _actionManager->getNumberOfRunningActionsInTarget(this);
-	}
-	return 0;
+	XLASSERT(_actionManager, "Action manager should be defined (node should be on scene");
+	return _actionManager->getNumberOfRunningActionsInTarget(this);
 }
 
 
@@ -1033,6 +1024,10 @@ bool Node::visitDraw(RenderFrameInfo &info, NodeFlags parentFlags) {
 		info.zPath.push_back(order);
 	}
 
+	if (_shadowIndex > 0.0f) {
+		info.shadowStack.push_back(std::max(info.shadowStack.back(), _shadowIndex));
+	}
+
 	memory::vector< memory::vector<Rc<Component>> * > components;
 
 	for (auto &it : _components) {
@@ -1066,6 +1061,10 @@ bool Node::visitDraw(RenderFrameInfo &info, NodeFlags parentFlags) {
 
 	for (auto &it : components) {
 		info.popComponent(it);
+	}
+
+	if (_shadowIndex > 0.0f) {
+		info.shadowStack.pop_back();
 	}
 
 	if (order != ZOrderTransparent) {

@@ -39,7 +39,7 @@ enum class ColorRole {
 	PrimaryContainer,
 	OnPrimaryContainer,
 	Secondary,
-	OnSecondary ,
+	OnSecondary,
 	SecondaryContainer,
 	OnSecondaryContainer,
 	Tertiary,

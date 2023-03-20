@@ -46,16 +46,19 @@ public:
 
 	virtual void setTexture(StringView);
 	virtual void setTexture(Rc<Texture> &&);
+	const Rc<Texture> &getTexture() const;
 
 	// texture rect should be normalized
 	virtual void setTextureRect(const Rect &);
 	virtual const Rect &getTextureRect() const { return _textureRect; }
 
+	virtual bool visitDraw(RenderFrameInfo &, NodeFlags parentFlags) override;
 	virtual void draw(RenderFrameInfo &, NodeFlags flags) override;
 
 	virtual void onEnter(Scene *) override;
 	virtual void onExit() override;
 	virtual void onContentSizeDirty() override;
+	virtual void onTextureLoaded();
 
 	virtual void setColorMode(const ColorMode &);
 	virtual const ColorMode &getColorMode() const { return _colorMode; }
@@ -82,9 +85,6 @@ public:
 	virtual void setAutofitPosition(const Vec2 &);
 	virtual const Vec2 &getAutofitPosition() const { return _autofitPos; }
 
-	virtual void setShadowIndex(float value) { _shadowIndex = value; }
-	virtual float getShadowIndex() const { return _shadowIndex; }
-
 	/** Семплеры определяются во время старта цикла графики (gl::Loop) и неизменны в последствии
 	 * По умолчанию, семплер с индексом 0 использует фильтр nearest, 1 - linear.
 	 * Разработчики приложений могут определять свою схему для семплеров,
@@ -99,6 +99,8 @@ public:
 	virtual void addCommandFlags(gl::CommandFlags flags) { _commandFlags |= flags; }
 	virtual void removeCommandFlags(gl::CommandFlags flags) { _commandFlags &= ~flags; }
 	virtual gl::CommandFlags getCommandFlags() const { return _commandFlags; }
+
+	virtual void setTextureLoadedCallback(Function<void()> &&);
 
 protected:
 	using DynamicStateNode::init;
@@ -128,8 +130,6 @@ protected:
 	Rc<Texture> _texture;
 	VertexArray _vertexes;
 
-	float _shadowIndex = 0.0f;
-
 	uint16_t _samplerIdx = 0;
 
 	bool _materialDirty = true;
@@ -140,6 +140,7 @@ protected:
 	bool _flippedX = false;
 	bool _flippedY = false;
 	bool _rotated = false;
+	bool _isTextureLoaded = false;
 
 	Rect _textureRect = Rect(0.0f, 0.0f, 1.0f, 1.0f); // normalized
 
@@ -161,6 +162,7 @@ protected:
 	PipelineMaterialInfo _materialInfo;
 
 	Vector<Rc<renderqueue::DependencyEvent>> _pendingDependencies;
+	Function<void()> _textureLoadedCallback;
 };
 
 }

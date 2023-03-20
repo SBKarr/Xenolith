@@ -196,7 +196,7 @@ protected:
 
 class ImageObject : public Object {
 public:
-	virtual ~ImageObject() { }
+	virtual ~ImageObject();
 
 	virtual bool init(Device &, ClearCallback, ObjectType, ObjectHandle ptr) override;
 	virtual bool init(Device &, ClearCallback, ObjectType, ObjectHandle ptr, uint64_t idx);

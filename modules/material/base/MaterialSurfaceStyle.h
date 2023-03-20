@@ -29,6 +29,7 @@
 namespace stappler::xenolith::material {
 
 class StyleContainer;
+class SurfaceInterior;
 
 enum class Elevation {
 	Level0,	// 0dp
@@ -107,7 +108,7 @@ struct SurfaceStyle {
 		define(std::forward<Args>(args)...);
 	}
 
-	bool apply(SurfaceStyleData &data, const Size2 &contentSize, const StyleContainer *);
+	bool apply(SurfaceStyleData &data, const Size2 &contentSize, const StyleContainer *, const SurfaceInterior *interior);
 
 	constexpr bool operator==(const SurfaceStyle &) const = default;
 	constexpr bool operator!=(const SurfaceStyle &) const = default;
@@ -136,6 +137,9 @@ struct SurfaceStyleData {
 	float elevationValue = 0.0f;
 	float shadowValue = 0.0f;
 	float outlineValue = 0.0f;
+
+	bool operator==(const SurfaceStyleData &) const = default;
+	bool operator!=(const SurfaceStyleData &) const = default;
 };
 
 }

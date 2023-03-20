@@ -27,6 +27,7 @@ THE SOFTWARE.
 #define XENOLITH_MODULES_ICONS_XLICONNAMES_H_
 
 #include "XLDefine.h"
+#include "SPVectorImage.h"
 
 namespace stappler::xenolith {
 
@@ -35,6 +36,8 @@ enum class IconName : uint16_t {
 	Empty,
 
 	Dynamic_Loader,
+	Dynamic_Nav,
+	Dynamic_DownloadProgress,
 
 	Action_3d_rotation_outline,
 	Action_3d_rotation_solid,
@@ -2873,6 +2876,8 @@ enum class IconName : uint16_t {
 
 StringView getIconName(IconName);
 bool getIconData(IconName, const Callback<void(BytesView)> &);
+
+void drawIcon(vg::VectorImage &, IconName, float progress);
 
 }
 

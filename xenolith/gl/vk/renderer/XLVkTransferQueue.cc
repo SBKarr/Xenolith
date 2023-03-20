@@ -191,6 +191,10 @@ bool TransferResource::init(const Rc<Allocator> &alloc, Rc<gl::Resource> &&res, 
 }
 
 bool TransferResource::initialize() {
+	if (_initialized) {
+		return true;
+	}
+
 	auto dev = _alloc->getDevice();
 	auto table = _alloc->getDevice()->getTable();
 
@@ -294,7 +298,8 @@ bool TransferResource::initialize() {
 
 	_memType = allocMemType;
 
-	return allocate() && upload();
+	_initialized = allocate() && upload();
+	return _initialized;
 }
 
 bool TransferResource::allocate() {
@@ -663,7 +668,7 @@ size_t TransferResource::writeData(uint8_t *mem, BufferAllocInfo &info) {
 		return size;
 	} else if (info.data->callback) {
 		size_t size = 0;
-		info.data->callback([&] (BytesView data) {
+		info.data->callback(mem, info.data->size, [&] (BytesView data) {
 			size = std::min(size_t(data.size()), size_t(info.data->size));
 			memcpy(mem, data.data(), size);
 		});
@@ -673,20 +678,21 @@ size_t TransferResource::writeData(uint8_t *mem, BufferAllocInfo &info) {
 }
 
 size_t TransferResource::writeData(uint8_t *mem, ImageAllocInfo &info) {
+	uint64_t expectedSize = getFormatBlockSize(info.data->format) * info.data->extent.width * info.data->extent.height * info.data->extent.depth;
 	if (!info.data->data.empty()) {
 		auto size = info.data->data.size();
 		memcpy(mem, info.data->data.data(), size);
 		return size;
 	} else if (info.data->memCallback) {
-		size_t size = 0;
-		info.data->memCallback([&] (BytesView data) {
+		size_t size = expectedSize;
+		info.data->memCallback(mem, expectedSize, [&] (BytesView data) {
 			size = data.size();
 			memcpy(mem, data.data(), size);
 		});
 		return size;
 	} else if (info.data->stdCallback) {
-		size_t size = 0;
-		info.data->stdCallback([&] (BytesView data) {
+		size_t size = expectedSize;
+		info.data->stdCallback(mem, expectedSize, [&] (BytesView data) {
 			size = data.size();
 			memcpy(mem, data.data(), size);
 		});

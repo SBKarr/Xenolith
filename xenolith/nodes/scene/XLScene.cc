@@ -174,6 +174,9 @@ void Scene::render(RenderFrameInfo &info) {
 	info.modelTransformStack.reserve(8);
 	info.modelTransformStack.push_back(Mat4::IDENTITY);
 
+	info.shadowStack.reserve(4);
+	info.shadowStack.push_back(0.0f);
+
 	auto eventDispatcher = _director->getInputDispatcher();
 
 	info.input = eventDispatcher->acquireNewStorage();
