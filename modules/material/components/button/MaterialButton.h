@@ -56,6 +56,9 @@ public:
 	virtual bool isEnabled() const { return _enabled; }
 	virtual bool isMenuSourceButtonEnabled() const;
 
+	virtual void setSelected(bool);
+	virtual bool isSelected() const;
+
 	virtual void setText(StringView);
 	virtual StringView getText() const;
 
@@ -73,6 +76,10 @@ public:
 	virtual void setDoubleTapCallback(Function<void()> &&);
 
 	virtual void setMenuSourceButton(Rc<MenuSourceButton> &&);
+
+	virtual TypescaleLabel *getLabelNode() const { return _label; };
+	virtual IconSprite *getLeadingIconNode() const { return _leadingIcon; }
+	virtual IconSprite *getTrailingIconNode() const { return _trailingIcon; }
 
 protected:
 	virtual void updateSizeFromContent();

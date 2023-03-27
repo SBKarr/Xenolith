@@ -102,6 +102,8 @@ public:
 	virtual void signalDependencies(const Vector<Rc<DependencyEvent>> &, bool success) = 0;
 	virtual void waitForDependencies(const Vector<Rc<DependencyEvent>> &, Function<void(bool)> &&) = 0;
 
+	virtual void wakeup() = 0;
+
 protected:
 	std::atomic_flag _shouldExit;
 	Rc<ResourceCache> _resourceCache;

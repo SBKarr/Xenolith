@@ -443,6 +443,10 @@ void DataScroll::onSliceData(DataMap &val, Time time, Request type) {
 		return;
 	}
 
+	if (!_director) {
+		return;
+	}
+
 	if (_items.empty() && type != Request::Update) {
 		type = Request::Reset;
 	}

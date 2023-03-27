@@ -56,6 +56,8 @@ public:
 	using RenderQueue = renderqueue::Queue;
 
 	static EventHeader onFrameRate;
+	static EventHeader onBackground;
+	static EventHeader onFocus;
 
 	View();
 	virtual ~View();
@@ -95,13 +97,10 @@ public:
 
 	// update screen extent, non thread-safe
 	// only updates field, view is not resized
-	// virtual void setScreenExtent(Extent2);
 
 	// handle and propagate input event
 	void handleInputEvent(const InputEventData &);
 	void handleInputEvents(Vector<InputEventData> &&);
-
-	// virtual void runFrame(const Rc<RenderQueue> &);
 
 	virtual ImageInfo getSwapchainImageInfo() const;
 	virtual ImageInfo getSwapchainImageInfo(const SwapchainConfig &cfg) const;

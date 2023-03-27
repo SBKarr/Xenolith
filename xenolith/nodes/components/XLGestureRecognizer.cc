@@ -683,6 +683,7 @@ bool GesturePinchRecognizer::addEvent(const InputEvent &event, float density) {
 			_gesture.scale = _gesture.distance / _gesture.startDistance;
 			_gesture.event = GestureEvent::Began;
 			_gesture.input = &_events.at(0);
+			_gesture.density = density;
 			_lastTime = Time::now();
 			if (_callback) {
 				_callback(_gesture);
@@ -725,6 +726,7 @@ bool GesturePinchRecognizer::renewEvent(const InputEvent &event, float density) 
 				_gesture.prevDistance = _events.at(0).previousLocation.getDistance(_events.at(1).previousLocation);
 				_gesture.distance = _gesture.first.getDistance(_gesture.second);
 				_gesture.scale = _gesture.distance / _gesture.startDistance;
+				_gesture.density = density;
 
 				auto t = Time::now();
 				float tm = (float)1000000LL / (float)((t - _lastTime).toMicroseconds());

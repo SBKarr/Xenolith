@@ -47,6 +47,7 @@ class Application : public Ref {
 public:
 	static EventHeader onDeviceToken;
 	static EventHeader onNetwork;
+	static EventHeader onRemoteNotification;
 	static EventHeader onUrlOpened;
 	static EventHeader onError;
 
@@ -215,6 +216,8 @@ public:
 
 	void setNativeHandle(void *handle) { _nativeHandle = handle; }
 	void *getNativeHandle() const { return _nativeHandle; }
+
+	virtual void wakeup();
 
 protected:
 	virtual void updateDefaultFontController(font::FontController::Builder &);

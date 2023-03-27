@@ -264,6 +264,12 @@ struct Loop::Internal final : memory::AllocPool {
 		}
 	}
 
+	void wakeup() {
+		for (auto &it : views) {
+			it->setReadyForNextFrame();
+		}
+	}
+
 	memory::pool_t *pool = nullptr;
 	Loop *loop = nullptr;
 
@@ -778,6 +784,12 @@ void Loop::waitForDependencies(const Vector<Rc<DependencyEvent>> &events, Functi
 		performOnGlThread([this, events = events, cb = move(cb)] () mutable {
 			_internal->waitForDependencies(move(events), move(cb));
 		}, this, true);
+	}
+}
+
+void Loop::wakeup() {
+	if (_internal) {
+		_internal->wakeup();
 	}
 }
 

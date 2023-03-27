@@ -82,11 +82,12 @@ protected:
 		InputEvent event;
 		Vector<Rc<InputListener>> listeners;
 		Rc<InputListener> exclusive;
-		InputListener *current = nullptr;
-		bool exclusiveDirty = true;
+		Vector<const InputListener *> processed;
 
 		void handle(bool removeOnFail);
 		void clear(bool cancel);
+
+		void setExclusive(const InputListener *);
 	};
 
 	void setListenerExclusive(EventHandlersInfo &, const InputListener *l) const;

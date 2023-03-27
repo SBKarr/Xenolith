@@ -53,8 +53,8 @@ public:
 	void addHandlerNode(EventHandlerNode *handler);
 	void removeHandlerNode(EventHandlerNode *handler);
 
-	EventHandlerNode * onEvent(const EventHeader &h, Callback && callback, bool destroyAfterEvent = false);
-	EventHandlerNode * onEventWithObject(const EventHeader &h, Ref *obj, Callback && callback, bool destroyAfterEvent = false);
+	EventHandlerNode * setEventHandler(const EventHeader &h, Callback && callback, bool destroyAfterEvent = false);
+	EventHandlerNode * setEventHandlerForObject(const EventHeader &h, Ref *obj, Callback && callback, bool destroyAfterEvent = false);
 
 	Ref *getInterface() const;
 

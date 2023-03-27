@@ -55,11 +55,11 @@ bool ScrollViewBase::init(Layout layout) {
 
 	_inputListener->addSwipeRecognizer([this] (const GestureSwipe &s) -> bool {
 		switch (s.event) {
-		case GestureEvent::Began: return onSwipeEventBegin(s.midpoint, s.delta, s.velocity); break;
-		case GestureEvent::Activated: return onSwipeEvent(s.midpoint, s.delta, s.velocity); break;
+		case GestureEvent::Began: return onSwipeEventBegin(s.getId(), s.midpoint, s.delta, s.velocity); break;
+		case GestureEvent::Activated: return onSwipeEvent(s.getId(), s.midpoint, s.delta, s.velocity); break;
 		case GestureEvent::Ended:
 		case GestureEvent::Cancelled:
-			return onSwipeEventEnd(s.midpoint, s.delta, s.velocity);
+			return onSwipeEventEnd(s.getId(), s.midpoint, s.delta, s.velocity);
 			break;
 		}
 		return false;
@@ -557,7 +557,9 @@ void ScrollViewBase::onOverscrollPerformed(float velocity, float pos, float boun
 	}
 }
 
-bool ScrollViewBase::onSwipeEventBegin(const Vec2 &loc, const Vec2 &delta, const Vec2 &velocity) {
+bool ScrollViewBase::onSwipeEventBegin(uint32_t id, const Vec2 &loc, const Vec2 &delta, const Vec2 &velocity) {
+	_inputListener->setExclusiveForTouch(id);
+
 	auto cs = (_layout == Vertical)?(_contentSize.height):(_contentSize.width);
 	auto length = getScrollLength();
 	if (!isnan(length) && cs >= length) {
@@ -580,14 +582,14 @@ bool ScrollViewBase::onSwipeEventBegin(const Vec2 &loc, const Vec2 &delta, const
 
 	return true;
 }
-bool ScrollViewBase::onSwipeEvent(const Vec2 &loc, const Vec2 &delta, const Vec2 &velocity) {
+bool ScrollViewBase::onSwipeEvent(uint32_t id, const Vec2 &loc, const Vec2 &delta, const Vec2 &velocity) {
 	if (_layout == Vertical) {
 		return onSwipe(delta.y / _globalScale.y, velocity.y / _globalScale.y, false);
 	} else {
 		return onSwipe(- delta.x / _globalScale.x, - velocity.x / _globalScale.x, false);
 	}
 }
-bool ScrollViewBase::onSwipeEventEnd(const Vec2 &loc, const Vec2 &d, const Vec2 &velocity) {
+bool ScrollViewBase::onSwipeEventEnd(uint32_t id, const Vec2 &loc, const Vec2 &d, const Vec2 &velocity) {
 	_movement = Movement::None;
 	if (_layout == Vertical) {
 		return onSwipe(0, velocity.y / _globalScale.y, true);

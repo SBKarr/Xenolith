@@ -230,6 +230,7 @@ void Controller::Data::onUploadProgress(Handle *handle, int64_t total, int64_t n
 		auto req = handle->getReqeust();
 		req->notifyOnUploadProgress(total, now);
 	});
+	_application->wakeup();
 }
 
 void Controller::Data::onDownloadProgress(Handle *handle, int64_t total, int64_t now) {
@@ -237,6 +238,7 @@ void Controller::Data::onDownloadProgress(Handle *handle, int64_t total, int64_t
 		auto req = handle->getReqeust();
 		req->notifyOnDownloadProgress(total, now);
 	});
+	_application->wakeup();
 }
 
 bool Controller::Data::onComplete(Handle *handle, bool success) {
@@ -244,6 +246,8 @@ bool Controller::Data::onComplete(Handle *handle, bool success) {
 		auto req = handle->getReqeust();
 		req->notifyOnComplete(success);
 	});
+
+	_application->wakeup();
 	return true;
 }
 

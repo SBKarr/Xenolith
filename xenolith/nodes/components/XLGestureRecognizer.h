@@ -70,6 +70,7 @@ struct GestureData {
 	const InputEvent *input = nullptr;
 
 	Vec2 location() const { return input->currentLocation; }
+	uint32_t getId() const { return input->data.id; }
 };
 
 struct GestureScroll : GestureData {
@@ -134,6 +135,7 @@ struct GesturePinch : GestureData {
 	float distance = 0.0f;
 	float scale = 0.0f;
 	float velocity = 0.0f;
+	float density = 1.0f;
 
     void cleanup() {
     	first = Vec2::ZERO;

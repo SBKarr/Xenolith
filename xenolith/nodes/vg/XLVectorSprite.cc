@@ -283,7 +283,7 @@ void VectorSprite::initVertexes() {
 }
 
 void VectorSprite::updateVertexes() {
-	if (!_image) {
+	if (!_image || !_director) {
 		return;
 	}
 
@@ -343,8 +343,11 @@ void VectorSprite::updateVertexes() {
 		auto imageData = _image->popData();
 
 		if (_deferred) {
-			auto &manager = _director->getApplication()->getDeferredManager();
-			_deferredResult = manager->runVectorCavas(move(imageData), targetViewSpaceSize, _displayedColor, _quality, _waitDeferred);
+			if (auto &manager = _director->getApplication()->getDeferredManager()) {
+				_deferredResult = manager->runVectorCavas(move(imageData), targetViewSpaceSize, _displayedColor, _quality, _waitDeferred);
+			} else {
+				_deferredResult = nullptr;
+			}
 			_result = nullptr;
 		} else {
 			auto canvas = VectorCanvas::getInstance();

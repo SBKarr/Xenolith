@@ -190,6 +190,10 @@ bool InputListener::shouldSwallowEvent(const InputEvent &event) const {
 }
 
 bool InputListener::canHandleEvent(const InputEvent &event) const {
+	if (!_running || !_owner) {
+		return false;
+	}
+
 	if (_eventMask.test(toInt(event.data.event)) && shouldProcessEvent(event)) {
 		auto it = _callbacks.find(event.data.event);
 		if (it != _callbacks.end()) {

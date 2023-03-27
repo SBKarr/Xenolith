@@ -32,6 +32,8 @@
 namespace stappler::xenolith::gl {
 
 XL_DECLARE_EVENT_CLASS(View, onFrameRate);
+XL_DECLARE_EVENT_CLASS(View, onBackground);
+XL_DECLARE_EVENT_CLASS(View, onFocus);
 
 View::View() { }
 
@@ -102,12 +104,14 @@ void View::handleInputEvent(const InputEventData &event) {
 		switch (event.event) {
 		case InputEventName::Background:
 			_inBackground = event.getValue();
+			onBackground(this, _inBackground);
 			break;
 		case InputEventName::PointerEnter:
 			_pointerInWindow = event.getValue();
 			break;
 		case InputEventName::FocusGain:
 			_hasFocus = event.getValue();
+			onFocus(this, _hasFocus);
 			break;
 		default:
 			break;
@@ -127,12 +131,14 @@ void View::handleInputEvents(Vector<InputEventData> &&events) {
 			switch (event.event) {
 			case InputEventName::Background:
 				_inBackground = event.getValue();
+				onBackground(this, _inBackground);
 				break;
 			case InputEventName::PointerEnter:
 				_pointerInWindow = event.getValue();
 				break;
 			case InputEventName::FocusGain:
 				_hasFocus = event.getValue();
+				onFocus(this, _hasFocus);
 				break;
 			default:
 				break;
@@ -142,21 +148,6 @@ void View::handleInputEvents(Vector<InputEventData> &&events) {
 	}, this, true);
 	setReadyForNextFrame();
 }
-
-/*void View::runFrame(const Rc<RenderQueue> &queue) {
-	auto a = queue->getPresentImageOutput();
-	if (!a) {
-		a = queue->getTransferImageOutput();
-	}
-	if (!a) {
-		log::vtext("vk::View", "Fail to run view with queue '", queue->getName(),  "': no usable output attachments found");
-		return;
-	}
-
-	auto req = Rc<FrameRequest>::create(queue, _frameEmitter, _constraints);
-	req->setOutput(Rc<renderqueue::FrameOutputBinding>::create(a, this));
-	_frameEmitter->submitNextFrame(move(req));
-}*/
 
 gl::ImageInfo View::getSwapchainImageInfo() const {
 	return getSwapchainImageInfo(_config);

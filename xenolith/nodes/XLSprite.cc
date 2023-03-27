@@ -260,7 +260,9 @@ void Sprite::setLineWidth(float value) {
 void Sprite::setRenderingLevel(RenderingLevel level) {
 	if (_renderingLevel != level) {
 		_renderingLevel = level;
-		updateBlendAndDepth();
+		if (_running) {
+			updateBlendAndDepth();
+		}
 	}
 }
 

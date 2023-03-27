@@ -198,7 +198,7 @@ bool Surface::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 }
 
 void Surface::applyStyle(const SurfaceStyleData &style) {
-	if (style.colorElevation.a == 0.0f) {
+	if (style.colorElevation.a == 0.0f && style.outlineValue == 0.0f) {
 		setImage(nullptr);
 		setColor(style.colorElevation, false);
 		setShadowIndex(style.shadowValue);
@@ -211,56 +211,8 @@ void Surface::applyStyle(const SurfaceStyleData &style) {
 	if (radius != _realCornerRadius || (_image && _contentSize != _image->getImageSize()) || _outlineValue != style.outlineValue
 			|| _fillValue != style.colorElevation.a || style.shapeFamily != _realShapeFamily) {
 		auto img = Rc<VectorImage>::create(_contentSize);
-		auto path = img->addPath();
-		if (radius > 0.0f) {
-			switch (style.shapeFamily) {
-			case ShapeFamily::RoundedCorners:
-				path->moveTo(0.0f, radius)
-					.arcTo(radius, radius, 0.0f, false, true, radius, 0.0f)
-					.lineTo(_contentSize.width - radius, 0.0f)
-					.arcTo(radius, radius, 0.0f, false, true, _contentSize.width, radius)
-					.lineTo(_contentSize.width, _contentSize.height - radius)
-					.arcTo(radius, radius, 0.0f, false, true, _contentSize.width - radius, _contentSize.height)
-					.lineTo(radius, _contentSize.height)
-					.arcTo(radius, radius, 0.0f, false, true, 0.0f, _contentSize.height - radius)
-					.closePath();
-				break;
-			case ShapeFamily::CutCorners:
-				path->moveTo(0.0f, radius)
-					.lineTo(radius, 0.0f)
-					.lineTo(_contentSize.width - radius, 0.0f)
-					.lineTo(_contentSize.width, radius)
-					.lineTo(_contentSize.width, _contentSize.height - radius)
-					.lineTo(_contentSize.width - radius, _contentSize.height)
-					.lineTo(radius, _contentSize.height)
-					.lineTo(0.0f, _contentSize.height - radius)
-					.closePath();
-				break;
-			}
-		} else {
-			path->moveTo(0.0f, 0.0f)
-				.lineTo(_contentSize.width, 0.0f)
-				.lineTo(_contentSize.width, _contentSize.height)
-				.lineTo(0.0f, _contentSize.height)
-				.closePath();
-		}
 
-		path->setAntialiased(false)
-			.setFillColor(Color::White)
-			.setFillOpacity(uint8_t(style.colorElevation.a * 255.0f))
-			.setStyle(vg::DrawStyle::None);
-
-		if (style.colorElevation.a > 0.0f) {
-			path->setStyle(path->getStyle() | vg::DrawStyle::Fill);
-		}
-
-		if (style.outlineValue > 0.0f) {
-			path->setStrokeWidth(1.0f)
-				.setStyle(path->getStyle() | vg::DrawStyle::Stroke)
-				.setStrokeColor(Color::White)
-				.setStrokeOpacity(uint8_t(style.outlineValue * 255.0f))
-				.setAntialiased(true);
-		}
+		updateBackgroundImage(img.get(), style, radius);
 
 		_realShapeFamily = style.shapeFamily;
 		_realCornerRadius = radius;
@@ -277,6 +229,59 @@ void Surface::applyStyle(const SurfaceStyleData &style) {
 	setColor(style.colorElevation, false);
 	setShadowIndex(style.shadowValue);
 	_styleDirty = false;
+}
+
+void Surface::updateBackgroundImage(VectorImage *img, const SurfaceStyleData &style, float radius) {
+	auto path = img->addPath();
+	if (radius > 0.0f) {
+		switch (style.shapeFamily) {
+		case ShapeFamily::RoundedCorners:
+			path->moveTo(0.0f, radius)
+				.arcTo(radius, radius, 0.0f, false, true, radius, 0.0f)
+				.lineTo(_contentSize.width - radius, 0.0f)
+				.arcTo(radius, radius, 0.0f, false, true, _contentSize.width, radius)
+				.lineTo(_contentSize.width, _contentSize.height - radius)
+				.arcTo(radius, radius, 0.0f, false, true, _contentSize.width - radius, _contentSize.height)
+				.lineTo(radius, _contentSize.height)
+				.arcTo(radius, radius, 0.0f, false, true, 0.0f, _contentSize.height - radius)
+				.closePath();
+			break;
+		case ShapeFamily::CutCorners:
+			path->moveTo(0.0f, radius)
+				.lineTo(radius, 0.0f)
+				.lineTo(_contentSize.width - radius, 0.0f)
+				.lineTo(_contentSize.width, radius)
+				.lineTo(_contentSize.width, _contentSize.height - radius)
+				.lineTo(_contentSize.width - radius, _contentSize.height)
+				.lineTo(radius, _contentSize.height)
+				.lineTo(0.0f, _contentSize.height - radius)
+				.closePath();
+			break;
+		}
+	} else {
+		path->moveTo(0.0f, 0.0f)
+			.lineTo(_contentSize.width, 0.0f)
+			.lineTo(_contentSize.width, _contentSize.height)
+			.lineTo(0.0f, _contentSize.height)
+			.closePath();
+	}
+
+	path->setAntialiased(false)
+		.setFillColor(Color::White)
+		.setFillOpacity(uint8_t(style.colorElevation.a * 255.0f))
+		.setStyle(vg::DrawStyle::None);
+
+	if (style.colorElevation.a > 0.0f) {
+		path->setStyle(path->getStyle() | vg::DrawStyle::Fill);
+	}
+
+	if (style.outlineValue > 0.0f) {
+		path->setStrokeWidth(1.0f)
+			.setStyle(path->getStyle() | vg::DrawStyle::Stroke)
+			.setStrokeColor(Color::White)
+			.setStrokeOpacity(uint8_t(style.outlineValue * 255.0f))
+			.setAntialiased(true);
+	}
 }
 
 StyleContainer *Surface::getStyleContainerForFrame(RenderFrameInfo &frame) const {

@@ -140,9 +140,9 @@ public:
 	virtual void onDelta(float delta);
 	virtual void onOverscrollPerformed(float velocity, float pos, float boundary);
 
-	virtual bool onSwipeEventBegin(const Vec2 &loc, const Vec2 &d, const Vec2 &v);
-	virtual bool onSwipeEvent(const Vec2 &loc, const Vec2 &d, const Vec2 &v);
-	virtual bool onSwipeEventEnd(const Vec2 &loc, const Vec2 &d, const Vec2 &v);
+	virtual bool onSwipeEventBegin(uint32_t id, const Vec2 &loc, const Vec2 &d, const Vec2 &v);
+	virtual bool onSwipeEvent(uint32_t id, const Vec2 &loc, const Vec2 &d, const Vec2 &v);
+	virtual bool onSwipeEventEnd(uint32_t id, const Vec2 &loc, const Vec2 &d, const Vec2 &v);
 
 	virtual void onSwipeBegin();
 	virtual bool onSwipe(float delta, float velocity, bool ended);

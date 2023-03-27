@@ -146,11 +146,6 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 		_events->foreach([&] (InputListener *l) {
 			if (l->canHandleEvent(v->second.event)) {
 				v->second.listeners.emplace_back(l);
-				if (l->shouldSwallowEvent(v->second.event)) {
-					v->second.listeners.clear();
-					v->second.listeners.emplace_back(l);
-					return false;
-				}
 			}
 			return true;
 		});
@@ -180,22 +175,16 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 	case InputEventName::MouseMove: {
 		_pointerLocation = Vec2(event.x, event.y);
 
-		auto ev = getEventInfo(event);
-		Vector<InputListener *> listeners;
+		EventHandlersInfo handlers{getEventInfo(event)};
 		_events->foreach([&] (InputListener *l) {
-			if (l->canHandleEvent(ev)) {
-				listeners.emplace_back(l);
-				if (l->shouldSwallowEvent(ev)) {
-					listeners.clear();
-					listeners.emplace_back(l);
-					return false;
-				}
+			if (l->canHandleEvent(handlers.event)) {
+				handlers.listeners.emplace_back(l);
 			}
 			return true;
 		});
-		for (auto &it : listeners) {
-			it->handleEvent(ev);
-		}
+
+		handlers.handle(false);
+
 		for (auto &it : _activeEvents) {
 			if ((it.second.event.data.modifiers & InputModifier::Unmanaged) == InputModifier::None) {
 				it.second.event.data.x = event.x;
@@ -208,87 +197,57 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 		break;
 	}
 	case InputEventName::Scroll: {
-		auto ev = getEventInfo(event);
-		Vector<InputListener *> listeners;
+		EventHandlersInfo handlers{getEventInfo(event)};
 		_events->foreach([&] (InputListener *l) {
-			if (l->canHandleEvent(ev)) {
-				listeners.emplace_back(l);
-				if (l->shouldSwallowEvent(ev)) {
-					listeners.clear();
-					listeners.emplace_back(l);
-					return false;
-				}
+			if (l->canHandleEvent(handlers.event)) {
+				handlers.listeners.emplace_back(l);
 			}
 			return true;
 		});
-		for (auto &it : listeners) {
-			it->handleEvent(ev);
-		}
+		handlers.handle(false);
 		break;
 	}
 	case InputEventName::Background: {
 		_inBackground = event.getValue();
 
-		auto ev = getEventInfo(event);
-		Vector<InputListener *> listeners;
+		EventHandlersInfo handlers{getEventInfo(event)};
 		_events->foreach([&] (InputListener *l) {
-			if (l->canHandleEvent(ev)) {
-				listeners.emplace_back(l);
-				if (l->shouldSwallowEvent(ev)) {
-					listeners.clear();
-					listeners.emplace_back(l);
-					return false;
-				}
+			if (l->canHandleEvent(handlers.event)) {
+				handlers.listeners.emplace_back(l);
 			}
 			return true;
 		});
-		for (auto &it : listeners) {
-			it->handleEvent(ev);
-		}
+		handlers.handle(false);
 		break;
 	}
 	case InputEventName::FocusGain: {
 		_hasFocus = event.getValue();
 
-		auto ev = getEventInfo(event);
-		Vector<InputListener *> listeners;
+		EventHandlersInfo handlers{getEventInfo(event)};
 		_events->foreach([&] (InputListener *l) {
-			if (l->canHandleEvent(ev)) {
-				listeners.emplace_back(l);
-				if (l->shouldSwallowEvent(ev)) {
-					listeners.clear();
-					listeners.emplace_back(l);
-					return false;
-				}
+			if (l->canHandleEvent(handlers.event)) {
+				handlers.listeners.emplace_back(l);
 			}
 			return true;
 		});
-		for (auto &it : listeners) {
-			it->handleEvent(ev);
-		}
+		handlers.handle(false);
 		break;
 	}
 	case InputEventName::PointerEnter: {
 		_pointerInWindow = event.getValue();
 
-		auto ev = getEventInfo(event);
-		Vector<InputListener *> listeners;
+		EventHandlersInfo handlers{getEventInfo(event)};
 		_events->foreach([&] (InputListener *l) {
-			if (l->canHandleEvent(ev)) {
-				listeners.emplace_back(l);
-				if (l->shouldSwallowEvent(ev)) {
-					listeners.clear();
-					listeners.emplace_back(l);
-					return false;
-				}
+			if (l->canHandleEvent(handlers.event)) {
+				handlers.listeners.emplace_back(l);
 			}
 			return true;
 		});
-		for (auto &it : listeners) {
-			it->handleEvent(ev);
-		}
-		if (!ev.data.getValue()) {
-			// Mouse left window
+
+		handlers.handle(false);
+
+		if (!handlers.event.data.getValue()) {
+			// Mouse left window, cancel active mouse events
 			auto tmpEvents = _activeEvents;
 			for (auto &it : tmpEvents) {
 				it.second.event.data.x = event.x;
@@ -315,11 +274,6 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 		_events->foreach([&] (InputListener *l) {
 			if (l->canHandleEvent(v->event)) {
 				v->listeners.emplace_back(l);
-				if (l->shouldSwallowEvent(v->event)) {
-					v->listeners.clear();
-					v->listeners.emplace_back(l);
-					return false;
-				}
 			}
 			return true;
 		});
@@ -416,25 +370,23 @@ void InputDispatcher::updateEventInfo(InputEvent &event, const InputEventData &d
 }
 
 void InputDispatcher::EventHandlersInfo::handle(bool removeOnFail) {
+	processed.clear();
 	if (exclusive) {
-		current = exclusive.get();
+		processed.emplace_back(exclusive.get());
 		exclusive->handleEvent(event);
-		current = nullptr;
 	} else {
 		Vector<Rc<InputListener>> listenerToRemove;
 		auto vec = listeners;
 		for (auto &it : vec) {
-			current = it.get();
+			processed.emplace_back(it.get());
 			auto res = it->handleEvent(event);
-			current = nullptr;
+			if (res && !exclusive && it->shouldSwallowEvent(event)) {
+				setExclusive(it);
+			}
 
 			if (exclusive) {
-				if (!exclusiveDirty) {
-					current = exclusive.get();
+				if (std::find(processed.begin(), processed.end(), exclusive.get()) == processed.end()) {
 					exclusive->handleEvent(event);
-					current = nullptr;
-				} else {
-					exclusiveDirty = true;
 				}
 				break;
 			}
@@ -451,6 +403,7 @@ void InputDispatcher::EventHandlersInfo::handle(bool removeOnFail) {
 			}
 		}
 	}
+	processed.clear();
 }
 
 void InputDispatcher::EventHandlersInfo::clear(bool cancel) {
@@ -463,25 +416,28 @@ void InputDispatcher::EventHandlersInfo::clear(bool cancel) {
 	exclusive = nullptr;
 }
 
-void InputDispatcher::setListenerExclusive(EventHandlersInfo &info, const InputListener *l) const {
-	if (info.exclusive) {
+void InputDispatcher::EventHandlersInfo::setExclusive(const InputListener *l) {
+	if (exclusive) {
 		return;
 	}
 
-	auto v = std::find(info.listeners.begin(), info.listeners.end(), l);
-	if (v != info.listeners.end()) {
-		info.exclusive = *v;
-		info.exclusiveDirty = info.current != l;
+	auto v = std::find(listeners.begin(), listeners.end(), l);
+	if (v != listeners.end()) {
+		exclusive = *v;
 
-		auto event = info.event;
+		auto event = this->event;
 		event.data.event = InputEventName::Cancel;
-		for (auto &iit : info.listeners) {
+		for (auto &iit : listeners) {
 			if (iit.get() != l) {
 				iit->handleEvent(event);
 			}
 		}
-		info.listeners.clear();
+		listeners.clear();
 	}
+}
+
+void InputDispatcher::setListenerExclusive(EventHandlersInfo &info, const InputListener *l) const {
+	info.setExclusive(l);
 }
 
 void InputDispatcher::clearKey(const InputEventData &event) {

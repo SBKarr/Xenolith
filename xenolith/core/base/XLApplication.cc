@@ -44,6 +44,7 @@ namespace stappler::xenolith {
 
 XL_DECLARE_EVENT_CLASS(Application, onDeviceToken);
 XL_DECLARE_EVENT_CLASS(Application, onNetwork);
+XL_DECLARE_EVENT_CLASS(Application, onRemoteNotification);
 XL_DECLARE_EVENT_CLASS(Application, onUrlOpened);
 XL_DECLARE_EVENT_CLASS(Application, onError);
 
@@ -710,6 +711,12 @@ const Rc<ResourceCache> &Application::getResourceCache() const {
 
 void Application::updateDefaultFontController(font::FontController::Builder &builder) {
 
+}
+
+void Application::wakeup() {
+	if (_glLoop) {
+		_glLoop->wakeup();
+	}
 }
 
 #if MODULE_XENOLITH_STORAGE

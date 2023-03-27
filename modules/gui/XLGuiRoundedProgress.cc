@@ -109,7 +109,7 @@ void RoundedProgress::onContentSizeDirty() {
 }
 
 void RoundedProgress::setBorderRadius(float value) {
-	setBorderRadius(value);
+	LayerRounded::setBorderRadius(value);
 	_bar->setBorderRadius(value);
 }
 
@@ -120,7 +120,7 @@ void RoundedProgress::setProgress(float value, float anim) {
 		value = 1.0f;
 	}
 	if (_progress != value) {
-		if (anim == 0.0f) {
+		if (!_actionManager || anim == 0.0f) {
 			_progress = value;
 			_contentSizeDirty = true;
 		} else {

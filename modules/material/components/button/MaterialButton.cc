@@ -73,6 +73,7 @@ bool Button::init(const SurfaceStyle &style) {
 			_pressed = false;
 			updateActivityState();
 			if (press.event == GestureEvent::Ended) {
+				_inputListener->setExclusiveForTouch(press.getId());
 				if (_longPressInit) {
 					handleLongPress();
 				} else {
@@ -88,6 +89,7 @@ bool Button::init(const SurfaceStyle &style) {
 			return false;
 		}
 		if (tap.count == 2) {
+			_inputListener->setExclusiveForTouch(tap.getId());
 			handleDoubleTap();
 		}
 		return true;
@@ -103,22 +105,29 @@ bool Button::init(const SurfaceStyle &style) {
 void Button::onContentSizeDirty() {
 	Surface::onContentSizeDirty();
 
-	float contentWidth = getWidthForContent();
-	float offset = (_contentSize.width - contentWidth) / 2.0f;
-
-	Vec2 target(offset + (_styleTarget.nodeStyle == NodeStyle::Text ? 12.0f : 16.0f), _contentSize.height / 2.0f);
-
-	if (getLeadingIconName() != IconName::None) {
-		_leadingIcon->setPosition(target);
-		target.x += 8.0f + _leadingIcon->getContentSize().width;
+	if (getLeadingIconName() != IconName::None && getTrailingIconName() == IconName::None && _label->getString().empty()) {
+		_leadingIcon->setAnchorPoint(Anchor::Middle);
+		_leadingIcon->setPosition(_contentSize / 2.0f);
 	} else {
-		target.x += 8.0f;
+		_leadingIcon->setAnchorPoint(Anchor::MiddleLeft);
+
+		float contentWidth = getWidthForContent();
+		float offset = (_contentSize.width - contentWidth) / 2.0f;
+
+		Vec2 target(offset + (_styleTarget.nodeStyle == NodeStyle::Text ? 12.0f : 16.0f), _contentSize.height / 2.0f);
+
+		if (getLeadingIconName() != IconName::None) {
+			_leadingIcon->setPosition(target);
+			target.x += 8.0f + _leadingIcon->getContentSize().width;
+		} else {
+			target.x += 8.0f;
+		}
+
+		_label->setPosition(target);
+		target.x += _label->getContentSize().width + 8.0f;
+
+		_trailingIcon->setPosition(target);
 	}
-
-	_label->setPosition(target);
-	target.x += _label->getContentSize().width + 8.0f;
-
-	_trailingIcon->setPosition(target);
 }
 
 void Button::setFollowContentSize(bool value) {
@@ -153,6 +162,15 @@ void Button::setEnabled(bool value) {
 		_inputListener->setEnabled(_enabled);
 		updateActivityState();
 	}
+}
+
+void Button::setSelected(bool val) {
+	_selected = val;
+	updateActivityState();
+}
+
+bool Button::isSelected() const {
+	return _selected;
 }
 
 bool Button::isMenuSourceButtonEnabled() const {

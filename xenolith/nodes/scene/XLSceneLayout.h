@@ -78,6 +78,9 @@ public:
 
 	virtual bool hasBackButtonAction() const;
 
+	virtual void setLayoutName(StringView);
+	virtual StringView getLayoutName() const;
+
 protected:
 	DecorationMask _decorationMask = DecorationMask::None;
 	Padding _decorationPadding;

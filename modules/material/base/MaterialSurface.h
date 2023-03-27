@@ -62,6 +62,7 @@ public:
 
 protected:
 	virtual void applyStyle(const SurfaceStyleData &);
+	virtual void updateBackgroundImage(VectorImage *img, const SurfaceStyleData &style, float radius);
 
 	virtual StyleContainer *getStyleContainerForFrame(RenderFrameInfo &) const;
 	virtual SurfaceInterior *getSurfaceInteriorForFrame(RenderFrameInfo &) const;

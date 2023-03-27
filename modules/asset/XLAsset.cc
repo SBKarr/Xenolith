@@ -116,6 +116,18 @@ bool Asset::download() {
 		return true;
 	}
 
+	do {
+		auto it = _versions.begin();
+		while (it != _versions.end()) {
+			if (it->complete && !filesystem::exists(it->path)) {
+				dropVersion(*it);
+				it = _versions.erase(it);
+			} else {
+				++ it;
+			}
+		}
+	} while (0);
+
 	auto it = _versions.begin();
 	while (it != _versions.end()) {
 		if (!it->complete) {

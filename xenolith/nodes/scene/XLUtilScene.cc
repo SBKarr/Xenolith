@@ -227,8 +227,8 @@ void UtilScene::initialize(Application *app) {
 		if ((ev.input->data.modifiers & InputModifier::Ctrl) == InputModifier::None) {
 			if (_data1.event != InputEventName::End && _data1.event != InputEventName::Cancel) {
 
-				updateInputEventData(_data1, ev.input->data, _pointerReal->getPosition().xy(), maxOf<uint32_t>() - 1);
-				updateInputEventData(_data2, ev.input->data, _pointerVirtual->getPosition().xy(), maxOf<uint32_t>() - 2);
+				updateInputEventData(_data1, ev.input->data, convertToWorldSpace(_pointerReal->getPosition().xy()), maxOf<uint32_t>() - 1);
+				updateInputEventData(_data2, ev.input->data, convertToWorldSpace(_pointerVirtual->getPosition().xy()), maxOf<uint32_t>() - 2);
 
 				_data1.event = InputEventName::Cancel;
 				_data2.event = InputEventName::Cancel;
@@ -245,8 +245,8 @@ void UtilScene::initialize(Application *app) {
 			_listener->setExclusiveForTouch(ev.input->data.id);
 		}
 
-		updateInputEventData(_data1, ev.input->data, _pointerReal->getPosition().xy(), maxOf<uint32_t>() - 1);
-		updateInputEventData(_data2, ev.input->data, _pointerVirtual->getPosition().xy(), maxOf<uint32_t>() - 2);
+		updateInputEventData(_data1, ev.input->data, convertToWorldSpace(_pointerReal->getPosition().xy()), maxOf<uint32_t>() - 1);
+		updateInputEventData(_data2, ev.input->data, convertToWorldSpace(_pointerVirtual->getPosition().xy()), maxOf<uint32_t>() - 2);
 
 		Vector<InputEventData> events{ _data1, _data2 };
 

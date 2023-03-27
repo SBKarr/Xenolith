@@ -248,8 +248,7 @@ void ActionManager::resumeTargets(const Vector<Node*> &targetsToResume) {
 void ActionManager::update(const UpdateTime &time) {
 	float dt = float(time.delta) / 1'000'000.0f;
 	auto it = _actions.begin();
-	auto end = _actions.end();
-	while (it != end) {
+	while (it != _actions.end()) {
 		_current = &(*it);
 		_current->foreach([&] (Action *a) {
 			a->step(dt);

@@ -108,4 +108,12 @@ bool SceneLayout::hasBackButtonAction() const {
 	return _backButtonCallback != nullptr;
 }
 
+void SceneLayout::setLayoutName(StringView name) {
+	_name = name.str<Interface>();
+}
+
+StringView SceneLayout::getLayoutName() const {
+	return _name;
+}
+
 }

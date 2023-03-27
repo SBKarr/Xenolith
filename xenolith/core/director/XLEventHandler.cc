@@ -50,11 +50,11 @@ void EventHandler::removeHandlerNode(EventHandlerNode *handler) {
 	});
 }
 
-EventHandlerNode * EventHandler::onEvent(const EventHeader &h, Callback && callback, bool destroyAfterEvent) {
+EventHandlerNode * EventHandler::setEventHandler(const EventHeader &h, Callback && callback, bool destroyAfterEvent) {
 	return EventHandlerNode::onEvent(h, nullptr, std::move(callback), this, destroyAfterEvent);
 }
 
-EventHandlerNode * EventHandler::onEventWithObject(const EventHeader &h, Ref *obj, Callback && callback, bool destroyAfterEvent) {
+EventHandlerNode * EventHandler::setEventHandlerForObject(const EventHeader &h, Ref *obj, Callback && callback, bool destroyAfterEvent) {
 	return EventHandlerNode::onEvent(h, obj, std::move(callback), this, destroyAfterEvent);
 }
 
