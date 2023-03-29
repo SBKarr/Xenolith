@@ -97,7 +97,7 @@ public:
 	virtual void signalDependencies(const Vector<Rc<DependencyEvent>> &, bool success) override;
 	virtual void waitForDependencies(const Vector<Rc<DependencyEvent>> &, Function<void(bool)> &&) override;
 
-	virtual void wakeup();
+	virtual void wakeup() override;
 
 protected:
 	using gl::Loop::init;

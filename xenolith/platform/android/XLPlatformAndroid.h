@@ -130,6 +130,36 @@ protected:
 	std::thread::id _threadId;
 };
 
+struct NativeClassLoader : Ref {
+	struct NativePaths {
+		jstring apkPath = nullptr;
+		jstring nativeLibraryDir = nullptr;
+	};
+
+	jobject activityClassLoader = nullptr;
+	jclass activityClassLoaderClass = nullptr;
+
+	jobject apkClassLoader = nullptr;
+	jclass apkClassLoaderClass = nullptr;
+
+	jmethodID findClassMethod = nullptr;
+
+	String apkPath;
+	String nativeLibraryDir;
+
+	NativeClassLoader();
+	~NativeClassLoader();
+
+	bool init(ANativeActivity *activity);
+	void finalize(JNIEnv *);
+
+	jclass findClass(JNIEnv *, StringView);
+	jclass findClass(JNIEnv *, jstring);
+	jstring getClassName(JNIEnv *, jclass);
+	NativePaths getNativePaths(JNIEnv *, jobject, jclass = nullptr);
+	jstring getCodeCachePath(JNIEnv *, jobject, jclass = nullptr);
+};
+
 struct NativeActivity {
 	struct InputLooperData {
 		NativeActivity *activity;
@@ -140,6 +170,9 @@ struct NativeActivity {
 	AConfiguration *config = nullptr;
 	ALooper *looper = nullptr;
 	Rc<EngineMainThread> thread;
+	Rc<NativeClassLoader> classLoader;
+
+	jobject networkConnectivity = nullptr;
 
 	Rc<graphic::ViewImpl> rootViewTmp;
 	Rc<graphic::ViewImpl> rootView;
@@ -202,6 +235,8 @@ struct NativeActivity {
 
 	const Rc<graphic::ViewImpl> &waitForView();
 };
+
+void checkJniError(JNIEnv *env);
 
 }
 

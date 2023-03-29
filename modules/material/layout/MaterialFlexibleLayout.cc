@@ -181,6 +181,7 @@ const FlexibleLayout::HeightFunction &FlexibleLayout::getFlexibleHeightFunction(
 void FlexibleLayout::updateFlexParams() {
 	NodeParams decorParams, flexibleNodeParams, baseNodeParams;
 
+	bool hasTopDecor = (_decorationMask & DecorationMask::Top) != DecorationMask::None;
 	auto size = _contentSize;
 	size.height -= _decorationPadding.bottom;
 	float decor = _viewDecorationTracked ? _decorationPadding.top : 0.0f;
@@ -193,8 +194,13 @@ void FlexibleLayout::updateFlexParams() {
 		flexSize = _flexibleMaxHeight;
 		decorParams.setPosition(Vec2(_decorationPadding.left, _contentSize.height));
 		decorParams.setVisible(true);
-	} else {
+	} else if (_viewDecorationTracked) {
 		decorParams.setVisible(false);
+	} else {
+		decorParams.setVisible(hasTopDecor);
+		if (hasTopDecor) {
+			size.height -= _decorationPadding.top;
+		}
 	}
 
 	flexibleNodeParams.setPosition(_decorationPadding.left, size.height + _decorationPadding.bottom);
@@ -304,11 +310,13 @@ void FlexibleLayout::setFlexibleLevelAnimated(float value, float duration) {
 	if (duration <= 0.0f) {
 		setFlexibleLevel(value);
 	} else {
-		auto a = makeEasing(Rc<ActionProgress>::create(
+		auto a = Rc<Sequence>::create(makeEasing(Rc<ActionProgress>::create(
 				duration, _flexibleLevel, value,
 				[this] (float progress) {
 			setFlexibleLevel(progress);
-		}), EasingType::Emphasized);
+		}), EasingType::Emphasized), [this, value] {
+			setFlexibleLevel(value);
+		});
 		a->setTag("FlexibleLevel"_tag);
 		runAction(a);
 	}

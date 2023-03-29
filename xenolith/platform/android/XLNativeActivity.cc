@@ -76,6 +76,20 @@ NativeActivity::~NativeActivity() {
 		rootView = nullptr;
 	}
 
+	if (networkConnectivity) {
+		jclass networkConnectivityClass = activity->env->FindClass("org/stappler/xenolith/appsupport/NetworkConnectivity");
+		jmethodID networkConnectivityFinalize = activity->env->GetMethodID(networkConnectivityClass, "finalize", "()V");
+
+		activity->env->CallVoidMethod(networkConnectivity, networkConnectivityFinalize);
+		activity->env->DeleteGlobalRef(networkConnectivity);
+		networkConnectivity = nullptr;
+	}
+
+	if (classLoader) {
+		classLoader->finalize(activity->env);
+		classLoader = nullptr;
+	}
+
 	filesystem::platform::Android_terminateFilesystem();
 	auto app = thread->getApplication();
 	app->end(true);
@@ -195,7 +209,10 @@ bool NativeActivity::init(ANativeActivity *a) {
 		((NativeActivity *)activity->instance)->handleWindowFocusChanged(focused);
 	};
 
-	filesystem::platform::Android_initializeFilesystem(activity->assetManager, activity->internalDataPath, activity->externalDataPath);
+	classLoader = Rc<NativeClassLoader>::create(activity);
+
+	filesystem::platform::Android_initializeFilesystem(activity->assetManager,
+			activity->internalDataPath, activity->externalDataPath, classLoader ? classLoader->apkPath : StringView());
 
 	activity->instance = this;
 
@@ -203,6 +220,23 @@ bool NativeActivity::init(ANativeActivity *a) {
 	app->setNativeHandle(this);
 	thread = Rc<EngineMainThread>::create(app, getAppInfo(config));
 
+	if (classLoader) {
+		jclass networkConnectivityClass = classLoader->findClass(activity->env, "org.stappler.xenolith.appsupport.NetworkConnectivity");
+		if (networkConnectivityClass) {
+			linkNetworkConnectivityClass(activity->env, networkConnectivityClass);
+			jmethodID networkConnectivityCreate = activity->env->GetStaticMethodID(networkConnectivityClass, "create",
+					"(Landroid/content/Context;)Lorg/stappler/xenolith/appsupport/NetworkConnectivity;");
+			if (networkConnectivityCreate) {
+				auto conn = activity->env->CallStaticObjectMethod(networkConnectivityClass, networkConnectivityCreate, activity->clazz);
+				if (conn) {
+					networkConnectivity = activity->env->NewGlobalRef(conn);
+				}
+			} else {
+				checkJniError(activity->env);
+			}
+			activity->env->DeleteLocalRef(networkConnectivityClass);
+		}
+	}
 	return true;
 }
 
@@ -471,6 +505,8 @@ int NativeActivity::handleMotionEvent(AInputEvent *event) {
 	auto count = AMotionEvent_getPointerCount(event);
 	switch (action & AMOTION_EVENT_ACTION_MASK) {
 	case AMOTION_EVENT_ACTION_DOWN:
+		stappler::log::vtext("NativeActivity", "Motion AMOTION_EVENT_ACTION_DOWN ", count,
+							 " ", AMotionEvent_getPointerId(event, 0), " ", 0);
 		for (size_t i = 0; i < count; ++ i) {
 			auto &ev = events.emplace_back(InputEventData{uint32_t(AMotionEvent_getPointerId(event, i)),
 				InputEventName::Begin, InputMouseButton::Touch, _activeModifiers,
@@ -479,6 +515,8 @@ int NativeActivity::handleMotionEvent(AInputEvent *event) {
 		}
 		break;
 	case AMOTION_EVENT_ACTION_UP:
+		stappler::log::vtext("NativeActivity", "Motion AMOTION_EVENT_ACTION_UP ", count,
+							 " ", AMotionEvent_getPointerId(event, 0), " ", 0);
 		for (size_t i = 0; i < count; ++ i) {
 			auto &ev = events.emplace_back(InputEventData{uint32_t(AMotionEvent_getPointerId(event, i)),
 				InputEventName::End, InputMouseButton::Touch, _activeModifiers,
@@ -512,6 +550,8 @@ int NativeActivity::handleMotionEvent(AInputEvent *event) {
 		break;
 	case AMOTION_EVENT_ACTION_POINTER_DOWN: {
 		auto pointer = (action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> 8;
+		stappler::log::vtext("NativeActivity", "Motion AMOTION_EVENT_ACTION_POINTER_DOWN ", count,
+							 " ", AMotionEvent_getPointerId(event, pointer), " ", pointer);
 		auto &ev = events.emplace_back(InputEventData{uint32_t(AMotionEvent_getPointerId(event, pointer)),
 			InputEventName::Begin, InputMouseButton::Touch, _activeModifiers,
 			AMotionEvent_getX(event, pointer), _windowSize.height - AMotionEvent_getY(event, pointer)});
@@ -520,8 +560,10 @@ int NativeActivity::handleMotionEvent(AInputEvent *event) {
 	}
 	case AMOTION_EVENT_ACTION_POINTER_UP: {
 		auto pointer = (action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> 8;
+		stappler::log::vtext("NativeActivity", "Motion AMOTION_EVENT_ACTION_POINTER_UP ", count,
+							 " ", AMotionEvent_getPointerId(event, pointer), " ", pointer);
 		auto &ev = events.emplace_back(InputEventData{uint32_t(AMotionEvent_getPointerId(event, pointer)),
-			InputEventName::Begin, InputMouseButton::Touch, _activeModifiers,
+			InputEventName::End, InputMouseButton::Touch, _activeModifiers,
 			AMotionEvent_getX(event, pointer), _windowSize.height - AMotionEvent_getY(event, pointer)});
 		ev.point.density = _density;
 		break;
@@ -667,6 +709,30 @@ const Rc<graphic::ViewImpl> &NativeActivity::waitForView() {
         rootView->setActivity(this);
 	}
 	return rootView;
+}
+
+void checkJniError(JNIEnv* env) {
+	if (env->ExceptionCheck()) {
+		// Read exception msg
+		jthrowable e = env->ExceptionOccurred();
+		env->ExceptionClear(); // clears the exception; e seems to remain valid
+		jclass clazz = env->GetObjectClass(e);
+		jclass classClass = env->GetObjectClass(clazz);
+		jmethodID getName = env->GetMethodID(classClass, "getName", "()Ljava/lang/String;");
+		jmethodID getMessage = env->GetMethodID(clazz, "getMessage", "()Ljava/lang/String;");
+		jstring message = (jstring) env->CallObjectMethod(e, getMessage);
+		jstring exName = (jstring) env->CallObjectMethod(clazz, getName);
+
+		const char *mstr = env->GetStringUTFChars(message, NULL);
+		log::vtext("JNI", "[", env->GetStringUTFChars(exName, NULL), "] ", mstr);
+
+		env->ReleaseStringUTFChars(message, mstr);
+		env->DeleteLocalRef(message);
+		env->DeleteLocalRef(exName);
+		env->DeleteLocalRef(classClass);
+		env->DeleteLocalRef(clazz);
+		env->DeleteLocalRef(e);
+	}
 }
 
 SP_EXTERN_C JNIEXPORT

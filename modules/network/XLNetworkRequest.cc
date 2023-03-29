@@ -130,6 +130,7 @@ void Request::perform(Application *app, CompleteCallback &&cb) {
 			_handle.setReceiveCallback([this] (char *buf, size_t size) -> size_t {
 				return handleReceive(buf, size);
 			});
+			_handle.setVerifyTls(false);
 		}
 	}
 	c->run(this);

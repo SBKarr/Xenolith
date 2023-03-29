@@ -342,7 +342,7 @@ static void Resource_loadFileData(uint8_t *ptr, uint64_t size, StringView path, 
 	memory::pool::push(p);
 	auto f = filesystem::openForReading(path);
 	if (f) {
-		auto fsize = f.size();
+		uint64_t fsize = f.size();
 		f.seek(0, io::Seek::Set);
 		if (ptr) {
 			f.read(ptr, std::min(fsize, size));

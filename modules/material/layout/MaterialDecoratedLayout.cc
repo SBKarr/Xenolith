@@ -35,9 +35,7 @@ bool DecoratedLayout::init(ColorRole role) {
 	_decorationTop->setAnchorPoint(Anchor::TopLeft);
 	_decorationTop->setVisible(false);
 	_decorationTop->setStyleDirtyCallback([this] (const SurfaceStyleData &style) {
-		if (_viewDecorationTracked) {
-			updateStatusBar(style);
-		}
+		updateStatusBar(style);
 	});
 
 	_decorationBottom = addChild(Rc<LayerSurface>::create(SurfaceStyle(role, NodeStyle::Filled)), ZOrderMax);
@@ -126,7 +124,6 @@ ColorRole DecoratedLayout::getDecorationColorRole() const {
 void DecoratedLayout::setViewDecorationTracked(bool value) {
 	if (_viewDecorationTracked != value) {
 		_viewDecorationTracked = value;
-		updateStatusBar(_decorationTop->getStyleCurrent());
 	}
 }
 
@@ -134,8 +131,12 @@ bool DecoratedLayout::isViewDecorationTracked() const {
 	return _viewDecorationTracked;
 }
 
+void DecoratedLayout::onForeground(SceneContent *l, SceneLayout *overlay) {
+	updateStatusBar(_decorationTop->getStyleCurrent());
+}
+
 void DecoratedLayout::updateStatusBar(const SurfaceStyleData &style) {
-	if (_director && _viewDecorationTracked) {
+	if (_director && _decorationStyleTracked) {
 		_director->getView()->setDecorationTone(style.colorOn.data.tone / 50.0f);
 	}
 }

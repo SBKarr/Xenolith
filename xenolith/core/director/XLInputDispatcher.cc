@@ -135,6 +135,7 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 		return;
 		break;
 	case InputEventName::Begin: {
+		log::vtext("InputDispatcher", "Begin: ", event.id);
 		auto v = _activeEvents.find(event.id);
 		if (v == _activeEvents.end()) {
 			v = _activeEvents.emplace(event.id, EventHandlersInfo{getEventInfo(event), Vector<Rc<InputListener>>()}).first;
@@ -163,6 +164,7 @@ void InputDispatcher::handleInputEvent(const InputEventData &event) {
 	}
 	case InputEventName::End:
 	case InputEventName::Cancel: {
+		log::vtext("InputDispatcher", "End: ", event.id);
 		auto v = _activeEvents.find(event.id);
 		if (v != _activeEvents.end()) {
 			updateEventInfo(v->second.event, event);

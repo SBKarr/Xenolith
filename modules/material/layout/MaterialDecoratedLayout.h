@@ -42,6 +42,8 @@ public:
 	virtual void setViewDecorationTracked(bool value);
 	virtual bool isViewDecorationTracked() const;
 
+	virtual void onForeground(SceneContent *l, SceneLayout *overlay) override;
+
 protected:
 	virtual void updateStatusBar(const SurfaceStyleData &style);
 
@@ -51,6 +53,7 @@ protected:
 	LayerSurface *_decorationBottom = nullptr;
 	LayerSurface *_background = nullptr;
 	bool _viewDecorationTracked = false;
+	bool _decorationStyleTracked = true;
 };
 
 }

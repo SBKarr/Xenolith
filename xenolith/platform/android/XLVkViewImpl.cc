@@ -335,9 +335,9 @@ void ViewImpl::updateDecorations() {
 		updatedVisibility = updatedVisibility & ~flag_SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
 	}
 
-	log::vtext("ViewImpl", "setDecorationVisible ", _decorationVisible);
+	// log::vtext("ViewImpl", "setDecorationVisible ", _decorationVisible);
 	if (currentVisibility != updatedVisibility) {
-		log::vtext("ViewImpl", "updatedVisibility ", updatedVisibility);
+		// log::vtext("ViewImpl", "updatedVisibility ", updatedVisibility);
 		env->CallVoidMethod(decorViewObj, setSystemUiVisibility, updatedVisibility);
 	}
 
@@ -352,23 +352,7 @@ void ViewImpl::doCheckError() {
 		return;
 	}
 
-	auto env = _activity->activity->env;
-	if (env->ExceptionCheck()) {
-		// Read exception msg
-		jthrowable e = env->ExceptionOccurred();
-		env->ExceptionClear(); // clears the exception; e seems to remain valid
-		jclass clazz = env->GetObjectClass(e);
-		jmethodID getMessage = env->GetMethodID(clazz, "getMessage", "()Ljava/lang/String;");
-		jstring message = (jstring) env->CallObjectMethod(e, getMessage);
-
-		const char *mstr = env->GetStringUTFChars(message, NULL);
-		log::text("JNI", mstr);
-
-		env->ReleaseStringUTFChars(message, mstr);
-		env->DeleteLocalRef(message);
-		env->DeleteLocalRef(clazz);
-		env->DeleteLocalRef(e);
-	}
+	checkJniError(_activity->activity->env);
 }
 
 }
