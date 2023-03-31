@@ -103,6 +103,7 @@ public:
 	virtual void waitForDependencies(const Vector<Rc<DependencyEvent>> &, Function<void(bool)> &&) = 0;
 
 	virtual void wakeup() = 0;
+	virtual void waitIdle() = 0;
 
 protected:
 	std::atomic_flag _shouldExit;

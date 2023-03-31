@@ -98,6 +98,7 @@ public:
 	virtual void waitForDependencies(const Vector<Rc<DependencyEvent>> &, Function<void(bool)> &&) override;
 
 	virtual void wakeup() override;
+	virtual void waitIdle() override;
 
 protected:
 	using gl::Loop::init;

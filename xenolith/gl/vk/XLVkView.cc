@@ -805,6 +805,10 @@ bool View::recreateSwapchain(gl::PresentMode mode) {
 	_requestedSwapchainImage.clear();
 	_swapchainImages.clear();
 
+	if (!_surface || mode == gl::PresentMode::Unsupported) {
+		return false;
+	}
+
 	if (renderqueue::FrameHandle::GetActiveFramesCount() > 1) {
 		renderqueue::FrameHandle::DescribeActiveFrames();
 	}

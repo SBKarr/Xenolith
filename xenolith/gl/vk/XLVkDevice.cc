@@ -637,6 +637,10 @@ bool Device::hasNonSolidFillMode() const {
 	return _info.features.device10.features.fillModeNonSolid;
 }
 
+void Device::waitIdle() const {
+	_table->vkDeviceWaitIdle(_device);
+}
+
 void Device::compileSamplers(gl::TaskQueue &q, bool force) {
 	_immutableSamplers.resize(_samplersInfo.size(), VK_NULL_HANDLE);
 	_samplers.resize(_samplersInfo.size(), nullptr);

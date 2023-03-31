@@ -75,6 +75,8 @@ public:
 
 	uint32_t getPresentatonMask() const { return _presentMask; }
 
+	virtual void waitIdle() const { }
+
 protected:
 	friend class Loop;
 

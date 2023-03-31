@@ -48,6 +48,7 @@ THE SOFTWARE.
 #include "android/XLNetwork.cc"
 #include "android/XLVulkan.cc"
 #include "android/XLNativeNetworkConnectivity.cc"
+#include "android/XLNativeMessagingService.cc"
 #include "android/XLNativeActivity.cc"
 #include "android/XLNativeClassLoader.cc"
 #include "android/XLVkViewImpl.cc"

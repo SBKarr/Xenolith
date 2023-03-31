@@ -129,6 +129,8 @@ public:
 
 	bool hasNonSolidFillMode() const;
 
+	virtual void waitIdle() const override;
+
 private:
 	using gl::Device::init;
 

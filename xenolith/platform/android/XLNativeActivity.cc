@@ -69,7 +69,17 @@ void EngineMainThread::waitForRunning() {
 	});
 }
 
+static std::atomic<NativeActivity *> s_currentActivity = nullptr;
+
+NativeActivity *NativeActivity::getInstance() {
+	return s_currentActivity;
+}
+
 NativeActivity::~NativeActivity() {
+	if (s_currentActivity == this) {
+		s_currentActivity = nullptr;
+	}
+
 	if (rootView) {
 		rootView->threadDispose();
 		rootView->end();
@@ -77,11 +87,7 @@ NativeActivity::~NativeActivity() {
 	}
 
 	if (networkConnectivity) {
-		jclass networkConnectivityClass = activity->env->FindClass("org/stappler/xenolith/appsupport/NetworkConnectivity");
-		jmethodID networkConnectivityFinalize = activity->env->GetMethodID(networkConnectivityClass, "finalize", "()V");
-
-		activity->env->CallVoidMethod(networkConnectivity, networkConnectivityFinalize);
-		activity->env->DeleteGlobalRef(networkConnectivity);
+		networkConnectivity->finalize(activity->env);
 		networkConnectivity = nullptr;
 	}
 
@@ -151,63 +157,70 @@ bool NativeActivity::init(ANativeActivity *a) {
 		}, this);
 	}
 
-	activity->callbacks->onConfigurationChanged = [] (ANativeActivity* activity) {
-		((NativeActivity *)activity->instance)->handleConfigurationChanged();
+	activity->callbacks->onConfigurationChanged = [] (ANativeActivity* a) {
+		((NativeActivity *)a->instance)->handleConfigurationChanged();
 	};
 
-	activity->callbacks->onContentRectChanged = [] (ANativeActivity* activity, const ARect* r) {
-		((NativeActivity *)activity->instance)->handleContentRectChanged(r);
+	activity->callbacks->onContentRectChanged = [] (ANativeActivity* a, const ARect* r) {
+		((NativeActivity *)a->instance)->handleContentRectChanged(r);
 	};
 
-	activity->callbacks->onDestroy = [] (ANativeActivity* activity) {
-		stappler::log::format("NativeActivity", "Destroy: %p", activity);
+	activity->callbacks->onDestroy = [] (ANativeActivity* a) {
+		stappler::log::format("NativeActivity", "Destroy: %p", a);
 
-		auto ref = (NativeActivity *)activity->instance;
+		auto ref = (NativeActivity *)a->instance;
 		delete ref;
 	};
-	activity->callbacks->onInputQueueCreated = [] (ANativeActivity* activity, AInputQueue* queue) {
-		((NativeActivity *)activity->instance)->handleInputQueueCreated(queue);
+	activity->callbacks->onInputQueueCreated = [] (ANativeActivity* a, AInputQueue* queue) {
+		((NativeActivity *)a->instance)->handleInputQueueCreated(queue);
 	};
-	activity->callbacks->onInputQueueDestroyed = [] (ANativeActivity* activity, AInputQueue* queue) {
-		((NativeActivity *)activity->instance)->handleInputQueueDestroyed(queue);
+	activity->callbacks->onInputQueueDestroyed = [] (ANativeActivity* a, AInputQueue* queue) {
+		((NativeActivity *)a->instance)->handleInputQueueDestroyed(queue);
 	};
-	activity->callbacks->onLowMemory = [] (ANativeActivity* activity) {
-		((NativeActivity *)activity->instance)->handleLowMemory();
-	};
-
-	activity->callbacks->onNativeWindowCreated = [] (ANativeActivity* activity, ANativeWindow* window) {
-		((NativeActivity *)activity->instance)->handleNativeWindowCreated(window);
+	activity->callbacks->onLowMemory = [] (ANativeActivity* a) {
+		((NativeActivity *)a->instance)->handleLowMemory();
 	};
 
-	activity->callbacks->onNativeWindowDestroyed = [] (ANativeActivity* activity, ANativeWindow* window) {
-		((NativeActivity *)activity->instance)->handleNativeWindowDestroyed(window);
+	activity->callbacks->onNativeWindowCreated = [] (ANativeActivity* a, ANativeWindow* window) {
+		((NativeActivity *)a->instance)->handleNativeWindowCreated(window);
 	};
 
-	activity->callbacks->onNativeWindowRedrawNeeded = [] (ANativeActivity* activity, ANativeWindow* window) {
-		((NativeActivity *)activity->instance)->handleNativeWindowRedrawNeeded(window);
+	activity->callbacks->onNativeWindowDestroyed = [] (ANativeActivity* a, ANativeWindow* window) {
+		((NativeActivity *)a->instance)->handleNativeWindowDestroyed(window);
 	};
 
-	activity->callbacks->onNativeWindowResized = [] (ANativeActivity* activity, ANativeWindow* window) {
-		((NativeActivity *)activity->instance)->handleNativeWindowResized(window);
+	activity->callbacks->onNativeWindowRedrawNeeded = [] (ANativeActivity* a, ANativeWindow* window) {
+		((NativeActivity *)a->instance)->handleNativeWindowRedrawNeeded(window);
 	};
-	activity->callbacks->onPause = [] (ANativeActivity* activity) {
-		((NativeActivity *)activity->instance)->handlePause();
+
+	activity->callbacks->onNativeWindowResized = [] (ANativeActivity* a, ANativeWindow* window) {
+		((NativeActivity *)a->instance)->handleNativeWindowResized(window);
 	};
-	activity->callbacks->onResume = [] (ANativeActivity* activity) {
-		((NativeActivity *)activity->instance)->handleResume();
+	activity->callbacks->onPause = [] (ANativeActivity* a) {
+		((NativeActivity *)a->instance)->handlePause();
 	};
-	activity->callbacks->onSaveInstanceState = [] (ANativeActivity* activity, size_t* outLen) {
-		return ((NativeActivity *)activity->instance)->handleSaveInstanceState(outLen);
+	activity->callbacks->onResume = [] (ANativeActivity* a) {
+		((NativeActivity *)a->instance)->handleResume();
 	};
-	activity->callbacks->onStart = [] (ANativeActivity* activity) {
-		((NativeActivity *)activity->instance)->handleStart();
+	activity->callbacks->onSaveInstanceState = [] (ANativeActivity* a, size_t* outLen) {
+		return ((NativeActivity *)a->instance)->handleSaveInstanceState(outLen);
 	};
-	activity->callbacks->onStop = [] (ANativeActivity* activity) {
-		((NativeActivity *)activity->instance)->handleStop();
+	activity->callbacks->onStart = [] (ANativeActivity* a) {
+		((NativeActivity *)a->instance)->handleStart();
 	};
-	activity->callbacks->onWindowFocusChanged = [] (ANativeActivity *activity, int focused) {
-		((NativeActivity *)activity->instance)->handleWindowFocusChanged(focused);
+	activity->callbacks->onStop = [] (ANativeActivity* a) {
+		((NativeActivity *)a->instance)->handleStop();
 	};
+	activity->callbacks->onWindowFocusChanged = [] (ANativeActivity *a, int focused) {
+		((NativeActivity *)a->instance)->handleWindowFocusChanged(focused);
+	};
+
+	auto activityClass = activity->env->GetObjectClass(activity->clazz);
+	auto setNativePointerMethod = activity->env->GetMethodID(activityClass, "setNativePointer", "(J)V");
+	if (setNativePointerMethod) {
+		activity->env->CallVoidMethod(activity->clazz, setNativePointerMethod, jlong(this));
+	}
+	activity->env->DeleteLocalRef(activityClass);
 
 	classLoader = Rc<NativeClassLoader>::create(activity);
 
@@ -218,25 +231,36 @@ bool NativeActivity::init(ANativeActivity *a) {
 
 	auto app = Application::getInstance();
 	app->setNativeHandle(this);
-	thread = Rc<EngineMainThread>::create(app, getAppInfo(config));
 
 	if (classLoader) {
-		jclass networkConnectivityClass = classLoader->findClass(activity->env, "org.stappler.xenolith.appsupport.NetworkConnectivity");
-		if (networkConnectivityClass) {
-			linkNetworkConnectivityClass(activity->env, networkConnectivityClass);
-			jmethodID networkConnectivityCreate = activity->env->GetStaticMethodID(networkConnectivityClass, "create",
-					"(Landroid/content/Context;)Lorg/stappler/xenolith/appsupport/NetworkConnectivity;");
-			if (networkConnectivityCreate) {
-				auto conn = activity->env->CallStaticObjectMethod(networkConnectivityClass, networkConnectivityCreate, activity->clazz);
-				if (conn) {
-					networkConnectivity = activity->env->NewGlobalRef(conn);
-				}
-			} else {
-				checkJniError(activity->env);
+		networkConnectivity = Rc<NetworkConnectivity>::create(activity->env, classLoader, activity->clazz, [this] (NetworkCapabilities flags) {
+			if (!thread) {
+				return;
 			}
-			activity->env->DeleteLocalRef(networkConnectivityClass);
+			thread->getApplication()->performOnMainThread([this, flags] {
+				if ((flags & NetworkCapabilities::NET_CAPABILITY_INTERNET) != NetworkCapabilities::None) {
+					platform::network::Android_setNetworkOnline(true);
+					thread->getApplication()->setNetworkOnline(true);
+				} else {
+					platform::network::Android_setNetworkOnline(false);
+					thread->getApplication()->setNetworkOnline(false);
+				}
+			});
+		});
+		if (networkConnectivity) {
+			if ((networkConnectivity->capabilities & NetworkCapabilities::NET_CAPABILITY_INTERNET) != NetworkCapabilities::None) {
+				platform::network::Android_setNetworkOnline(true);
+				app->setNetworkOnline(true);
+			} else {
+				platform::network::Android_setNetworkOnline(false);
+				app->setNetworkOnline(false);
+			}
 		}
 	}
+
+	s_currentActivity = this;
+
+	thread = Rc<EngineMainThread>::create(app, getAppInfo(config));
 	return true;
 }
 
@@ -711,6 +735,22 @@ const Rc<graphic::ViewImpl> &NativeActivity::waitForView() {
 	return rootView;
 }
 
+void NativeActivity::setDeviceToken(StringView str) {
+	if (thread) {
+		thread->getApplication()->performOnMainThread([app = thread->getApplication(), str = str.str<Interface>()] {
+			app->registerDeviceToken(str);
+		});
+	}
+}
+
+void NativeActivity::handleRemoteNotification() {
+	if (thread) {
+		thread->getApplication()->performOnMainThread([app = thread->getApplication()] {
+			Application::onRemoteNotification(app);
+		});
+	}
+}
+
 void checkJniError(JNIEnv* env) {
 	if (env->ExceptionCheck()) {
 		// Read exception msg
@@ -741,6 +781,14 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* savedState, size_
 
 	NativeActivity *a = new NativeActivity();
 	a->init(activity);
+}
+
+SP_EXTERN_C JNIEXPORT
+void Java_org_stappler_xenolith_appsupport_AppSupportActivity_setDeviceToken(JNIEnv *env, jobject thiz, jlong nativePointer, jstring token) {
+	if (nativePointer) {
+		auto a = (NativeActivity *)nativePointer;
+		a->setDeviceToken(a->activity->env->GetStringUTFChars(token, nullptr));
+	}
 }
 
 }

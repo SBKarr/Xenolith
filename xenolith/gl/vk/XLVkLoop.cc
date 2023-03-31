@@ -125,7 +125,7 @@ struct Loop::Internal final : memory::AllocPool {
 
 		if (device) {
 			// wait for device
-			device->getTable()->vkDeviceWaitIdle(device->getDevice());
+			device->waitIdle();
 		}
 
 		queue->unlock();
@@ -790,6 +790,12 @@ void Loop::waitForDependencies(const Vector<Rc<DependencyEvent>> &events, Functi
 void Loop::wakeup() {
 	if (_internal) {
 		_internal->wakeup();
+	}
+}
+
+void Loop::waitIdle() {
+	if (_internal) {
+		_internal->waitIdle();
 	}
 }
 

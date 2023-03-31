@@ -91,6 +91,9 @@ protected:
 
 	float _decorationTone = 0.0f;
 	bool _decorationVisible = true;
+
+	std::mutex _windowMutex;
+	std::condition_variable _windowCond;
 };
 
 }
@@ -160,6 +163,42 @@ struct NativeClassLoader : Ref {
 	jstring getCodeCachePath(JNIEnv *, jobject, jclass = nullptr);
 };
 
+enum class NetworkCapabilities {
+	None,
+	NET_CAPABILITY_INTERNET = (1 << 0),
+	NET_CAPABILITY_NOT_CONGESTED = (1 << 1),
+	NET_CAPABILITY_NOT_METERED = (1 << 2),
+	NET_CAPABILITY_NOT_RESTRICTED = (1 << 3),
+	NET_CAPABILITY_NOT_ROAMING = (1 << 4),
+	NET_CAPABILITY_NOT_SUSPENDED = (1 << 5),
+	NET_CAPABILITY_NOT_VPN = (1 << 6),
+	NET_CAPABILITY_PRIORITIZE_BANDWIDTH = (1 << 7),
+	NET_CAPABILITY_PRIORITIZE_LATENCY = (1 << 8),
+	NET_CAPABILITY_TEMPORARILY_NOT_METERED = (1 << 9),
+	NET_CAPABILITY_TRUSTED = (1 << 10),
+	NET_CAPABILITY_VALIDATED = (1 << 11),
+	NET_CAPABILITY_WIFI_P2P = (1 << 12),
+};
+
+SP_DEFINE_ENUM_AS_MASK(NetworkCapabilities)
+
+struct NetworkConnectivity : public Ref {
+	jclass clazz = nullptr;
+	jobject thiz = nullptr;
+	NetworkCapabilities capabilities;
+	Function<void(NetworkCapabilities)> callback;
+
+	bool init(JNIEnv *, NativeClassLoader *, jobject context, Function<void(NetworkCapabilities)> && = nullptr);
+	void finalize(JNIEnv *);
+
+	void handleCreated(int flags);
+	void handleFinalized();
+	void handleAvailable(int flags);
+	void handleLost();
+	void handleCapabilitiesChanged(int flags);
+	void handleLinkPropertiesChanged();
+};
+
 struct NativeActivity {
 	struct InputLooperData {
 		NativeActivity *activity;
@@ -171,8 +210,7 @@ struct NativeActivity {
 	ALooper *looper = nullptr;
 	Rc<EngineMainThread> thread;
 	Rc<NativeClassLoader> classLoader;
-
-	jobject networkConnectivity = nullptr;
+	Rc<NetworkConnectivity> networkConnectivity;
 
 	Rc<graphic::ViewImpl> rootViewTmp;
 	Rc<graphic::ViewImpl> rootView;
@@ -188,6 +226,8 @@ struct NativeActivity {
 	InputModifier _activeModifiers = InputModifier::None;
 	Size2 _windowSize;
 	Vec2 _hoverLocation;
+
+	static NativeActivity *getInstance();
 
 	~NativeActivity();
 	NativeActivity() = default;
@@ -234,6 +274,9 @@ struct NativeActivity {
 	Value getAppInfo(AConfiguration *);
 
 	const Rc<graphic::ViewImpl> &waitForView();
+
+	void setDeviceToken(StringView);
+	void handleRemoteNotification();
 };
 
 void checkJniError(JNIEnv *env);

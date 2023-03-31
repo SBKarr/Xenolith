@@ -482,14 +482,17 @@ void Application::update(uint64_t clock, uint64_t dt) {
 	memory::pool::clear(_updatePool);
 }
 
-void Application::registerDeviceToken(const uint8_t *data, size_t len) {
-    registerDeviceToken(base16::encode<Interface>(CoderSource(data, len)));
+void Application::registerDeviceToken(BytesView data) {
+    registerDeviceToken(base16::encode<Interface>(data));
 }
 
-void Application::registerDeviceToken(const String &data) {
-	_deviceToken = data;
-	if (!_deviceToken.empty()) {
-		onDeviceToken(this, _deviceToken);
+void Application::registerDeviceToken(StringView data) {
+	if (data != _deviceToken) {
+		_deviceToken = data.str<Interface>();
+		if (!_deviceToken.empty()) {
+			onDeviceToken(this, _deviceToken);
+		}
+		log::vtext("Application", "Device token: ", data);
 	}
 }
 

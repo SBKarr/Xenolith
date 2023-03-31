@@ -178,10 +178,10 @@ public:
 	int64_t getApplicationVersionCode();
 
 	/* Device token for APNS/GCM */
-	void registerDeviceToken(const uint8_t *data, size_t len);
+	void registerDeviceToken(BytesView);
 
 	/* Device token for APNS/GCM */
-	void registerDeviceToken(const String &data);
+	void registerDeviceToken(StringView);
 
 	/* networking */
 	void setNetworkOnline(bool isOnline);

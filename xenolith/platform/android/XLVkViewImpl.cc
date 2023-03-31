@@ -183,10 +183,29 @@ void ViewImpl::initWindow() {
 }
 
 void ViewImpl::stopWindow() {
+	_surface = nullptr;
+
+	_swapchain->deprecate(false);
+	recreateSwapchain(gl::PresentMode::Unsupported);
+
+	std::unique_lock lock(_windowMutex);
+	_loop->performOnGlThread([this] {
+		std::unique_lock lock(_windowMutex);
+		_loop->waitIdle();
+		_windowCond.notify_all();
+	});
+
+	_windowCond.wait(lock);
+
 	clearImages();
 
+	for (auto &it : _scheduledPresent) {
+		invalidateSwapchainImage(it);
+	}
+
+	_scheduledPresent.clear();
+
 	if (_swapchain) {
-		_swapchain->invalidate();
 		_swapchain = nullptr;
 	}
 	_surface = nullptr;
@@ -195,6 +214,7 @@ void ViewImpl::stopWindow() {
 		ANativeWindow_release(_nativeWindow);
 		_nativeWindow = nullptr;
 	}
+
 }
 
 void ViewImpl::setContentPadding(const Padding &padding) {

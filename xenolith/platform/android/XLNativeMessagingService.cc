@@ -24,26 +24,38 @@
 
 #if ANDROID
 
-namespace stappler::xenolith::platform::network {
+#include "XLPlatformAndroid.h"
 
-static bool _isNetworkOnlineFlag = false;
-static Function<void(bool isOnline)> _callback;
+namespace stappler::xenolith::platform {
 
-void Android_setNetworkOnline(bool value) {
-	if (value != _isNetworkOnlineFlag) {
-		_isNetworkOnlineFlag = value;
-		if (_callback) {
-			_callback(_isNetworkOnlineFlag);
-		}
+extern "C"
+JNIEXPORT jlong JNICALL
+Java_org_stappler_xenolith_appsupport_MessagingService_onCreated(JNIEnv *env, jobject thiz) {
+	log::text("MessagingService", "onCreated");
+	return 0;
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_org_stappler_xenolith_appsupport_MessagingService_onDestroyed(JNIEnv *env, jobject thiz, jlong nativePointer) {
+	log::text("MessagingService", "onDestroyed");
+
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_org_stappler_xenolith_appsupport_MessagingService_onRemoteNotification(JNIEnv *env, jobject thiz, jlong nativePointer, jstring header, jstring body) {
+	if (auto a = NativeActivity::getInstance()) {
+		a->handleRemoteNotification();
 	}
+	log::text("MessagingService", "onRemoteNotification");
 }
 
-void _setNetworkCallback(const Function<void(bool isOnline)> &callback) {
-	// _callback = callback;
-}
+extern "C"
+JNIEXPORT void JNICALL
+Java_org_stappler_xenolith_appsupport_MessagingService_onTokenReceived(JNIEnv *env, jobject thiz, jlong nativePointer, jstring token) {
 
-bool _isNetworkOnline() {
-	return _isNetworkOnlineFlag;
+	log::text("MessagingService", "onTokenReceived");
 }
 
 }

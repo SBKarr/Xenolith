@@ -28,66 +28,128 @@
 
 namespace stappler::xenolith::platform {
 
-struct NetworkConnectivity {
-	JNIEnv *env = nullptr;
-	jobject thiz = nullptr;
-
-	void (*callback) (JNIEnv *, jobject, void *) = nullptr;
-	void *listener = nullptr;
-};
-
-static jlong NetworkConnectivity_nativeOnCreated(JNIEnv *env, jobject thiz) {
-	__android_log_write(ANDROID_LOG_INFO, "NetworkConnectivity", "nativeOnCreated");
-	auto obj = new NetworkConnectivity{env, thiz, nullptr, nullptr};
-	return (jlong)obj;
+static void NetworkConnectivity_nativeOnCreated(JNIEnv *env, jobject thiz, jlong nativePointer, int flags) {
+	auto native = (NetworkConnectivity *)nativePointer;
+	native->handleCreated(flags);
 }
 
 static void NetworkConnectivity_nativeOnFinalized(JNIEnv *env, jobject thiz, jlong nativePointer) {
-	__android_log_write(ANDROID_LOG_INFO, "NetworkConnectivity", "nativeOnFinalized");
-	if (nativePointer) {
-		delete (NetworkConnectivity *)nativePointer;
-	}
+	auto native = (NetworkConnectivity *)nativePointer;
+	native->handleFinalized();
 }
 
-static void NetworkConnectivity_nativeOnAvailable(JNIEnv *env, jobject thiz, jlong nativePointer) {
+static void NetworkConnectivity_nativeOnAvailable(JNIEnv *env, jobject thiz, jlong nativePointer, int flags) {
 	auto native = (NetworkConnectivity *)nativePointer;
-	native->env = env;
-	native->thiz = thiz;
-	__android_log_write(ANDROID_LOG_INFO, "NetworkConnectivity", "nativeOnAvailable");
+	native->handleAvailable(flags);
 }
 
 static void NetworkConnectivity_nativeOnLost(JNIEnv *env, jobject thiz, jlong nativePointer) {
 	auto native = (NetworkConnectivity *)nativePointer;
-	native->env = env;
-	native->thiz = thiz;
-	__android_log_write(ANDROID_LOG_INFO, "NetworkConnectivity", "nativeOnLost");
+	native->handleLost();
 }
 
-static void NetworkConnectivity_nativeOnCapabilitiesChanged(JNIEnv *env, jobject thiz, jlong nativePointer) {
+static void NetworkConnectivity_nativeOnCapabilitiesChanged(JNIEnv *env, jobject thiz, jlong nativePointer, int flags) {
 	auto native = (NetworkConnectivity *)nativePointer;
-	native->env = env;
-	native->thiz = thiz;
-	__android_log_write(ANDROID_LOG_INFO, "NetworkConnectivity", "nativeOnCapabilitiesChanged");
+	native->handleCapabilitiesChanged(flags);
 }
 
 static void NetworkConnectivity_nativeOnLinkPropertiesChanged(JNIEnv *env, jobject thiz, jlong nativePointer) {
 	auto native = (NetworkConnectivity *)nativePointer;
-	native->env = env;
-	native->thiz = thiz;
-	__android_log_write(ANDROID_LOG_INFO, "NetworkConnectivity", "nativeOnLinkPropertiesChanged");
+	native->handleLinkPropertiesChanged();
 }
 
 static JNINativeMethod methods[] = {
-	{"nativeOnCreated","()J", (void *)&NetworkConnectivity_nativeOnCreated},
+	{"nativeOnCreated","(JI)V", (void *)&NetworkConnectivity_nativeOnCreated},
 	{"nativeOnFinalized","(J)V", (void *)&NetworkConnectivity_nativeOnFinalized},
-	{"nativeOnAvailable", "(J)V", (void *)&NetworkConnectivity_nativeOnAvailable},
+	{"nativeOnAvailable", "(JI)V", (void *)&NetworkConnectivity_nativeOnAvailable},
 	{"nativeOnLost", "(J)V", (void *)&NetworkConnectivity_nativeOnLost},
-	{"nativeOnCapabilitiesChanged", "(J)V", (void *)&NetworkConnectivity_nativeOnCapabilitiesChanged},
+	{"nativeOnCapabilitiesChanged", "(JI)V", (void *)&NetworkConnectivity_nativeOnCapabilitiesChanged},
 	{"nativeOnLinkPropertiesChanged", "(J)V", (void *)&NetworkConnectivity_nativeOnLinkPropertiesChanged},
 };
 
 void linkNetworkConnectivityClass(JNIEnv *env, jclass cl) {
 	env->RegisterNatives(cl, methods, 6);
+}
+
+bool NetworkConnectivity::init(JNIEnv *env, NativeClassLoader *classLoader, jobject context, Function<void(NetworkCapabilities)> &&cb) {
+	jclass networkConnectivityClass = classLoader->findClass(env, "org.stappler.xenolith.appsupport.NetworkConnectivity");
+	if (networkConnectivityClass) {
+		env->RegisterNatives(networkConnectivityClass, methods, 6);
+		jmethodID networkConnectivityCreate = env->GetStaticMethodID(networkConnectivityClass, "create",
+				"(Landroid/content/Context;J)Lorg/stappler/xenolith/appsupport/NetworkConnectivity;");
+		if (networkConnectivityCreate) {
+			auto conn = env->CallStaticObjectMethod(networkConnectivityClass, networkConnectivityCreate, context, jlong(this));
+			if (conn) {
+				thiz = env->NewGlobalRef(conn);
+				clazz = (jclass)env->NewGlobalRef(networkConnectivityClass);
+				env->DeleteLocalRef(conn);
+				env->DeleteLocalRef(networkConnectivityClass);
+				callback = move(cb);
+				if (callback) {
+					callback(capabilities);
+				}
+				return true;
+			}
+		} else {
+			checkJniError(env);
+		}
+		env->DeleteLocalRef(networkConnectivityClass);
+	}
+	return false;
+}
+
+void NetworkConnectivity::finalize(JNIEnv *env) {
+	if (thiz && clazz) {
+		jmethodID networkConnectivityFinalize = env->GetMethodID(clazz, "finalize", "()V");
+		if (networkConnectivityFinalize) {
+			env->CallVoidMethod(thiz, networkConnectivityFinalize);
+		}
+	}
+	if (thiz) {
+		env->DeleteGlobalRef(thiz);
+		thiz = nullptr;
+	}
+	if (clazz) {
+		env->DeleteGlobalRef(clazz);
+		thiz = nullptr;
+	}
+}
+
+void NetworkConnectivity::handleCreated(int flags) {
+	capabilities = NetworkCapabilities(flags);
+	if (callback) {
+		callback(capabilities);
+	}
+}
+
+void NetworkConnectivity::handleFinalized() {
+	capabilities = NetworkCapabilities::None;
+	callback = nullptr;
+}
+
+void NetworkConnectivity::handleAvailable(int flags) {
+	capabilities = NetworkCapabilities(flags);
+	if (callback) {
+		callback(capabilities);
+	}
+}
+
+void NetworkConnectivity::handleLost() {
+	capabilities = NetworkCapabilities::None;
+	if (callback) {
+		callback(capabilities);
+	}
+}
+
+void NetworkConnectivity::handleCapabilitiesChanged(int flags) {
+	capabilities = NetworkCapabilities(flags);
+	if (callback) {
+		callback(capabilities);
+	}
+}
+
+void NetworkConnectivity::handleLinkPropertiesChanged() {
+
 }
 
 }
