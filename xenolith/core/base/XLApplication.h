@@ -109,9 +109,6 @@ public:
 
 	virtual void end(bool sync = false);
 
-	// Open external URL from within application
-	virtual bool openURL(const StringView &url);
-
 	virtual void addView(gl::ViewInfo &&);
 
 	virtual void updateConfig(Value &&);
@@ -188,9 +185,9 @@ public:
 	bool isNetworkOnline();
 
 	/* application actions */
-	void goToUrl(const StringView &url, bool external = true);
-	void makePhoneCall(const StringView &number);
-	void mailTo(const StringView &address);
+	void goToUrl(StringView url, bool external = true);
+	void makePhoneCall(StringView number);
+	void mailTo(StringView address);
 
 	Pair<uint64_t, uint64_t> getTotalDiskSpace();
 	uint64_t getApplicationDiskSpace();

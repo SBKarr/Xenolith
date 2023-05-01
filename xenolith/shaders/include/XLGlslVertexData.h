@@ -26,6 +26,11 @@
 namespace stappler::xenolith::gl::glsl {
 #endif
 
+struct MeshIndexData {
+	uint offset;
+	uint count;
+};
+
 struct Vertex {
 	vec4 pos;
 	vec4 color;
@@ -35,10 +40,10 @@ struct Vertex {
 };
 
 struct Material {
-	uint samplerIdx;
-	uint imageIdx;
+	uint samplerImageIdx;
 	uint setIdx;
-	uint padding0;
+	uint atlasIdx;
+	uint flags;
 };
 
 struct TransformObject {
@@ -63,6 +68,16 @@ struct TransformObject {
 	shadow(vec4::ZERO)
 	{ }
 #endif
+};
+
+struct DataAtlasIndex {
+	uint key;
+	uint value;
+};
+
+struct DataAtlasValue {
+	vec2 pos;
+	vec2 tex;
 };
 
 #ifndef XL_GLSL

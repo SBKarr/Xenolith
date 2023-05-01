@@ -20,15 +20,56 @@
  THE SOFTWARE.
  **/
 
-#include "XLDefine.h"
+#include "XLResourceObject.h"
+#include "XLTemporaryResource.h"
 
-#include "renderer/XLVkAttachment.cc"
-#include "renderer/XLVkQueuePass.cc"
-#include "renderer/XLVkTransferQueue.cc"
-#include "renderer/XLVkMaterialCompiler.cc"
-#include "renderer/XLVkMaterialVertexPass.cc"
-#include "renderer/XLVkMaterialRenderPass.cc"
-#include "renderer/XLVkMaterialShadowPass.cc"
-#include "renderer/XLVkRenderQueueCompiler.cc"
-#include "renderer/XLVkRenderFontQueue.cc"
-#include "renderer/XLVkShadowRenderPass.cc"
+namespace stappler::xenolith {
+
+ResourceObject::~ResourceObject() { }
+
+bool ResourceObject::init(ResourceType type) {
+	_type = type;
+	return true;
+}
+
+bool ResourceObject::init(ResourceType type, const Rc<gl::Resource> &res) {
+	_type = type;
+	_resource = res;
+	return true;
+}
+
+bool ResourceObject::init(ResourceType type, const Rc<TemporaryResource> &tmp) {
+	_type = type;
+	_temporary = tmp;
+	return true;
+}
+
+void ResourceObject::invalidate() {
+	//_temporary = nullptr;
+}
+
+StringView ResourceObject::getName() const {
+	return StringView();
+}
+
+bool ResourceObject::isLoaded() const {
+	return !_temporary || (_temporary && _temporary->isLoaded());
+}
+
+void ResourceObject::onEnter(Scene *scene) {
+	if (_temporary) {
+		_temporary->onEnter(scene, this);
+	}
+}
+
+void ResourceObject::onExit(Scene *scene) {
+	if (_temporary) {
+		_temporary->onExit(scene, this);
+	}
+}
+
+Rc<TemporaryResource> ResourceObject::getTemporary() const {
+	return _temporary;
+}
+
+}

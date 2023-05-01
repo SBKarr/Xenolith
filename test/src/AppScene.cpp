@@ -31,7 +31,6 @@
 #include "XLApplication.h"
 
 #include "XLVkAttachment.h"
-#include "XLVkMaterialRenderPass.h"
 #include "XLVkMaterialShadowPass.h"
 #include "XLFontLibrary.h"
 #include "XLSceneContent.h"
@@ -47,7 +46,7 @@ bool AppScene::init(Application *app, const gl::FrameContraints &constraints) {
 	renderqueue::Queue::Builder builder("Loader");
 
 	vk::MaterialShadowPass::RenderQueueInfo info{
-		app, &builder, constraints.extent,
+		app, constraints.extent, vk::MaterialShadowPass::QueueFlags::None,
 		[&] (renderqueue::Resource::Builder &resourceBuilder) {
 			resourceBuilder.addImage("xenolith-1-480.png",
 					gl::ImageInfo(gl::ImageFormat::R8G8B8A8_UNORM, gl::ImageUsage::Sampled, gl::ImageHints::Opaque),
@@ -58,7 +57,7 @@ bool AppScene::init(Application *app, const gl::FrameContraints &constraints) {
 		}
 	};
 
-	vk::MaterialShadowPass::makeDefaultRenderQueue(info);
+	vk::MaterialShadowPass::makeDefaultRenderQueue(builder, info);
 
 	if (!UtilScene::init(app, move(builder), constraints)) {
 		return false;

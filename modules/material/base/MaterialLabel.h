@@ -62,6 +62,9 @@ public:
 	virtual ColorRole getBlendColorRule() const { return _blendColorRule; }
 	virtual float getBlendColorValue() const { return _blendValue; }
 
+	virtual void setPreserveOpacity(bool);
+	virtual bool isPreserveOpacity() const;
+
 	virtual bool visitDraw(RenderFrameInfo &, NodeFlags parentFlags) override;
 
 protected:
@@ -69,6 +72,7 @@ protected:
 
 	using Label::init;
 
+	bool _preserveOpacity = false;
 	float _blendValue = 0.0f;
 	Color4F _blendColor = Color4F::WHITE;
 	ColorRole _blendColorRule = ColorRole::Primary;

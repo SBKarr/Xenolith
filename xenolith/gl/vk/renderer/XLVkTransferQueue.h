@@ -34,7 +34,7 @@ class DeviceQueue;
 class CommandPool;
 class TransferAttachment;
 
-class TransferResource : public gl::AttachmentInputData {
+class TransferResource final : public gl::AttachmentInputData {
 public:
 	struct BufferAllocInfo {
 		gl::BufferData *data = nullptr;
@@ -89,7 +89,7 @@ public:
 	bool init(const Rc<Allocator> &alloc, const Rc<gl::Resource> &, Function<void(bool)> &&cb = nullptr);
 	bool init(const Rc<Allocator> &alloc, Rc<gl::Resource> &&, Function<void(bool)> &&cb = nullptr);
 
-	bool initialize();
+	bool initialize(AllocationUsage = AllocationUsage::DeviceLocal);
 	bool compile();
 
 	bool prepareCommands(uint32_t idx, VkCommandBuffer buf,
@@ -128,6 +128,7 @@ protected:
 	Function<void(bool)> _callback;
 
 	bool _initialized = false;
+	AllocationUsage _targetUsage = AllocationUsage::DeviceLocal;
 };
 
 class TransferQueue : public renderqueue::Queue {

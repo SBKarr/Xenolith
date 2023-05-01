@@ -354,9 +354,7 @@ uint32_t CharLayout::getObjectId(uint32_t ret, FontAnchor a) {
 }
 
 FontAnchor CharLayout::getAnchorForObject(uint32_t obj) {
-	obj >>= sizeof(char16_t) * 8;
-	obj &= 0b11;
-	return FontAnchor(obj);
+	return FontAnchor((obj >> sizeof(char16_t) * 8) & 0b11);
 }
 
 }

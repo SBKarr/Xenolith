@@ -559,6 +559,42 @@ MemoryRequirements Allocator::getImageMemoryRequirements(VkImage target) {
 }
 
 Rc<Buffer> Allocator::spawnPersistent(AllocationUsage usage, const gl::BufferInfo &info, BytesView view) {
+	auto target = preallocate(info, view);
+	if (!target) {
+		return nullptr;
+	}
+
+	if (!allocateDedicated(usage, target)) {
+		return nullptr;
+	}
+
+	if (!view.empty()) {
+		void *ptr = nullptr;
+		if (_device->getTable()->vkMapMemory(_device->getDevice(), target->getMemory()->getMemory(), 0, view.size(), 0, &ptr) == VK_SUCCESS) {
+			memcpy(ptr, view.data(), view.size());
+			_device->getTable()->vkUnmapMemory(_device->getDevice(), target->getMemory()->getMemory());
+		} else {
+			return nullptr;
+		}
+	}
+
+	return target;
+}
+
+Rc<Image> Allocator::spawnPersistent(AllocationUsage usage, const gl::ImageInfo &info, bool preinitialized, uint64_t forceId) {
+	auto target = preallocate(info, preinitialized, forceId);
+	if (!target) {
+		return nullptr;
+	}
+
+	if (!allocateDedicated(usage, target)) {
+		return nullptr;
+	}
+
+	return target;
+}
+
+Rc<Buffer> Allocator::preallocate(const gl::BufferInfo &info, BytesView view) {
 	VkBufferCreateInfo bufferInfo { };
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	bufferInfo.size = (view.empty() ? info.size : view.size());
@@ -571,72 +607,10 @@ Rc<Buffer> Allocator::spawnPersistent(AllocationUsage usage, const gl::BufferInf
 		return nullptr;
 	}
 
-	auto req = getBufferMemoryRequirements(target);
-	auto type = findMemoryType(req.requirements.memoryTypeBits, usage);
-	if (!type) {
-		return nullptr;
-	}
-
-	VkDeviceMemory memory;
-	if (hasDedicatedFeature()) {
-		VkMemoryDedicatedAllocateInfo dedicatedInfo;
-		dedicatedInfo.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
-		dedicatedInfo.pNext = nullptr;
-		dedicatedInfo.image = VK_NULL_HANDLE;
-		dedicatedInfo.buffer = target;
-
-		VkMemoryAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		allocInfo.pNext = &dedicatedInfo;
-		allocInfo.allocationSize = req.requirements.size;
-		allocInfo.memoryTypeIndex = type->idx;
-
-		VkResult result = VK_ERROR_UNKNOWN;
-		_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
-			result = table.vkAllocateMemory(device, &allocInfo, nullptr, &memory);
-		});
-		if (result != VK_SUCCESS) {
-			_device->getTable()->vkDestroyBuffer(_device->getDevice(), target, nullptr);
-			return nullptr;
-		}
-	} else {
-		VkMemoryAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		allocInfo.pNext = nullptr;
-		allocInfo.allocationSize = req.requirements.size;
-		allocInfo.memoryTypeIndex = type->idx;
-
-		VkResult result = VK_ERROR_UNKNOWN;
-		_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
-			result = table.vkAllocateMemory(device, &allocInfo, nullptr, &memory);
-		});
-		if (result != VK_SUCCESS) {
-			_device->getTable()->vkDestroyBuffer(_device->getDevice(), target, nullptr);
-			return nullptr;
-		}
-	}
-
-	_device->getTable()->vkBindBufferMemory(_device->getDevice(), target, memory, 0);
-
-	if (!view.empty()) {
-		void *ptr = nullptr;
-		if (_device->getTable()->vkMapMemory(_device->getDevice(), memory, 0, view.size(), 0, &ptr) == VK_SUCCESS) {
-			memcpy(ptr, view.data(), view.size());
-			_device->getTable()->vkUnmapMemory(_device->getDevice(), memory);
-		} else {
-			_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
-				table.vkFreeMemory(device, memory, nullptr);
-			});
-			_device->getTable()->vkDestroyBuffer(_device->getDevice(), target, nullptr);
-			return nullptr;
-		}
-	}
-
-	auto mem = Rc<DeviceMemory>::create(*_device, memory);
-	return Rc<Buffer>::create(*_device, target, info, move(mem));
+	return Rc<Buffer>::create(*_device, target, info, nullptr);
 }
 
-Rc<Image> Allocator::spawnPersistent(AllocationUsage usage, const gl::ImageInfo &info, bool preinitialized, uint64_t forceId) {
+Rc<Image> Allocator::preallocate(const gl::ImageInfo &info, bool preinitialized, uint64_t forceId) {
 	VkImageCreateInfo imageInfo { };
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 	imageInfo.pNext = nullptr;
@@ -662,11 +636,177 @@ Rc<Image> Allocator::spawnPersistent(AllocationUsage usage, const gl::ImageInfo 
 		return nullptr;
 	}
 
-	auto req = getImageMemoryRequirements(target);
+	if (forceId) {
+		return Rc<Image>::create(*_device, forceId, target, info, nullptr);
+	} else {
+		return Rc<Image>::create(*_device, target, info, nullptr);
+	}
+}
+
+Rc<DeviceMemory> Allocator::emplaceObjects(AllocationUsage usage, SpanView<Rc<Image>> images, SpanView<Rc<Buffer>> buffers) {
+	Vector<MemoryRequirements> bufferRequirements; bufferRequirements.reserve(buffers.size());
+	Vector<MemoryRequirements> imageRequirements; imageRequirements.reserve(images.size());
+
+	uint32_t linearObjects = 0;
+	uint32_t nonLinearObjects = 0;
+
+	auto mask = getInitialTypeMask();
+
+	for (auto &it : buffers) {
+		auto req = getBufferMemoryRequirements(it->getBuffer());
+		if (!req.prefersDedicated && !req.requiresDedicated) {
+			mask &= req.requirements.memoryTypeBits;
+		}
+		if (mask == 0) {
+			log::text("vk::Allocator", "emplaceObjects: fail to find common memory type");
+			return nullptr;
+		}
+		bufferRequirements.emplace_back(req);
+		++ linearObjects;
+	}
+
+	for (auto &it : images) {
+		auto req = getImageMemoryRequirements(it->getImage());
+		if (!req.prefersDedicated && !req.requiresDedicated) {
+			mask &= req.requirements.memoryTypeBits;
+		}
+		if (mask == 0) {
+			log::text("vk::Allocator", "emplaceObjects: fail to find common memory type");
+			return nullptr;
+		}
+		imageRequirements.emplace_back(req);
+
+		if (it->getInfo().tiling == gl::ImageTiling::Optimal) {
+			++ nonLinearObjects;
+		} else {
+			++ linearObjects;
+		}
+	}
+
+	auto allocMemType = findMemoryType(mask, usage);
+	if (!allocMemType) {
+		log::vtext("vk::Allocator", "emplaceObjects: fail to find memory type");
+		return nullptr;
+	}
+
+	VkDeviceSize nonCoherentAtomSize = 1;
+	if (allocMemType->isHostVisible()) {
+		if (!allocMemType->isHostCoherent()) {
+			nonCoherentAtomSize = getNonCoherentAtomSize();
+		}
+	}
+
+	VkDeviceSize requiredMemory = 0;
+
+	uint32_t i = 0;
+	if (nonLinearObjects > 0) {
+		for (auto &it : images) {
+			if (!imageRequirements[i].requiresDedicated && !imageRequirements[i].prefersDedicated) {
+				if (it->getInfo().tiling == gl::ImageTiling::Optimal) {
+					requiredMemory = math::align<VkDeviceSize>(requiredMemory,
+							std::max(imageRequirements[i].requirements.alignment, nonCoherentAtomSize));
+					imageRequirements[i].targetOffset = requiredMemory;
+					requiredMemory += imageRequirements[i].requirements.size;
+				}
+			}
+			++ i;
+		}
+	}
+
+	if (nonLinearObjects > 0 && linearObjects > 0) {
+		requiredMemory = math::align<VkDeviceSize>(requiredMemory, getBufferImageGranularity());
+	}
+
+	if (linearObjects) {
+		i = 0;
+		for (auto &it : images) {
+			if (!imageRequirements[i].requiresDedicated && !imageRequirements[i].prefersDedicated) {
+				if (it->getInfo().tiling != gl::ImageTiling::Optimal) {
+					requiredMemory = math::align<VkDeviceSize>(requiredMemory,
+							std::max(imageRequirements[i].requirements.alignment, nonCoherentAtomSize));
+					imageRequirements[i].targetOffset = requiredMemory;
+					requiredMemory += imageRequirements[i].requirements.size;
+				}
+			}
+			++ i;
+		}
+
+		i = 0;
+		for (auto &it : bufferRequirements) {
+			if (!it.requiresDedicated && !it.prefersDedicated) {
+				requiredMemory = math::align<VkDeviceSize>(requiredMemory,
+						std::max(it.requirements.alignment, nonCoherentAtomSize));
+				it.targetOffset = requiredMemory;
+				requiredMemory += it.requirements.size;
+			}
+			++ i;
+		}
+	}
+
+	VkDeviceMemory memObject;
+	if (requiredMemory > 0) {
+		VkMemoryAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.allocationSize = requiredMemory;
+		allocInfo.memoryTypeIndex = allocMemType->idx;
+
+		if (_device->getTable()->vkAllocateMemory(_device->getDevice(), &allocInfo, nullptr, &memObject) != VK_SUCCESS) {
+			log::vtext("vk::Allocator", "emplaceObjects: fail to allocate memory");
+			return nullptr;
+		}
+	}
+
+	auto memory = Rc<DeviceMemory>::create(*_device, memObject);
+
+	// bind memory
+	if (nonLinearObjects > 0) {
+		i = 0;
+		for (auto &it : images) {
+			if (imageRequirements[i].requiresDedicated || imageRequirements[i].prefersDedicated) {
+				if (!allocateDedicated(usage, it)) {
+					return nullptr;
+				}
+			} else {
+				if (it->getInfo().tiling == gl::ImageTiling::Optimal) {
+					it->bindMemory(Rc<DeviceMemory>(memory), imageRequirements[i].targetOffset);
+				}
+			}
+			++ i;
+		}
+	}
+
+	if (linearObjects > 0) {
+		i = 0;
+		for (auto &it : images) {
+			if (!imageRequirements[i].requiresDedicated && !imageRequirements[i].prefersDedicated) {
+				if (it->getInfo().tiling != gl::ImageTiling::Optimal) {
+					it->bindMemory(Rc<DeviceMemory>(memory), imageRequirements[i].targetOffset);
+				}
+			}
+			++ i;
+		}
+
+		i = 0;
+		for (auto &it : buffers) {
+			if (bufferRequirements[i].requiresDedicated || bufferRequirements[i].prefersDedicated) {
+				if (!allocateDedicated(usage, it)) {
+					return nullptr;
+				}
+			} else {
+				it->bindMemory(Rc<DeviceMemory>(memory), bufferRequirements[i].targetOffset);
+			}
+			++ i;
+		}
+	}
+	return memory;
+}
+
+bool Allocator::allocateDedicated(AllocationUsage usage, Buffer *target) {
+	auto req = getBufferMemoryRequirements(target->getBuffer());
 	auto type = findMemoryType(req.requirements.memoryTypeBits, usage);
 	if (!type) {
-		log::text("vk::Allocator", "Image: spawnPersistent: Fail to find memory type");
-		return nullptr;
+		log::text("vk::Allocator", "Buffer: allocateDedicated: Fail to find memory type");
+		return false;
 	}
 
 	VkDeviceMemory memory;
@@ -674,8 +814,8 @@ Rc<Image> Allocator::spawnPersistent(AllocationUsage usage, const gl::ImageInfo 
 		VkMemoryDedicatedAllocateInfo dedicatedInfo;
 		dedicatedInfo.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
 		dedicatedInfo.pNext = nullptr;
-		dedicatedInfo.image = target;
-		dedicatedInfo.buffer = VK_NULL_HANDLE;
+		dedicatedInfo.image = VK_NULL_HANDLE;
+		dedicatedInfo.buffer = target->getBuffer();
 
 		VkMemoryAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -688,9 +828,7 @@ Rc<Image> Allocator::spawnPersistent(AllocationUsage usage, const gl::ImageInfo 
 			result = table.vkAllocateMemory(device, &allocInfo, nullptr, &memory);
 		});
 		if (result != VK_SUCCESS) {
-			log::text("vk::Allocator", "Image: spawnPersistent: Fail to allocate memory for dedicated allocation");
-			_device->getTable()->vkDestroyImage(_device->getDevice(), target, nullptr);
-			return nullptr;
+			return false;
 		}
 	} else {
 		VkMemoryAllocateInfo allocInfo{};
@@ -704,20 +842,63 @@ Rc<Image> Allocator::spawnPersistent(AllocationUsage usage, const gl::ImageInfo 
 			result = table.vkAllocateMemory(device, &allocInfo, nullptr, &memory);
 		});
 		if (result != VK_SUCCESS) {
-			log::text("vk::Allocator", "Image: spawnPersistent: Fail to allocate memory for dedicated allocation");
-			_device->getTable()->vkDestroyImage(_device->getDevice(), target, nullptr);
-			return nullptr;
+			return false;
 		}
 	}
 
-	_device->getTable()->vkBindImageMemory(_device->getDevice(), target, memory, 0);
+	target->bindMemory(Rc<DeviceMemory>::create(*_device, memory));
+	return true;
+}
 
-	auto mem = Rc<DeviceMemory>::create(*_device, memory);
-	if (forceId) {
-		return Rc<Image>::create(*_device, forceId, target, info, move(mem));
-	} else {
-		return Rc<Image>::create(*_device, target, info, move(mem));
+bool Allocator::allocateDedicated(AllocationUsage usage, Image *target) {
+	auto req = getImageMemoryRequirements(target->getImage());
+	auto type = findMemoryType(req.requirements.memoryTypeBits, usage);
+	if (!type) {
+		log::text("vk::Allocator", "Image: allocateDedicated: Fail to find memory type");
+		return false;
 	}
+
+	VkDeviceMemory memory;
+	if (hasDedicatedFeature()) {
+		VkMemoryDedicatedAllocateInfo dedicatedInfo;
+		dedicatedInfo.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
+		dedicatedInfo.pNext = nullptr;
+		dedicatedInfo.image = target->getImage();
+		dedicatedInfo.buffer = VK_NULL_HANDLE;
+
+		VkMemoryAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.pNext = &dedicatedInfo;
+		allocInfo.allocationSize = req.requirements.size;
+		allocInfo.memoryTypeIndex = type->idx;
+
+		VkResult result = VK_ERROR_UNKNOWN;
+		_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+			result = table.vkAllocateMemory(device, &allocInfo, nullptr, &memory);
+		});
+		if (result != VK_SUCCESS) {
+			log::text("vk::Allocator", "Image: allocateDedicated: Fail to allocate memory for dedicated allocation");
+			return false;
+		}
+	} else {
+		VkMemoryAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.pNext = nullptr;
+		allocInfo.allocationSize = req.requirements.size;
+		allocInfo.memoryTypeIndex = type->idx;
+
+		VkResult result = VK_ERROR_UNKNOWN;
+		_device->makeApiCall([&] (const DeviceTable &table, VkDevice device) {
+			result = table.vkAllocateMemory(device, &allocInfo, nullptr, &memory);
+		});
+		if (result != VK_SUCCESS) {
+			log::text("vk::Allocator", "Image: allocateDedicated: Fail to allocate memory for dedicated allocation");
+			return false;
+		}
+	}
+
+	target->bindMemory(Rc<DeviceMemory>::create(*_device, memory));
+	return true;
 }
 
 DeviceMemoryPool::~DeviceMemoryPool() {

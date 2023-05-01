@@ -127,10 +127,6 @@ static void VectorCanvasPathDrawer_pushVertex(void *ptr, uint32_t idx, const Vec
 		Vec4(out->color.r, out->color.g, out->color.b, out->color.a * vertexValue),
 		Vec2(0.0f, 0.0f), out->material, 0
 	};
-
-	/*if constexpr (vg::Tesselator::TessVerbose != vg::VerboseFlag::None) {
-		std::cout << "Vertex: " << idx << ": " << pt << "\n";
-	}*/
 }
 
 static void VectorCanvasPathDrawer_pushTriangle(void *ptr, uint32_t pt[3]) {
@@ -139,10 +135,6 @@ static void VectorCanvasPathDrawer_pushTriangle(void *ptr, uint32_t pt[3]) {
 	out->vertexes->indexes.emplace_back(pt[1]);
 	out->vertexes->indexes.emplace_back(pt[2]);
 	++ out->objects;
-
-	/*if constexpr (vg::Tesselator::TessVerbose != vg::VerboseFlag::None) {
-		std::cout << "Face: " << pt[0] << " " << pt[1] << " " << pt[2] << "\n";
-	}*/
 }
 
 Rc<VectorCanvas> VectorCanvas::getInstance(bool deferred) {
@@ -450,7 +442,7 @@ uint32_t VectorCanvasPathDrawer::draw(memory::pool_t *pool, const VectorPath &p,
 	}
 
 	if (!success) {
-		std::cout << "Failed path:\n" << path->toString(true);
+		log::vtext("VectorCanvasPathDrawer", "Failed path:\n", path->toString(true));
 	}
 
 	return target.objects;

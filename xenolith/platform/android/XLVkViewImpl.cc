@@ -285,6 +285,44 @@ bool ViewImpl::pollInput(bool frameReady) {
 gl::SurfaceInfo ViewImpl::getSurfaceOptions() const {
 	auto info = View::getSurfaceOptions();
 	info.currentExtent = _identityExtent;
+
+	auto it = info.formats.begin();
+	while (it != info.formats.end()) {
+		switch (it->first) {
+		case gl::ImageFormat::R8G8B8A8_UNORM:
+		case gl::ImageFormat::R8G8B8A8_SRGB:
+			if (!_activity->formatSupport.R8G8B8A8_UNORM) {
+				it = info.formats.erase(it);
+			} else {
+				++ it;
+			}
+			break;
+		case gl::ImageFormat::R8G8B8_UNORM:
+			if (!_activity->formatSupport.R8G8B8_UNORM) {
+				it = info.formats.erase(it);
+			} else {
+				++ it;
+			}
+			break;
+		case gl::ImageFormat::R5G6B5_UNORM_PACK16:
+			if (!_activity->formatSupport.R5G6B5_UNORM) {
+				it = info.formats.erase(it);
+			} else {
+				++ it;
+			}
+			break;
+		case gl::ImageFormat::R16G16B16A16_SFLOAT:
+			if (!_activity->formatSupport.R16G16B16A16_FLOAT) {
+				it = info.formats.erase(it);
+			} else {
+				++ it;
+			}
+			break;
+		default:
+			++ it;
+		}
+	}
+
 	return info;
 }
 

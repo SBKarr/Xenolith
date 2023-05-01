@@ -3,6 +3,7 @@
 	<name>Xenolith</name>
 	<comment></comment>
 	<projects>
+		<project>libstappler-common</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>

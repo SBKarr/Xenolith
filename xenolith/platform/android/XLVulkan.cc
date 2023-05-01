@@ -37,6 +37,7 @@ struct FunctionTable : public vk::LoaderTable {
 	}
 };
 
+static gl::ImageFormat s_getCommonFormat = gl::ImageFormat::R8G8B8A8_UNORM;
 static uint32_t s_InstanceVersion = 0;
 static Vector<VkLayerProperties> s_InstanceAvailableLayers;
 static Vector<VkExtensionProperties> s_InstanceAvailableExtensions;
@@ -77,24 +78,24 @@ Rc<gl::Instance> createInstance(Application *app) {
 
 	Vector<const char *> enableLayers;
 
+	bool validationLayerFound = false;
 	if constexpr (vk::s_enableValidationLayers) {
 #if DEBUG
 		if (app->getData().validation) {
 			for (const char *layerName : vk::s_validationLayers) {
-				bool layerFound = false;
 
 				for (const auto &layerProperties : s_InstanceAvailableLayers) {
 					if (strcmp(layerName, layerProperties.layerName) == 0) {
 						enableLayers.emplace_back(layerName);
-						layerFound = true;
+						validationLayerFound = true;
 						break;
 					}
 				}
 
-				if (!layerFound) {
+				/*if (!layerFound) {
 					log::format("Vk", "Required validation layer not found: %s", layerName);
 					return nullptr;
-				}
+				}*/
 			}
 		}
 #endif
@@ -114,9 +115,13 @@ Rc<gl::Instance> createInstance(Application *app) {
 
 	for (auto &extension : s_InstanceAvailableExtensions) {
 		if constexpr (vk::s_enableValidationLayers) {
-			if (app->getData().validation) {
+			if (validationLayerFound && app->getData().validation) {
 				if (strcmp(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, extension.extensionName) == 0) {
 					requiredExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+					debugExt = extension.extensionName;
+					continue;
+				} else if (strcmp(VK_EXT_DEBUG_REPORT_EXTENSION_NAME, extension.extensionName) == 0) {
+					requiredExtensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
 					debugExt = extension.extensionName;
 					continue;
 				}
@@ -169,7 +174,7 @@ Rc<gl::Instance> createInstance(Application *app) {
 	}
 
 	if constexpr (vk::s_enableValidationLayers) {
-		if (app->getData().validation) {
+		if (validationLayerFound && app->getData().validation) {
 			if (!debugExt) {
 				log::format("Vk", "Required extension not found: %s", VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 				completeExt = false;
@@ -277,7 +282,7 @@ Rc<gl::Instance> createInstance(Application *app) {
 }
 
 gl::ImageFormat getCommonFormat() {
-	return gl::ImageFormat::R8G8B8A8_UNORM;
+	return s_getCommonFormat;
 }
 
 }

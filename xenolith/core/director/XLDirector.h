@@ -51,7 +51,7 @@ public:
 
 	bool acquireFrame(const Rc<FrameRequest> &);
 
-	void update();
+	void update(uint64_t t);
 
 	void end();
 
@@ -77,6 +77,8 @@ public:
 	float getAvgFps() const;
 	float getSpf() const; // in milliseconds
 	float getLocalFrameTime() const; // in milliseconds
+
+	float getDirectorFrameTime() const { return _avgFrameTimeValue / 1000.0f; }
 
 	void autorelease(Ref *);
 
@@ -111,6 +113,9 @@ protected:
 	Rc<InputDispatcher> _inputDispatcher;
 
 	Vector<Rc<Ref>> _autorelease;
+
+	math::MovingAverage<20, uint64_t> _avgFrameTime;
+	uint64_t _avgFrameTimeValue = 0;
 };
 
 }

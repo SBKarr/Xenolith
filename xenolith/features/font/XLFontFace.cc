@@ -112,9 +112,9 @@ void FontFaceData::inspectVariableFont(FontLayoutParameters params, FT_Face face
 				_gradeMin = FontGrade(masters->axis[i].minimum >> 16);
 				_gradeMax = FontGrade(masters->axis[i].maximum >> 16);
 			}
-			std::cout << "Variable axis: [" << masters->axis[i].tag << "] "
+			/* std::cout << "Variable axis: [" << masters->axis[i].tag << "] "
 					<< (masters->axis[i].minimum >> 16) << " - " << (masters->axis[i].maximum >> 16)
-					<< " def: "<< (masters->axis[i].def >> 16) << "\n";
+					<< " def: "<< (masters->axis[i].def >> 16) << "\n"; */
 		}
 	}
 

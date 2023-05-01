@@ -32,6 +32,8 @@
 // Log FrameHandle events
 #define XL_FRAME_DEBUG 0
 
+#define XL_FRAME_ATTACHMENTS_DEBUG 1
+
 #if XL_FRAME_EMITTER_DEBUG
 #define XL_FRAME_EMITTER_LOG(...) log::vtext("FrameEmitter", __VA_ARGS__)
 #else

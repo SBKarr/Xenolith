@@ -199,6 +199,15 @@ struct NetworkConnectivity : public Ref {
 	void handleLinkPropertiesChanged();
 };
 
+struct NativeBufferFormatSupport {
+	bool R8G8B8A8_UNORM = true;
+	bool R8G8B8X8_UNORM = true;
+	bool R8G8B8_UNORM = true;
+	bool R5G6B5_UNORM = true;
+	bool R16G16B16A16_FLOAT = true;
+	bool R10G10B10A2_UNORM = true;
+};
+
 struct NativeActivity {
 	struct InputLooperData {
 		NativeActivity *activity;
@@ -226,6 +235,10 @@ struct NativeActivity {
 	InputModifier _activeModifiers = InputModifier::None;
 	Size2 _windowSize;
 	Vec2 _hoverLocation;
+	int32_t sdkVersion = 0;
+
+	NativeBufferFormatSupport formatSupport;
+	bool isEmulator = false;
 
 	static NativeActivity *getInstance();
 
@@ -277,6 +290,8 @@ struct NativeActivity {
 
 	void setDeviceToken(StringView);
 	void handleRemoteNotification();
+
+	void openUrl(StringView url);
 };
 
 void checkJniError(JNIEnv *env);

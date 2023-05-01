@@ -34,7 +34,7 @@ DeviceInfo::Features DeviceInfo::Features::getRequired() {
 	ret.devicePortability.imageViewFormatSwizzle = VK_TRUE;
 	ret.devicePortability.shaderSampleRateInterpolationFunctions = VK_TRUE;
 #endif
-	//ret.device10.features.shaderSampledImageArrayDynamicIndexing = VK_TRUE;
+	ret.device10.features.shaderStorageBufferArrayDynamicIndexing = VK_TRUE;
 	return ret;
 }
 

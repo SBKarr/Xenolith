@@ -255,6 +255,10 @@ BufferMemoryBarrier::BufferMemoryBarrier(Buffer *buf, VkAccessFlags src, VkAcces
 : srcAccessMask(src), dstAccessMask(dst), buffer(buf) { }
 
 BufferMemoryBarrier::BufferMemoryBarrier(Buffer *buf, VkAccessFlags src, VkAccessFlags dst,
+		QueueFamilyTransfer transfer)
+: srcAccessMask(src), dstAccessMask(dst), familyTransfer(transfer), buffer(buf) { }
+
+BufferMemoryBarrier::BufferMemoryBarrier(Buffer *buf, VkAccessFlags src, VkAccessFlags dst,
 		QueueFamilyTransfer transfer, VkDeviceSize offset, VkDeviceSize size)
 : srcAccessMask(src), dstAccessMask(dst), familyTransfer(transfer),
   buffer(buf), offset(offset), size(size) { }

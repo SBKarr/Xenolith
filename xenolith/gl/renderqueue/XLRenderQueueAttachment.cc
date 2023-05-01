@@ -170,8 +170,10 @@ void AttachmentDescriptor::reset() {
 void AttachmentDescriptor::setAttachmentIndex(uint32_t idx) {
 	_attachmentIndex = idx;
 
-	std::cout << "[" << _renderPass->key << ":attachment:" << getName() << ":" << _attachmentIndex << "] "
-			<< getDescriptorTypeName(_descriptor.type) << ": usage:" << getProgramStageDescription(_descriptor.stages) << "\n";
+#if XL_FRAME_ATTACHMENTS_DEBUG
+	log::vtext("AttachmentDescriptor", "[", _renderPass->key, ":attachment:", getName(), ":", _attachmentIndex, "] ",
+			getDescriptorTypeName(_descriptor.type), ": usage:", getProgramStageDescription(_descriptor.stages));
+#endif
 }
 
 void AttachmentDescriptor::setDescriptorIndex(uint32_t idx) {
@@ -189,8 +191,9 @@ void AttachmentDescriptor::setDescriptorIndex(uint32_t idx) {
 						if (_descriptor.type == DescriptorType::Unknown) {
 							_descriptor.type = binding.type;
 						} else if (_descriptor.type != binding.type) {
-							std::cout << "[" << _renderPass->key << ":" << getName() << ":" << _descriptorIndex << "] descriptor type conflict: (code)"
-									<<  getDescriptorTypeName(_descriptor.type)  << " vs. (shader)" << getDescriptorTypeName(binding.type) << "\n";
+							log::vtext("AttachmentDescriptor", "[", _renderPass->key, ":", getName(), ":", _descriptorIndex,
+									"] descriptor type conflict: (code)", getDescriptorTypeName(_descriptor.type), " vs. (shader)",
+									getDescriptorTypeName(binding.type));
 						}
 						_descriptor.stages |= it.data->stage;
 						_descriptor.count = std::max(binding.count, _descriptor.count);
@@ -204,8 +207,9 @@ void AttachmentDescriptor::setDescriptorIndex(uint32_t idx) {
 					if (_descriptor.type == DescriptorType::Unknown) {
 						_descriptor.type = binding.type;
 					} else if (_descriptor.type != binding.type) {
-						std::cout << "[" << getName() << ":" << _descriptorIndex << "] descriptor type conflict: (code)"
-								<<  getDescriptorTypeName(_descriptor.type)  << " vs. (shader)" << getDescriptorTypeName(binding.type) << "\n";
+						log::vtext("AttachmentDescriptor", "[", _renderPass->key, ":", getName(), ":", _descriptorIndex,
+								"] descriptor type conflict: (code)", getDescriptorTypeName(_descriptor.type), " vs. (shader)",
+								getDescriptorTypeName(binding.type));
 					}
 					_descriptor.stages |= ProgramStage::Compute;
 					_descriptor.count = std::max(binding.count, _descriptor.count);
@@ -215,12 +219,14 @@ void AttachmentDescriptor::setDescriptorIndex(uint32_t idx) {
 	}
 
 	if (_descriptor.type == DescriptorType::Unknown) {
-		std::cout << "[" << _renderPass->key << ":descriptor:" << getName() << ":" << _descriptorIndex << "] type is not defined\n";
+		log::vtext("AttachmentDescriptor", "[", _renderPass->key, ":descriptor:", getName(), ":", _descriptorIndex, "] type is not defined");
 		return;
 	}
 
-	std::cout << "[" << _renderPass->key << ":descriptor:" << getName() << ":" << _descriptorIndex << "] "
-			<< getDescriptorTypeName(_descriptor.type) << "[" << _descriptor.count << "]: usage:" << getProgramStageDescription(_descriptor.stages) << "\n";
+#if XL_FRAME_ATTACHMENTS_DEBUG
+	log::vtext("AttachmentDescriptor", "[", _renderPass->key, ":descriptor:", getName(), ":", _descriptorIndex, "] ",
+			getDescriptorTypeName(_descriptor.type), "[", _descriptor.count, "]: usage:", getProgramStageDescription(_descriptor.stages));
+#endif
 }
 
 AttachmentRef *AttachmentDescriptor::addRef(uint32_t idx, AttachmentUsage usage, AttachmentDependencyInfo info) {

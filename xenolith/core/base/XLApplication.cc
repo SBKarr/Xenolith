@@ -391,10 +391,6 @@ int Application::run(Value &&data, const Callback<void(Application *)> &onStarte
     return ret ? 0 : -1;
 }
 
-bool Application::openURL(const StringView &url) {
-	return platform::interaction::_goToUrl(url, true);
-}
-
 void Application::addView(gl::ViewInfo &&view) {
 	_glLoop->addView(move(view));
 }
@@ -510,17 +506,17 @@ bool Application::isNetworkOnline() {
 	return _isNetworkOnline;
 }
 
-void Application::goToUrl(const StringView &url, bool external) {
+void Application::goToUrl(StringView url, bool external) {
 	onUrlOpened(this, url);
-	platform::interaction::_goToUrl(url, external);
+	platform::interaction::_goToUrl(_nativeHandle, url, external);
 }
-void Application::makePhoneCall(const StringView &number) {
+void Application::makePhoneCall(StringView number) {
 	onUrlOpened(this, number);
-	platform::interaction::_makePhoneCall(number);
+	platform::interaction::_makePhoneCall(_nativeHandle, number);
 }
-void Application::mailTo(const StringView &address) {
+void Application::mailTo(StringView address) {
 	onUrlOpened(this, address);
-	platform::interaction::_mailTo(address);
+	platform::interaction::_mailTo(_nativeHandle, address);
 }
 
 uint64_t Application::getApplicationDiskSpace() {
@@ -576,7 +572,7 @@ int64_t Application::getApplicationVersionCode() {
 }
 
 void Application::notification(const String &title, const String &text) {
-	platform::interaction::_notification(title, text);
+	platform::interaction::_notification(_nativeHandle, title, text);
 }
 
 void Application::setLaunchUrl(const StringView &url) {

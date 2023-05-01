@@ -21,77 +21,12 @@
  **/
 
 #include "XLVkMaterialVertexPass.h"
-#include "XLVkTextureSet.h"
 #include "XLVkAllocator.h"
 #include "XLVkBuffer.h"
 #include "XLVkPipeline.h"
 #include "XLGlCommandList.h"
 
 namespace stappler::xenolith::vk {
-
-MaterialAttachment::~MaterialAttachment() { }
-
-bool MaterialAttachment::init(StringView str, const gl::BufferInfo &info, Vector<Rc<gl::Material>> &&initial) {
-	return MaterialAttachment::init(str, info, [] (uint8_t *target, const gl::Material *material) {
-		auto &images = material->getImages();
-		if (!images.empty()) {
-			auto &image = images.front();
-			uint32_t sampler = image.sampler;
-			memcpy(target, &sampler, sizeof(uint32_t));
-			memcpy(target + sizeof(uint32_t), &image.descriptor, sizeof(uint32_t));
-			memcpy(target + sizeof(uint32_t) * 2, &image.set, sizeof(uint32_t));
-			return true;
-		}
-		return false;
-	}, [] (Rc<gl::TextureSet> &&set) {
-		auto s = (TextureSet *)set.get();
-		s->getDevice()->getTextureSetLayout()->releaseSet(s);
-	}, sizeof(uint32_t) * 4, gl::MaterialType::Basic2D, move(initial));
-}
-
-auto MaterialAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<AttachmentHandle> {
-	return Rc<MaterialAttachmentHandle>::create(this, handle);
-}
-
-MaterialAttachmentHandle::~MaterialAttachmentHandle() { }
-
-bool MaterialAttachmentHandle::init(const Rc<Attachment> &a, const FrameQueue &handle) {
-	if (BufferAttachmentHandle::init(a, handle)) {
-		return true;
-	}
-	return false;
-}
-
-bool MaterialAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &desc,
-		uint32_t, bool isExternal) const {
-	return _materials && _materials->getGeneration() != ((gl::MaterialAttachmentDescriptor *)desc.descriptor)->getBoundGeneration();
-}
-
-bool MaterialAttachmentHandle::writeDescriptor(const QueuePassHandle &handle, DescriptorBufferInfo &info) {
-	if (!_materials) {
-		return false;
-	}
-
-	auto b = _materials->getBuffer();
-	if (!b) {
-		return false;
-	}
-	info.buffer = ((Buffer *)b.get());
-	info.offset = 0;
-	info.range = info.buffer->getSize();
-	return true;
-}
-
-const MaterialAttachment *MaterialAttachmentHandle::getMaterialAttachment() const {
-	return (MaterialAttachment *)_attachment.get();
-}
-
-const Rc<gl::MaterialSet> MaterialAttachmentHandle::getSet() const {
-	if (!_materials) {
-		_materials = getMaterialAttachment()->getMaterials();
-	}
-	return _materials;
-}
 
 VertexMaterialAttachment::~VertexMaterialAttachment() { }
 
@@ -197,7 +132,7 @@ struct VertexMaterialDrawPlan {
 
 	struct MaterialWritePlan {
 		const gl::Material *material = nullptr;
-		Rc<gl::ImageAtlas> atlas;
+		Rc<gl::DataAtlas> atlas;
 		uint32_t vertexes = 0;
 		uint32_t indexes = 0;
 		uint32_t transforms = 0;
@@ -243,6 +178,8 @@ struct VertexMaterialDrawPlan {
 	uint32_t solidCmds = 0;
 	uint32_t surfaceCmds = 0;
 	uint32_t transparentCmds = 0;
+
+	bool hasGpuSideAtlases = false;
 
 	VertexMaterialDrawPlan(const gl::FrameContraints &constraints)
 	: surfaceExtent{constraints.extent}, transform(constraints.transform) { }
@@ -442,13 +379,6 @@ struct VertexMaterialDrawPlan {
 		return vec;
 	}
 
-	void writeRotatedTexture(const gl::ImageAtlas *atlas, const Mat4 &inverseTransform, gl::Vertex_V4F_V4F_T2F2U &t, font::FontAtlasValue *d) {
-		Vec2 scaledPos = inverseTransform * (rotateVec(d->pos) / Vec2(surfaceExtent.width, surfaceExtent.height) * 2.0f);
-		t.pos.x += scaledPos.x;
-		t.pos.y += scaledPos.y;
-		t.tex = d->tex;
-	}
-
 	void pushVertexes(WriteTarget &writeTarget, const gl::MaterialId &materialId, const MaterialWritePlan &plan,
 				const gl::CmdGeneral *cmd, const gl::TransformObject &transform, gl::VertexData *vertexes) {
 		auto target = (gl::Vertex_V4F_V4F_T2F2U *)writeTarget.vertexes + vertexOffset;
@@ -457,44 +387,46 @@ struct VertexMaterialDrawPlan {
 
 		memcpy(writeTarget.transform + transtormOffset, &transform, sizeof(gl::TransformObject));
 
-		float atlasScaleX = 1.0f;
-		float atlasScaleY = 1.0f;
-		Mat4 inverseTransform;
-
+		size_t idx = 0;
 		if (plan.atlas) {
 			auto ext = plan.atlas->getImageExtent();
-			atlasScaleX = 1.0f / ext.width;
-			atlasScaleY = 1.0f / ext.height;
-			inverseTransform = transform.transform.getInversed();
-		}
+			float atlasScaleX = 1.0f / ext.width;
+			float atlasScaleY =  1.0f / ext.height;
 
-		size_t idx = 0;
-		for (; idx < vertexes->data.size(); ++ idx) {
-			auto &t = target[idx];
-			t.material = transformIdx | transformIdx << 16;
+			for (; idx < vertexes->data.size(); ++ idx) {
+				auto &t = target[idx];
+				t.material = transformIdx | transformIdx << 16;
 
-			if (plan.atlas && t.object) {
-				if (font::FontAtlasValue *d = (font::FontAtlasValue *)plan.atlas->getObjectByName(t.object)) {
-					// scale to (-1.0, 1.0), then transform into command space
-					writeRotatedTexture(plan.atlas, inverseTransform, t, d);
-				} else {
-					std::cout << "VertexMaterialDrawPlan: Object not found: " << t.object << " " << string::toUtf8<Interface>(char16_t(t.object)) << "\n";
-					auto anchor = font::CharLayout::getAnchorForObject(t.object);
-					switch (anchor) {
-					case font::FontAnchor::BottomLeft:
-						t.tex = Vec2(1.0f - atlasScaleX, 0.0f);
-						break;
-					case font::FontAnchor::TopLeft:
-						t.tex = Vec2(1.0f - atlasScaleX, 0.0f + atlasScaleY);
-						break;
-					case font::FontAnchor::TopRight:
-						t.tex = Vec2(1.0f, 0.0f + atlasScaleY);
-						break;
-					case font::FontAnchor::BottomRight:
-						t.tex = Vec2(1.0f, 0.0f);
-						break;
+				if (!hasGpuSideAtlases) {
+					if (font::FontAtlasValue *d = (font::FontAtlasValue *)plan.atlas->getObjectByName(t.object)) {
+						t.pos += Vec4(d->pos.x, d->pos.y, 0, 0);
+						t.tex = d->tex;
+					} else {
+	#if DEBUG
+						log::vtext("VertexMaterialDrawPlan", "Object not found: ", t.object, " ", string::toUtf8<Interface>(char16_t(t.object)));
+	#endif
+						auto anchor = font::CharLayout::getAnchorForObject(t.object);
+						switch (anchor) {
+						case font::FontAnchor::BottomLeft:
+							t.tex = Vec2(1.0f - atlasScaleX, 0.0f);
+							break;
+						case font::FontAnchor::TopLeft:
+							t.tex = Vec2(1.0f - atlasScaleX, 0.0f + atlasScaleY);
+							break;
+						case font::FontAnchor::TopRight:
+							t.tex = Vec2(1.0f, 0.0f + atlasScaleY);
+							break;
+						case font::FontAnchor::BottomRight:
+							t.tex = Vec2(1.0f, 0.0f);
+							break;
+						}
 					}
 				}
+			}
+		} else {
+			for (; idx < vertexes->data.size(); ++ idx) {
+				auto &t = target[idx];
+				t.material = transformIdx | transformIdx << 16;
 			}
 		}
 
@@ -593,12 +525,15 @@ struct VertexMaterialDrawPlan {
 };
 
 bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<gl::CommandList> &commands) {
-	auto handle = dynamic_cast<FrameHandle *>(&fhandle);
+	auto handle = dynamic_cast<DeviceFrameHandle *>(&fhandle);
 	if (!handle) {
 		return false;
 	}
 
+	auto t = platform::device::_clock();
+
 	VertexMaterialDrawPlan plan(fhandle.getFrameConstraints());
+	plan.hasGpuSideAtlases = handle->getAllocator()->getDevice()->hasDynamicIndexedBuffers();
 
 	auto cmd = commands->getFirst();
 	while (cmd) {
@@ -670,7 +605,6 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 	// write initial full screen quad
 	plan.pushAll(_spans, writeTarget);
 
-
 	if (fhandle.isPersistentMapping()) {
 		_vertexes->unmap(vertexesMap, true);
 		_indexes->unmap(indexesMap, true);
@@ -689,6 +623,7 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 	_drawStat.solidCmds = plan.solidCmds;
 	_drawStat.surfaceCmds = plan.surfaceCmds;
 	_drawStat.transparentCmds = plan.transparentCmds;
+	_drawStat.vertexInputTime = platform::device::_clock() - t;
 
 	commands->sendStat(_drawStat);
 
@@ -743,43 +678,6 @@ void MaterialVertexPass::prepare(gl::Device &dev) {
 	}
 }
 
-VkRect2D MaterialVertexPassHandle::rotateScissor(const gl::FrameContraints &constraints, const URect &scissor) {
-	VkRect2D scissorRect{
-		{ int32_t(scissor.x), int32_t(constraints.extent.height - scissor.y - scissor.height) },
-		{ scissor.width, scissor.height }
-	};
-
-	switch (constraints.transform) {
-	case gl::SurfaceTransformFlags::Rotate90:
-		scissorRect.offset.y = scissor.x;
-		scissorRect.offset.x = scissor.y;
-		std::swap(scissorRect.extent.width, scissorRect.extent.height);
-		break;
-	case gl::SurfaceTransformFlags::Rotate180:
-		scissorRect.offset.y = scissor.y;
-		break;
-	case gl::SurfaceTransformFlags::Rotate270:
-		scissorRect.offset.y = constraints.extent.height - scissor.x - scissor.width;
-		scissorRect.offset.x = constraints.extent.width - scissor.y - scissor.height;
-		//scissorRect.offset.x = extent.height - scissor.y;
-		std::swap(scissorRect.extent.width, scissorRect.extent.height);
-		break;
-	default: break;
-	}
-
-	if (scissorRect.offset.x < 0) {
-		scissorRect.extent.width -= scissorRect.offset.x;
-		scissorRect.offset.x = 0;
-	}
-
-	if (scissorRect.offset.y < 0) {
-		scissorRect.extent.height -= scissorRect.offset.y;
-		scissorRect.offset.y = 0;
-	}
-
-	return scissorRect;
-}
-
 bool MaterialVertexPassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
 	auto pass = (MaterialVertexPass *)_renderPass.get();
 
@@ -790,8 +688,6 @@ bool MaterialVertexPassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb)
 	if (auto vertexBuffer = q.getAttachment(pass->getVertexes())) {
 		_vertexBuffer = (const VertexMaterialAttachmentHandle *)vertexBuffer->handle.get();
 	}
-
-	_constraints = q.getFrame()->getFrameConstraints();
 
 	return QueuePassHandle::prepare(q, move(cb));
 }
@@ -935,34 +831,5 @@ void MaterialVertexPassHandle::prepareMaterialCommands(gl::MaterialSet * materia
 }
 
 void MaterialVertexPassHandle::finalizeRenderPass(CommandBuffer &) { }
-
-void MaterialVertexPassHandle::doFinalizeTransfer(gl::MaterialSet * materials,
-		Vector<ImageMemoryBarrier> &outputImageBarriers, Vector<BufferMemoryBarrier> &outputBufferBarriers) {
-	if (!materials) {
-		return;
-	}
-
-	auto b = (Buffer *)materials->getBuffer().get();
-	if (!b) {
-		return;
-	}
-
-	if (auto barrier = b->getPendingBarrier()) {
-		outputBufferBarriers.emplace_back(*barrier);
-		b->dropPendingBarrier();
-	}
-
-	for (auto &it : materials->getLayouts()) {
-		if (it.set) {
-			auto &pending = ((TextureSet *)it.set.get())->getPendingBarriers();
-			for (auto &barrier : pending) {
-				outputImageBarriers.emplace_back(barrier);
-			}
-			((TextureSet *)it.set.get())->dropPendingBarriers();
-		} else {
-			log::text("MaterialRenderPassHandle", "No set for material layout");
-		}
-	}
-}
 
 }

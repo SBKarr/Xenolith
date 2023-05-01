@@ -38,3 +38,4 @@
 #include "XLGlDevice.cc"
 #include "XLGlLoop.cc"
 #include "XLGlSdf.cc"
+#include "XLGlMesh.cc"

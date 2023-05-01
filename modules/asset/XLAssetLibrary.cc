@@ -368,7 +368,6 @@ int64_t AssetLibrary::addVersion(const db::Transaction &t, int64_t assetId, cons
 		pair("size", db::Value(data.size)),
 		pair("type", db::Value(data.contentType)),
 	}));
-	std::cout << data::EncodeFormat::Pretty << version << "\n";
 	return version.getInteger("__oid");
 }
 

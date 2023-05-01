@@ -30,8 +30,8 @@ layout (location = 1) out vec4 outShadow;
 void main() {
 	vec4 textureColor = texture(
 		sampler2D(
-			images[materials[pushConstants.materialIdx].imageIdx],
-			immutableSamplers[materials[pushConstants.materialIdx].samplerIdx]
+			images[materials[pushConstants.materialIdx].samplerImageIdx & 0xFFFF],
+			immutableSamplers[materials[pushConstants.materialIdx].samplerImageIdx >> 16]
 		), fragTexCoord);
 	outColor = fragColor * textureColor;
 	outShadow = shadowColor;

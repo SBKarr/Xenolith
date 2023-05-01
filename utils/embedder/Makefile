@@ -25,7 +25,4 @@ LOCAL_MODULES ?= \
 
 LOCAL_FORCE_INSTALL := 1
 
-#.local_prebuild:
-#	@echo test
-
 include $(STAPPLER_ROOT)/make/universal.mk

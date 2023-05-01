@@ -30,13 +30,13 @@ MaterialSet::~MaterialSet() {
 	clear();
 }
 
-bool MaterialSet::init(const BufferInfo &info, const EncodeCallback &callback, const FinalizeCallback &fin,
-		uint32_t objectSize, uint32_t imagesInSet, const MaterialAttachment *owner) {
+bool MaterialSet::init(const BufferInfo &info, const EncodeCallback &callback,
+		uint32_t objectSize, uint32_t imagesInSet, uint32_t buffersInSet, const MaterialAttachment *owner) {
 	_info = info;
 	_encodeCallback = callback;
-	_finalizeCallback = fin;
 	_objectSize = objectSize;
 	_imagesInSet = imagesInSet;
+	_buffersInSet = buffersInSet;
 	_info.size = 0;
 	_owner = owner;
 	return true;
@@ -45,11 +45,11 @@ bool MaterialSet::init(const BufferInfo &info, const EncodeCallback &callback, c
 bool MaterialSet::init(const Rc<MaterialSet> &other) {
 	_info = other->_info;
 	_encodeCallback = other->_encodeCallback;
-	_finalizeCallback = other->_finalizeCallback;
 	_generation = other->_generation + 1;
 	_materials = other->_materials;
 	_objectSize = other->_objectSize;
 	_imagesInSet = other->_imagesInSet;
+	_buffersInSet = other->_buffersInSet;
 	_layouts = other->_layouts;
 	_owner = other->_owner;
 	_buffer = other->_buffer;
@@ -68,13 +68,7 @@ bool MaterialSet::encode(uint8_t *buf, const Material *material) {
 	return false;
 }
 
-void MaterialSet::clear() {
-	if (_finalizeCallback && _textureSet) {
-		_finalizeCallback(move(_textureSet));
-		_textureSet = nullptr;
-		_finalizeCallback = nullptr;
-	}
-}
+void MaterialSet::clear() { }
 
 Vector<Rc<Material>> MaterialSet::updateMaterials(const Rc<MaterialInputData> &data,
 		const Callback<Rc<ImageView>(const MaterialImage &)> &cb) {
@@ -254,9 +248,9 @@ uint32_t MaterialSet::getMaterialOrder(MaterialId idx) const {
 void MaterialSet::removeMaterial(Material *oldMaterial) {
 	auto &oldSet = _layouts[oldMaterial->getLayoutIndex()];
 	for (auto &oIt : oldMaterial->_images) {
-		-- oldSet.slots[oIt.descriptor].refCount;
-		if (oldSet.slots[oIt.descriptor].refCount == 0) {
-			oldSet.slots[oIt.descriptor].image = nullptr;
+		-- oldSet.imageSlots[oIt.descriptor].refCount;
+		if (oldSet.imageSlots[oIt.descriptor].refCount == 0) {
+			oldSet.imageSlots[oIt.descriptor].image = nullptr;
 		}
 		oIt.view = nullptr;
 	}
@@ -284,16 +278,37 @@ void MaterialSet::emplaceMaterialImages(Material *oldMaterial, Material *newMate
 				}
 			}
 			if (!hasAlias) {
-				-- oldSet.slots[oIt.descriptor].refCount;
-				if (oldSet.slots[oIt.descriptor].refCount == 0) {
-					oldSet.slots[oIt.descriptor].image = nullptr;
+				-- oldSet.imageSlots[oIt.descriptor].refCount;
+				if (oldSet.imageSlots[oIt.descriptor].refCount == 0) {
+					oldSet.imageSlots[oIt.descriptor].image = nullptr;
 				}
 				oIt.view = nullptr;
+			}
+			if (oIt.image->atlas) {
+				if (auto &atlasIndex = oIt.image->atlas->getIndexBuffer()) {
+					auto descIdx = atlasIndex->getDescriptor();
+					if (descIdx < oldSet.bufferSlots.size()) {
+						-- oldSet.bufferSlots[descIdx].refCount;
+						if (oldSet.bufferSlots[descIdx].refCount == 0) {
+							oldSet.bufferSlots[descIdx].buffer = nullptr;
+						}
+					}
+				}
+				if (auto &atlasData = oIt.image->atlas->getDataBuffer()) {
+					auto descIdx = atlasData->getDescriptor();
+					if (descIdx < oldSet.bufferSlots.size()) {
+						-- oldSet.bufferSlots[descIdx].refCount;
+						if (oldSet.bufferSlots[descIdx].refCount == 0) {
+							oldSet.bufferSlots[descIdx].buffer = nullptr;
+						}
+					}
+				}
 			}
 		}
 	}
 
 	Vector<Pair<const MaterialImage *, Vector<uint32_t>>> uniqueImages;
+	Vector<BufferObject *> uniqueBuffers;
 
 	// find unique images
 	uint32_t imageIdx = 0;
@@ -311,37 +326,68 @@ void MaterialSet::emplaceMaterialImages(Material *oldMaterial, Material *newMate
 			uniqueImages.emplace_back(pair(&it, Vector<uint32_t>({imageIdx})));
 		}
 		++ imageIdx;
+
+		if (it.image->atlas) {
+			if (auto &atlasIndex = it.image->atlas->getIndexBuffer()) {
+				uniqueBuffers.emplace_back(atlasIndex);
+			}
+			if (auto &atlasData = it.image->atlas->getDataBuffer()) {
+				uniqueBuffers.emplace_back(atlasData);
+			}
+		}
 	}
 
-	auto emplaceMaterial = [&] (uint32_t setIdx, MaterialLayout &set, Vector<uint32_t> &locations) {
-		if (locations.empty()) {
+	auto emplaceMaterial = [&] (uint32_t setIdx, MaterialLayout &set, Vector<uint32_t> &imageLocations, Vector<uint32_t> &bufferLocations) {
+		if (imageLocations.empty()) {
 			for (uint32_t imageIdx = 0; imageIdx < uniqueImages.size(); ++ imageIdx) {
-				locations.emplace_back(imageIdx);
+				imageLocations.emplace_back(imageIdx);
+			}
+		}
+
+		if (!uniqueBuffers.empty() && bufferLocations.empty()) {
+			for (uint32_t bufferIdx = 0; bufferIdx < uniqueBuffers.size(); ++ bufferIdx) {
+				bufferLocations.emplace_back(bufferIdx);
 			}
 		}
 
 		uint32_t imageIdx = 0;
 		for (auto &it : uniqueImages) {
-			auto loc = locations[imageIdx];
-			if (set.slots[loc].image) {
+			auto loc = imageLocations[imageIdx];
+			if (set.imageSlots[loc].image) {
 				// increment slot refcount, if image already exists
-				set.slots[loc].refCount += it.second.size();
+				set.imageSlots[loc].refCount += it.second.size();
 			} else {
 				// fill slot with new ImageView
-				set.slots[loc].image = cb(*it.first);
-				set.slots[loc].image->setLocation(setIdx, loc);
-				set.slots[loc].refCount = it.second.size();
-				set.usedSlots = std::max(set.usedSlots, loc + 1);
+				set.imageSlots[loc].image = cb(*it.first);
+				set.imageSlots[loc].image->setLocation(setIdx, loc);
+				set.imageSlots[loc].refCount = it.second.size();
+				set.usedImageSlots = std::max(set.usedImageSlots, loc + 1);
 			}
 
 			// fill refs
 			for (auto &iIt : it.second) {
-				newImages[iIt].view = set.slots[loc].image;
+				newImages[iIt].view = set.imageSlots[loc].image;
 				newImages[iIt].set = setIdx;
 				newImages[iIt].descriptor = loc;
 			}
 
 			++ imageIdx;
+		}
+
+		uint32_t bufferIdx = 0;
+		for (auto &it : uniqueBuffers) {
+			auto loc = bufferLocations[bufferIdx];
+			if (set.bufferSlots[loc].buffer) {
+				++ set.bufferSlots[loc].refCount;
+			} else {
+				// fill slot with new ImageView
+				set.bufferSlots[loc].buffer = it;
+				set.bufferSlots[loc].buffer->setLocation(setIdx, loc);
+				++ set.bufferSlots[loc].refCount;
+				set.usedBufferSlots = std::max(set.usedBufferSlots, loc + 1);
+			}
+
+			++ bufferIdx;
 		}
 
 		newMaterial->setLayoutIndex(setIdx);
@@ -351,9 +397,9 @@ void MaterialSet::emplaceMaterialImages(Material *oldMaterial, Material *newMate
 			// remove non-aliased images
 			for (auto &oIt : *oldImages) {
 				if (oIt.view) {
-					-- oldSet.slots[oIt.descriptor].refCount;
-					if (oldSet.slots[oIt.descriptor].refCount == 0) {
-						oldSet.slots[oIt.descriptor].image = nullptr;
+					-- oldSet.imageSlots[oIt.descriptor].refCount;
+					if (oldSet.imageSlots[oIt.descriptor].refCount == 0) {
+						oldSet.imageSlots[oIt.descriptor].image = nullptr;
 					}
 					oIt.view = nullptr;
 				}
@@ -362,38 +408,73 @@ void MaterialSet::emplaceMaterialImages(Material *oldMaterial, Material *newMate
 	};
 
 	auto tryToEmplaceSet = [&] (uint32_t setIndex, MaterialLayout &set) -> bool {
-		uint32_t emplaced = 0;
-		Vector<uint32_t> positions; positions.resize(uniqueImages.size(), maxOf<uint32_t>());
+		uint32_t emplacedImages = 0;
+		uint32_t emplacedBuffers = 0;
+		Vector<uint32_t> imagePositions; imagePositions.resize(uniqueImages.size(), maxOf<uint32_t>());
+		Vector<uint32_t> bufferPositions; bufferPositions.resize(uniqueBuffers.size(), maxOf<uint32_t>());
 
 		imageIdx = 0;
 		// for each unique image, find it's potential place in set
 		for (auto &uit : uniqueImages) {
 			uint32_t location = 0;
-			for (auto &it : set.slots) {
+			for (auto &it : set.imageSlots) {
 				// check if image can alias with existed
 				if (it.image && it.image->getImage() == uit.first->image->image && it.image->getInfo() == uit.first->info) {
-					if (positions[imageIdx] == maxOf<uint32_t>()) {
-						++ emplaced; // mark as emplaced only if not emplaced already
+					if (imagePositions[imageIdx] == maxOf<uint32_t>()) {
+						++ emplacedImages; // mark as emplaced only if not emplaced already
 					}
-					positions[imageIdx] = location;
+					imagePositions[imageIdx] = location;
 					break; // stop searching - best variant
 				} else if (!it.image || it.refCount == 0) {
 					// only if not emplaced
-					if (positions[imageIdx] == maxOf<uint32_t>()) {
-						++ emplaced;
-						positions[imageIdx] = location;
+					if (imagePositions[imageIdx] == maxOf<uint32_t>()) {
+						if (std::find(imagePositions.begin(), imagePositions.end(), location) == imagePositions.end()) {
+							++ emplacedImages;
+							imagePositions[imageIdx] = location;
+						}
 					}
 					// continue searching for possible alias
 				}
 				++ location;
+				if (location > set.usedImageSlots + uniqueImages.size()) {
+					break;
+				}
 			}
 
 			++ imageIdx;
 		}
 
+		imageIdx = 0;
+		for (auto &uit : uniqueBuffers) {
+			uint32_t location = 0;
+			for (auto &it : set.bufferSlots) {
+				if (it.buffer && it.buffer == uit) {
+					if (bufferPositions[imageIdx] == maxOf<uint32_t>()) {
+						++ emplacedBuffers; // mark as emplaced only if not emplaced already
+					}
+					bufferPositions[imageIdx] = location;
+					break; // stop searching - best variant
+				} else if (!it.buffer || it.refCount == 0) {
+					// only if not emplaced
+					if (bufferPositions[imageIdx] == maxOf<uint32_t>()) {
+						if (std::find(bufferPositions.begin(), bufferPositions.end(), location) == bufferPositions.end()) {
+							++ emplacedBuffers;
+							bufferPositions[imageIdx] = location;
+						}
+					}
+					// continue searching for possible alias
+				}
+				++ location;
+				if (location > set.usedBufferSlots + uniqueBuffers.size()) {
+					break;
+				}
+			}
+			++ imageIdx;
+		}
+
 		// if all images emplaced, perform actual emplace and return
-		if (emplaced == uniqueImages.size()) {
-			emplaceMaterial(setIndex, set, positions);
+		if (emplacedImages == uniqueImages.size() && emplacedBuffers == uniqueBuffers.size()) {
+			emplaceMaterial(setIndex, set, imagePositions, bufferPositions);
 			return true;
 		}
 		return false;
@@ -422,10 +503,12 @@ void MaterialSet::emplaceMaterialImages(Material *oldMaterial, Material *newMate
 
 	// no available set, create new one;
 	auto &nIt = _layouts.emplace_back(MaterialLayout());
-	nIt.slots.resize(_imagesInSet);
+	nIt.imageSlots.resize(_imagesInSet);
+	nIt.bufferSlots.resize(_buffersInSet);
 
-	Vector<uint32_t> locations;
-	emplaceMaterial(_layouts.size() - 1, nIt, locations);
+	Vector<uint32_t> imageLocations;
+	Vector<uint32_t> bufferLocations;
+	emplaceMaterial(_layouts.size() - 1, nIt, imageLocations, bufferLocations);
 }
 
 bool MaterialImage::canAlias(const MaterialImage &other) const {
@@ -500,7 +583,7 @@ bool Material::init(MaterialId id, const PipelineData *pipeline, const ImageData
 	return true;
 }
 
-bool Material::init(const Material *master, Rc<ImageObject> &&image, Rc<ImageAtlas> &&atlas, Bytes &&data) {
+bool Material::init(const Material *master, Rc<ImageObject> &&image, Rc<DataAtlas> &&atlas, Bytes &&data) {
 	_id = master->getId();
 	_pipeline = master->getPipeline();
 	_data = move(data);
@@ -549,12 +632,11 @@ void Material::setLayoutIndex(uint32_t idx) {
 MaterialAttachment::~MaterialAttachment() { }
 
 bool MaterialAttachment::init(StringView name, const BufferInfo &info, MaterialSet::EncodeCallback &&cb,
-		MaterialSet::FinalizeCallback &&fin, uint32_t size, MaterialType type, Vector<Rc<Material>> &&initials) {
+		uint32_t size, MaterialType type, Vector<Rc<Material>> &&initials) {
 	if (BufferAttachment::init(name, info)) {
 		_materialObjectSize = size;
 		_type = type;
 		_encodeCallback = move(cb);
-		_finalizeCallback = move(fin);
 		_initialMaterials = move(initials);
 
 		for (auto &it : _initialMaterials) {
@@ -578,7 +660,8 @@ void MaterialAttachment::setMaterials(const Rc<gl::MaterialSet> &data) const {
 }
 
 Rc<gl::MaterialSet> MaterialAttachment::allocateSet(const Device &dev) const {
-	return Rc<gl::MaterialSet>::create(_info, _encodeCallback, _finalizeCallback, _materialObjectSize, dev.getTextureLayoutImagesCount(), this);
+	return Rc<gl::MaterialSet>::create(_info, _encodeCallback, _materialObjectSize,
+			dev.getTextureLayoutImagesCount(), dev.getTextureLayoutBuffersCount(), this);
 }
 
 Rc<gl::MaterialSet> MaterialAttachment::cloneSet(const Rc<gl::MaterialSet> &other) const {
@@ -659,8 +742,12 @@ bool MaterialAttachmentDescriptor::init(PassData *data, Attachment *attachment) 
 	return false;
 }
 
-void MaterialAttachmentDescriptor::setBoundGeneration(uint64_t gen) {
-	_boundGeneration = gen;
+uint64_t MaterialAttachmentDescriptor::getBoundGeneration() const {
+	return _boundGeneration.load();
+}
+
+void MaterialAttachmentDescriptor::setBoundGeneration(uint64_t id) {
+	_boundGeneration.store(id);
 }
 
 }

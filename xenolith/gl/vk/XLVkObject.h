@@ -54,16 +54,19 @@ public:
 	bool init(Device &dev, VkImage, const gl::ImageInfo &, uint32_t);
 
 	// owning image wrapping
-	bool init(Device &dev, VkImage, const gl::ImageInfo &, Rc<DeviceMemory> &&, Rc<gl::ImageAtlas> && = Rc<gl::ImageAtlas>());
-	bool init(Device &dev, uint64_t, VkImage, const gl::ImageInfo &, Rc<DeviceMemory> &&, Rc<gl::ImageAtlas> && = Rc<gl::ImageAtlas>());
+	bool init(Device &dev, VkImage, const gl::ImageInfo &, Rc<DeviceMemory> &&, Rc<gl::DataAtlas> && = Rc<gl::DataAtlas>());
+	bool init(Device &dev, uint64_t, VkImage, const gl::ImageInfo &, Rc<DeviceMemory> &&, Rc<gl::DataAtlas> && = Rc<gl::DataAtlas>());
 
 	VkImage getImage() const { return _image; }
+	DeviceMemory *getMemory() const { return _memory; }
 
 	void setPendingBarrier(const ImageMemoryBarrier &);
 	const ImageMemoryBarrier *getPendingBarrier() const;
 	void dropPendingBarrier();
 
 	VkImageAspectFlags getAspectMask() const;
+
+	void bindMemory(Rc<DeviceMemory> &&, VkDeviceSize = 0);
 
 protected:
 	using gl::ImageObject::init;
@@ -80,12 +83,14 @@ public:
 	bool init(Device &dev, VkBuffer, const gl::BufferInfo &, Rc<DeviceMemory> &&);
 
 	VkBuffer getBuffer() const { return _buffer; }
-
 	DeviceMemoryPool *getPool() const { return _pool; }
+	DeviceMemory *getMemory() const { return _memory; }
 
 	void setPendingBarrier(const BufferMemoryBarrier &);
 	const BufferMemoryBarrier *getPendingBarrier() const;
 	void dropPendingBarrier();
+
+	void bindMemory(Rc<DeviceMemory> &&, VkDeviceSize = 0);
 
 protected:
 	using gl::BufferObject::init;

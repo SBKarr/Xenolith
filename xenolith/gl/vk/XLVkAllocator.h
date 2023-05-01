@@ -47,9 +47,10 @@ enum class AllocationType {
 };
 
 struct MemoryRequirements {
+	VkMemoryRequirements requirements;
+	VkDeviceSize targetOffset;
 	bool prefersDedicated = false;
 	bool requiresDedicated = false;
-	VkMemoryRequirements requirements;
 };
 
 class Allocator : public Ref {
@@ -145,6 +146,11 @@ public:
 	Rc<Buffer> spawnPersistent(AllocationUsage, const gl::BufferInfo &, BytesView = BytesView());
 	Rc<Image> spawnPersistent(AllocationUsage, const gl::ImageInfo &, bool preinitialized, uint64_t forceId = 0);
 
+	Rc<Buffer> preallocate(const gl::BufferInfo &, BytesView = BytesView());
+	Rc<Image> preallocate(const gl::ImageInfo &, bool preinitialized, uint64_t forceId = 0);
+
+	Rc<DeviceMemory> emplaceObjects(AllocationUsage usage, SpanView<Rc<Image>>, SpanView<Rc<Buffer>>);
+
 protected:
 	friend class DeviceMemoryPool;
 
@@ -153,6 +159,9 @@ protected:
 
 	MemNode alloc(MemType *, uint64_t, bool persistent = false);
 	void free(MemType *, SpanView<MemNode>);
+
+	bool allocateDedicated(AllocationUsage usage, Buffer *);
+	bool allocateDedicated(AllocationUsage usage, Image *);
 
 	Mutex _mutex;
 	VkPhysicalDevice _physicalDevice = VK_NULL_HANDLE;

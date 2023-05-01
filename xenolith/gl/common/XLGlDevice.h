@@ -56,6 +56,7 @@ public:
 	bool isSamplersCompiled() const { return _samplersCompiled; }
 
 	uint32_t getTextureLayoutImagesCount() const { return _textureLayoutImagesCount; }
+	uint32_t getTextureLayoutBuffersCount() const { return _textureLayoutBuffersCount; }
 
 	const Vector<gl::ImageFormat> &getSupportedDepthStencilFormat() const { return _depthFormats; }
 	const Vector<gl::ImageFormat> &getSupportedColorFormat() const { return _colorFormats; }
@@ -99,6 +100,7 @@ protected:
 	uint32_t _samplersCount = 0;
 	bool _samplersCompiled = false;
 	uint32_t _textureLayoutImagesCount = 0;
+	uint32_t _textureLayoutBuffersCount = 0;
 
 	std::thread::id _loopThreadId;
 	uint32_t _presentMask = 0;

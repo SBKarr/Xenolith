@@ -49,7 +49,7 @@ bool Image::init(Device &dev, VkImage image, const gl::ImageInfo &info, uint32_t
 	return ret;
 }
 
-bool Image::init(Device &dev, VkImage image, const gl::ImageInfo &info, Rc<DeviceMemory> &&mem, Rc<gl::ImageAtlas> &&atlas) {
+bool Image::init(Device &dev, VkImage image, const gl::ImageInfo &info, Rc<DeviceMemory> &&mem, Rc<gl::DataAtlas> &&atlas) {
 	_info = info;
 	_image = image;
 	_atlas = atlas;
@@ -61,7 +61,7 @@ bool Image::init(Device &dev, VkImage image, const gl::ImageInfo &info, Rc<Devic
 	}, gl::ObjectType::Image, ObjectHandle(_image));
 }
 
-bool Image::init(Device &dev, uint64_t idx, VkImage image, const gl::ImageInfo &info, Rc<DeviceMemory> &&mem, Rc<gl::ImageAtlas> &&atlas) {
+bool Image::init(Device &dev, uint64_t idx, VkImage image, const gl::ImageInfo &info, Rc<DeviceMemory> &&mem, Rc<gl::DataAtlas> &&atlas) {
 	_info = info;
 	_image = image;
 	_atlas = atlas;
@@ -100,6 +100,12 @@ VkImageAspectFlags Image::getAspectMask() const {
 	return VK_IMAGE_ASPECT_NONE_KHR;
 }
 
+void Image::bindMemory(Rc<DeviceMemory> &&mem, VkDeviceSize offset) {
+	auto dev = (Device *)_device;
+	dev->getTable()->vkBindImageMemory(dev->getDevice(), _image, mem->getMemory(), offset);
+	_memory = move(mem);
+}
+
 bool Buffer::init(Device &dev, VkBuffer buffer, const gl::BufferInfo &info, Rc<DeviceMemory> &&mem) {
 	_info = info;
 	_buffer = buffer;
@@ -126,6 +132,12 @@ const BufferMemoryBarrier *Buffer::getPendingBarrier() const {
 
 void Buffer::dropPendingBarrier() {
 	_barrier.reset();
+}
+
+void Buffer::bindMemory(Rc<DeviceMemory> &&mem, VkDeviceSize offset) {
+	auto dev = (Device *)_device;
+	dev->getTable()->vkBindBufferMemory(dev->getDevice(), _buffer, mem->getMemory(), offset);
+	_memory = move(mem);
 }
 
 bool ImageView::init(Device &dev, VkImage image, VkFormat format) {

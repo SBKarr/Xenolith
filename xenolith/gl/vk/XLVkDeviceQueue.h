@@ -156,6 +156,8 @@ struct BufferMemoryBarrier {
 	BufferMemoryBarrier() = default;
 	BufferMemoryBarrier(Buffer *, VkAccessFlags src, VkAccessFlags dst);
 	BufferMemoryBarrier(Buffer *, VkAccessFlags src, VkAccessFlags dst,
+			QueueFamilyTransfer);
+	BufferMemoryBarrier(Buffer *, VkAccessFlags src, VkAccessFlags dst,
 			QueueFamilyTransfer, VkDeviceSize, VkDeviceSize);
 	BufferMemoryBarrier(const VkBufferMemoryBarrier &);
 

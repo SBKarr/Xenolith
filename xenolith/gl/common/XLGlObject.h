@@ -115,7 +115,7 @@ public:
 	using ProgramData = renderqueue::ProgramData;
 	using DescriptorType = renderqueue::DescriptorType;
 
-	static void inspectShader(SpanView<uint32_t>);
+	static String inspectShader(SpanView<uint32_t>);
 
 	virtual ~Shader() { }
 
@@ -123,7 +123,7 @@ public:
 	virtual ProgramStage getStage() const { return _stage; }
 
 protected:
-	virtual void inspect(SpanView<uint32_t>);
+	String inspect(SpanView<uint32_t>);
 
 	String _name;
 	ProgramStage _stage = ProgramStage::None;
@@ -173,25 +173,53 @@ protected:
 	Vector<Rc<ImageView>> _imageViews;
 };
 
-class ImageAtlas : public Ref {
+class DataAtlas : public Ref {
 public:
-	virtual ~ImageAtlas() { }
+	enum Type {
+		ImageAtlas,
+		MeshAtlas,
+		Custom,
+	};
 
-	bool init(uint32_t count, uint32_t objectSize, Extent2);
+	virtual ~DataAtlas() { }
+
+	bool init(Type, uint32_t count, uint32_t objectSize, Extent2 = Extent2(0, 0));
+	void compile();
 
 	const uint8_t *getObjectByName(uint32_t) const;
+	const uint8_t *getObjectByName(StringView) const;
 	const uint8_t *getObjectByOrder(uint32_t) const;
 
 	void addObject(uint32_t, void *);
+	void addObject(StringView, void *);
 
+	Type getType() const { return _type; }
 	uint32_t getObjectSize() const { return _objectSize; }
 	Extent2 getImageExtent() const { return _imageExtent; }
 
+	uint32_t getObjectsCount() const { return _intNames.size() + _stringNames.size(); }
+
+	BytesView getData() const { return _data; }
+	BytesView getIndexData() const { return _dataIndex; }
+
+	void setIndexBuffer(Rc<BufferObject> &&);
+	const Rc<BufferObject> &getIndexBuffer() const { return _indexBuffer; }
+
+	void setDataBuffer(Rc<BufferObject> &&);
+	const Rc<BufferObject> &getDataBuffer() const { return _dataBuffer; }
+
 protected:
+	void makeHashIndex();
+
+	Type _type = Type::Custom;
 	uint32_t _objectSize;
 	Extent2 _imageExtent;
-	std::unordered_map<uint32_t, uint32_t> _names;
+	std::unordered_map<uint32_t, uint32_t> _intNames;
+	std::unordered_map<String, uint32_t> _stringNames;
 	Bytes _data;
+	Bytes _dataIndex;
+	Rc<BufferObject> _indexBuffer;
+	Rc<BufferObject> _dataBuffer;
 };
 
 class ImageObject : public Object {
@@ -203,13 +231,13 @@ public:
 
 	const ImageInfo &getInfo() const { return _info; }
 	uint64_t getIndex() const { return _index; }
-	const Rc<ImageAtlas> &getAtlas() const { return _atlas; }
+	const Rc<DataAtlas> &getAtlas() const { return _atlas; }
 
 	ImageViewInfo getViewInfo(const ImageViewInfo &) const;
 
 protected:
 	ImageInfo _info;
-	Rc<ImageAtlas> _atlas;
+	Rc<DataAtlas> _atlas;
 
 	uint64_t _index = 1; // 0 stays as special value
 };
@@ -257,8 +285,19 @@ public:
 	const BufferInfo &getInfo() const { return _info; }
 	uint64_t getSize() const { return _info.size; }
 
+	void setLocation(uint32_t set, uint32_t desc) {
+		_set = set;
+		_descriptor = desc;
+	}
+
+	uint32_t getSet() const { return _set; }
+	uint32_t getDescriptor() const { return _descriptor; }
+
 protected:
 	BufferInfo _info;
+
+	uint32_t _set = 0;
+	uint32_t _descriptor = 0;
 };
 
 
@@ -281,9 +320,18 @@ struct MaterialImageSlot {
 	uint32_t refCount = 0;
 };
 
+struct MaterialBufferSlot {
+	Rc<BufferObject> buffer;
+	uint32_t refCount = 0;
+};
+
 struct MaterialLayout {
-	Vector<MaterialImageSlot> slots;
-	uint32_t usedSlots = 0;
+	Vector<MaterialImageSlot> imageSlots;
+	uint32_t usedImageSlots = 0;
+
+	Vector<MaterialBufferSlot> bufferSlots;
+	uint32_t usedBufferSlots = 0;
+
 	Rc<TextureSet> set;
 };
 
@@ -296,6 +344,7 @@ public:
 protected:
 	uint32_t _count = 0;
 	Vector<uint64_t> _layoutIndexes;
+	Vector<BufferObject *> _layoutBuffers;
 };
 
 class Semaphore : public gl::Object {

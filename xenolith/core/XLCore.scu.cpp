@@ -31,10 +31,14 @@ THE SOFTWARE.
 #include "XLVertexArray.cc"
 #include "XLScheduler.cc"
 #include "XLTextInputManager.cc"
+#include "XLTemporaryResource.cc"
 
 #include "base/XLApplication.cc"
 #include "base/XLDeferredManager.cc"
 #include "base/XLLog.cc"
+#include "base/XLResourceObject.cc"
+#include "base/XLTexture.cc"
+#include "base/XLMeshIndex.cc"
 
 namespace stappler::xenolith {
 

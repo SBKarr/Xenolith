@@ -24,27 +24,25 @@
 
 #if ANDROID
 
+#include "XLPlatformAndroid.h"
+
 namespace stappler::xenolith::platform::interaction {
 
-bool _goToUrl(const StringView &url, bool external) {
-	log::format("Interaction", "GoTo url: %s", url.data());
+bool _goToUrl(void *handle, StringView url, bool external) {
+	((NativeActivity *)handle)->openUrl(url);
 	return true;
 }
-void _makePhoneCall(const StringView &str) {
-	log::format("Interaction", "phone: %s", str.data());
-}
-void _mailTo(const StringView &address) {
-	log::format("Interaction", "MailTo: %s", address.data());
+
+void _makePhoneCall(void *handle, StringView str) {
+	((NativeActivity *)handle)->openUrl(str);
 }
 
-void _backKey() { }
-
-void _notification(const StringView &title, const StringView &text) {
-
+void _mailTo(void *handle, StringView address) {
+	((NativeActivity *)handle)->openUrl(address);
 }
 
-void _rateApplication() {
-	log::text("Interaction", "Rate app");
+void _notification(void *handle, StringView title, StringView text) {
+	//((NativeActivity *)handle)->notification(title, text);
 }
 
 void _openFileDialog(const String &path, const Function<void(const String &)> &func) {

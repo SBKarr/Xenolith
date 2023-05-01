@@ -33,25 +33,45 @@ namespace stappler::xenolith::vk {
 class MaterialShadowPass : public MaterialVertexPass {
 public:
 	using AttachmentHandle = renderqueue::AttachmentHandle;
+	using Builder = renderqueue::Queue::Builder;
 
 	static constexpr StringView ShadowPipeline = "ShadowPipeline";
 
+	enum class QueueFlags {
+		None = 0,
+		Render3D = 1 << 0,
+	};
+
 	struct RenderQueueInfo {
 		Application *app = nullptr;
-		renderqueue::Queue::Builder *builder = nullptr;
 		Extent2 extent;
+		QueueFlags flags = QueueFlags::None;
 		Function<void(gl::Resource::Builder &)> resourceCallback;
 	};
 
-	static bool makeDefaultRenderQueue(RenderQueueInfo &);
+	struct PassCreateInfo {
+		Application *app = nullptr;
+		Extent2 extent;
+
+		vk::ImageAttachment *outputAttachment = nullptr;
+		vk::ImageAttachment *depthAttachment = nullptr;
+		vk::ImageAttachment *shadowSdfAttachment = nullptr;
+
+		vk::BufferAttachment *lightsAttachment = nullptr;
+		vk::BufferAttachment *sdfPrimitivesAttachment = nullptr;
+	};
+
+	static bool makeDefaultRenderQueue(Builder &, RenderQueueInfo &);
+
+	static void makeDefaultPass(Builder &builder, const PassCreateInfo &info);
 
 	virtual ~MaterialShadowPass() { }
 
-	virtual bool init(StringView, RenderOrdering, size_t subpassCount = 1) override;
+	virtual bool init(StringView, RenderOrdering);
 
 	const ShadowLightDataAttachment *getShadowData() const { return _shadowData; }
 	const ShadowVertexAttachment *getShadowVertexBuffer() const { return _shadowVertexBuffer; }
-	const ShadowTrianglesAttachment *getShadowTriangles() const { return _shadowTriangles; }
+	const ShadowPrimitivesAttachment *getShadowTriangles() const { return _shadowTriangles; }
 	const ShadowSdfImageAttachment *getSdf() const { return _sdf; }
 
 	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
@@ -64,9 +84,11 @@ protected:
 	// shadows
 	const ShadowLightDataAttachment *_shadowData = nullptr;
 	const ShadowVertexAttachment *_shadowVertexBuffer = nullptr;
-	const ShadowTrianglesAttachment *_shadowTriangles = nullptr;
+	const ShadowPrimitivesAttachment *_shadowTriangles = nullptr;
 	const ShadowSdfImageAttachment *_sdf = nullptr;
 };
+
+SP_DEFINE_ENUM_AS_MASK(MaterialShadowPass::QueueFlags)
 
 class MaterialShadowPassHandle : public MaterialVertexPassHandle {
 public:
@@ -81,13 +103,31 @@ protected:
 	// shadows
 	const ShadowLightDataAttachmentHandle *_shadowData = nullptr;
 	const ShadowVertexAttachmentHandle *_shadowVertexBuffer = nullptr;
-	const ShadowTrianglesAttachmentHandle *_shadowTriangles = nullptr;
+	const ShadowPrimitivesAttachmentHandle *_shadowTriangles = nullptr;
 	const ShadowSdfImageAttachmentHandle *_sdfImage = nullptr;
 };
 
 class MaterialShadowComputePass : public QueuePass {
 public:
 	using AttachmentHandle = renderqueue::AttachmentHandle;
+	using Builder = renderqueue::Queue::Builder;
+
+	static constexpr StringView SdfTrianglesComp = "SdfTrianglesComp";
+	static constexpr StringView SdfCirclesComp = "SdfCirclesComp";
+	static constexpr StringView SdfRectsComp = "SdfRectsComp";
+	static constexpr StringView SdfRoundedRectsComp = "SdfRoundedRectsComp";
+	static constexpr StringView SdfPolygonsComp = "SdfPolygonsComp";
+	static constexpr StringView SdfImageComp = "SdfImageComp";
+
+	struct PassData {
+		MaterialShadowComputePass *pass = nullptr;
+		ShadowLightDataAttachment *lightData = nullptr;
+		ShadowVertexAttachment *vertexes = nullptr;
+		ShadowPrimitivesAttachment *primitives = nullptr;
+		ShadowSdfImageAttachment *image = nullptr;
+	};
+
+	static PassData makeDefaultPass(Builder &builder, const Extent2 &extent);
 
 	virtual ~MaterialShadowComputePass() { }
 
@@ -95,7 +135,7 @@ public:
 
 	const ShadowLightDataAttachment *getLights() const { return _lights; }
 	const ShadowVertexAttachment *getVertexes() const { return _vertexes; }
-	const ShadowTrianglesAttachment *getTriangles() const { return _triangles; }
+	const ShadowPrimitivesAttachment *getTriangles() const { return _triangles; }
 	const ShadowSdfImageAttachment *getSdf() const { return _sdf; }
 
 	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
@@ -107,7 +147,7 @@ protected:
 
 	const ShadowLightDataAttachment *_lights = nullptr;
 	const ShadowVertexAttachment *_vertexes = nullptr;
-	const ShadowTrianglesAttachment *_triangles = nullptr;
+	const ShadowPrimitivesAttachment *_triangles = nullptr;
 	const ShadowSdfImageAttachment *_sdf = nullptr;
 };
 
@@ -123,7 +163,7 @@ protected:
 
 	const ShadowLightDataAttachmentHandle *_lightsBuffer = nullptr;
 	const ShadowVertexAttachmentHandle *_vertexBuffer = nullptr;
-	const ShadowTrianglesAttachmentHandle *_trianglesBuffer = nullptr;
+	const ShadowPrimitivesAttachmentHandle *_trianglesBuffer = nullptr;
 	const ShadowSdfImageAttachmentHandle *_sdfImage = nullptr;
 
 	uint32_t _gridCellSize = 64;

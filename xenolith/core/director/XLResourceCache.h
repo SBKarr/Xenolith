@@ -24,109 +24,12 @@
 #define XENOLITH_CORE_DIRECTOR_XLRESOURCECACHE_H_
 
 #include "XLDefine.h"
-#include "XLRenderQueueResource.h"
 #include "XLGlMaterial.h"
+#include "XLTexture.h"
+#include "XLMeshIndex.h"
+#include "XLTemporaryResource.h"
 
 namespace stappler::xenolith {
-
-class Scene;
-class TemporaryResource;
-
-enum class TemporaryResourceFlags {
-	None = 0,
-	Loaded = 1 << 0,
-	RemoveOnClear = 1 << 1,
-};
-
-SP_DEFINE_ENUM_AS_MASK(TemporaryResourceFlags)
-
-class Texture : public NamedRef {
-public:
-	virtual ~Texture();
-
-	bool init(const gl::ImageData *);
-	bool init(const gl::ImageData *, const Rc<renderqueue::Resource> &);
-	bool init(const gl::ImageData *, const Rc<TemporaryResource> &);
-	bool init(const Rc<gl::DynamicImage> &);
-
-	// invalidate texture from temporary resource
-	void invalidate();
-
-	virtual StringView getName() const;
-	gl::MaterialImage getMaterialImage() const;
-
-	uint64_t getIndex() const;
-
-	bool hasAlpha() const;
-
-	Extent3 getExtent() const;
-
-	bool isLoaded() const;
-
-	void onEnter(Scene *);
-	void onExit(Scene *);
-
-	const gl::ImageData *getImageData() const { return _data; }
-	Rc<TemporaryResource> getTemporary() const { return _temporary; }
-
-protected:
-	const gl::ImageData *_data = nullptr;
-	Rc<renderqueue::Resource> _resource;
-	Rc<gl::DynamicImage> _dynamic;
-	Rc<TemporaryResource> _temporary;
-};
-
-class TemporaryResource : public Ref {
-public:
-	static EventHeader onLoaded; // bool - true если ресурс загружен, false если выгружен
-
-	virtual ~TemporaryResource();
-
-	bool init(Rc<renderqueue::Resource> &&, TimeInterval timeout, TemporaryResourceFlags flags);
-	void invalidate();
-
-	Rc<Texture> acquireTexture(StringView);
-
-	void setLoaded(bool);
-	void setRequested(bool);
-	void setTimeout(TimeInterval);
-
-	// Загружает ресурс в память, вызывает функцию по завершению со значением true
-	// Если ресурс уже загружен, вызывает функцию немедленно со значением false
-	// Возвращает true если загрузка начата и false есть ресурс уже загружен
-	bool load(Ref *, Function<void(bool)> &&);
-
-	void onEnter(Scene *, Texture *);
-	void onExit(Scene *, Texture *);
-
-	bool clear();
-
-	StringView getName() const;
-
-	bool isRequested() const { return _requested; }
-	bool isLoaded() const { return _loaded; }
-
-	Time getAccessTime() const { return _atime; }
-	TimeInterval getTimeout() const { return _timeout; }
-	size_t getUsersCount() const { return _users; }
-
-	const Rc<renderqueue::Resource> &getResource() const { return _resource; }
-
-	bool isDeprecated(const UpdateTime &) const;
-
-protected:
-	bool _requested = false;
-	bool _loaded = false;
-	bool _removeOnClear = false;
-	size_t _users = 0;
-	uint64_t _atime;
-	TimeInterval _timeout;
-	String _name;
-	Rc<renderqueue::Resource> _resource;
-	Map<const gl::ImageData *, Rc<Texture>> _textures;
-	Set<Rc<Scene>> _scenes;
-	Vector<Pair<Rc<Ref>, Function<void(bool)>>> _callbacks;
-};
 
 class ResourceCache : public Ref {
 public:
@@ -144,6 +47,7 @@ public:
 	void removeResource(StringView);
 
 	Rc<Texture> acquireTexture(StringView) const;
+	Rc<MeshIndex> acquireMeshIndex(StringView) const;
 
 	const gl::ImageData *getEmptyImage() const;
 	const gl::ImageData *getSolidImage() const;

@@ -22,70 +22,96 @@
 
 #include "XLVkMaterialShadowPass.h"
 #include "XLDefaultShaders.h"
-#include "XLVkMaterialRenderPass.h"
 
 namespace stappler::xenolith::vk {
 
-bool MaterialShadowPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
+bool MaterialShadowPass::makeDefaultRenderQueue(Builder &builder, RenderQueueInfo &info) {
 	using namespace renderqueue;
 
-	auto &builder = *info.builder;
+	// swapchain output
+	auto out = Rc<vk::ImageAttachment>::create("Output",
+		gl::ImageInfo(
+			info.extent,
+			gl::ForceImageUsage(gl::ImageUsage::ColorAttachment),
+			platform::graphic::getCommonFormat()),
+		ImageAttachment::AttachmentInfo{
+			.initialLayout = AttachmentLayout::Undefined,
+			.finalLayout = AttachmentLayout::PresentSrc,
+			.clearOnLoad = true,
+			.clearColor = Color4F(1.0f, 1.0f, 1.0f, 1.0f) // Color4F::WHITE;
+	});
+
+	// depth buffer - temporary/transient
+	auto depth = Rc<vk::ImageAttachment>::create("CommonDepth",
+		gl::ImageInfo(
+			info.extent,
+			gl::ForceImageUsage(gl::ImageUsage::DepthStencilAttachment),
+			MaterialVertexPass::selectDepthFormat(info.app->getGlLoop()->getSupportedDepthStencilFormat())),
+		ImageAttachment::AttachmentInfo{
+			.initialLayout = AttachmentLayout::Undefined,
+			.finalLayout = AttachmentLayout::DepthStencilAttachmentOptimal,
+			.clearOnLoad = true,
+			.clearColor = Color4F::WHITE
+	});
+
+	auto computePassData = MaterialShadowComputePass::makeDefaultPass(builder, info.extent);
+
+	if ((info.flags & QueueFlags::Render3D) != QueueFlags::None) {
+
+	}
+
+	makeDefaultPass(builder, PassCreateInfo{
+		info.app, info.extent,
+		out, depth, computePassData.image,
+		computePassData.lightData, computePassData.primitives
+	});
+
+	builder.addOutput(out);
+
+	// uncomment to capture shadow image
+	//builder.addOutput(shadowImage);
+
+	// define internal resources (images and buffers)
+	gl::Resource::Builder resourceBuilder("LoaderResources");
+	if (info.resourceCallback) {
+		info.resourceCallback(resourceBuilder);
+	}
+
+	builder.setInternalResource(Rc<gl::Resource>::create(move(resourceBuilder)));
+
+	return true;
+}
+
+void MaterialShadowPass::makeDefaultPass(Builder &builder, const PassCreateInfo &info) {
+	using namespace renderqueue;
+
+	auto shadow = Rc<vk::ImageAttachment>::create("Shadow",
+		gl::ImageInfo(
+			info.extent,
+			gl::ForceImageUsage(gl::ImageUsage::ColorAttachment | gl::ImageUsage::InputAttachment),
+			gl::ImageFormat::R16_SFLOAT),
+		ImageAttachment::AttachmentInfo{
+			.initialLayout = AttachmentLayout::Undefined,
+			.finalLayout = AttachmentLayout::ShaderReadOnlyOptimal,
+			.clearOnLoad = true,
+			.clearColor = Color4F(0.0f, 0.0f, 0.0f, 0.0f) // Color4F::BLACK;
+	});
 
 	// load shaders by ref - do not copy data into engine
-	auto materialFrag = builder.addProgramByRef("Loader_MaterialVert", xenolith::shaders::MaterialVert);
-	auto materialVert = builder.addProgramByRef("Loader_MaterialFrag", xenolith::shaders::MaterialFrag);
-
-	auto computePass = Rc<vk::MaterialShadowComputePass>::create("ShadowPass", RenderOrdering(0));
-	builder.addRenderPass(computePass);
-
-	builder.addComputePipeline(computePass, ShadowPass::SdfTrianglesComp,
-			builder.addProgramByRef("ShadowPass_SdfTrianglesComp", xenolith::shaders::SdfTrianglesComp));
-
-	builder.addComputePipeline(computePass, ShadowPass::SdfCirclesComp,
-			builder.addProgramByRef("ShadowPass_SdfCirclesComp", xenolith::shaders::SdfCirclesComp));
-
-	builder.addComputePipeline(computePass, ShadowPass::SdfRectsComp,
-			builder.addProgramByRef("ShadowPass_SdfRectsComp", xenolith::shaders::SdfRectsComp));
-
-	builder.addComputePipeline(computePass, ShadowPass::SdfRoundedRectsComp,
-			builder.addProgramByRef("ShadowPass_SdfRoundedRectsComp", xenolith::shaders::SdfRoundedRectsComp));
-
-	builder.addComputePipeline(computePass, ShadowPass::SdfPolygonsComp,
-			builder.addProgramByRef("ShadowPass_SdfPolygonsComp", xenolith::shaders::SdfPolygonsComp));
-
-	builder.addComputePipeline(computePass, ShadowPass::SdfImageComp,
-			builder.addProgramByRef("ShadowPass_SdfImageComp", xenolith::shaders::SdfImageComp));
-
-	auto shadowDataInput = Rc<ShadowLightDataAttachment>::create("ShadowDataAttachment");
-	auto shadowVertexInput = Rc<ShadowVertexAttachment>::create("ShadowVertexAttachment");
-	auto shadowTriangles = Rc<ShadowTrianglesAttachment>::create("ShadowTrianglesAttachment");
-	auto shadowImage = Rc<ShadowSdfImageAttachment>::create("ShadowImage", info.extent);
-
-	builder.addPassInput(computePass, 0, shadowDataInput, AttachmentDependencyInfo());
-	builder.addPassInput(computePass, 0, shadowVertexInput, AttachmentDependencyInfo());
-	builder.addPassOutput(computePass, 0, shadowTriangles, AttachmentDependencyInfo{
-			PipelineStage::ComputeShader, AccessType::ShaderWrite,
-			PipelineStage::ComputeShader, AccessType::ShaderWrite,
-			FrameRenderPassState::Submitted});
-	builder.addPassInput(computePass, 0, shadowImage, AttachmentDependencyInfo{
-			PipelineStage::ComputeShader, AccessType::ShaderWrite,
-			PipelineStage::ComputeShader, AccessType::ShaderWrite,
-			FrameRenderPassState::Submitted}, DescriptorType::StorageImage, AttachmentLayout::General);
-
-	// define global input-output
-	builder.addInput(shadowDataInput);
-	builder.addInput(shadowVertexInput);
-	builder.addInput(shadowImage);
+	auto materialVert = builder.addProgramByRef("Loader_MaterialVert", xenolith::shaders::MaterialVert);
+	auto materialFrag = builder.addProgramByRef("Loader_MaterialFrag", xenolith::shaders::MaterialFrag);
 
 	// render-to-swapchain RenderPass
-	auto materialPass = Rc<vk::MaterialShadowPass>::create("MaterialSwapchainPass", RenderOrderingHighest, 2);
+	auto materialPass = Rc<vk::MaterialShadowPass>::create("MaterialSwapchainPass", RenderOrderingHighest);
 	builder.addRenderPass(materialPass);
 	builder.addSubpassDependency(materialPass, 0, PipelineStage::LateFragmentTest, AccessType::DepthStencilAttachmentWrite,
 			1, PipelineStage::FragmentShader, AccessType::ShaderRead, true);
 
 	auto shaderSpecInfo = Vector<SpecializationInfo>({
 		// no specialization required for vertex shader
-		materialVert,
+		SpecializationInfo(materialVert, Vector<PredefinedConstant>{
+			PredefinedConstant::BuffersArraySize
+		}),
 		// specialization for fragment shader - use platform-dependent array sizes
 		SpecializationInfo(materialFrag, Vector<PredefinedConstant>{
 			PredefinedConstant::SamplersArraySize,
@@ -112,44 +138,6 @@ bool MaterialShadowPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
 		LineWidth(1.0f)
 	));
 
-	// depth buffer - temporary/transient
-	auto depth = Rc<vk::ImageAttachment>::create("CommonDepth",
-		gl::ImageInfo(
-			info.extent,
-			gl::ForceImageUsage(gl::ImageUsage::DepthStencilAttachment),
-			MaterialPass::selectDepthFormat(info.app->getGlLoop()->getSupportedDepthStencilFormat())),
-		ImageAttachment::AttachmentInfo{
-			.initialLayout = AttachmentLayout::Undefined,
-			.finalLayout = AttachmentLayout::DepthStencilAttachmentOptimal,
-			.clearOnLoad = true,
-			.clearColor = Color4F::WHITE
-	});
-
-	// swapchain output
-	auto out = Rc<vk::ImageAttachment>::create("Output",
-		gl::ImageInfo(
-			info.extent,
-			gl::ForceImageUsage(gl::ImageUsage::ColorAttachment),
-			platform::graphic::getCommonFormat()),
-		ImageAttachment::AttachmentInfo{
-			.initialLayout = AttachmentLayout::Undefined,
-			.finalLayout = AttachmentLayout::PresentSrc,
-			.clearOnLoad = true,
-			.clearColor = Color4F(1.0f, 1.0f, 1.0f, 1.0f) // Color4F::WHITE;
-	});
-
-	auto shadow = Rc<vk::ImageAttachment>::create("Shadow",
-		gl::ImageInfo(
-			info.extent,
-			gl::ForceImageUsage(gl::ImageUsage::ColorAttachment | gl::ImageUsage::InputAttachment),
-			gl::ImageFormat::R16_SFLOAT),
-		ImageAttachment::AttachmentInfo{
-			.initialLayout = AttachmentLayout::Undefined,
-			.finalLayout = AttachmentLayout::ShaderReadOnlyOptimal,
-			.clearOnLoad = true,
-			.clearColor = Color4F(0.0f, 0.0f, 0.0f, 0.0f) // Color4F::BLACK;
-	});
-
 	// Material input attachment - per-scene list of materials
 	auto &cache = info.app->getResourceCache();
 	auto materialInput = Rc<vk::MaterialAttachment>::create("MaterialInput",
@@ -173,10 +161,10 @@ bool MaterialShadowPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
 	// define pass input-output
 	builder.addPassInput(materialPass, 0, vertexInput, AttachmentDependencyInfo()); // 0
 	builder.addPassInput(materialPass, 0, materialInput, AttachmentDependencyInfo()); // 1
-	builder.addPassInput(materialPass, 0, shadowDataInput, AttachmentDependencyInfo()); // 2
-	builder.addPassInput(materialPass, 0, shadowTriangles, AttachmentDependencyInfo()); // 3
+	builder.addPassInput(materialPass, 0, info.lightsAttachment, AttachmentDependencyInfo()); // 2
+	builder.addPassInput(materialPass, 0, info.sdfPrimitivesAttachment, AttachmentDependencyInfo()); // 3
 
-	builder.addPassOutput(materialPass, 0, out, AttachmentDependencyInfo{
+	builder.addPassOutput(materialPass, 0, info.outputAttachment, AttachmentDependencyInfo{
 		PipelineStage::ColorAttachmentOutput, AccessType::ColorAttachmentWrite,
 		PipelineStage::ColorAttachmentOutput, AccessType::ColorAttachmentWrite,
 		FrameRenderPassState::Submitted,
@@ -188,13 +176,13 @@ bool MaterialShadowPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
 		FrameRenderPassState::Submitted,
 	}, DescriptorType::Attachment, AttachmentLayout::Ignored);
 
-	builder.addPassDepthStencil(materialPass, 0, depth, AttachmentDependencyInfo{
+	builder.addPassDepthStencil(materialPass, 0, info.depthAttachment, AttachmentDependencyInfo{
 		PipelineStage::EarlyFragmentTest, AccessType::DepthStencilAttachmentRead | AccessType::DepthStencilAttachmentWrite,
 		PipelineStage::LateFragmentTest, AccessType::DepthStencilAttachmentRead | AccessType::DepthStencilAttachmentWrite,
 		FrameRenderPassState::Submitted,
 	});
 
-	builder.addPassOutput(materialPass, 1, out, AttachmentDependencyInfo{
+	builder.addPassOutput(materialPass, 1, info.outputAttachment, AttachmentDependencyInfo{
 		PipelineStage::ColorAttachmentOutput, AccessType::ColorAttachmentWrite,
 		PipelineStage::ColorAttachmentOutput, AccessType::ColorAttachmentWrite,
 		FrameRenderPassState::Submitted,
@@ -206,7 +194,7 @@ bool MaterialShadowPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
 		FrameRenderPassState::Submitted,
 	},  DescriptorType::InputAttachment, AttachmentLayout::ShaderReadOnlyOptimal);
 
-	builder.addPassInput(materialPass, 1, shadowImage, AttachmentDependencyInfo{ // 5
+	builder.addPassInput(materialPass, 1, info.shadowSdfAttachment, AttachmentDependencyInfo{ // 5
 		PipelineStage::FragmentShader, AccessType::ShaderRead,
 		PipelineStage::FragmentShader, AccessType::ShaderRead,
 	FrameRenderPassState::Submitted}, DescriptorType::SampledImage, AttachmentLayout::ShaderReadOnlyOptimal);
@@ -228,22 +216,10 @@ bool MaterialShadowPass::makeDefaultRenderQueue(RenderQueueInfo &info) {
 	}));
 
 	builder.addInput(vertexInput);
-	builder.addOutput(out);
-	//builder.addOutput(shadowImage);
-
-	// define internal resources (images and buffers)
-	gl::Resource::Builder resourceBuilder("LoaderResources");
-	if (info.resourceCallback) {
-		info.resourceCallback(resourceBuilder);
-	}
-
-	info.builder->setInternalResource(Rc<gl::Resource>::create(move(resourceBuilder)));
-
-	return true;
 }
 
-bool MaterialShadowPass::init(StringView name, RenderOrdering ord, size_t subpassCount) {
-	return QueuePass::init(name, gl::RenderPassType::Graphics, ord, subpassCount);
+bool MaterialShadowPass::init(StringView name, RenderOrdering ord) {
+	return QueuePass::init(name, gl::RenderPassType::Graphics, ord, 2);
 }
 
 auto MaterialShadowPass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle> {
@@ -257,7 +233,7 @@ void MaterialShadowPass::prepare(gl::Device &dev) {
 			_shadowData = a;
 		} else if (auto a = dynamic_cast<ShadowVertexAttachment *>(it->getAttachment())) {
 			_shadowVertexBuffer = a;
-		} else if (auto a = dynamic_cast<ShadowTrianglesAttachment *>(it->getAttachment())) {
+		} else if (auto a = dynamic_cast<ShadowPrimitivesAttachment *>(it->getAttachment())) {
 			_shadowTriangles = a;
 		} else if (auto a = dynamic_cast<ShadowSdfImageAttachment *>(it->getAttachment())) {
 			_sdf = a;
@@ -277,7 +253,7 @@ bool MaterialShadowPassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb)
 	}
 
 	if (auto shadowTriangles = q.getAttachment(pass->getShadowTriangles())) {
-		_shadowTriangles = (const ShadowTrianglesAttachmentHandle *)shadowTriangles->handle.get();
+		_shadowTriangles = (const ShadowPrimitivesAttachmentHandle *)shadowTriangles->handle.get();
 	}
 
 	if (auto sdfImage = q.getAttachment(pass->getSdf())) {
@@ -387,6 +363,62 @@ void MaterialShadowPassHandle::prepareMaterialCommands(gl::MaterialSet * materia
 	}
 }
 
+MaterialShadowComputePass::PassData MaterialShadowComputePass::makeDefaultPass(Builder &builder, const Extent2 &extent) {
+	PassData data;
+
+	using namespace renderqueue;
+
+	auto computePass = Rc<vk::MaterialShadowComputePass>::create("ShadowPass", RenderOrdering(0));
+	builder.addRenderPass(computePass);
+	data.pass = computePass;
+
+	builder.addComputePipeline(computePass, MaterialShadowComputePass::SdfTrianglesComp,
+			builder.addProgramByRef("ShadowPass_SdfTrianglesComp", xenolith::shaders::SdfTrianglesComp));
+
+	builder.addComputePipeline(computePass, MaterialShadowComputePass::SdfCirclesComp,
+			builder.addProgramByRef("ShadowPass_SdfCirclesComp", xenolith::shaders::SdfCirclesComp));
+
+	builder.addComputePipeline(computePass, MaterialShadowComputePass::SdfRectsComp,
+			builder.addProgramByRef("ShadowPass_SdfRectsComp", xenolith::shaders::SdfRectsComp));
+
+	builder.addComputePipeline(computePass, MaterialShadowComputePass::SdfRoundedRectsComp,
+			builder.addProgramByRef("ShadowPass_SdfRoundedRectsComp", xenolith::shaders::SdfRoundedRectsComp));
+
+	builder.addComputePipeline(computePass, MaterialShadowComputePass::SdfPolygonsComp,
+			builder.addProgramByRef("ShadowPass_SdfPolygonsComp", xenolith::shaders::SdfPolygonsComp));
+
+	builder.addComputePipeline(computePass, MaterialShadowComputePass::SdfImageComp,
+			builder.addProgramByRef("ShadowPass_SdfImageComp", xenolith::shaders::SdfImageComp));
+
+	auto shadowDataInput = Rc<ShadowLightDataAttachment>::create("ShadowDataAttachment");
+	auto shadowVertexInput = Rc<ShadowVertexAttachment>::create("ShadowVertexAttachment");
+	auto shadowPrimitives = Rc<ShadowPrimitivesAttachment>::create("ShadowTrianglesAttachment");
+	auto shadowImage = Rc<ShadowSdfImageAttachment>::create("ShadowImage", extent);
+
+	builder.addPassInput(computePass, 0, shadowDataInput, AttachmentDependencyInfo());
+	builder.addPassInput(computePass, 0, shadowVertexInput, AttachmentDependencyInfo());
+	builder.addPassOutput(computePass, 0, shadowPrimitives, AttachmentDependencyInfo{
+			PipelineStage::ComputeShader, AccessType::ShaderWrite,
+			PipelineStage::ComputeShader, AccessType::ShaderWrite,
+			FrameRenderPassState::Submitted});
+	builder.addPassInput(computePass, 0, shadowImage, AttachmentDependencyInfo{
+			PipelineStage::ComputeShader, AccessType::ShaderWrite,
+			PipelineStage::ComputeShader, AccessType::ShaderWrite,
+			FrameRenderPassState::Submitted}, DescriptorType::StorageImage, AttachmentLayout::General);
+
+	data.lightData = shadowDataInput;
+	data.vertexes = shadowVertexInput;
+	data.primitives = shadowPrimitives;
+	data.image = shadowImage;
+
+	// define global input-output
+	builder.addInput(shadowDataInput);
+	builder.addInput(shadowVertexInput);
+	builder.addInput(shadowImage);
+
+	return data;
+}
+
 bool MaterialShadowComputePass::init(StringView name, RenderOrdering ord) {
 	return QueuePass::init(name, gl::RenderPassType::Compute, ord, 1);
 }
@@ -400,7 +432,7 @@ void MaterialShadowComputePass::prepare(gl::Device &dev) {
 	for (auto &it : _data->passDescriptors) {
 		if (auto a = dynamic_cast<ShadowVertexAttachment *>(it->getAttachment())) {
 			_vertexes = a;
-		} else if (auto a = dynamic_cast<ShadowTrianglesAttachment *>(it->getAttachment())) {
+		} else if (auto a = dynamic_cast<ShadowPrimitivesAttachment *>(it->getAttachment())) {
 			_triangles = a;
 		} else if (auto a = dynamic_cast<ShadowLightDataAttachment *>(it->getAttachment())) {
 			_lights = a;
@@ -413,7 +445,7 @@ void MaterialShadowComputePass::prepare(gl::Device &dev) {
 bool MaterialShadowComputePassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
 	auto pass = (MaterialShadowComputePass *)_renderPass.get();
 
-	ShadowTrianglesAttachmentHandle *trianglesHandle = nullptr;
+	ShadowPrimitivesAttachmentHandle *trianglesHandle = nullptr;
 	ShadowLightDataAttachmentHandle *lightsHandle = nullptr;
 
 	if (auto lightsBuffer = q.getAttachment(pass->getLights())) {
@@ -421,7 +453,7 @@ bool MaterialShadowComputePassHandle::prepare(FrameQueue &q, Function<void(bool)
 	}
 
 	if (auto trianglesBuffer = q.getAttachment(pass->getTriangles())) {
-		_trianglesBuffer = trianglesHandle = (ShadowTrianglesAttachmentHandle *)trianglesBuffer->handle.get();
+		_trianglesBuffer = trianglesHandle = (ShadowPrimitivesAttachmentHandle *)trianglesBuffer->handle.get();
 	}
 
 	if (auto vertexBuffer = q.getAttachment(pass->getVertexes())) {
@@ -489,31 +521,31 @@ void MaterialShadowComputePassHandle::writeShadowCommands(RenderPassImpl *pass, 
 	buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, makeSpanView(&bufferBarrier, 1));
 
 	if (_vertexBuffer->getTrianglesCount()) {
-		pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(StringView(ShadowPass::SdfTrianglesComp))->pipeline.get();
+		pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(MaterialShadowComputePass::SdfTrianglesComp)->pipeline.get();
 		buf.cmdBindPipeline(pipeline);
 		buf.cmdDispatch((_vertexBuffer->getTrianglesCount() - 1) / pipeline->getLocalX() + 1);
 	}
 
 	if (_vertexBuffer->getCirclesCount()) {
-		pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(StringView(ShadowPass::SdfCirclesComp))->pipeline.get();
+		pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(MaterialShadowComputePass::SdfCirclesComp)->pipeline.get();
 		buf.cmdBindPipeline(pipeline);
 		buf.cmdDispatch((_vertexBuffer->getCirclesCount() - 1) / pipeline->getLocalX() + 1);
 	}
 
 	if (_vertexBuffer->getRectsCount()) {
-		pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(StringView(ShadowPass::SdfRectsComp))->pipeline.get();
+		pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(MaterialShadowComputePass::SdfRectsComp)->pipeline.get();
 		buf.cmdBindPipeline(pipeline);
 		buf.cmdDispatch((_vertexBuffer->getRectsCount() - 1) / pipeline->getLocalX() + 1);
 	}
 
 	if (_vertexBuffer->getRoundedRectsCount()) {
-		pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(StringView(ShadowPass::SdfRoundedRectsComp))->pipeline.get();
+		pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(MaterialShadowComputePass::SdfRoundedRectsComp)->pipeline.get();
 		buf.cmdBindPipeline(pipeline);
 		buf.cmdDispatch((_vertexBuffer->getRoundedRectsCount() - 1) / pipeline->getLocalX() + 1);
 	}
 
 	if (_vertexBuffer->getPolygonsCount()) {
-		pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(StringView(ShadowPass::SdfPolygonsComp))->pipeline.get();
+		pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(MaterialShadowComputePass::SdfPolygonsComp)->pipeline.get();
 		buf.cmdBindPipeline(pipeline);
 		buf.cmdDispatch((_vertexBuffer->getPolygonsCount() - 1) / pipeline->getLocalX() + 1);
 	}
@@ -536,7 +568,7 @@ void MaterialShadowComputePassHandle::writeShadowCommands(RenderPassImpl *pass, 
 	buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
 			bufferBarriers, inImageBarriers);
 
-	pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(StringView(ShadowPass::SdfImageComp))->pipeline.get();
+	pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(MaterialShadowComputePass::SdfImageComp)->pipeline.get();
 	buf.cmdBindPipeline(pipeline);
 
 	buf.cmdDispatch(

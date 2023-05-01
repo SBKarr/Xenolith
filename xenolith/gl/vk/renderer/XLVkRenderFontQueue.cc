@@ -64,7 +64,7 @@ public:
 	const Rc<gl::RenderFontInput> &getInput() const { return _input; }
 	const Rc<DeviceBuffer> &getTmpBuffer() const { return _frontBuffer; }
 	const Rc<DeviceBuffer> &getPersistentTargetBuffer() const { return _persistentTargetBuffer; }
-	const Rc<gl::ImageAtlas> &getAtlas() const { return _atlas; }
+	const Rc<gl::DataAtlas> &getAtlas() const { return _atlas; }
 	const Rc<RenderFontPersistentBufferUserdata> &getUserdata() const { return _userdata; }
 	const Vector<VkBufferImageCopy> &getCopyFromTmpBufferData() const { return _copyFromTmpBufferData; }
 	const Map<DeviceBuffer *, Vector<VkBufferImageCopy>> &getCopyFromPersistentBufferData() const { return _copyFromPersistentBufferData; }
@@ -79,7 +79,7 @@ protected:
 
 	bool addPersistentCopy(uint16_t fontId, char16_t c);
 	void pushCopyTexture(uint32_t reqIdx, const font::CharTexture &texData);
-	void pushAtlasTexture(gl::ImageAtlas *, VkBufferImageCopy &);
+	void pushAtlasTexture(gl::DataAtlas *, VkBufferImageCopy &);
 
 	Rc<gl::RenderFontInput> _input;
 	Rc<RenderFontPersistentBufferUserdata> _userdata;
@@ -94,7 +94,7 @@ protected:
 	std::atomic<uint32_t> _textureTargetOffset = 0;
 	Rc<DeviceBuffer> _frontBuffer;
 	Rc<DeviceBuffer> _persistentTargetBuffer;
-	Rc<gl::ImageAtlas> _atlas;
+	Rc<gl::DataAtlas> _atlas;
 	Vector<VkBufferImageCopy> _copyFromTmpBufferData;
 	Map<DeviceBuffer *, Vector<VkBufferImageCopy>> _copyFromPersistentBufferData;
 	Vector<VkBufferCopy> _copyToPersistentBufferData;
@@ -145,6 +145,8 @@ protected:
 	RenderFontAttachmentHandle *_fontAttachment = nullptr;
 	QueueOperations _queueOps = QueueOperations::None;
 	Rc<Image> _targetImage;
+	Rc<Buffer> _targetAtlasIndex;
+	Rc<Buffer> _targetAtlasData;
 	Rc<DeviceBuffer> _outBuffer;
 };
 
@@ -392,7 +394,8 @@ void RenderFontAttachmentHandle::writeAtlasData(FrameHandle &handle, bool underl
 
 	_imageExtent = RenderFontAttachmentHandle_buildTextureData(commands);
 
-	auto atlas = Rc<gl::ImageAtlas>::create(_copyFromTmpBufferData.size() * 4, sizeof(font::FontAtlasValue), _imageExtent);
+	auto atlas = Rc<gl::DataAtlas>::create(gl::DataAtlas::ImageAtlas,
+			_copyFromTmpBufferData.size() * 4, sizeof(font::FontAtlasValue), _imageExtent);
 
 	for (auto &c : commands) {
 		for (auto &it : c) {
@@ -400,7 +403,8 @@ void RenderFontAttachmentHandle::writeAtlasData(FrameHandle &handle, bool underl
 		}
 	}
 
-	_atlas = atlas;
+	atlas->compile();
+	_atlas = move(atlas);
 
 	memory::pool::pop();
 	memory::pool::destroy(pool);
@@ -494,7 +498,7 @@ void RenderFontAttachmentHandle::pushCopyTexture(uint32_t reqIdx, const font::Ch
 	}
 }
 
-void RenderFontAttachmentHandle::pushAtlasTexture(gl::ImageAtlas *atlas, VkBufferImageCopy &d) {
+void RenderFontAttachmentHandle::pushAtlasTexture(gl::DataAtlas *atlas, VkBufferImageCopy &d) {
 	font::FontAtlasValue data[4];
 
 	auto texOffset = d.bufferRowLength;
@@ -509,16 +513,16 @@ void RenderFontAttachmentHandle::pushAtlasTexture(gl::ImageAtlas *atlas, VkBuffe
 	const float w = float(d.imageExtent.width);
 	const float h = float(d.imageExtent.height);
 
-	data[0].pos = Vec2(tex.x, tex.y);
+	data[0].pos = Vec2(tex.x, -tex.y);
 	data[0].tex = Vec2(x / _imageExtent.width, y / _imageExtent.height);
 
-	data[1].pos = Vec2(tex.x, tex.y + tex.height);
+	data[1].pos = Vec2(tex.x, -tex.y - tex.height);
 	data[1].tex = Vec2(x / _imageExtent.width, (y + h) / _imageExtent.height);
 
-	data[2].pos = Vec2(tex.x + tex.width, tex.y + tex.height);
+	data[2].pos = Vec2(tex.x + tex.width, -tex.y - tex.height);
 	data[2].tex = Vec2((x + w) / _imageExtent.width, (y + h) / _imageExtent.height);
 
-	data[3].pos = Vec2(tex.x + tex.width, tex.y);
+	data[3].pos = Vec2(tex.x + tex.width, -tex.y);
 	data[3].tex = Vec2((x + w) / _imageExtent.width, y / _imageExtent.height);
 
 	atlas->addObject(font::CharLayout::getObjectId(id, font::FontAnchor::BottomLeft), &data[0]);
@@ -612,15 +616,46 @@ Vector<const CommandBuffer *> RenderFontRenderPassHandle::doPrepareCommands(Fram
 		return Vector<const CommandBuffer *>();
 	}
 
+	auto atlas = _fontAttachment->getAtlas();
+
 	gl::ImageInfo info = masterImage->getInfo();
 
 	info.format = gl::ImageFormat::R8_UNORM;
 	info.extent = _fontAttachment->getImageExtent();
 
-	_targetImage = _device->getAllocator()->spawnPersistent(AllocationUsage::DeviceLocal, info, false, instance->data.image->getIndex());
+	auto allocator = _device->getAllocator();
+
+	if (_device->hasDynamicIndexedBuffers()) {
+		_targetImage = allocator->preallocate(info, false, instance->data.image->getIndex());
+		_targetAtlasIndex = allocator->preallocate(gl::BufferInfo(atlas->getIndexData().size(), gl::BufferUsage::StorageBuffer));
+		_targetAtlasData = allocator->preallocate(gl::BufferInfo(atlas->getData().size(), gl::BufferUsage::StorageBuffer));
+
+		Rc<Buffer> atlasBuffers[] = {
+			_targetAtlasIndex,
+			_targetAtlasData
+		};
+
+		allocator->emplaceObjects(AllocationUsage::DeviceLocal, makeSpanView(&_targetImage, 1), makeSpanView(atlasBuffers, 2));
+	} else {
+		_targetImage = allocator->spawnPersistent(AllocationUsage::DeviceLocal, info, false, instance->data.image->getIndex());
+	}
+
+	auto frame = static_cast<DeviceFrameHandle *>(&handle);
+	auto &memPool = frame->getMemPool(&handle);
+
+	Rc<DeviceBuffer> stageAtlasIndex, stageAtlasData;
+
+	if (_targetAtlasIndex && _targetAtlasData) {
+		stageAtlasIndex = memPool->spawn(AllocationUsage::HostTransitionSource,
+				gl::BufferInfo(atlas->getIndexData().size(), gl::ForceBufferUsage(gl::BufferUsage::TransferSrc)));
+		stageAtlasData = memPool->spawn(AllocationUsage::HostTransitionSource,
+				gl::BufferInfo(atlas->getData().size(), gl::ForceBufferUsage(gl::BufferUsage::TransferSrc)));
+
+		stageAtlasIndex->setData(atlas->getIndexData());
+		stageAtlasData->setData(atlas->getData());
+	}
 
 	auto buf = _pool->recordBuffer(*_device, [&] (CommandBuffer &buf) {
-
 		Vector<BufferMemoryBarrier> persistentBarriers;
 		for (auto &it : copyFromPersistent) {
 			if (auto b = it.first->getPendingBarrier()) {
@@ -652,6 +687,11 @@ Vector<const CommandBuffer *> RenderFontRenderPassHandle::doPrepareCommands(Fram
 				VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
 				QueueFamilyTransfer(), 0, _fontAttachment->getPersistentTargetBuffer()->getReservedSize()
 			));
+		}
+
+		if (_targetAtlasIndex && _targetAtlasData) {
+			buf.cmdCopyBuffer(stageAtlasIndex, _targetAtlasIndex);
+			buf.cmdCopyBuffer(stageAtlasData, _targetAtlasData);
 		}
 
 		auto sourceLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -694,10 +734,6 @@ Vector<const CommandBuffer *> RenderFontRenderPassHandle::doPrepareCommands(Fram
 				sourceLayout, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 				QueueFamilyTransfer{srcQueueFamilyIndex, dstQueueFamilyIndex});
 
-			if (q->index != _pool->getFamilyIdx()) {
-				_targetImage->setPendingBarrier(outputBarrier);
-			}
-
 			VkPipelineStageFlags targetOps = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
 					| VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 
@@ -713,7 +749,31 @@ Vector<const CommandBuffer *> RenderFontRenderPassHandle::doPrepareCommands(Fram
 				break;
 			}
 
-			buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, targetOps, 0, makeSpanView(&outputBarrier, 1));
+			if (q->index != _pool->getFamilyIdx()) {
+				_targetImage->setPendingBarrier(outputBarrier);
+			}
+
+			if (_targetAtlasIndex && _targetAtlasData) {
+				BufferMemoryBarrier outputBufferBarrier[] = {
+					BufferMemoryBarrier(_targetAtlasIndex,
+						VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+						QueueFamilyTransfer{srcQueueFamilyIndex, dstQueueFamilyIndex}, 0, _targetAtlasIndex->getSize()),
+					BufferMemoryBarrier(_targetAtlasData,
+						VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+						QueueFamilyTransfer{srcQueueFamilyIndex, dstQueueFamilyIndex}, 0, _targetAtlasData->getSize()),
+				};
+
+				if (q->index != _pool->getFamilyIdx()) {
+					_targetAtlasIndex->setPendingBarrier(outputBufferBarrier[0]);
+					_targetAtlasData->setPendingBarrier(outputBufferBarrier[1]);
+				}
+
+				buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, targetOps, 0,
+						makeSpanView(outputBufferBarrier, 2), makeSpanView(&outputBarrier, 1));
+			} else {
+				buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, targetOps, 0,
+						makeSpanView(&outputBarrier, 1));
+			}
 		}
 		return true;
 	});
@@ -724,7 +784,14 @@ Vector<const CommandBuffer *> RenderFontRenderPassHandle::doPrepareCommands(Fram
 void RenderFontRenderPassHandle::doSubmitted(FrameHandle &frame, Function<void(bool)> &&func, bool success) {
 	if (success) {
 		auto &input = _fontAttachment->getInput();
-		input->image->updateInstance(*frame.getLoop(), _targetImage, Rc<gl::ImageAtlas>(_fontAttachment->getAtlas()),
+
+		auto atlas = _fontAttachment->getAtlas();
+		if (_device->hasDynamicIndexedBuffers()) {
+			atlas->setIndexBuffer(_targetAtlasIndex);
+			atlas->setDataBuffer(_targetAtlasData);
+		}
+
+		input->image->updateInstance(*frame.getLoop(), _targetImage, move(atlas),
 				Rc<Ref>(_fontAttachment->getUserdata()), frame.getSignalDependencies());
 
 		if (input->output) {

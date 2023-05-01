@@ -69,11 +69,11 @@ public:
 	Builder(StringView);
 	~Builder();
 
-	const gl::BufferData * addBufferByRef(StringView key, gl::BufferInfo &&, BytesView data);
-	const gl::BufferData * addBuffer(StringView key, gl::BufferInfo &&, FilePath data);
-	const gl::BufferData * addBuffer(StringView key, gl::BufferInfo &&, BytesView data);
-	const gl::BufferData * addBuffer(StringView key, gl::BufferInfo &&, size_t,
-			const memory::function<void(uint8_t *, uint64_t, const gl::BufferData::DataCallback &)> &cb);
+	const gl::BufferData * addBufferByRef(StringView key, gl::BufferInfo &&, BytesView data, Rc<gl::DataAtlas> &&atlas = Rc<gl::DataAtlas>());
+	const gl::BufferData * addBuffer(StringView key, gl::BufferInfo &&, FilePath data, Rc<gl::DataAtlas> &&atlas = Rc<gl::DataAtlas>());
+	const gl::BufferData * addBuffer(StringView key, gl::BufferInfo &&, BytesView data, Rc<gl::DataAtlas> &&atlas = Rc<gl::DataAtlas>());
+	const gl::BufferData * addBuffer(StringView key, gl::BufferInfo &&,
+			const memory::function<void(uint8_t *, uint64_t, const gl::BufferData::DataCallback &)> &cb, Rc<gl::DataAtlas> &&atlas = Rc<gl::DataAtlas>());
 
 	const gl::ImageData * addImageByRef(StringView key, gl::ImageInfo &&, BytesView data);
 	const gl::ImageData * addImage(StringView key, gl::ImageInfo &&img, FilePath data);

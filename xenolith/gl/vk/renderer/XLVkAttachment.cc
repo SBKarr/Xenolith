@@ -22,6 +22,7 @@
 
 #include "XLVkAttachment.h"
 #include "XLVkDevice.h"
+#include "XLVkTextureSet.h"
 
 namespace stappler::xenolith::vk {
 
@@ -44,6 +45,85 @@ bool ImageAttachmentHandle::writeDescriptor(const QueuePassHandle &queue, Descri
 
 bool ImageAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &d, uint32_t, bool isExternal) const {
 	return getImage();
+}
+
+MaterialAttachment::~MaterialAttachment() { }
+
+bool MaterialAttachment::init(StringView str, const gl::BufferInfo &info, Vector<Rc<gl::Material>> &&initial) {
+	return gl::MaterialAttachment::init(str, info, [] (uint8_t *target, const gl::Material *material) {
+		auto &images = material->getImages();
+		if (!images.empty()) {
+			gl::glsl::Material material;
+			auto &image = images.front();
+			material.samplerImageIdx = image.descriptor | (image.sampler << 16);
+			material.setIdx = image.set;
+			material.flags = 0;
+			material.atlasIdx = 0;
+			if (image.image->atlas) {
+				if (auto &index = image.image->atlas->getIndexBuffer()) {
+					material.flags |= 1;
+					material.atlasIdx |= index->getDescriptor();
+
+					auto indexSize = image.image->atlas->getIndexData().size() / sizeof(gl::glsl::DataAtlasIndex);
+					auto pow2index = std::countr_zero(indexSize);
+
+					material.flags |= (pow2index << 24);
+				}
+				if (auto &data = image.image->atlas->getDataBuffer()) {
+					material.flags |= 2;
+					material.atlasIdx |= (data->getDescriptor() << 16);
+				}
+			}
+			memcpy(target, &material, sizeof(gl::glsl::Material));
+			return true;
+		}
+		return false;
+	}, sizeof(gl::glsl::Material), gl::MaterialType::Basic2D, move(initial));
+}
+
+auto MaterialAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<AttachmentHandle> {
+	return Rc<MaterialAttachmentHandle>::create(this, handle);
+}
+
+MaterialAttachmentHandle::~MaterialAttachmentHandle() { }
+
+bool MaterialAttachmentHandle::init(const Rc<Attachment> &a, const FrameQueue &handle) {
+	if (BufferAttachmentHandle::init(a, handle)) {
+		return true;
+	}
+	return false;
+}
+
+bool MaterialAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &desc,
+		uint32_t, bool isExternal) const {
+	return _materials && _materials->getGeneration() != ((gl::MaterialAttachmentDescriptor *)desc.descriptor)->getBoundGeneration();
+}
+
+bool MaterialAttachmentHandle::writeDescriptor(const QueuePassHandle &handle, DescriptorBufferInfo &info) {
+	if (!_materials) {
+		return false;
+	}
+
+	auto b = _materials->getBuffer();
+	if (!b) {
+		return false;
+	}
+	info.buffer = ((Buffer *)b.get());
+	info.offset = 0;
+	info.range = info.buffer->getSize();
+	((gl::MaterialAttachmentDescriptor *)info.descriptor->descriptor)->setBoundGeneration(_materials->getGeneration());
+	return true;
+}
+
+const MaterialAttachment *MaterialAttachmentHandle::getMaterialAttachment() const {
+	return (MaterialAttachment *)_attachment.get();
+}
+
+const Rc<gl::MaterialSet> MaterialAttachmentHandle::getSet() const {
+	if (!_materials) {
+		_materials = getMaterialAttachment()->getMaterials();
+	}
+	return _materials;
 }
 
 }

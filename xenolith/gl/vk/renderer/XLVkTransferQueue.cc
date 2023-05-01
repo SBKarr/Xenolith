@@ -190,7 +190,7 @@ bool TransferResource::init(const Rc<Allocator> &alloc, Rc<gl::Resource> &&res, 
 	return true;
 }
 
-bool TransferResource::initialize() {
+bool TransferResource::initialize(AllocationUsage usage) {
 	if (_initialized) {
 		return true;
 	}
@@ -205,6 +205,7 @@ bool TransferResource::initialize() {
 		return false;
 	};
 
+	_targetUsage = usage;
 	_buffers.reserve(_resource->getBuffers().size());
 	_images.reserve(_resource->getImages().size());
 
@@ -250,7 +251,7 @@ bool TransferResource::initialize() {
 		return cleanup("No common memory type for resource found");
 	}
 
-	auto allocMemType = _alloc->findMemoryType(mask, AllocationUsage::DeviceLocal);
+	auto allocMemType = _alloc->findMemoryType(mask, _targetUsage);
 
 	if (!allocMemType) {
 		log::vtext("Vk-Error", "Fail to find memory type for static resource: ", _resource->getName());
@@ -289,7 +290,7 @@ bool TransferResource::initialize() {
 
 	for (auto &it : _buffers) {
 		if (!it.req.requiresDedicated && !it.req.prefersDedicated) {
-			_requiredMemory += math::align<VkDeviceSize>(_requiredMemory,
+			_requiredMemory = math::align<VkDeviceSize>(_requiredMemory,
 					std::max(it.req.requirements.alignment, _nonCoherentAtomSize));
 			it.offset = _requiredMemory;
 			_requiredMemory += it.req.requirements.size;
@@ -394,10 +395,10 @@ bool TransferResource::compile() {
 		Rc<Image> img;
 		if (it.dedicated) {
 			auto dedicated = Rc<DeviceMemory>::create(*_alloc->getDevice(), it.dedicated);
-			img = Rc<Image>::create(*_alloc->getDevice(), it.image, *it.data, move(dedicated), Rc<gl::ImageAtlas>(it.data->atlas));
+			img = Rc<Image>::create(*_alloc->getDevice(), it.image, *it.data, move(dedicated), Rc<gl::DataAtlas>(it.data->atlas));
 			it.dedicated = VK_NULL_HANDLE;
 		} else {
-			img = Rc<Image>::create(*_alloc->getDevice(), it.image, *it.data, Rc<DeviceMemory>(mem), Rc<gl::ImageAtlas>(it.data->atlas));
+			img = Rc<Image>::create(*_alloc->getDevice(), it.image, *it.data, Rc<DeviceMemory>(mem), Rc<gl::DataAtlas>(it.data->atlas));
 		}
 		if (it.barrier) {
 			img->setPendingBarrier(it.barrier.value());
@@ -423,6 +424,9 @@ bool TransferResource::compile() {
 	}
 
 	_memory = VK_NULL_HANDLE;
+
+	_resource->setCompiled(true);
+
 	if (_callback) {
 		_callback(true);
 		_callback = nullptr;
@@ -536,7 +540,7 @@ bool TransferResource::prepareCommands(uint32_t idx, VkCommandBuffer buf,
 				}
 			}
 		} else if (it.targetBuffer) {
-			if (auto q = dev->getQueueFamily(getQueueOperations(it.targetImage->data->type))) {
+			if (auto q = dev->getQueueFamily(getQueueOperations(it.targetBuffer->data->type))) {
 				uint32_t srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 				uint32_t dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
@@ -667,7 +671,7 @@ size_t TransferResource::writeData(uint8_t *mem, BufferAllocInfo &info) {
 		memcpy(mem, info.data->data.data(), size);
 		return size;
 	} else if (info.data->callback) {
-		size_t size = 0;
+		size_t size = mem ? info.data->size : 0;
 		info.data->callback(mem, info.data->size, [&] (BytesView data) {
 			size = std::min(size_t(data.size()), size_t(info.data->size));
 			memcpy(mem, data.data(), size);

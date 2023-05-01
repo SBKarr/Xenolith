@@ -218,7 +218,7 @@ struct Loop::Internal final : memory::AllocPool {
 							str << " " << it->id;
 						}
 						str << "\n";
-						std::cout << "Signal: " << str.str();
+						log::vtext("vk::Loop", "Signal: " str.str());
 #endif
 
 						v->callback(iit.first->second->success);
@@ -237,8 +237,7 @@ struct Loop::Internal final : memory::AllocPool {
 		for (auto &it : events) {
 			str << " " << it->id;
 		}
-		str << "\n";
-		std::cout << "Wait: " << str.str();
+		log::vtext("vk::Loop", "Wait: " str.str());
 #endif
 
 		auto req = Rc<DependencyRequest>::alloc();
@@ -258,7 +257,7 @@ struct Loop::Internal final : memory::AllocPool {
 
 		if (req->signaled == req->events.size()) {
 #if XL_VK_DEBUG
-			std::cout << "Run: " << str.str();
+			log::vtext("vk::Loop", "Run: " str.str());
 #endif
 			req->callback(req->success);
 		}

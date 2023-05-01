@@ -22,7 +22,6 @@
  **/
 
 #include "XLSprite.h"
-#include "XLApplication.h"
 
 #include "XLGlCommandList.h"
 
@@ -81,7 +80,7 @@ void Sprite::setTexture(StringView textureName) {
 				_materialDirty = true;
 			}
 		} else if (!_texture || _texture->getName() != textureName) {
-			if (auto &cache = _director->getApplication()->getResourceCache()) {
+			if (auto &cache = _director->getResourceCache()) {
 				if (auto tex = cache->acquireTexture(textureName)) {
 					setTexture(move(tex));
 				}
@@ -154,50 +153,48 @@ bool Sprite::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 }
 
 void Sprite::draw(RenderFrameInfo &frame, NodeFlags flags) {
-	if (!_texture) {
+	if (!_texture || !_texture->isLoaded()) {
 		return;
 	}
 
-	if (_texture->isLoaded()) {
-		if (_autofit != Autofit::None) {
-			auto size = _texture->getExtent();
-			if (_targetTextureSize != size) {
-				_targetTextureSize = size;
-				_vertexesDirty = true;
-			}
+	if (_autofit != Autofit::None) {
+		auto size = _texture->getExtent();
+		if (_targetTextureSize != size) {
+			_targetTextureSize = size;
+			_vertexesDirty = true;
 		}
-
-		if (checkVertexDirty()) {
-			updateVertexes();
-			_vertexesDirty = false;
-		}
-
-		if (_vertexColorDirty) {
-			updateVertexesColor();
-			_vertexColorDirty = false;
-		}
-
-		if (_materialDirty) {
-			updateBlendAndDepth();
-
-			auto info = getMaterialInfo();
-			_materialId = frame.scene->getMaterial(info);
-			if (_materialId == 0) {
-				_materialId = frame.scene->acquireMaterial(info, getMaterialImages(), isMaterialRevokable());
-				if (_materialId == 0) {
-					log::vtext("Sprite", "Material for sprite with texture '", _texture->getName(), "' not found");
-				}
-			}
-			_materialDirty = false;
-		}
-
-		for (auto &it : _pendingDependencies) {
-			emplace_ordered(frame.commands->waitDependencies, move(it));
-		}
-
-		pushCommands(frame, flags);
-		_pendingDependencies.clear();
 	}
+
+	if (checkVertexDirty()) {
+		updateVertexes();
+		_vertexesDirty = false;
+	}
+
+	if (_vertexColorDirty) {
+		updateVertexesColor();
+		_vertexColorDirty = false;
+	}
+
+	if (_materialDirty) {
+		updateBlendAndDepth();
+
+		auto info = getMaterialInfo();
+		_materialId = frame.scene->getMaterial(info);
+		if (_materialId == 0) {
+			_materialId = frame.scene->acquireMaterial(info, getMaterialImages(), isMaterialRevokable());
+			if (_materialId == 0) {
+				log::vtext("Sprite", "Material for sprite with texture '", _texture->getName(), "' not found");
+			}
+		}
+		_materialDirty = false;
+	}
+
+	for (auto &it : _pendingDependencies) {
+		emplace_ordered(frame.commands->waitDependencies, move(it));
+	}
+
+	pushCommands(frame, flags);
+	_pendingDependencies.clear();
 }
 
 void Sprite::onEnter(Scene *scene) {
@@ -205,7 +202,7 @@ void Sprite::onEnter(Scene *scene) {
 
 	if (!_textureName.empty()) {
 		if (!_texture || _texture->getName() != _textureName) {
-			if (auto &cache = _director->getApplication()->getResourceCache()) {
+			if (auto &cache = _director->getResourceCache()) {
 				_texture = cache->acquireTexture(_textureName);
 				_materialDirty = true;
 			}

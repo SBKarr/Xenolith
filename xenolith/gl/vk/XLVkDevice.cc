@@ -166,11 +166,13 @@ bool Device::init(const vk::Instance *inst, DeviceInfo && info, const Features &
 	auto maxResources = _info.properties.device10.properties.limits.maxPerStageResources - 16;
 
 	auto imageLimit = std::min(maxResources, maxDescriptors);
+	auto bufferLimit = std::min(info.properties.device10.properties.limits.maxPerStageDescriptorStorageBuffers, maxDescriptors);
 	if (!_info.features.device10.features.shaderSampledImageArrayDynamicIndexing) {
 		imageLimit = 1;
 	}
 	_textureLayoutImagesCount = imageLimit = std::min(imageLimit, config::MaxTextureSetImages);
-	_textureSetLayout = Rc<TextureSetLayout>::create(*this, imageLimit);
+	_textureLayoutBuffersCount = bufferLimit = std::min(bufferLimit, config::MaxBufferArrayObjects);
+	_textureSetLayout = Rc<TextureSetLayout>::create(*this, imageLimit, bufferLimit);
 
 	do {
 		VkFormatProperties properties;
@@ -557,6 +559,13 @@ BytesView Device::emplaceConstant(renderqueue::PredefinedConstant c, Bytes &data
 		intData = 1;
 		return Device_emplaceConstant(data, BytesView((const uint8_t *)&intData, sizeof(uint32_t)));
 		break;
+	case renderqueue::PredefinedConstant::BuffersArraySize:
+		return Device_emplaceConstant(data, BytesView((const uint8_t *)&_textureSetLayout->getBuffersCount(), sizeof(uint32_t)));
+		break;
+	case renderqueue::PredefinedConstant::BuffersDescriptorIdx:
+		intData = 2;
+		return Device_emplaceConstant(data, BytesView((const uint8_t *)&intData, sizeof(uint32_t)));
+		break;
 	case renderqueue::PredefinedConstant::CurrentSamplerIdx:
 		break;
 	}
@@ -635,6 +644,10 @@ Rc<gl::ImageView> Device::makeImageView(const Rc<gl::ImageObject> &img, const gl
 
 bool Device::hasNonSolidFillMode() const {
 	return _info.features.device10.features.fillModeNonSolid;
+}
+
+bool Device::hasDynamicIndexedBuffers() const {
+	return _info.features.device10.features.shaderStorageBufferArrayDynamicIndexing;
 }
 
 void Device::waitIdle() const {

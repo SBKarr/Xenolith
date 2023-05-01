@@ -39,16 +39,18 @@ public:
 
 	virtual ~TextureSetLayout() { }
 
-	bool init(Device &dev, uint32_t);
+	bool init(Device &dev, uint32_t imageCount, uint32_t bufferLimit);
 	void invalidate(Device &dev);
 
 	bool compile(Device &dev, const Vector<VkSampler> &);
 
 	const uint32_t &getImageCount() const { return _imageCount; }
 	const uint32_t &getSamplersCount() const { return _samplersCount; }
+	const uint32_t &getBuffersCount() const { return _bufferCount; }
 	VkDescriptorSetLayout getLayout() const { return _layout; }
 	const Rc<ImageView> &getEmptyImageView() const { return _emptyImageView; }
 	const Rc<ImageView> &getSolidImageView() const { return _solidImageView; }
+	const Rc<Buffer> &getEmptyBuffer() const { return _emptyBuffer; }
 
 	Rc<TextureSet> acquireSet(Device &dev);
 	void releaseSet(Rc<TextureSet> &&);
@@ -72,6 +74,7 @@ protected:
 
 	bool _partiallyBound = false;
 	uint32_t _imageCount = 0;
+	uint32_t _bufferCount = 0;
 	uint32_t _samplersCount = 0;
 	VkDescriptorSetLayout _layout = VK_NULL_HANDLE;
 
@@ -79,6 +82,7 @@ protected:
 	Rc<ImageView> _emptyImageView;
 	Rc<Image> _solidImage;
 	Rc<ImageView> _solidImageView;
+	Rc<Buffer> _emptyBuffer;
 
 	mutable Mutex _mutex;
 	Vector<Rc<TextureSet>> _sets;
@@ -94,7 +98,9 @@ public:
 
 	virtual void write(const gl::MaterialLayout &) override;
 
-	const Vector<ImageMemoryBarrier> &getPendingBarriers() const { return _pendingBarriers; }
+	const Vector<ImageMemoryBarrier> &getPendingImageBarriers() const { return _pendingImageBarriers; }
+	const Vector<BufferMemoryBarrier> &getPendingBufferBarriers() const { return _pendingBufferBarriers; }
+
 	void dropPendingBarriers();
 
 	Device *getDevice() const;
@@ -102,12 +108,18 @@ public:
 protected:
 	using gl::TextureSet::init;
 
+	void writeImages(Vector<VkWriteDescriptorSet> &writes, const gl::MaterialLayout &set,
+			std::forward_list<Vector<VkDescriptorImageInfo>> &imagesList);
+	void writeBuffers(Vector<VkWriteDescriptorSet> &writes, const gl::MaterialLayout &set,
+			std::forward_list<Vector<VkDescriptorBufferInfo>> &bufferList);
+
 	bool _partiallyBound = false;
 	const TextureSetLayout *_layout = nullptr;
 	uint32_t _count = 0;
 	VkDescriptorSet _set = VK_NULL_HANDLE;
 	VkDescriptorPool _pool = VK_NULL_HANDLE;
-	Vector<ImageMemoryBarrier> _pendingBarriers;
+	Vector<ImageMemoryBarrier> _pendingImageBarriers;
+	Vector<BufferMemoryBarrier> _pendingBufferBarriers;
 };
 
 }

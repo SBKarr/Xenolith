@@ -87,13 +87,15 @@ void UtilScene::FpsDisplay::update(const UpdateTime &) {
 		auto spf = _director->getSpf();
 		auto local = _director->getLocalFrameTime();
 		auto stat = _director->getDrawStat();
+		auto tm = _director->getDirectorFrameTime();
+		auto vertex = stat.vertexInputTime / float(1000);
 
 		if (_label) {
 			String str;
 			switch (_mode) {
 			case Fps:
 				str = toString(std::setprecision(3),
-					"FPS: ", fps, "\nSPF: ", spf, "\nGPU: ", local,
+					"FPS: ", fps, " SPF: ", spf, "\nGPU: ", local, "\nDir: ", tm, " Ver: ", vertex,
 					"\nF12 to switch");
 				break;
 			case Vertexes:
@@ -109,7 +111,7 @@ void UtilScene::FpsDisplay::update(const UpdateTime &) {
 				break;
 			case Full:
 				str = toString(std::setprecision(3),
-					"FPS: ", fps, "\nSPF: ", spf, "\nGPU: ", local, "\n",
+					"FPS: ", fps, " SPF: ", spf, "\nGPU: ", local, "\nDir: ", tm, " Ver: ", vertex, "\n",
 					"V:", stat.vertexes, " T:", stat.triangles, "\nZ:", stat.zPaths, " C:", stat.drawCalls, " M: ", stat.materials, "\n",
 					stat.solidCmds, "/", stat.surfaceCmds, "/", stat.transparentCmds, "\n",
 					"Cache:", stat.cachedFramebuffers, "/", stat.cachedImages, "/", stat.cachedImageViews,
@@ -236,7 +238,6 @@ void UtilScene::initialize(Application *app) {
 				Vector<InputEventData> events{ _data1, _data2 };
 
 				_scene->getDirector()->getView()->handleInputEvents(move(events));
-				std::cout << "Cancel virtual events: " << toInt(_data1.event) << ": " << _data1.id << ": " << _data2.id << "\n";
 			}
 			return false;
 		}

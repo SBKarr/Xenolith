@@ -42,6 +42,7 @@ public:
 
 	bool init(Loop &loop, Device &, Rc<FrameRequest> &&, uint64_t gen);
 
+	const Rc<Allocator> &getAllocator() const { return _allocator; }
 	const Rc<DeviceMemoryPool> &getMemPool(void *key);
 
 protected:
@@ -128,6 +129,7 @@ public:
 	}
 
 	bool hasNonSolidFillMode() const;
+	bool hasDynamicIndexedBuffers() const;
 
 	virtual void waitIdle() const override;
 

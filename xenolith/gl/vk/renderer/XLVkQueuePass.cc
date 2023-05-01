@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -61,6 +62,43 @@ auto QueuePass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle> {
 	return Rc<QueuePassHandle>::create(*this, handle);
 }
 
+VkRect2D QueuePassHandle::rotateScissor(const gl::FrameContraints &constraints, const URect &scissor) {
+	VkRect2D scissorRect{
+		{ int32_t(scissor.x), int32_t(constraints.extent.height - scissor.y - scissor.height) },
+		{ scissor.width, scissor.height }
+	};
+
+	switch (constraints.transform) {
+	case gl::SurfaceTransformFlags::Rotate90:
+		scissorRect.offset.y = scissor.x;
+		scissorRect.offset.x = scissor.y;
+		std::swap(scissorRect.extent.width, scissorRect.extent.height);
+		break;
+	case gl::SurfaceTransformFlags::Rotate180:
+		scissorRect.offset.y = scissor.y;
+		break;
+	case gl::SurfaceTransformFlags::Rotate270:
+		scissorRect.offset.y = constraints.extent.height - scissor.x - scissor.width;
+		scissorRect.offset.x = constraints.extent.width - scissor.y - scissor.height;
+		//scissorRect.offset.x = extent.height - scissor.y;
+		std::swap(scissorRect.extent.width, scissorRect.extent.height);
+		break;
+	default: break;
+	}
+
+	if (scissorRect.offset.x < 0) {
+		scissorRect.extent.width -= scissorRect.offset.x;
+		scissorRect.offset.x = 0;
+	}
+
+	if (scissorRect.offset.y < 0) {
+		scissorRect.extent.height -= scissorRect.offset.y;
+		scissorRect.offset.y = 0;
+	}
+
+	return scissorRect;
+}
+
 QueuePassHandle::~QueuePassHandle() {
 	invalidate();
 }
@@ -84,6 +122,9 @@ bool QueuePassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
 	_loop = (Loop *)q.getLoop();
 	_device = (Device *)q.getFrame()->getDevice();
 	_pool = _device->acquireCommandPool(getQueueOps());
+
+	_constraints = q.getFrame()->getFrameConstraints();
+
 	if (!_pool) {
 		invalidate();
 		return false;
@@ -312,6 +353,39 @@ auto QueuePassHandle::updateMaterials(FrameHandle &frame, const Rc<gl::MaterialS
 
 	ret.stagingBuffer->unmap(mapped);
 	return ret;
+}
+
+void QueuePassHandle::doFinalizeTransfer(gl::MaterialSet * materials,
+		Vector<ImageMemoryBarrier> &outputImageBarriers, Vector<BufferMemoryBarrier> &outputBufferBarriers) {
+	if (!materials) {
+		return;
+	}
+
+	auto b = (Buffer *)materials->getBuffer().get();
+	if (!b) {
+		return;
+	}
+
+	if (auto barrier = b->getPendingBarrier()) {
+		outputBufferBarriers.emplace_back(*barrier);
+		b->dropPendingBarrier();
+	}
+
+	for (auto &it : materials->getLayouts()) {
+		if (it.set) {
+			auto &pendingImageBarriers = ((TextureSet *)it.set.get())->getPendingImageBarriers();
+			for (auto &barrier : pendingImageBarriers) {
+				outputImageBarriers.emplace_back(barrier);
+			}
+			auto &pendingBufferBarriers = ((TextureSet *)it.set.get())->getPendingBufferBarriers();
+			for (auto &barrier : pendingBufferBarriers) {
+				outputBufferBarriers.emplace_back(barrier);
+			}
+			((TextureSet *)it.set.get())->dropPendingBarriers();
+		} else {
+			log::text("MaterialRenderPassHandle", "No set for material layout");
+		}
+	}
 }
 
 }

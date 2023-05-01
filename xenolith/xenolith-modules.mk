@@ -28,3 +28,4 @@ include $(XENOLITH_MODULE_DIR)/storage/storage.mk
 include $(XENOLITH_MODULE_DIR)/network/network.mk
 include $(XENOLITH_MODULE_DIR)/material/material.mk
 include $(XENOLITH_MODULE_DIR)/asset/asset.mk
+include $(XENOLITH_MODULE_DIR)/objfile/objfile.mk

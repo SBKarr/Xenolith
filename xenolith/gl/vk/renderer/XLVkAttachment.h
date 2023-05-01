@@ -71,6 +71,39 @@ public:
 	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorBufferViewInfo &) { return false; }
 };
 
+// this attachment should provide material data buffer for rendering
+class MaterialAttachment : public gl::MaterialAttachment {
+public:
+	virtual ~MaterialAttachment();
+
+	virtual bool init(StringView, const gl::BufferInfo &, Vector<Rc<gl::Material>> && = Vector<Rc<gl::Material>>());
+
+	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
+
+protected:
+	using gl::MaterialAttachment::init;
+};
+
+class MaterialAttachmentHandle : public BufferAttachmentHandle {
+public:
+	virtual ~MaterialAttachmentHandle();
+
+	virtual bool init(const Rc<Attachment> &, const FrameQueue &) override;
+
+	virtual bool isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
+			uint32_t, bool isExternal) const override;
+
+	virtual bool writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &) override;
+
+	const MaterialAttachment *getMaterialAttachment() const;
+
+	const Rc<gl::MaterialSet> getSet() const;
+
+protected:
+	std::mutex _mutex;
+	mutable Rc<gl::MaterialSet> _materials;
+};
+
 }
 
 #endif /* XENOLITH_GL_VK_RENDERER_XLVKATTACHMENT_H_ */

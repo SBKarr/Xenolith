@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2021-2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -56,6 +57,8 @@ protected:
 
 class QueuePassHandle : public renderqueue::PassHandle {
 public:
+	static VkRect2D rotateScissor(const gl::FrameContraints &constraints, const URect &scissor);
+
 	virtual ~QueuePassHandle();
 	virtual void invalidate();
 
@@ -83,6 +86,9 @@ protected:
 	virtual MaterialBuffers updateMaterials(FrameHandle &iframe, const Rc<gl::MaterialSet> &data,
 			const Vector<Rc<gl::Material>> &materials, SpanView<gl::MaterialId> dynamicMaterials, SpanView<gl::MaterialId> materialsToRemove);
 
+	virtual void doFinalizeTransfer(gl::MaterialSet * materials,
+			Vector<ImageMemoryBarrier> &outputImageBarriers, Vector<BufferMemoryBarrier> &outputBufferBarriers);
+
 	Function<void(bool)> _onPrepared;
 	bool _valid = true;
 	bool _commandsReady = false;
@@ -95,6 +101,7 @@ protected:
 	Rc<DeviceQueue> _queue;
 	Vector<const CommandBuffer *> _buffers;
 	Rc<FrameSync> _sync;
+	gl::FrameContraints _constraints;
 };
 
 }

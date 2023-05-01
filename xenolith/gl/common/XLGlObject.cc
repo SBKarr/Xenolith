@@ -83,17 +83,51 @@ uint64_t Framebuffer::getHash() const {
 
 static std::atomic<uint64_t> s_ImageViewCurrentIndex = 1;
 
-bool ImageAtlas::init(uint32_t count, uint32_t objectSize, Extent2 imageSize) {
+bool DataAtlas::init(Type t, uint32_t count, uint32_t objectSize, Extent2 imageSize) {
+	_type = t;
 	_objectSize = objectSize;
 	_imageExtent = imageSize;
-	_names.reserve(count);
 	_data.reserve(count * objectSize);
 	return true;
 }
 
-const uint8_t *ImageAtlas::getObjectByName(uint32_t id) const {
-	auto it = _names.find(id);
-	if (it != _names.end()) {
+void DataAtlas::compile() {
+	makeHashIndex();
+}
+
+inline uint32_t hash(uint32_t k, uint32_t capacity) {
+	k ^= k >> 16;
+	k *= 0x85ebca6b;
+	k ^= k >> 13;
+	k *= 0xc2b2ae35;
+	k ^= k >> 16;
+	return k & (capacity - 1);
+}
+
+struct HashTableKeyValue {
+	uint32_t key;
+	uint32_t value;
+};
+
+const uint8_t *DataAtlas::getObjectByName(uint32_t id) const {
+	if (!_dataIndex.empty()) {
+		auto size = _dataIndex.size() / sizeof(HashTableKeyValue);
+		uint32_t slot = hash(id, size);
+		auto data = (HashTableKeyValue *)_dataIndex.data();
+
+		while (true) {
+			uint32_t prev = data[slot].key;
+			if (prev == id) {
+				return _data.data() + _objectSize * data[slot].value;
+			} else if (prev == 0xffffffffU) {
+				break;
+			}
+			slot = (slot + 1) & (size - 1);
+		}
+	}
+
+	auto it = _intNames.find(id);
+	if (it != _intNames.end()) {
 		if (it->second < _data.size() / _objectSize) {
 			return _data.data() + _objectSize * it->second;
 		}
@@ -101,19 +135,57 @@ const uint8_t *ImageAtlas::getObjectByName(uint32_t id) const {
 	return nullptr;
 }
 
-const uint8_t *ImageAtlas::getObjectByOrder(uint32_t order) const {
+const uint8_t *DataAtlas::getObjectByOrder(uint32_t order) const {
 	if (order < _data.size() / _objectSize) {
 		return _data.data() + _objectSize * order;
 	}
 	return nullptr;
 }
 
-void ImageAtlas::addObject(uint32_t id, void *data) {
+void DataAtlas::addObject(uint32_t id, void *data) {
 	auto off = _data.size();
 	_data.resize(off + _objectSize);
 	memcpy(_data.data() + off, data,  _objectSize);
 
-	_names.emplace(id, off / _objectSize);
+	_intNames.emplace(id, off / _objectSize);
+}
+
+void DataAtlas::addObject(StringView name, void *data) {
+	auto off = _data.size();
+	_data.resize(off + _objectSize);
+	memcpy(_data.data() + off, data,  _objectSize);
+
+	_stringNames.emplace(name.str<Interface>(), off / _objectSize);
+}
+
+void DataAtlas::setIndexBuffer(Rc<BufferObject> &&index) {
+	_indexBuffer = move(index);
+}
+
+void DataAtlas::setDataBuffer(Rc<BufferObject> &&data) {
+	_dataBuffer = move(data);
+}
+
+void DataAtlas::makeHashIndex() {
+	auto size = math::npot(_intNames.size());
+	Bytes dataStorage; dataStorage.resize(size * sizeof(HashTableKeyValue), uint8_t(0xFFU));
+	auto data = (HashTableKeyValue *)dataStorage.data();
+
+	for (auto &it : _intNames) {
+		uint32_t slot = hash(it.first, size);
+
+		while (true) {
+			uint32_t prev = data[slot].key;
+			if (prev == 0xffffffffU || prev == it.first) {
+				data[slot].key = it.first;
+				data[slot].value = it.second;
+				break;
+			}
+			slot = (slot + 1) & (size - 1);
+		}
+	}
+
+	_dataIndex = move(dataStorage);
 }
 
 ImageObject::~ImageObject() { }
@@ -178,9 +250,9 @@ Extent3 ImageView::getExtent() const {
 
 void TextureSet::write(const MaterialLayout &set) {
 	_layoutIndexes.clear();
-	for (uint32_t i = 0; i < set.usedSlots; ++ i) {
-		if (set.slots[i].image) {
-			_layoutIndexes.emplace_back(set.slots[i].image->getIndex());
+	for (uint32_t i = 0; i < set.usedImageSlots; ++ i) {
+		if (set.imageSlots[i].image) {
+			_layoutIndexes.emplace_back(set.imageSlots[i].image->getIndex());
 		} else {
 			_layoutIndexes.emplace_back(0);
 		}
@@ -189,7 +261,7 @@ void TextureSet::write(const MaterialLayout &set) {
 	_layoutIndexes.resize(_count, 0);
 }
 
-void Shader::inspectShader(SpanView<uint32_t> data) {
+String Shader::inspectShader(SpanView<uint32_t> data) {
 	SpvReflectShaderModule shader;
 
 	spvReflectCreateShaderModule(data.size() * sizeof(uint32_t), data.data(), &shader);
@@ -214,36 +286,26 @@ void Shader::inspectShader(SpanView<uint32_t> data) {
 	default: break;
 	}
 
-	std::cout << "[" << getProgramStageDescription(stage) << "]\n";
+	StringStream out;
+
+	out << "[" << getProgramStageDescription(stage) << "]\n";
 
 	for (auto &it : makeSpanView(shader.descriptor_bindings, shader.descriptor_binding_count)) {
-		std::cout << "Binging: [" << it.set << ":" << it.binding << "] "
+		out << "\tBinging: [" << it.set << ":" << it.binding << "] "
 				<< renderqueue::getDescriptorTypeName(DescriptorType(it.descriptor_type)) << "\n";
 	}
 
 	for (auto &it : makeSpanView(shader.push_constant_blocks, shader.push_constant_block_count)) {
-		std::cout << "PushConstant: [" << it.absolute_offset << " - " << it.padded_size << "]\n";
+		out << "\tPushConstant: [" << it.absolute_offset << " - " << it.padded_size << "]\n";
 	}
 
 	spvReflectDestroyShaderModule(&shader);
+
+	return out.str();
 }
 
-void Shader::inspect(SpanView<uint32_t> data) {
-	SpvReflectShaderModule shader;
-
-	spvReflectCreateShaderModule(data.size() * sizeof(uint32_t), data.data(), &shader);
-
-	uint32_t count = 0;
-	SpvReflectDescriptorBinding *bindings = nullptr;
-
-	spvReflectEnumerateDescriptorBindings(&shader, &count, &bindings);
-
-	for (auto &it : makeSpanView(shader.descriptor_bindings, shader.descriptor_binding_count)) {
-		std::cout << "[" << it.set << ":" << it.binding << "] "
-				<< renderqueue::getDescriptorTypeName(DescriptorType(it.descriptor_type)) << "\n";
-	}
-
-	spvReflectDestroyShaderModule(&shader);
+String Shader::inspect(SpanView<uint32_t> data) {
+	return inspectShader(data);
 }
 
 void Semaphore::setSignaled(bool value) {

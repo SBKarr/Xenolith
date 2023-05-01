@@ -59,12 +59,11 @@ class MaterialSet final : public Ref {
 public:
 	using ImageSlot = MaterialImageSlot;
 	using EncodeCallback = Function<bool(uint8_t *, const Material *)>;
-	using FinalizeCallback = Function<void(Rc<TextureSet> &&)>;
 
 	virtual ~MaterialSet();
 
-	bool init(const BufferInfo &, const EncodeCallback &callback, const FinalizeCallback &,
-			uint32_t objectSize, uint32_t imagesInSet, const MaterialAttachment * = nullptr);
+	bool init(const BufferInfo &, const EncodeCallback &callback,
+			uint32_t objectSize, uint32_t imagesInSet, uint32_t buffersInSet, const MaterialAttachment * = nullptr);
 	bool init(const Rc<MaterialSet> &);
 
 	bool encode(uint8_t *, const Material *);
@@ -98,9 +97,9 @@ protected:
 
 	BufferInfo _info;
 	EncodeCallback _encodeCallback;
-	FinalizeCallback _finalizeCallback;
 	uint32_t _objectSize = 0;
 	uint32_t _imagesInSet = 16;
+	uint32_t _buffersInSet = 16;
 
 	uint32_t _generation = 1;
 	std::unordered_map<MaterialId, Rc<Material>> _materials;
@@ -111,7 +110,6 @@ protected:
 	Vector<MaterialLayout> _layouts;
 
 	Rc<BufferObject> _buffer;
-	Rc<TextureSet> _textureSet;
 	const MaterialAttachment *_owner = nullptr;
 };
 
@@ -129,7 +127,7 @@ public:
 	bool init(MaterialId, const PipelineData *, const Rc<DynamicImageInstance> &, Bytes && = Bytes());
 	bool init(MaterialId, const PipelineData *, const ImageData *, Bytes && = Bytes(), bool ownedData = false);
 	bool init(MaterialId, const PipelineData *, const ImageData *, ColorMode, Bytes && = Bytes(), bool ownedData = false);
-	bool init(const Material *, Rc<ImageObject> &&, Rc<ImageAtlas> &&, Bytes && = Bytes());
+	bool init(const Material *, Rc<ImageObject> &&, Rc<DataAtlas> &&, Bytes && = Bytes());
 	bool init(const Material *, Vector<MaterialImage> &&);
 
 	MaterialId getId() const { return _id; }
@@ -140,7 +138,7 @@ public:
 	uint32_t getLayoutIndex() const { return _layoutIndex; }
 	void setLayoutIndex(uint32_t);
 
-	const Rc<ImageAtlas> &getAtlas() const { return _atlas; }
+	const Rc<DataAtlas> &getAtlas() const { return _atlas; }
 	const ImageData *getOwnedData() const { return _ownedData; }
 
 protected:
@@ -152,7 +150,7 @@ protected:
 	uint32_t _layoutIndex = 0; // set after compilation
 	const PipelineData *_pipeline;
 	Vector<MaterialImage> _images;
-	Rc<ImageAtlas> _atlas;
+	Rc<DataAtlas> _atlas;
 	Bytes _data;
 	const ImageData *_ownedData = nullptr;
 };
@@ -162,7 +160,7 @@ class MaterialAttachment : public renderqueue::BufferAttachment {
 public:
 	virtual ~MaterialAttachment();
 
-	virtual bool init(StringView, const BufferInfo &, MaterialSet::EncodeCallback &&, MaterialSet::FinalizeCallback &&,
+	virtual bool init(StringView, const BufferInfo &, MaterialSet::EncodeCallback &&,
 			uint32_t materialObjectSize, MaterialType type, Vector<Rc<Material>> &&);
 
 	const Rc<gl::MaterialSet> &getMaterials() const;
@@ -199,7 +197,6 @@ protected:
 	uint32_t _materialObjectSize = 0;
 	MaterialType _type;
 	MaterialSet::EncodeCallback _encodeCallback;
-	MaterialSet::FinalizeCallback _finalizeCallback;
 	mutable Rc<gl::MaterialSet> _data;
 	Vector<Rc<Material>> _initialMaterials;
 
@@ -213,7 +210,7 @@ public:
 
 	virtual bool init(renderqueue::PassData *, renderqueue::Attachment *);
 
-	uint64_t getBoundGeneration() const { return _boundGeneration.load(); }
+	uint64_t getBoundGeneration() const;
 	void setBoundGeneration(uint64_t);
 
 protected:

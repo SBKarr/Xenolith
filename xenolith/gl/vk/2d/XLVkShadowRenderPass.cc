@@ -679,9 +679,9 @@ bool ShadowVertexAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc<g
 	return true;
 }
 
-ShadowTrianglesAttachmentHandle::~ShadowTrianglesAttachmentHandle() { }
+ShadowPrimitivesAttachmentHandle::~ShadowPrimitivesAttachmentHandle() { }
 
-void ShadowTrianglesAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame, uint32_t objects, const gl::glsl::ShadowData &data) {
+void ShadowPrimitivesAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame, uint32_t objects, const gl::glsl::ShadowData &data) {
 	auto &pool = devFrame->getMemPool(devFrame);
 	_triangles = pool->spawn(AllocationUsage::DeviceLocal, gl::BufferInfo(gl::BufferUsage::StorageBuffer,
 			std::max(uint32_t(1), data.trianglesCount) * sizeof(gl::Triangle2DData)));
@@ -699,7 +699,7 @@ void ShadowTrianglesAttachmentHandle::allocateBuffer(DeviceFrameHandle *devFrame
 			std::max(uint32_t(1), objects) * data.gridWidth * data.gridHeight * sizeof(uint32_t)));
 }
 
-bool ShadowTrianglesAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
+bool ShadowPrimitivesAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &,
 		uint32_t idx, bool isExternal) const {
 	switch (idx) {
 	case 0: return _triangles; break;
@@ -715,7 +715,7 @@ bool ShadowTrianglesAttachmentHandle::isDescriptorDirty(const PassHandle &, cons
 	return false;
 }
 
-bool ShadowTrianglesAttachmentHandle::writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &info) {
+bool ShadowPrimitivesAttachmentHandle::writeDescriptor(const QueuePassHandle &, DescriptorBufferInfo &info) {
 	switch (info.index) {
 	case 0:
 		info.buffer = _triangles;
@@ -806,43 +806,17 @@ auto ShadowVertexAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<Att
 	return Rc<ShadowVertexAttachmentHandle>::create(this, handle);
 }
 
-ShadowTrianglesAttachment::~ShadowTrianglesAttachment() { }
+ShadowPrimitivesAttachment::~ShadowPrimitivesAttachment() { }
 
-bool ShadowTrianglesAttachment::init(StringView name) {
+bool ShadowPrimitivesAttachment::init(StringView name) {
 	if (BufferAttachment::init(name, gl::BufferInfo(gl::BufferUsage::StorageBuffer))) {
 		return true;
 	}
 	return false;
 }
 
-auto ShadowTrianglesAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<AttachmentHandle> {
-	return Rc<ShadowTrianglesAttachmentHandle>::create(this, handle);
-}
-
-ShadowImageArrayAttachment::~ShadowImageArrayAttachment() { }
-
-bool ShadowImageArrayAttachment::init(StringView name, Extent2 extent) {
-	return ImageAttachment::init(name, gl::ImageInfo(
-		extent,
-		gl::ArrayLayers(config::MaxAmbientLights + config::MaxDirectLights),
-		gl::ForceImageUsage(gl::ImageUsage::Storage | gl::ImageUsage::Sampled | gl::ImageUsage::TransferDst),
-		gl::RenderPassType::Compute,
-		gl::ImageFormat::R8_UNORM),
-	ImageAttachment::AttachmentInfo{
-		.initialLayout = renderqueue::AttachmentLayout::Undefined,
-		.finalLayout = renderqueue::AttachmentLayout::ShaderReadOnlyOptimal,
-		.clearOnLoad = false,
-		.clearColor = Color4F(1.0f, 0.0f, 0.0f, 0.0f)
-	});
-}
-
-gl::ImageInfo ShadowImageArrayAttachment::getAttachmentInfo(const AttachmentHandle *a, Extent3 e) const {
-	auto img = (const ShadowImageArrayAttachmentHandle *)a;
-	return img->getImageInfo();
-}
-
-auto ShadowImageArrayAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<AttachmentHandle> {
-	return Rc<ShadowImageArrayAttachmentHandle>::create(this, handle);
+auto ShadowPrimitivesAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<AttachmentHandle> {
+	return Rc<ShadowPrimitivesAttachmentHandle>::create(this, handle);
 }
 
 ShadowSdfImageAttachment::~ShadowSdfImageAttachment() { }
@@ -868,195 +842,6 @@ gl::ImageInfo ShadowSdfImageAttachment::getAttachmentInfo(const AttachmentHandle
 
 Rc<ShadowSdfImageAttachment::AttachmentHandle> ShadowSdfImageAttachment::makeFrameHandle(const FrameQueue &handle) {
 	return Rc<ShadowSdfImageAttachmentHandle>::create(this, handle);
-}
-
-bool ShadowPass::makeDefaultRenderQueue(renderqueue::Queue::Builder &builder, Extent2 extent) {
-	using namespace renderqueue;
-
-	auto trianglesShader = builder.addProgramByRef("ShadowPass_SdfTrianglesComp", xenolith::shaders::SdfTrianglesComp);
-	auto imageShader = builder.addProgramByRef("ShadowPass_SdfImageComp", xenolith::shaders::SdfImageComp);
-
-	auto pass = Rc<vk::ShadowPass>::create("ShadowPass", RenderOrdering(0));
-	builder.addRenderPass(pass);
-
-	builder.addComputePipeline(pass, SdfTrianglesComp, trianglesShader);
-	builder.addComputePipeline(pass, SdfImageComp, imageShader);
-
-	auto lightDataInput = Rc<vk::ShadowLightDataAttachment>::create("ShadowLightDataAttachment");
-	auto vertexInput = Rc<vk::ShadowVertexAttachment>::create("ShadowVertexAttachment");
-	auto triangles = Rc<vk::ShadowTrianglesAttachment>::create("ShadowTrianglesAttachment");
-
-	auto array = Rc<ShadowImageArrayAttachment>::create("Array", extent);
-
-	builder.addPassInput(pass, 0, lightDataInput, AttachmentDependencyInfo());
-	builder.addPassInput(pass, 0, vertexInput, AttachmentDependencyInfo());
-	builder.addPassOutput(pass, 0, triangles, AttachmentDependencyInfo());
-
-	builder.addPassOutput(pass, 0, array, AttachmentDependencyInfo{
-		PipelineStage::ComputeShader, AccessType::ShaderWrite,
-		PipelineStage::ComputeShader, AccessType::ShaderWrite,
-
-		// can be reused after RenderPass is submitted
-		FrameRenderPassState::Submitted,
-	}, DescriptorType::StorageImage, AttachmentLayout::ShaderReadOnlyOptimal);
-
-	// define global input-output
-	// materialInput is persistent between frames, only vertexes should be provided before rendering started
-	builder.addInput(lightDataInput);
-	builder.addInput(vertexInput);
-	builder.addInput(array);
-	builder.addOutput(array);
-	return true;
-}
-
-bool ShadowPass::init(StringView name, RenderOrdering ord) {
-	return QueuePass::init(name, gl::RenderPassType::Compute, ord, 1);
-}
-
-auto ShadowPass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle> {
-	return Rc<ShadowPassHandle>::create(*this, handle);
-}
-
-void ShadowPass::prepare(gl::Device &dev) {
-	QueuePass::prepare(dev);
-	for (auto &it : _data->passDescriptors) {
-		if (auto a = dynamic_cast<ShadowVertexAttachment *>(it->getAttachment())) {
-			_vertexes = a;
-		} else if (auto a = dynamic_cast<ShadowTrianglesAttachment *>(it->getAttachment())) {
-			_triangles = a;
-		} else if (auto a = dynamic_cast<ShadowLightDataAttachment *>(it->getAttachment())) {
-			_lights = a;
-		} else if (auto a = dynamic_cast<ShadowImageArrayAttachment *>(it->getAttachment())) {
-			_array = a;
-		}
-	}
-}
-
-bool ShadowPassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
-	auto pass = (ShadowPass *)_renderPass.get();
-
-	ShadowTrianglesAttachmentHandle *trianglesHandle = nullptr;
-	ShadowLightDataAttachmentHandle *lightsHandle = nullptr;
-
-	if (auto lightsBuffer = q.getAttachment(pass->getLights())) {
-		_lightsBuffer = lightsHandle = (ShadowLightDataAttachmentHandle *)lightsBuffer->handle.get();
-	}
-
-	if (auto trianglesBuffer = q.getAttachment(pass->getTriangles())) {
-		_trianglesBuffer = trianglesHandle = (ShadowTrianglesAttachmentHandle *)trianglesBuffer->handle.get();
-	}
-
-	if (auto vertexBuffer = q.getAttachment(pass->getVertexes())) {
-		_vertexBuffer = (const ShadowVertexAttachmentHandle *)vertexBuffer->handle.get();
-	}
-
-	if (auto arrayAttachment = q.getAttachment(pass->getArray())) {
-		_arrayAttachment = (const ShadowImageArrayAttachmentHandle *)arrayAttachment->handle.get();
-	}
-
-	if (lightsHandle && lightsHandle->getLightsCount()) {
-		lightsHandle->allocateBuffer(static_cast<DeviceFrameHandle *>(q.getFrame().get()),
-				_vertexBuffer, _gridCellSize, q.getExtent());
-
-		if (lightsHandle->getObjectsCount() > 0 && trianglesHandle) {
-			trianglesHandle->allocateBuffer(static_cast<DeviceFrameHandle *>(q.getFrame().get()),
-					lightsHandle->getObjectsCount(), lightsHandle->getShadowData());
-		}
-
-		return QueuePassHandle::prepare(q, move(cb));
-	} else {
-		cb(true);
-		return true;
-	}
-}
-
-Vector<const CommandBuffer *> ShadowPassHandle::doPrepareCommands(FrameHandle &h) {
-	auto buf = _pool->recordBuffer(*_device, [&] (CommandBuffer &buf) {
-		auto pass = (RenderPassImpl *)_data->impl.get();
-
-		pass->perform(*this, buf, [&] {
-			auto arrayImage = (Image *)_arrayAttachment->getImage()->getImage().get();
-			auto targetLayout = (_vertexBuffer && _vertexBuffer->getTrianglesCount()) ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-			ImageMemoryBarrier inImageBarriers[] = {
-				ImageMemoryBarrier(arrayImage, 0, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED, targetLayout)
-			};
-
-			if (!_vertexBuffer || _vertexBuffer->getTrianglesCount() == 0) {
-				buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, inImageBarriers);
-				buf.cmdClearColorImage(arrayImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, Color4F::BLACK);
-
-				auto gIdx = _device->getQueueFamily(QueueOperations::Graphics)->index;
-
-				if (_pool->getFamilyIdx() != gIdx) {
-					BufferMemoryBarrier transferBufferBarrier(_lightsBuffer->getBuffer(),
-						VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
-						QueueFamilyTransfer{_pool->getFamilyIdx(), gIdx}, 0, VK_WHOLE_SIZE);
-
-					ImageMemoryBarrier transferImageBarrier(arrayImage,
-						VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-						VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-						QueueFamilyTransfer{_pool->getFamilyIdx(), gIdx});
-					arrayImage->setPendingBarrier(transferImageBarrier);
-
-					buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
-							makeSpanView(&transferBufferBarrier, 1), makeSpanView(&transferImageBarrier, 1));
-				}
-				return;
-			}
-
-			ComputePipeline *pipeline = nullptr;
-			buf.cmdBindDescriptorSets(pass);
-			buf.cmdFillBuffer(_trianglesBuffer->getGridSize(), 0);
-
-			pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(StringView(ShadowPass::SdfTrianglesComp))->pipeline.get();
-			buf.cmdBindPipeline(pipeline);
-
-			BufferMemoryBarrier bufferBarrier(_trianglesBuffer->getGridSize(),
-				VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT
-			);
-
-			buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, makeSpanView(&bufferBarrier, 1));
-
-			buf.cmdDispatch((_vertexBuffer->getTrianglesCount() - 1) / pipeline->getLocalX() + 1);
-
-			BufferMemoryBarrier bufferBarriers[] = {
-				BufferMemoryBarrier(_trianglesBuffer->getTriangles(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
-				BufferMemoryBarrier(_trianglesBuffer->getGridSize(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT),
-				BufferMemoryBarrier(_trianglesBuffer->getGridIndex(), VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT)
-			};
-
-			buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
-					bufferBarriers, inImageBarriers);
-
-			pipeline = (ComputePipeline *)_data->subpasses[0].computePipelines.get(StringView(ShadowPass::SdfImageComp))->pipeline.get();
-			buf.cmdBindPipeline(pipeline);
-
-			buf.cmdDispatch(
-					(arrayImage->getInfo().extent.width - 1) / pipeline->getLocalX() + 1,
-					(arrayImage->getInfo().extent.height - 1) / pipeline->getLocalY() + 1);
-
-			// transfer image and buffer to transfer queue
-			auto gIdx = _device->getQueueFamily(QueueOperations::Graphics)->index;
-
-			if (_pool->getFamilyIdx() != gIdx) {
-				BufferMemoryBarrier transferBufferBarrier(_lightsBuffer->getBuffer(),
-					VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
-					QueueFamilyTransfer{_pool->getFamilyIdx(), gIdx}, 0, VK_WHOLE_SIZE);
-
-				ImageMemoryBarrier transferImageBarrier(arrayImage,
-					VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-					VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-					QueueFamilyTransfer{_pool->getFamilyIdx(), gIdx});
-				arrayImage->setPendingBarrier(transferImageBarrier);
-
-				buf.cmdPipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
-						makeSpanView(&transferBufferBarrier, 1), makeSpanView(&transferImageBarrier, 1));
-			}
-		});
-		return true;
-	});
-
-	return Vector<const CommandBuffer *>{buf};
 }
 
 void ShadowImageArrayAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentInputData> &&data, Function<void(bool)> &&cb) {

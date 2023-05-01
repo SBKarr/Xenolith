@@ -377,7 +377,7 @@ Resource::Builder::~Builder() {
 	}
 }
 
-const gl::BufferData *Resource::Builder::addBufferByRef(StringView key, gl::BufferInfo &&info, BytesView data) {
+const gl::BufferData *Resource::Builder::addBufferByRef(StringView key, gl::BufferInfo &&info, BytesView data, Rc<gl::DataAtlas> &&atlas) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add buffer: ", key, ", not initialized");
 		return nullptr;
@@ -389,6 +389,7 @@ const gl::BufferData *Resource::Builder::addBufferByRef(StringView key, gl::Buff
 		buf->key = key.pdup(_data->pool);
 		buf->data = data;
 		buf->size = data.size();
+		buf->atlas = move(atlas);
 		return buf;
 	}, _data->pool);
 	if (!p) {
@@ -397,7 +398,7 @@ const gl::BufferData *Resource::Builder::addBufferByRef(StringView key, gl::Buff
 	}
 	return p;
 }
-const gl::BufferData *Resource::Builder::addBuffer(StringView key, gl::BufferInfo &&info, FilePath path) {
+const gl::BufferData *Resource::Builder::addBuffer(StringView key, gl::BufferInfo &&info, FilePath path, Rc<gl::DataAtlas> &&atlas) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add buffer: ", key, ", not initialized");
 		return nullptr;
@@ -430,6 +431,7 @@ const gl::BufferData *Resource::Builder::addBuffer(StringView key, gl::BufferInf
 		if (filesystem::stat(path.get(), stat)) {
 			buf->size = stat.size;
 		}
+		buf->atlas = move(atlas);
 		return buf;
 	}, _data->pool);
 	if (!p) {
@@ -438,7 +440,8 @@ const gl::BufferData *Resource::Builder::addBuffer(StringView key, gl::BufferInf
 	}
 	return p;
 }
-const gl::BufferData *Resource::Builder::addBuffer(StringView key, gl::BufferInfo &&info, BytesView data) {
+
+const gl::BufferData *Resource::Builder::addBuffer(StringView key, gl::BufferInfo &&info, BytesView data, Rc<gl::DataAtlas> &&atlas) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add buffer: ", key, ", not initialized");
 		return nullptr;
@@ -450,6 +453,7 @@ const gl::BufferData *Resource::Builder::addBuffer(StringView key, gl::BufferInf
 		buf->key = key.pdup(_data->pool);
 		buf->data = data.pdup(_data->pool);
 		buf->size = data.size();
+		buf->atlas = move(atlas);
 		return buf;
 	}, _data->pool);
 	if (!p) {
@@ -458,8 +462,8 @@ const gl::BufferData *Resource::Builder::addBuffer(StringView key, gl::BufferInf
 	}
 	return p;
 }
-const gl::BufferData *Resource::Builder::addBuffer(StringView key, gl::BufferInfo &&info, size_t size,
-		const memory::function<void(uint8_t *, uint64_t, const gl::BufferData::DataCallback &)> &cb) {
+const gl::BufferData *Resource::Builder::addBuffer(StringView key, gl::BufferInfo &&info,
+		const memory::function<void(uint8_t *, uint64_t, const gl::BufferData::DataCallback &)> &cb, Rc<gl::DataAtlas> &&atlas) {
 	if (!_data) {
 		log::vtext("Resource", "Fail to add buffer: ", key, ", not initialized");
 		return nullptr;
@@ -468,9 +472,9 @@ const gl::BufferData *Resource::Builder::addBuffer(StringView key, gl::BufferInf
 	auto p = Resource_conditionalInsert<gl::BufferData>(_data->buffers, key, [&] () -> gl::BufferData * {
 		auto buf = new (_data->pool) gl::BufferData;
 		static_cast<gl::BufferInfo &>(*buf) = move(info);
-		buf->size = size;
 		buf->key = key.pdup(_data->pool);
 		buf->callback = cb;
+		buf->atlas = move(atlas);
 		return buf;
 	}, _data->pool);
 	if (!p) {

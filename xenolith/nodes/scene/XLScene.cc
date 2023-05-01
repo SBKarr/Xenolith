@@ -28,8 +28,7 @@ THE SOFTWARE.
 #include "XLApplication.h"
 #include "XLGlLoop.h"
 #include "XLRenderQueueFrameHandle.h"
-#include "XLVkMaterialRenderPass.h"
-#include "XLVkShadowRenderPass.h"
+#include "XLVkMaterialShadowPass.h"
 #include "XLSceneContent.h"
 
 namespace stappler::xenolith {
@@ -129,8 +128,6 @@ void Scene::renderRequest(const Rc<FrameRequest> &req) {
 
 				bmpSdf.save(toString("sdf-", Time::now().toMicros(), ".png"));
 				bmpHeight.save(toString("height-", Time::now().toMicros(), ".png"));
-
-				std::cout << info.extent << "\n";
 			}, data.image->getImage(), data.image->getLayout());
 			return true;
 		});
@@ -410,21 +407,6 @@ void Scene::revokeImages(const Vector<uint64_t> &vec) {
 }
 
 void Scene::specializeRequest(const Rc<FrameRequest> &req) {
-	if (auto a = _queue->getInputAttachment<vk::ShadowImageArrayAttachment>()) {
-		gl::ImageInfoData info = a->getImageInfo();
-		info.arrayLayers = gl::ArrayLayers(_lightsAmbientCount + _lightsDirectCount);
-		info.extent =  Extent2(std::ceil(req->getFrameConstraints().extent.width * _shadowDensity),
-				std::ceil(req->getFrameConstraints().extent.height * _shadowDensity));
-		req->addImageSpecialization(a, move(info));
-
-		if (_cachedShadowDensity != _shadowDensity / req->getFrameConstraints().density
-				|| _cachedLightsCount != _lightsAmbientCount + _lightsDirectCount) {
-			_cachedShadowDensity = _shadowDensity / req->getFrameConstraints().density;
-			_cachedLightsCount = _lightsAmbientCount + _lightsDirectCount;
-			req->setAttachmentsDirty(true);
-		}
-	}
-
 	if (auto a = _queue->getInputAttachment<vk::ShadowSdfImageAttachment>()) {
 		gl::ImageInfoData info = a->getImageInfo();
 		auto &constraints = req->getFrameConstraints();
@@ -717,13 +699,15 @@ void Scene::addMaterial(const MaterialInfo &info, gl::MaterialId id, bool revoka
 	}
 }
 
-void Scene::listMaterials() const {
+String Scene::listMaterials() const {
+	StringStream out;
 	for (auto &it : _materials) {
-		std::cout << it.first << ":\n";
+		out << it.first << ":\n";
 		for (auto &iit : it.second) {
-			std::cout << "\t" << iit.info.description() << " -> " << iit.id << "\n";
+			out << "\t" << iit.info.description() << " -> " << iit.id << "\n";
 		}
 	}
+	return out.str();
 }
 
 Vector<Rc<SceneLight>>::iterator Scene::removeLight(Vector<Rc<SceneLight>>::iterator itVec) {

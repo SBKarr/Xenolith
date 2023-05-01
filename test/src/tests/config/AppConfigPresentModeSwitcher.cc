@@ -177,11 +177,15 @@ void ConfigSwitcher::updateState() {
 }
 
 void ConfigSwitcher::applyGradient(Layer *layer, const SimpleGradient &gradient) {
-	layer->stopAllActionsByTag(1);
-	if (layer->getGradient() != gradient) {
-		layer->runAction(Rc<ActionProgress>::create(0.15f, [layer, start = layer->getGradient(), target = gradient] (float p) {
-			layer->setGradient(progress(start, target, p));
-		}), 1);
+	if (_actionManager) {
+		layer->stopAllActionsByTag(1);
+		if (layer->getGradient() != gradient) {
+			layer->runAction(Rc<ActionProgress>::create(0.15f, [layer, start = layer->getGradient(), target = gradient] (float p) {
+				layer->setGradient(progress(start, target, p));
+			}), 1);
+		}
+	} else {
+		layer->setGradient(gradient);
 	}
 }
 

@@ -193,8 +193,11 @@ void View::deprecateSwapchain(bool fast) {
 		return;
 	}
 	performOnThread([this, fast] {
-		_swapchain->deprecate(fast);
+		if (!_swapchain) {
+			return;
+		}
 
+		_swapchain->deprecate(fast);
 		auto it = _scheduledPresent.begin();
 		while (it != _scheduledPresent.end()) {
 			runScheduledPresent(move(*it));
@@ -285,6 +288,10 @@ bool View::present(Rc<ImageStorage> &&object) {
 }
 
 bool View::presentImmediate(Rc<ImageStorage> &&object, Function<void(bool)> &&scheduleCb) {
+	if (!_swapchain) {
+		return false;
+	}
+
 	auto ops = QueueOperations::Present;
 	auto dev = (Device *)_device.get();
 

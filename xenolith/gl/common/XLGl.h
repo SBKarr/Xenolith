@@ -30,7 +30,6 @@
 #include "SPBitmap.h"
 #include "SPThread.h"
 #include "SPThreadTaskQueue.h"
-#include "SPEventTaskQueue.h"
 #include <optional>
 
 #include "XLGlslVertexData.h"
@@ -56,7 +55,7 @@ class GraphicPipeline;
 class ComputePipeline;
 class Framebuffer;
 class ImageObject;
-class ImageAtlas;
+class DataAtlas;
 class ImageView;
 class BufferObject;
 class CommandList;
@@ -82,6 +81,7 @@ using AmbientLightData = glsl::AmbientLightData;
 using DirectLightData = glsl::DirectLightData;
 using Vertex_V4F_V4F_T2F2U = glsl::Vertex;
 using TransformObject = glsl::TransformObject;
+using MeshIndexData = glsl::MeshIndexData;
 
 enum class ObjectType {
 	Unknown,
@@ -194,6 +194,7 @@ struct BufferData : BufferInfo {
 	BytesView data;
 	memory::function<void(uint8_t *, uint64_t, const DataCallback &)> callback = nullptr;
 	Rc<BufferObject> buffer; // GL implementation-dependent object
+	Rc<DataAtlas> atlas;
 	const Resource *resource = nullptr; // owning resource;
 };
 
@@ -275,7 +276,7 @@ struct ImageData : ImageInfo {
 	memory::function<void(uint8_t *, uint64_t, const DataCallback &)> memCallback = nullptr;
 	Function<void(uint8_t *, uint64_t, const DataCallback &)> stdCallback = nullptr;
 	Rc<ImageObject> image; // GL implementation-dependent object
-	Rc<ImageAtlas> atlas;
+	Rc<DataAtlas> atlas;
 	const Resource *resource = nullptr; // owning resource;
 };
 
@@ -368,6 +369,8 @@ struct DrawStat {
 	uint32_t solidCmds;
 	uint32_t surfaceCmds;
 	uint32_t transparentCmds;
+
+	uint32_t vertexInputTime;
 };
 
 struct VertexSpan {

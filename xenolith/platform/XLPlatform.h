@@ -72,13 +72,10 @@ namespace device {
 }
 
 namespace interaction {
-	bool _goToUrl(const StringView &url, bool external);
-	void _makePhoneCall(const StringView &number);
-	void _mailTo(const StringView &address);
-
-	void _backKey();
-	void _notification(const StringView &title, const StringView &text);
-	void _rateApplication();
+	bool _goToUrl(void *handle, StringView url, bool external);
+	void _makePhoneCall(void *handle, StringView number);
+	void _mailTo(void *handle, StringView address);
+	void _notification(void *handle, StringView title, StringView text);
 }
 
 namespace statusbar {

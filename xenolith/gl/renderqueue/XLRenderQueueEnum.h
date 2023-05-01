@@ -236,6 +236,8 @@ enum class PredefinedConstant {
 	SamplersDescriptorIdx,
 	TexturesArraySize,
 	TexturesDescriptorIdx,
+	BuffersArraySize,
+	BuffersDescriptorIdx,
 	CurrentSamplerIdx,
 };
 

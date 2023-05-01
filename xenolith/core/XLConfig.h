@@ -42,6 +42,9 @@ static constexpr uint64_t FrameIntervalSafeOffset = 200;
 /* Max sampled image descriptors per material texture set (can be actually lower due maxPerStageDescriptorSampledImages) */
 static constexpr uint32_t MaxTextureSetImages = 1024;
 
+/* Max buffers in buffer array */
+static constexpr uint32_t MaxBufferArrayObjects = 64;
+
 /* Number of frames, that can be performed in suboptimal swapchain modes */
 static constexpr uint32_t MaxSuboptimalFrames = 24;
 

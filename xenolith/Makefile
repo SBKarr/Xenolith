@@ -52,7 +52,7 @@ GLOBAL_ROOT := ../libstappler
 LOCAL_TOOLKIT := $(abspath xenolith.mk)
 
 include $(GLOBAL_ROOT)/make/utils/compiler.mk
-include $(GLOBAL_ROOT)/make/build.mk
+include $(GLOBAL_ROOT)/make/local.mk
 
 all: libxenolith
 

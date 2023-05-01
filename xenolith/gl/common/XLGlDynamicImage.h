@@ -50,7 +50,7 @@ public:
 
 	Rc<DynamicImageInstance> getInstance();
 
-	void updateInstance(Loop &, const Rc<ImageObject> &, Rc<ImageAtlas> && = Rc<ImageAtlas>(), Rc<Ref> &&userdata = Rc<Ref>(),
+	void updateInstance(Loop &, const Rc<ImageObject> &, Rc<DataAtlas> && = Rc<DataAtlas>(), Rc<Ref> &&userdata = Rc<Ref>(),
 			const Vector<Rc<renderqueue::DependencyEvent>> & = Vector<Rc<renderqueue::DependencyEvent>>());
 
 	void addTracker(const MaterialAttachment *);
@@ -76,11 +76,11 @@ protected:
 
 class DynamicImage::Builder {
 public:
-	const ImageData * setImageByRef(StringView key, ImageInfo &&, BytesView data, Rc<ImageAtlas> && = nullptr);
-	const ImageData * setImage(StringView key, ImageInfo &&, FilePath data, Rc<ImageAtlas> && = nullptr);
-	const ImageData * setImage(StringView key, ImageInfo &&, BytesView data, Rc<ImageAtlas> && = nullptr);
+	const ImageData * setImageByRef(StringView key, ImageInfo &&, BytesView data, Rc<DataAtlas> && = nullptr);
+	const ImageData * setImage(StringView key, ImageInfo &&, FilePath data, Rc<DataAtlas> && = nullptr);
+	const ImageData * setImage(StringView key, ImageInfo &&, BytesView data, Rc<DataAtlas> && = nullptr);
 	const ImageData * setImage(StringView key, ImageInfo &&,
-			Function<void(uint8_t *, uint64_t, const ImageData::DataCallback &)> &&cb, Rc<ImageAtlas> && = nullptr);
+			Function<void(uint8_t *, uint64_t, const ImageData::DataCallback &)> &&cb, Rc<DataAtlas> && = nullptr);
 
 protected:
 	friend class DynamicImage;

@@ -133,7 +133,7 @@ protected:
 	void addPendingMaterial(const gl::MaterialAttachment *, Rc<gl::Material> &&);
 	void addMaterial(const MaterialInfo &, gl::MaterialId, bool revokable);
 
-	void listMaterials() const;
+	String listMaterials() const;
 
 	Vector<Rc<SceneLight>>::iterator removeLight(Vector<Rc<SceneLight>>::iterator);
 

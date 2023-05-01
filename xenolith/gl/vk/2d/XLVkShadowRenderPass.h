@@ -61,27 +61,15 @@ protected:
 };
 
 // this attachment should provide vertex & index buffers
-class ShadowTrianglesAttachment : public BufferAttachment {
+class ShadowPrimitivesAttachment : public BufferAttachment {
 public:
-	virtual ~ShadowTrianglesAttachment();
+	virtual ~ShadowPrimitivesAttachment();
 
 	virtual bool init(StringView);
 
 protected:
 	using BufferAttachment::init;
 
-	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
-};
-
-class ShadowImageArrayAttachment : public ImageAttachment {
-public:
-	virtual ~ShadowImageArrayAttachment();
-
-	virtual bool init(StringView, Extent2 extent);
-
-	virtual gl::ImageInfo getAttachmentInfo(const AttachmentHandle *, Extent3 e) const override;
-
-protected:
 	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
 };
 
@@ -95,41 +83,6 @@ public:
 
 protected:
 	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
-};
-
-class ShadowPass : public QueuePass {
-public:
-	using AttachmentHandle = renderqueue::AttachmentHandle;
-
-	static constexpr StringView SdfTrianglesComp = "SdfTrianglesComp";
-	static constexpr StringView SdfCirclesComp = "SdfCirclesComp";
-	static constexpr StringView SdfRectsComp = "SdfRectsComp";
-	static constexpr StringView SdfRoundedRectsComp = "SdfRoundedRectsComp";
-	static constexpr StringView SdfPolygonsComp = "SdfPolygonsComp";
-	static constexpr StringView SdfImageComp = "SdfImageComp";
-
-	static bool makeDefaultRenderQueue(renderqueue::Queue::Builder &, Extent2 extent);
-
-	virtual ~ShadowPass() { }
-
-	virtual bool init(StringView, RenderOrdering);
-
-	const ShadowLightDataAttachment *getLights() const { return _lights; }
-	const ShadowVertexAttachment *getVertexes() const { return _vertexes; }
-	const ShadowTrianglesAttachment *getTriangles() const { return _triangles; }
-	const ShadowImageArrayAttachment *getArray() const { return _array; }
-
-	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
-
-protected:
-	using QueuePass::init;
-
-	virtual void prepare(gl::Device &) override;
-
-	const ShadowLightDataAttachment *_lights = nullptr;
-	const ShadowVertexAttachment *_vertexes = nullptr;
-	const ShadowTrianglesAttachment *_triangles = nullptr;
-	const ShadowImageArrayAttachment *_array = nullptr;
 };
 
 class ShadowVertexAttachmentHandle : public BufferAttachmentHandle {
@@ -199,9 +152,9 @@ protected:
 	gl::glsl::ShadowData _shadowData;
 };
 
-class ShadowTrianglesAttachmentHandle : public BufferAttachmentHandle {
+class ShadowPrimitivesAttachmentHandle : public BufferAttachmentHandle {
 public:
-	virtual ~ShadowTrianglesAttachmentHandle();
+	virtual ~ShadowPrimitivesAttachmentHandle();
 
 	void allocateBuffer(DeviceFrameHandle *, uint32_t objects, const gl::glsl::ShadowData &);
 
@@ -258,23 +211,6 @@ protected:
 	float _sceneDensity = 1.0f;
 	float _shadowDensity = 1.0f;
 	gl::ImageInfo _currentImageInfo;
-};
-
-class ShadowPassHandle : public QueuePassHandle {
-public:
-	virtual ~ShadowPassHandle() { }
-
-	virtual bool prepare(FrameQueue &, Function<void(bool)> &&) override;
-
-protected:
-	virtual Vector<const CommandBuffer *> doPrepareCommands(FrameHandle &) override;
-
-	const ShadowLightDataAttachmentHandle *_lightsBuffer = nullptr;
-	const ShadowVertexAttachmentHandle *_vertexBuffer = nullptr;
-	const ShadowTrianglesAttachmentHandle *_trianglesBuffer = nullptr;
-	const ShadowImageArrayAttachmentHandle *_arrayAttachment = nullptr;
-
-	uint32_t _gridCellSize = 32;
 };
 
 }

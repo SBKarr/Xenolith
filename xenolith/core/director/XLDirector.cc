@@ -66,6 +66,8 @@ const Rc<ResourceCache> &Director::getResourceCache() const {
 }
 
 bool Director::acquireFrame(const Rc<FrameRequest> &req) {
+	auto t = _application->getClock();
+
 	if (_constraints != req->getFrameConstraints()) {
 		_constraints = req->getFrameConstraints();
 		_screenSize = _constraints.getScreenSize();
@@ -76,7 +78,7 @@ bool Director::acquireFrame(const Rc<FrameRequest> &req) {
 		updateGeneralTransform();
 	}
 
-	update();
+	update(t);
 	if (_scene) {
 		_scene->specializeRequest(req);
 	}
@@ -89,12 +91,12 @@ bool Director::acquireFrame(const Rc<FrameRequest> &req) {
 		}
 	}, this, true);
 
+	_avgFrameTime.addValue(_application->getClock() - t);
+	_avgFrameTimeValue = _avgFrameTime.getAverage(true);
 	return true;
 }
 
-void Director::update() {
-	auto t = _application->getClock();
-
+void Director::update(uint64_t t) {
 	if (_time.global) {
 		_time.delta = t - _time.global;
 	} else {

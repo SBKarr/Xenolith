@@ -136,8 +136,8 @@ bool ConfigFrameRateSlider::init(uint64_t value, Function<void(uint64_t)> &&) {
 	auto val = 1.0f - float(value - min) / float(max - min);
 
 	_slider = addChild(Rc<AppSliderWithLabel>::create("60", val, [this] (float value) {
-		uint64_t max = 1'000'000 / 10;
-		uint64_t min = 1'000'000 / 360;
+		float max = 1'000'000 / 10;
+		float min = 1'000'000 / 360;
 
 		value = progress(max, min, value);
 
@@ -230,7 +230,7 @@ void ConfigMenu::makeScrollList(ScrollController *controller) {
 		return Rc<ConfigApplyButton>::create(!_applyData.empty(), [this] () {
 			applyConfig();
 		});
-	}, 42.0f, ZOrder(0));
+	}, 42.0f, ZOrder(0), "apply");
 
 	controller->addItem([this] (const ScrollController::Item &item) -> Rc<Node> {
 		auto app = (AppDelegate *)_director->getApplication();

@@ -85,6 +85,14 @@ void TypescaleLabel::setBlendColor(ColorRole rule, float value) {
 	}
 }
 
+void TypescaleLabel::setPreserveOpacity(bool value) {
+	_preserveOpacity = value;
+}
+
+bool TypescaleLabel::isPreserveOpacity() const {
+	return _preserveOpacity;
+}
+
 bool TypescaleLabel::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 	if (!_visible) {
 		return false;
@@ -112,7 +120,7 @@ bool TypescaleLabel::visitDraw(RenderFrameInfo &frame, NodeFlags parentFlags) {
 		}
 
 		if (color != getColor()) {
-			setColor(color, true);
+			setColor(color, !_preserveOpacity);
 		}
 
 		if (getRenderingLevel() != RenderingLevel::Default) {

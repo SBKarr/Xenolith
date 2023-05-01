@@ -46,7 +46,7 @@ Rc<DynamicImageInstance> DynamicImage::getInstance() {
 	return _instance;
 }
 
-void DynamicImage::updateInstance(Loop &loop, const Rc<ImageObject> &obj, Rc<ImageAtlas> &&atlas, Rc<Ref> &&userdata,
+void DynamicImage::updateInstance(Loop &loop, const Rc<ImageObject> &obj, Rc<DataAtlas> &&atlas, Rc<Ref> &&userdata,
 		const Vector<Rc<renderqueue::DependencyEvent>> &deps) {
 	auto newInstance = Rc<DynamicImageInstance>::alloc();
 	static_cast<ImageInfo &>(newInstance->data) = obj->getInfo();
@@ -117,7 +117,7 @@ void DynamicImage::acquireData(const Callback<void(BytesView)> &cb) {
 	}
 }
 
-const ImageData * DynamicImage::Builder::setImageByRef(StringView key, ImageInfo &&info, BytesView data, Rc<ImageAtlas> &&atlas) {
+const ImageData * DynamicImage::Builder::setImageByRef(StringView key, ImageInfo &&info, BytesView data, Rc<DataAtlas> &&atlas) {
 	static_cast<ImageInfo &>(_data->_data) = info;
 	_data->_data.key = key;
 	_data->_data.data = data;
@@ -125,7 +125,7 @@ const ImageData * DynamicImage::Builder::setImageByRef(StringView key, ImageInfo
 	return &_data->_data;
 }
 
-const ImageData * DynamicImage::Builder::setImage(StringView key, ImageInfo &&info, FilePath path, Rc<ImageAtlas> &&atlas) {
+const ImageData * DynamicImage::Builder::setImage(StringView key, ImageInfo &&info, FilePath path, Rc<DataAtlas> &&atlas) {
 	String npath;
 	if (filesystem::exists(path.get())) {
 		npath = path.get().str<Interface>();
@@ -151,7 +151,7 @@ const ImageData * DynamicImage::Builder::setImage(StringView key, ImageInfo &&in
 	return &_data->_data;
 }
 
-const ImageData * DynamicImage::Builder::setImage(StringView key, ImageInfo &&info, BytesView data, Rc<ImageAtlas> &&atlas) {
+const ImageData * DynamicImage::Builder::setImage(StringView key, ImageInfo &&info, BytesView data, Rc<DataAtlas> &&atlas) {
 	_data->_keyData = key.str<Interface>();
 	_data->_imageData = data.bytes<Interface>();
 	static_cast<ImageInfo &>(_data->_data) = info;
@@ -162,7 +162,7 @@ const ImageData * DynamicImage::Builder::setImage(StringView key, ImageInfo &&in
 }
 
 const ImageData * DynamicImage::Builder::setImage(StringView key, ImageInfo &&info,
-		Function<void(uint8_t *, uint64_t, const ImageData::DataCallback &)> &&cb, Rc<ImageAtlas> &&atlas) {
+		Function<void(uint8_t *, uint64_t, const ImageData::DataCallback &)> &&cb, Rc<DataAtlas> &&atlas) {
 	_data->_keyData = key.str<Interface>();
 	static_cast<ImageInfo &>(_data->_data) = info;
 	_data->_data.key = _data->_keyData;

@@ -26,6 +26,8 @@
 
 #include "XLPlatformAndroid.h"
 #include <sys/timerfd.h>
+#include <android/hardware_buffer.h>
+#include <dlfcn.h>
 
 namespace stappler::xenolith::platform {
 
@@ -131,6 +133,41 @@ bool NativeActivity::init(ANativeActivity *a) {
 	activity = a;
 	config = AConfiguration_new();
 	AConfiguration_fromAssetManager(config, activity->assetManager);
+	sdkVersion = AConfiguration_getSdkVersion(config);
+
+	if (sdkVersion >= 29) {
+		auto handle = ::dlopen(nullptr, RTLD_LAZY);
+		if (handle) {
+			auto fn_AHardwareBuffer_isSupported = ::dlsym(handle, "AHardwareBuffer_isSupported");
+			if (fn_AHardwareBuffer_isSupported) {
+				auto _AHardwareBuffer_isSupported = (int (*) (const AHardwareBuffer_Desc *))fn_AHardwareBuffer_isSupported;
+
+				// check for common buffer formats
+				auto checkSupported = [&] (int format) -> bool {
+					AHardwareBuffer_Desc desc;
+					desc.width = 1024;
+					desc.height = 1024;
+					desc.layers = 1;
+					desc.format = format;
+					desc.usage = AHARDWAREBUFFER_USAGE_GPU_FRAMEBUFFER | AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE;
+					desc.stride = 0;
+					desc.rfu0 = 0;
+					desc.rfu1 = 0;
+
+					return _AHardwareBuffer_isSupported(&desc) != 0;
+				};
+
+				formatSupport = NativeBufferFormatSupport{
+					checkSupported(AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM),
+					checkSupported(AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM),
+					checkSupported(AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM),
+					checkSupported(AHARDWAREBUFFER_FORMAT_R5G6B5_UNORM),
+					checkSupported(AHARDWAREBUFFER_FORMAT_R16G16B16A16_FLOAT),
+					checkSupported(AHARDWAREBUFFER_FORMAT_R10G10B10A2_UNORM)
+				};
+			}
+		}
+	}
 
 	looper = ALooper_forThread();
 	if (looper) {
@@ -220,6 +257,21 @@ bool NativeActivity::init(ANativeActivity *a) {
 	if (setNativePointerMethod) {
 		activity->env->CallVoidMethod(activity->clazz, setNativePointerMethod, jlong(this));
 	}
+
+	checkJniError(activity->env);
+
+	auto isEmulatorMethod = activity->env->GetMethodID(activityClass, "isEmulator", "()Z");
+	if (isEmulatorMethod) {
+		isEmulator = activity->env->CallBooleanMethod(activity->clazz, isEmulatorMethod);
+		if (isEmulator) {
+			// emulators often do not support this format for swapchains
+			formatSupport.R8G8B8A8_UNORM = false;
+			stappler::xenolith::platform::graphic::s_getCommonFormat = gl::ImageFormat::R5G6B5_UNORM_PACK16;
+		}
+	}
+
+	checkJniError(activity->env);
+
 	activity->env->DeleteLocalRef(activityClass);
 
 	classLoader = Rc<NativeClassLoader>::create(activity);
@@ -281,6 +333,7 @@ void NativeActivity::handleConfigurationChanged() {
 	}
 	config = AConfiguration_new();
 	AConfiguration_fromAssetManager(config, activity->assetManager);
+	sdkVersion = AConfiguration_getSdkVersion(config);
 
 	auto appInfo = getAppInfo(config);
 
@@ -749,6 +802,19 @@ void NativeActivity::handleRemoteNotification() {
 			Application::onRemoteNotification(app);
 		});
 	}
+}
+
+void NativeActivity::openUrl(StringView url) {
+	rootView->performOnThread([this, url = url.str<Interface>()] {
+		auto activityClass = activity->env->GetObjectClass(activity->clazz);
+		jmethodID openWebURL = activity->env->GetMethodID(activityClass, "openURL", "(Ljava/lang/String;)V");
+		if (openWebURL) {
+			jstring jurl = activity->env->NewStringUTF(url.data());
+			activity->env->CallVoidMethod(activity->clazz, openWebURL, jurl);
+			activity->env->DeleteLocalRef(jurl);
+		}
+		activity->env->DeleteLocalRef(activityClass);
+	});
 }
 
 void checkJniError(JNIEnv* env) {

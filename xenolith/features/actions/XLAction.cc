@@ -226,8 +226,6 @@ void Sequence::stop(void) {
 			front->action->update(1.0);
 			front->action->stop();
 
-			// std::cout << "Index: " << _currentIdx << "\n";
-
 			++ front;
 			++ _currentIdx;
 		}
@@ -262,8 +260,6 @@ void Sequence::update(float t) {
 				front->action->update(1.0);
 				front->action->stop();
 
-				// std::cout << "Index: (instant) " << _currentIdx << "\n";
-
 				++ front;
 				++ _currentIdx;
 			} while (front != end && front->threshold == 0.0f);
@@ -285,8 +281,6 @@ void Sequence::update(float t) {
 			front->action->update(1.0f);
 			dt = t - front->maxThreshold;
 			front->action->stop();
-
-			// std::cout << "Index: (interval) " << _currentIdx << "\n";
 
 			++ front;
 			++ _currentIdx;
@@ -311,8 +305,6 @@ void Sequence::update(float t) {
 		front->action->startWithTarget(_target);
 		front->action->update(1.0);
 		front->action->stop();
-
-		// std::cout << "Index: " << _currentIdx << "\n";
 
 		++ front;
 		++ _currentIdx;
