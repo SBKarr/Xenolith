@@ -33,14 +33,14 @@ class RenderFontQueue : public renderqueue::Queue {
 public:
 	virtual ~RenderFontQueue();
 
-	bool init(StringView name, Function<void(FrameQueue &, const Rc<AttachmentHandle> &, Function<void(bool)> &&)> && = nullptr);
+	bool init(StringView name);
 
-	RenderFontAttachment *getAttachment() const { return _attachment; }
+	const AttachmentData *getAttachment() const { return _attachment; }
 
 protected:
 	using renderqueue::Queue::init;
 
-	RenderFontAttachment *_attachment;
+	const AttachmentData *_attachment;
 };
 
 }

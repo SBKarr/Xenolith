@@ -61,7 +61,7 @@ protected:
 		Vector<Rc<renderqueue::DependencyEvent>> deps;
 	};
 
-	MaterialCompilationAttachment *_attachment = nullptr;
+	const AttachmentData *_attachment = nullptr;
 	Set<const gl::MaterialAttachment *> _inProgress;
 	Map<const gl::MaterialAttachment *, MaterialRequest> _requests;
 };

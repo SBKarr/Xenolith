@@ -41,6 +41,7 @@ class View;
 namespace stappler::xenolith::renderqueue {
 
 struct PassData;
+struct SubpassData;
 
 class FrameQueue;
 class FrameEmitter;
@@ -48,18 +49,10 @@ class FrameHandle;
 class FrameRequest;
 
 class Attachment;
-class AttachmentDescriptor;
-class AttachmentRef;
 class AttachmentHandle;
 
 class BufferAttachment;
-class BufferAttachmentDescriptor;
-class BufferAttachmentRef;
-
 class ImageAttachment;
-class ImageAttachmentDescriptor;
-class ImageAttachmentRef;
-
 class Pass;
 class PassHandle;
 class Resource;
@@ -70,7 +63,14 @@ class Queue;
 struct FrameAttachmentData;
 struct FramePassData;
 
+struct AttachmentData;
+struct AttachmentPassData;
+struct PipelineLayoutData;
+struct DescriptorSetData;
+
 class ImageStorage;
+
+class AttachmentBuilder;
 
 struct ProgramDescriptorBinding {
 	uint32_t set = 0;
@@ -127,9 +127,9 @@ struct GraphicPipelineInfo : NamedMem {
 };
 
 struct GraphicPipelineData : GraphicPipelineInfo {
-	const Pass *renderPass = nullptr;
+	const SubpassData *subpass = nullptr;
+	const PipelineLayoutData *layout = nullptr;
 	Rc<gl::GraphicPipeline> pipeline; // GL implementation-dependent object
-	uint32_t subpass = 0;
 };
 
 struct ComputePipelineInfo : NamedMem {
@@ -137,19 +137,21 @@ struct ComputePipelineInfo : NamedMem {
 };
 
 struct ComputePipelineData : ComputePipelineInfo {
-	const Pass *renderPass = nullptr;
+	const SubpassData *subpass = nullptr;
+	const PipelineLayoutData *layout = nullptr;
 	Rc<gl::ComputePipeline> pipeline; // GL implementation-dependent object
 };
 
-struct PipelineDescriptor {
-	StringView name; // for external descriptors
-	Attachment *attachment = nullptr;
-	AttachmentDescriptor *descriptor = nullptr;
+struct PipelineDescriptor : NamedMem {
+	const DescriptorSetData *set = nullptr;
+	const AttachmentPassData *attachment = nullptr;
 	DescriptorType type = DescriptorType::Unknown;
 	ProgramStage stages = ProgramStage::None;
+	AttachmentLayout layout = AttachmentLayout::Ignored;
 	uint32_t count = 1;
-	uint32_t maxCount = 1;
+	uint32_t index = maxOf<uint32_t>();
 	bool updateAfterBind = false;
+	mutable uint64_t boundGeneration = 0;
 };
 
 struct SubpassDependency {
@@ -172,7 +174,88 @@ inline bool operator < (const SubpassDependency &l, const SubpassDependency &r) 
 inline bool operator == (const SubpassDependency &l, const SubpassDependency &r) { return l.value() == r.value(); }
 inline bool operator != (const SubpassDependency &l, const SubpassDependency &r) { return l.value() != r.value(); }
 
-struct SubpassData {
+struct AttachmentDependencyInfo {
+	// when and how within renderpass/subpass attachment will be used for a first time
+	PipelineStage initialUsageStage = PipelineStage::None;
+	AccessType initialAccessMask = AccessType::None;
+
+	// when and how within renderpass/subpass attachment will be used for a last time
+	PipelineStage finalUsageStage = PipelineStage::None;
+	AccessType finalAccessMask = AccessType::None;
+
+	// FrameRenderPassState, after which attachment can be used on next renderpass
+	// Or Initial if no dependencies
+	FrameRenderPassState requiredRenderPassState = FrameRenderPassState::Initial;
+
+	// FrameRenderPassState that can be processed before attachment is acquired
+	FrameRenderPassState lockedRenderPassState = FrameRenderPassState::Initial;
+};
+
+struct AttachmentSubpassData : NamedMem {
+	const AttachmentPassData *pass = nullptr;
+	const SubpassData *subpass = nullptr;
+	AttachmentLayout layout = AttachmentLayout::Ignored;
+	AttachmentUsage usage = AttachmentUsage::None;
+	AttachmentOps ops = AttachmentOps::Undefined;
+	AttachmentDependencyInfo dependency;
+};
+
+struct AttachmentPassData : NamedMem {
+	const AttachmentData *attachment = nullptr;
+	const PassData *pass = nullptr;
+
+	mutable uint32_t index = maxOf<uint32_t>();
+
+	AttachmentOps ops = AttachmentOps::Undefined;
+
+	// calculated initial layout
+	// for first descriptor in execution chain - initial layout of queue's attachment or first usage layout
+	// for others - final layout of previous descriptor in chain of execution
+	AttachmentLayout initialLayout = AttachmentLayout::Undefined;
+
+	// calculated final layout
+	// for last descriptor in execution chain - final layout of queue's attachment or last usage layout
+	// for others - last usage layout
+	AttachmentLayout finalLayout = AttachmentLayout::Undefined;
+
+	AttachmentLoadOp loadOp = AttachmentLoadOp::DontCare;
+	AttachmentStoreOp storeOp = AttachmentStoreOp::DontCare;
+	AttachmentLoadOp stencilLoadOp = AttachmentLoadOp::DontCare;
+	AttachmentStoreOp stencilStoreOp = AttachmentStoreOp::DontCare;
+
+	ColorMode colorMode;
+	AttachmentDependencyInfo dependency;
+
+	memory::vector<PipelineDescriptor *> descriptors;
+	memory::vector<AttachmentSubpassData *> subpasses;
+};
+
+struct AttachmentData : NamedMem {
+	const QueueData *queue = nullptr;
+	bool transient = false;
+	AttachmentOps ops = AttachmentOps::Undefined;
+	AttachmentType type = AttachmentType::Image;
+	AttachmentUsage usage = AttachmentUsage::None;
+	memory::vector<AttachmentPassData *> passes;
+	Rc<Attachment> attachment;
+};
+
+struct DescriptorSetData : NamedMem {
+	const PipelineLayoutData *layout = nullptr;
+	uint32_t index = 0;
+	memory::vector<PipelineDescriptor *> descriptors;
+};
+
+struct PipelineLayoutData : NamedMem {
+	const PassData *pass = nullptr;
+	uint32_t index = 0;
+	bool usesTextureSet = false;
+	memory::vector<DescriptorSetData *> sets;
+	memory::vector<const GraphicPipelineData *> graphicPipelines;
+	memory::vector<const ComputePipelineData *> computePipelines;
+};
+
+struct SubpassData : NamedMem {
 	SubpassData() = default;
 	SubpassData(const SubpassData &) = default;
 	SubpassData(SubpassData &&) = default;
@@ -180,22 +263,17 @@ struct SubpassData {
 	SubpassData &operator=(const SubpassData &) = delete;
 	SubpassData &operator=(SubpassData &&) = delete;
 
+	const PassData *pass = nullptr;
 	uint32_t index = 0;
-	PassData *renderPass = nullptr;
 
 	HashTable<GraphicPipelineData *> graphicPipelines;
 	HashTable<ComputePipelineData *> computePipelines;
-	memory::vector<BufferAttachmentRef *> inputBuffers;
-	memory::vector<BufferAttachmentRef *> outputBuffers;
 
-	memory::vector<AttachmentRef *> inputGenerics;
-	memory::vector<AttachmentRef *> outputGenerics;
-
-	memory::vector<ImageAttachmentRef *> inputImages;
-	memory::vector<ImageAttachmentRef *> outputImages;
-	memory::vector<ImageAttachmentRef *> resolveImages;
-	ImageAttachmentRef *depthStencil = nullptr;
-	memory::vector<uint32_t> preserve;
+	memory::vector<const AttachmentSubpassData *> inputImages;
+	memory::vector<const AttachmentSubpassData *> outputImages;
+	memory::vector<const AttachmentSubpassData *> resolveImages;
+	const AttachmentSubpassData *depthStencil = nullptr;
+	mutable memory::vector<uint32_t> preserve;
 };
 
 /** RenderOrdering defines order of execution for render passes between interdependent passes
@@ -214,13 +292,13 @@ struct PassData : NamedMem {
 	PassData &operator=(const PassData &) = delete;
 	PassData &operator=(PassData &&) = delete;
 
-	memory::vector<AttachmentDescriptor *> passAttachments;
-	memory::vector<AttachmentDescriptor *> passDescriptors;
-	memory::vector<SubpassData> subpasses;
+	const QueueData *queue = nullptr;
+	memory::vector<const AttachmentPassData *> attachments;
+	memory::vector<const SubpassData *> subpasses;
+	memory::vector<const PipelineLayoutData *> pipelineLayouts;
 	memory::vector<SubpassDependency> dependencies;
-	memory::vector<const PipelineDescriptor *> queueDescriptors;
-	memory::vector<PipelineDescriptor> extraDescriptors;
 
+	PassType type = PassType::Graphics;
 	RenderOrdering ordering = RenderOrderingLowest;
 	bool hasUpdateAfterBind = false;
 

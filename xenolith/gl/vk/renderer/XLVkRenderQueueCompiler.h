@@ -47,7 +47,7 @@ public:
 protected:
 	using renderqueue::Queue::init;
 
-	RenderQueueAttachment *_attachment;
+	const AttachmentData *_attachment;
 };
 
 }

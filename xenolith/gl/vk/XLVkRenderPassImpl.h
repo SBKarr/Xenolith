@@ -56,13 +56,17 @@ struct DescriptorSet : public Ref {
 
 class RenderPassImpl : public gl::RenderPass {
 public:
-	struct Data {
+	struct LayoutData {
 		VkPipelineLayout layout = VK_NULL_HANDLE;
-		VkRenderPass renderPass = VK_NULL_HANDLE;
-		VkRenderPass renderPassAlternative = VK_NULL_HANDLE;
 		VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
 		Vector<VkDescriptorSetLayout> layouts;
 		Vector<Rc<DescriptorSet>> sets;
+	};
+
+	struct Data {
+		VkRenderPass renderPass = VK_NULL_HANDLE;
+		VkRenderPass renderPassAlternative = VK_NULL_HANDLE;
+		Vector<LayoutData> layouts;
 
 		bool cleanup(Device &dev);
 	};
@@ -72,15 +76,15 @@ public:
 	virtual bool init(Device &dev, PassData &);
 
 	VkRenderPass getRenderPass(bool alt = false) const;
-	VkPipelineLayout getPipelineLayout() const { return _data->layout; }
-	const Vector<Rc<DescriptorSet>> &getDescriptorSets() const { return _data->sets; }
+	VkPipelineLayout getPipelineLayout(uint32_t idx) const { return _data->layouts[idx].layout; }
+	const Vector<Rc<DescriptorSet>> &getDescriptorSets(uint32_t idx) const { return _data->layouts[idx].sets; }
 	const Vector<VkClearValue> &getClearValues() const { return _clearValues; }
 
 	//VkDescriptorSet getDescriptorSet(uint32_t) const;
 
 	// if async is true - update descriptors with updateAfterBind flag
 	// 			   false - without updateAfterBindFlag
-	virtual bool writeDescriptors(const QueuePassHandle &, bool async) const;
+	virtual bool writeDescriptors(const QueuePassHandle &, uint32_t layoutIndex, bool async) const;
 
 	virtual void perform(const QueuePassHandle &, CommandBuffer &buf, const Callback<void()> &);
 
@@ -92,7 +96,8 @@ protected:
 	bool initTransferPass(Device &dev, PassData &);
 	bool initGenericPass(Device &dev, PassData &);
 
-	bool initDescriptors(Device &dev, PassData &, Data &);
+	bool initDescriptors(Device &dev, const PassData &, Data &);
+	bool initDescriptors(Device &dev, const renderqueue::PipelineLayoutData &, Data &, LayoutData &);
 
 	Vector<VkAttachmentDescription> _attachmentDescriptions;
 	Vector<VkAttachmentDescription> _attachmentDescriptionsAlternative;
@@ -100,7 +105,7 @@ protected:
 	Vector<uint32_t> _preservedAttachments;
 	Vector<VkSubpassDependency> _subpassDependencies;
 	Vector<VkSubpassDescription> _subpasses;
-	Set<const Attachment *> _variableAttachments;
+	Set<const renderqueue::AttachmentPassData *> _variableAttachments;
 	Data *_data = nullptr;
 
 	Vector<VkClearValue> _clearValues;

@@ -32,10 +32,12 @@ auto ImageAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<Attachment
 
 bool ImageAttachmentHandle::writeDescriptor(const QueuePassHandle &queue, DescriptorImageInfo &info) {
 	auto &image = _queueData->image;
-	auto desc = (renderqueue::ImageAttachmentDescriptor *)info.descriptor->descriptor;
-	auto viewInfo = gl::ImageViewInfo(*desc, image->getInfo());
+
+	bool allowSwizzle = (info.descriptor->type == renderqueue::DescriptorType::SampledImage);
+	gl::ImageViewInfo viewInfo(image->getInfo());
+	viewInfo.setup(info.descriptor->attachment->colorMode, allowSwizzle);
 	if (auto view = image->getView(viewInfo)) {
-		info.layout = VkImageLayout(desc->getDescriptorLayout());
+		info.layout = VkImageLayout(info.descriptor->layout);
 		info.imageView = (ImageView *)view.get();
 		return true;
 	}
@@ -49,8 +51,8 @@ bool ImageAttachmentHandle::isDescriptorDirty(const PassHandle &, const Pipeline
 
 MaterialAttachment::~MaterialAttachment() { }
 
-bool MaterialAttachment::init(StringView str, const gl::BufferInfo &info, Vector<Rc<gl::Material>> &&initial) {
-	return gl::MaterialAttachment::init(str, info, [] (uint8_t *target, const gl::Material *material) {
+bool MaterialAttachment::init(AttachmentBuilder &builder, const gl::BufferInfo &info) {
+	return gl::MaterialAttachment::init(builder, info, [] (uint8_t *target, const gl::Material *material) {
 		auto &images = material->getImages();
 		if (!images.empty()) {
 			gl::glsl::Material material;
@@ -78,7 +80,7 @@ bool MaterialAttachment::init(StringView str, const gl::BufferInfo &info, Vector
 			return true;
 		}
 		return false;
-	}, sizeof(gl::glsl::Material), gl::MaterialType::Basic2D, move(initial));
+	}, sizeof(gl::glsl::Material), gl::MaterialType::Basic2D);
 }
 
 auto MaterialAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<AttachmentHandle> {
@@ -96,7 +98,7 @@ bool MaterialAttachmentHandle::init(const Rc<Attachment> &a, const FrameQueue &h
 
 bool MaterialAttachmentHandle::isDescriptorDirty(const PassHandle &, const PipelineDescriptor &desc,
 		uint32_t, bool isExternal) const {
-	return _materials && _materials->getGeneration() != ((gl::MaterialAttachmentDescriptor *)desc.descriptor)->getBoundGeneration();
+	return _materials && _materials->getGeneration() != desc.boundGeneration;
 }
 
 bool MaterialAttachmentHandle::writeDescriptor(const QueuePassHandle &handle, DescriptorBufferInfo &info) {
@@ -111,7 +113,7 @@ bool MaterialAttachmentHandle::writeDescriptor(const QueuePassHandle &handle, De
 	info.buffer = ((Buffer *)b.get());
 	info.offset = 0;
 	info.range = info.buffer->getSize();
-	((gl::MaterialAttachmentDescriptor *)info.descriptor->descriptor)->setBoundGeneration(_materials->getGeneration());
+	info.descriptor->boundGeneration = _materials->getGeneration();
 	return true;
 }
 

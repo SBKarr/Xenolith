@@ -32,16 +32,16 @@ class VertexMaterialAttachment : public BufferAttachment {
 public:
 	virtual ~VertexMaterialAttachment();
 
-	virtual bool init(StringView, const gl::BufferInfo &, const MaterialAttachment *);
+	virtual bool init(AttachmentBuilder &builder, const gl::BufferInfo &, const AttachmentData *);
 
-	const MaterialAttachment *getMaterials() const { return _materials; }
+	const AttachmentData *getMaterials() const { return _materials; }
 
 protected:
 	using BufferAttachment::init;
 
 	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
 
-	const MaterialAttachment *_materials = nullptr;
+	const AttachmentData *_materials = nullptr;
 };
 
 class VertexMaterialAttachmentHandle : public BufferAttachmentHandle {
@@ -85,24 +85,26 @@ class MaterialVertexPass : public QueuePass {
 public:
 	using AttachmentHandle = renderqueue::AttachmentHandle;
 
-	static gl::ImageFormat selectDepthFormat(SpanView<gl::ImageFormat> formats);
+	static gl::ImageFormat select2dDepthFormat(SpanView<gl::ImageFormat> formats);
+	static gl::ImageFormat select3dDepthFormat(SpanView<gl::ImageFormat> formats);
 
 	virtual ~MaterialVertexPass() { }
 
-	virtual bool init(StringView, RenderOrdering, size_t subpassCount = 1);
-
-	const VertexMaterialAttachment *getVertexes() const { return _vertexes; }
-	const MaterialAttachment *getMaterials() const { return _materials; }
+	const AttachmentData *getVertexes() const { return _vertexes; }
+	const AttachmentData *getMaterials() const { return _materials; }
 
 	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
 
 protected:
 	using QueuePass::init;
 
-	virtual void prepare(gl::Device &) override;
+	const AttachmentData *_output = nullptr;
+	const AttachmentData *_shadow = nullptr;
+	const AttachmentData *_depth2d = nullptr;
+	const AttachmentData *_depth3d = nullptr;
 
-	const VertexMaterialAttachment *_vertexes = nullptr;
-	const MaterialAttachment *_materials = nullptr;
+	const AttachmentData *_vertexes = nullptr;
+	const AttachmentData *_materials = nullptr;
 };
 
 class MaterialVertexPassHandle : public QueuePassHandle {

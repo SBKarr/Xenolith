@@ -28,10 +28,10 @@
 
 namespace stappler::xenolith::renderqueue {
 
-FrameOutputBinding::FrameOutputBinding(const Attachment *a, CompleteCallback &&cb)
+FrameOutputBinding::FrameOutputBinding(const AttachmentData *a, CompleteCallback &&cb)
 : callback(cb), attachment(a) { }
 
-FrameOutputBinding::FrameOutputBinding(const Attachment *a, Rc<gl::View> &&view, CompleteCallback &&cb)
+FrameOutputBinding::FrameOutputBinding(const AttachmentData *a, Rc<gl::View> &&view, CompleteCallback &&cb)
 : view(view), handle(view->getSwapchainHandle()), callback(cb), attachment(a) { }
 
 FrameOutputBinding::~FrameOutputBinding() { }
@@ -133,7 +133,11 @@ const gl::ImageInfoData *FrameRequest::getImageSpecialization(const ImageAttachm
 }
 
 bool FrameRequest::addInput(const Attachment *a, Rc<AttachmentInputData> &&data) {
-	if (a && a->validateInput(data)) {
+	return addInput(a->getData(), move(data));
+}
+
+bool FrameRequest::addInput(const AttachmentData *a, Rc<AttachmentInputData> &&data) {
+	if (a && a->attachment->validateInput(data)) {
 		auto wIt = _waitForInputs.find(a);
 		if (wIt != _waitForInputs.end()) {
 			wIt->second.handle->submitInput(*wIt->second.queue, move(data), move(wIt->second.callback));
@@ -143,7 +147,7 @@ bool FrameRequest::addInput(const Attachment *a, Rc<AttachmentInputData> &&data)
 		return true;
 	}
 	if (a) {
-		log::vtext("FrameRequest", "Invalid input for attachment ", a->getName());
+		log::vtext("FrameRequest", "Invalid input for attachment ", a->key);
 	}
 	return false;
 }
@@ -164,20 +168,28 @@ void FrameRequest::setOutput(Rc<FrameOutputBinding> &&binding) {
 	_output.emplace(binding->attachment, move(binding));
 }
 
-void FrameRequest::setOutput(const Attachment *a, CompleteCallback &&cb) {
+void FrameRequest::setOutput(const AttachmentData *a, CompleteCallback &&cb) {
 	setOutput(Rc<FrameOutputBinding>::alloc(a, move(cb)));
 }
 
-void FrameRequest::setOutput(const Attachment *a, Rc<gl::View> &&view, CompleteCallback &&cb) {
+void FrameRequest::setOutput(const AttachmentData *a, Rc<gl::View> &&view, CompleteCallback &&cb) {
 	setOutput(Rc<FrameOutputBinding>::alloc(a, move(view), move(cb)));
 }
 
-void FrameRequest::setRenderTarget(const Attachment *a, Rc<ImageStorage> &&img) {
+void FrameRequest::setOutput(const Attachment *a, CompleteCallback &&cb) {
+	setOutput(a->getData(), move(cb));
+}
+
+void FrameRequest::setOutput(const Attachment *a, Rc<gl::View> &&view, CompleteCallback &&cb) {
+	setOutput(a->getData(), move(view), move(cb));
+}
+
+void FrameRequest::setRenderTarget(const AttachmentData *a, Rc<ImageStorage> &&img) {
 	_renderTargets.emplace(a, move(img));
 }
 
 bool FrameRequest::onOutputReady(gl::Loop &loop, FrameAttachmentData &data) {
-	auto it = _output.find(data.handle->getAttachment());
+	auto it = _output.find(data.handle->getAttachment()->getData());
 	if (it != _output.end()) {
 		if (it->second->handleReady(data, true)) {
 			_output.erase(it);
@@ -190,7 +202,7 @@ bool FrameRequest::onOutputReady(gl::Loop &loop, FrameAttachmentData &data) {
 }
 
 void FrameRequest::onOutputInvalidated(gl::Loop &loop, FrameAttachmentData &data) {
-	auto it = _output.find(data.handle->getAttachment());
+	auto it = _output.find(data.handle->getAttachment()->getData());
 	if (it != _output.end()) {
 		if (it->second->handleReady(data, false)) {
 			_output.erase(it);
@@ -199,7 +211,7 @@ void FrameRequest::onOutputInvalidated(gl::Loop &loop, FrameAttachmentData &data
 	}
 }
 
-void FrameRequest::finalize(gl::Loop &loop, HashMap<const Attachment *, FrameAttachmentData *> &attachments, bool success) {
+void FrameRequest::finalize(gl::Loop &loop, HashMap<const AttachmentData *, FrameAttachmentData *> &attachments, bool success) {
 	_waitForInputs.clear();
 
 	if (!success) {
@@ -227,7 +239,7 @@ void FrameRequest::signalDependencies(gl::Loop &loop, bool success) {
 	}
 }
 
-Rc<AttachmentInputData> FrameRequest::getInputData(const Attachment *attachment) {
+Rc<AttachmentInputData> FrameRequest::getInputData(const AttachmentData *attachment) {
 	auto it = _input.find(attachment);
 	if (it != _input.end()) {
 		auto ret = it->second;
@@ -237,7 +249,7 @@ Rc<AttachmentInputData> FrameRequest::getInputData(const Attachment *attachment)
 	return nullptr;
 }
 
-Rc<ImageStorage> FrameRequest::getRenderTarget(const Attachment *a) {
+Rc<ImageStorage> FrameRequest::getRenderTarget(const AttachmentData *a) {
 	auto it = _renderTargets.find(a);
 	if (it != _renderTargets.end()) {
 		return it->second;
@@ -250,16 +262,16 @@ Set<Rc<Queue>> FrameRequest::getQueueList() const {
 }
 
 void FrameRequest::waitForInput(FrameQueue &queue, const Rc<AttachmentHandle> &a, Function<void(bool)> &&cb) {
-	auto it = _waitForInputs.find(a->getAttachment());
+	auto it = _waitForInputs.find(a->getAttachment()->getData());
 	if (it != _waitForInputs.end()) {
 		it->second.callback(false);
 		it->second.callback = move(cb);
 	} else {
-		_waitForInputs.emplace(a->getAttachment(), WaitInputData{&queue, a, move(cb)});
+		_waitForInputs.emplace(a->getAttachment()->getData(), WaitInputData{&queue, a, move(cb)});
 	}
 }
 
-const FrameOutputBinding *FrameRequest::getOutputBinding(const Attachment *a) const {
+const FrameOutputBinding *FrameRequest::getOutputBinding(const AttachmentData *a) const {
 	auto it = _output.find(a);
 	if (it != _output.end()) {
 		return it->second;
@@ -538,8 +550,8 @@ void FrameEmitter::enableCacheAttachments(const Rc<FrameHandle> &req, bool dirty
 		Set<gl::ImageInfoData> images;
 		for (auto &it : queues) {
 			for (auto &a : it->getRenderQueue()->getAttachments()) {
-				if (a->getType() == AttachmentType::Image) {
-					auto img = (ImageAttachment *)a.get();
+				if (a->type == AttachmentType::Image) {
+					auto img = (ImageAttachment *)a->attachment.get();
 					gl::ImageInfoData data = img->getImageInfo();
 					if (auto spec = req->getImageSpecialization(img)) {
 						data = *spec;
@@ -548,7 +560,7 @@ void FrameEmitter::enableCacheAttachments(const Rc<FrameHandle> &req, bool dirty
 					images.emplace(data);
 
 					// for possible transient attachment add transient version of image
-					if (a->isTransient()) {
+					if (a->transient) {
 						data.usage |=  gl::ImageUsage::TransientAttachment;
 						images.emplace(data);
 					}

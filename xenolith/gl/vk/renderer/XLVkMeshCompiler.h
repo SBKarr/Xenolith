@@ -60,7 +60,7 @@ protected:
 		Vector<Rc<renderqueue::DependencyEvent>> deps;
 	};
 
-	MeshCompilerAttachment *_attachment = nullptr;
+	const AttachmentData *_attachment = nullptr;
 	Set<const gl::MeshAttachment *> _inProgress;
 	Map<const gl::MeshAttachment *, MeshRequest> _requests;
 };

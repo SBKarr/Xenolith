@@ -176,173 +176,6 @@ Rc<Device> Instance::makeDevice(uint32_t deviceIndex) const {
 	return nullptr;
 }
 
-Vector<DeviceInfo> Instance::getDeviceInfo(VkSurfaceKHR surface, const Vector<Pair<VkPhysicalDevice, uint32_t>> &devs) const {
-	Vector<DeviceInfo> ret;
-
-	auto processDevice = [&] (const VkPhysicalDevice &device, uint32_t availableQueues) {
-		uint32_t graphicsFamily = maxOf<uint32_t>();
-		uint32_t presentFamily = maxOf<uint32_t>();
-		uint32_t transferFamily = maxOf<uint32_t>();
-		uint32_t computeFamily = maxOf<uint32_t>();
-
-		uint32_t queueFamilyCount = 0;
-		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-
-		Vector<DeviceInfo::QueueFamilyInfo> queueInfo(queueFamilyCount);
-		Vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-
-		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
-
-		int i = 0;
-		for (const VkQueueFamilyProperties &queueFamily : queueFamilies) {
-			VkBool32 presentSupport = false;
-			if (surface) {
-				vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
-			}
-
-			queueInfo[i].index = i;
-			queueInfo[i].ops = getQueueOperations(queueFamily.queueFlags, presentSupport);
-			queueInfo[i].count = queueFamily.queueCount;
-			queueInfo[i].used = 0;
-			queueInfo[i].minImageTransferGranularity = queueFamily.minImageTransferGranularity;
-
-			if ((queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) && graphicsFamily == maxOf<uint32_t>()) {
-				graphicsFamily = i;
-			}
-
-			if ((queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT) && transferFamily == maxOf<uint32_t>()) {
-				transferFamily = i;
-			}
-
-			if ((queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT) && computeFamily == maxOf<uint32_t>()) {
-				computeFamily = i;
-			}
-
-			if (availableQueues) {
-				if (((1 << i) & availableQueues) != 0) {
-					if (presentSupport && presentFamily == maxOf<uint32_t>()) {
-						presentFamily = i;
-					}
-				}
-			} else {
-				if (presentSupport && presentFamily == maxOf<uint32_t>()) {
-					presentFamily = i;
-				}
-			}
-
-			i++;
-		}
-
-		// try to select different families for transfer and compute (for more concurrency)
-		if (computeFamily == graphicsFamily) {
-			for (auto &it : queueInfo) {
-				if (it.index != graphicsFamily && ((it.ops & QueueOperations::Compute) != QueueOperations::None)) {
-					computeFamily = it.index;
-				}
-			}
-		}
-
-		if (transferFamily == computeFamily || transferFamily == graphicsFamily) {
-			for (auto &it : queueInfo) {
-				if (it.index != graphicsFamily && it.index != computeFamily && ((it.ops & QueueOperations::Transfer) != QueueOperations::None)) {
-					transferFamily = it.index;
-				}
-			}
-		}
-
-		if (presentFamily == maxOf<uint32_t>() || graphicsFamily == maxOf<uint32_t>()) {
-			return; // present or graphics is not supported for device
-		}
-
-		// fallback when Transfer or Compute is not defined
-		if (transferFamily == maxOf<uint32_t>()) {
-			transferFamily = graphicsFamily;
-			queueInfo[transferFamily].ops |= QueueOperations::Transfer;
-		}
-
-		if (computeFamily == maxOf<uint32_t>()) {
-			computeFamily = graphicsFamily;
-		}
-
-		uint32_t extensionCount;
-		vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
-
-		Vector<VkExtensionProperties> availableExtensions(extensionCount);
-		vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
-
-		DeviceInfo::Properties deviceProperties;
-		if (vkGetPhysicalDeviceProperties2) {
-			vkGetPhysicalDeviceProperties2(device, &deviceProperties.device10);
-		} else if (vkGetPhysicalDeviceProperties2KHR) {
-			vkGetPhysicalDeviceProperties2KHR(device, &deviceProperties.device10);
-		} else {
-			vkGetPhysicalDeviceProperties(device, &deviceProperties.device10.properties);
-		}
-
-		bool notFound = false;
-		for (auto &extensionName : s_requiredDeviceExtensions) {
-			if (!extensionName) {
-				break;
-			}
-
-			if (isPromotedExtension(deviceProperties.device10.properties.apiVersion, extensionName)) {
-				continue;
-			}
-
-			bool found = false;
-			for (auto &extension : availableExtensions) {
-				if (strcmp(extensionName, extension.extensionName) == 0) {
-					found = true;
-					break;
-				}
-			}
-
-			if (!found) {
-				if constexpr (s_printVkInfo) {
-					log::format("Vk-Info", "Required device extension not found: %s", extensionName);
-				}
-				notFound = true;
-				break;
-			}
-		}
-
-		if (notFound) {
-			return;
-		}
-
-		ExtensionFlags extensionFlags = ExtensionFlags::None;
-		Vector<StringView> enabledOptionals;
-		Vector<StringView> promotedOptionals;
-		for (auto &extensionName : s_optionalDeviceExtensions) {
-			if (!extensionName) {
-				break;
-			}
-
-			checkIfExtensionAvailable(deviceProperties.device10.properties.apiVersion,
-					extensionName, availableExtensions, enabledOptionals, promotedOptionals, extensionFlags);
-		}
-
-		DeviceInfo::Features features;
-		getDeviceFeatures(device, features, extensionFlags, deviceProperties.device10.properties.apiVersion);
-
-		auto req = DeviceInfo::Features::getRequired();
-		if (features.canEnable(req, deviceProperties.device10.properties.apiVersion)) {
-			ret.emplace_back(device,
-					queueInfo[graphicsFamily], queueInfo[presentFamily], queueInfo[transferFamily], queueInfo[computeFamily],
-					move(enabledOptionals), move(promotedOptionals));
-
-			getDeviceProperties(device, ret.back().properties, extensionFlags, deviceProperties.device10.properties.apiVersion);
-			getDeviceFeatures(device, ret.back().features, extensionFlags, deviceProperties.device10.properties.apiVersion);
-		}
-	};
-
-	for (auto &device : devs) {
-		processDevice(device.first, device.second);
-	}
-
-	return ret;
-}
-
 static gl::PresentMode getGlPresentMode(VkPresentModeKHR presentMode) {
 	switch (presentMode) {
 	case VK_PRESENT_MODE_IMMEDIATE_KHR: return gl::PresentMode::Immediate; break;
@@ -637,6 +470,13 @@ DeviceInfo Instance::getDeviceInfo(VkPhysicalDevice device) const {
 		for (auto &it : queueInfo) {
 			if (it.index != graphicsFamily && it.index != computeFamily && ((it.ops & QueueOperations::Transfer) != QueueOperations::None)) {
 				transferFamily = it.index;
+			}
+		}
+		if (transferFamily == computeFamily || transferFamily == graphicsFamily) {
+			if (queueInfo[computeFamily].count >= queueInfo[graphicsFamily].count) {
+				transferFamily = computeFamily;
+			} else {
+				transferFamily = graphicsFamily;
 			}
 		}
 	}

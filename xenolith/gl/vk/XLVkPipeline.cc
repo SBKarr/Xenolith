@@ -260,7 +260,8 @@ bool GraphicPipeline::init(Device &dev, const PipelineData &params, const Subpas
 	depthState.pNext = nullptr;
 	depthState.flags = 0;
 	if (pass.depthStencil) {
-		if (gl::isDepthFormat(pass.depthStencil->getImageInfo().format)) {
+		auto a = (renderqueue::ImageAttachment *)pass.depthStencil->pass->attachment->attachment.get();
+		if (a && gl::isDepthFormat(a->getImageInfo().format)) {
 			auto &depth = params.material.getDepthInfo();
 			auto &bounds = params.material.getDepthBounds();
 			depthState.depthTestEnable = depth.testEnabled ? VK_TRUE : VK_FALSE;
@@ -280,7 +281,7 @@ bool GraphicPipeline::init(Device &dev, const PipelineData &params, const Subpas
 			depthState.maxDepthBounds = 0.0f;
 		}
 
-		if (gl::isStencilFormat(pass.depthStencil->getImageInfo().format)) {
+		if (a && gl::isStencilFormat(a->getImageInfo().format)) {
 			auto &front = params.material.getStencilInfoFront();
 			auto &back = params.material.getStencilInfoBack();
 
@@ -336,8 +337,9 @@ bool GraphicPipeline::init(Device &dev, const PipelineData &params, const Subpas
 	pipelineInfo.pDepthStencilState = pass.depthStencil ? &depthState : nullptr; // Optional
 	pipelineInfo.pColorBlendState = &colorBlending;
 	pipelineInfo.pDynamicState = (dynamicStates.size() > 0) ? &dynamicState : nullptr; // Optional
-	pipelineInfo.layout = pass.renderPass->impl.cast<RenderPassImpl>()->getPipelineLayout();
-	pipelineInfo.renderPass = pass.renderPass->impl.cast<RenderPassImpl>()->getRenderPass();
+
+	pipelineInfo.layout = pass.pass->impl.cast<RenderPassImpl>()->getPipelineLayout(params.layout->index);
+	pipelineInfo.renderPass = pass.pass->impl.cast<RenderPassImpl>()->getRenderPass();
 	pipelineInfo.subpass = pass.index;
 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 	pipelineInfo.basePipelineIndex = -1;
@@ -360,7 +362,7 @@ bool ComputePipeline::init(Device &dev, const PipelineData &params, const Subpas
 	pipelineInfo.stage = VkPipelineShaderStageCreateInfo{
 		VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0
 	};
-	pipelineInfo.layout = pass.renderPass->impl.cast<RenderPassImpl>()->getPipelineLayout();
+	pipelineInfo.layout = pass.pass->impl.cast<RenderPassImpl>()->getPipelineLayout(params.layout->index);
 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 	pipelineInfo.basePipelineIndex = 0;
 

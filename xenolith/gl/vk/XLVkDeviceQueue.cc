@@ -471,10 +471,14 @@ void CommandBuffer::cmdBeginRenderPass(RenderPassImpl *pass, Framebuffer *fb, Vk
 
 	_framebuffers.emplace(fb);
 	_table->vkCmdBeginRenderPass(_buffer, &renderPassInfo, subpass);
+
+	_currentSubpass = 0;
 }
 
 void CommandBuffer::cmdEndRenderPass() {
 	_table->vkCmdEndRenderPass(_buffer);
+
+	_currentSubpass = 0;
 }
 
 void CommandBuffer::cmdSetViewport(uint32_t firstViewport, SpanView<VkViewport> viewports) {
@@ -497,8 +501,8 @@ void CommandBuffer::cmdBindIndexBuffer(Buffer *buf, VkDeviceSize offset, VkIndex
 	_table->vkCmdBindIndexBuffer(_buffer, buf->getBuffer(), offset, indexType);
 }
 
-void CommandBuffer::cmdBindDescriptorSets(RenderPassImpl *pass, uint32_t firstSet) {
-	auto &sets = pass->getDescriptorSets();
+void CommandBuffer::cmdBindDescriptorSets(RenderPassImpl *pass, uint32_t layoutIndex, uint32_t firstSet) {
+	auto &sets = pass->getDescriptorSets(layoutIndex);
 
 	Vector<VkDescriptorSet> bindSets; bindSets.reserve(sets.size());
 	for (auto &it : sets) {
@@ -506,13 +510,16 @@ void CommandBuffer::cmdBindDescriptorSets(RenderPassImpl *pass, uint32_t firstSe
 		_descriptorSets.emplace(it);
 	}
 
-	cmdBindDescriptorSets(pass, bindSets, firstSet);
+	cmdBindDescriptorSets(pass, layoutIndex, bindSets, firstSet);
 }
 
-void CommandBuffer::cmdBindDescriptorSets(RenderPassImpl *pass, SpanView<VkDescriptorSet> sets, uint32_t firstSet) {
+void CommandBuffer::cmdBindDescriptorSets(RenderPassImpl *pass, uint32_t layoutIndex, SpanView<VkDescriptorSet> sets, uint32_t firstSet) {
 	auto bindPoint = (pass->getType() == gl::RenderPassType::Compute) ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS;
 
-	_table->vkCmdBindDescriptorSets(_buffer, bindPoint, pass->getPipelineLayout(), firstSet,
+	_boundLayoutIndex = layoutIndex;
+	_boundLayout = pass->getPipelineLayout(layoutIndex);
+
+	_table->vkCmdBindDescriptorSets(_buffer, bindPoint, _boundLayout, firstSet,
 			sets.size(), sets.data(), 0, nullptr);
 }
 
@@ -538,6 +545,11 @@ void CommandBuffer::cmdPushConstants(VkPipelineLayout layout, VkShaderStageFlags
 	_table->vkCmdPushConstants(_buffer, layout, stageFlags, offset, data.size(), data.data());
 }
 
+void CommandBuffer::cmdPushConstants(VkShaderStageFlags stageFlags, uint32_t offset, BytesView data) {
+	XLASSERT(_boundLayout, "cmdPushConstants without bound layout");
+	_table->vkCmdPushConstants(_buffer, _boundLayout, stageFlags, offset, data.size(), data.data());
+}
+
 void CommandBuffer::cmdFillBuffer(Buffer *buffer, uint32_t data) {
 	cmdFillBuffer(buffer, 0, VK_WHOLE_SIZE, data);
 }
@@ -551,8 +563,10 @@ void CommandBuffer::cmdDispatch(uint32_t groupCountX, uint32_t groupCountY, uint
 	_table->vkCmdDispatch(_buffer, groupCountX, groupCountY, groupCountZ);
 }
 
-void CommandBuffer::cmdNextSubpass() {
+uint32_t CommandBuffer::cmdNextSubpass() {
 	_table->vkCmdNextSubpass(_buffer, VK_SUBPASS_CONTENTS_INLINE);
+	++ _currentSubpass;
+	return _currentSubpass;
 }
 
 void CommandBuffer::addImage(Image *image) {

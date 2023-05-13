@@ -37,64 +37,58 @@ public:
 
 	static constexpr StringView ShadowPipeline = "ShadowPipeline";
 
-	enum class QueueFlags {
+	enum class Flags {
 		None = 0,
 		Render3D = 1 << 0,
 	};
 
 	struct RenderQueueInfo {
-		Application *app = nullptr;
+		gl::Loop *target = nullptr;
 		Extent2 extent;
-		QueueFlags flags = QueueFlags::None;
+		Flags flags = Flags::None;
 		Function<void(gl::Resource::Builder &)> resourceCallback;
 	};
 
 	struct PassCreateInfo {
-		Application *app = nullptr;
+		gl::Loop *target = nullptr;
 		Extent2 extent;
+		Flags flags;
 
-		vk::ImageAttachment *outputAttachment = nullptr;
-		vk::ImageAttachment *depthAttachment = nullptr;
-		vk::ImageAttachment *shadowSdfAttachment = nullptr;
-
-		vk::BufferAttachment *lightsAttachment = nullptr;
-		vk::BufferAttachment *sdfPrimitivesAttachment = nullptr;
+		const AttachmentData *shadowSdfAttachment = nullptr;
+		const AttachmentData *lightsAttachment = nullptr;
+		const AttachmentData *sdfPrimitivesAttachment = nullptr;
 	};
 
 	static bool makeDefaultRenderQueue(Builder &, RenderQueueInfo &);
 
-	static void makeDefaultPass(Builder &builder, const PassCreateInfo &info);
-
 	virtual ~MaterialShadowPass() { }
 
-	virtual bool init(StringView, RenderOrdering);
+	virtual bool init(Queue::Builder &queueBuilder, PassBuilder &passBuilder, const PassCreateInfo &info);
 
-	const ShadowLightDataAttachment *getShadowData() const { return _shadowData; }
-	const ShadowVertexAttachment *getShadowVertexBuffer() const { return _shadowVertexBuffer; }
-	const ShadowPrimitivesAttachment *getShadowTriangles() const { return _shadowTriangles; }
-	const ShadowSdfImageAttachment *getSdf() const { return _sdf; }
+	const AttachmentData *getLightsData() const { return _lightsData; }
+	const AttachmentData *getShadowPrimitives() const { return _shadowPrimitives; }
+	const AttachmentData *getSdf() const { return _sdf; }
 
 	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
 
 protected:
 	using QueuePass::init;
 
-	virtual void prepare(gl::Device &) override;
+	Flags _flags = Flags::None;
 
 	// shadows
-	const ShadowLightDataAttachment *_shadowData = nullptr;
-	const ShadowVertexAttachment *_shadowVertexBuffer = nullptr;
-	const ShadowPrimitivesAttachment *_shadowTriangles = nullptr;
-	const ShadowSdfImageAttachment *_sdf = nullptr;
+	const AttachmentData *_lightsData = nullptr;
+	const AttachmentData *_shadowPrimitives = nullptr;
+	const AttachmentData *_sdf = nullptr;
 };
 
-SP_DEFINE_ENUM_AS_MASK(MaterialShadowPass::QueueFlags)
+SP_DEFINE_ENUM_AS_MASK(MaterialShadowPass::Flags)
 
 class MaterialShadowPassHandle : public MaterialVertexPassHandle {
 public:
 	virtual ~MaterialShadowPassHandle() { }
 
-	virtual bool prepare(FrameQueue &, Function<void(bool)> &&) override;
+	virtual bool prepare(FrameQueue &q, Function<void(bool)> &&cb) override;
 
 protected:
 	virtual void prepareRenderPass(CommandBuffer &) override;
@@ -102,12 +96,11 @@ protected:
 
 	// shadows
 	const ShadowLightDataAttachmentHandle *_shadowData = nullptr;
-	const ShadowVertexAttachmentHandle *_shadowVertexBuffer = nullptr;
-	const ShadowPrimitivesAttachmentHandle *_shadowTriangles = nullptr;
-	const ShadowSdfImageAttachmentHandle *_sdfImage = nullptr;
+	const ShadowPrimitivesAttachmentHandle *_shadowPrimitives = nullptr;
+	const ImageAttachmentHandle *_sdfImage = nullptr;
 };
 
-class MaterialShadowComputePass : public QueuePass {
+class MaterialComputeShadowPass : public QueuePass {
 public:
 	using AttachmentHandle = renderqueue::AttachmentHandle;
 	using Builder = renderqueue::Queue::Builder;
@@ -119,41 +112,29 @@ public:
 	static constexpr StringView SdfPolygonsComp = "SdfPolygonsComp";
 	static constexpr StringView SdfImageComp = "SdfImageComp";
 
-	struct PassData {
-		MaterialShadowComputePass *pass = nullptr;
-		ShadowLightDataAttachment *lightData = nullptr;
-		ShadowVertexAttachment *vertexes = nullptr;
-		ShadowPrimitivesAttachment *primitives = nullptr;
-		ShadowSdfImageAttachment *image = nullptr;
-	};
+	virtual ~MaterialComputeShadowPass() { }
 
-	static PassData makeDefaultPass(Builder &builder, const Extent2 &extent);
+	virtual bool init(Queue::Builder &queueBuilder, PassBuilder &passBuilder, Extent2 defaultExtent);
 
-	virtual ~MaterialShadowComputePass() { }
-
-	virtual bool init(StringView, RenderOrdering);
-
-	const ShadowLightDataAttachment *getLights() const { return _lights; }
-	const ShadowVertexAttachment *getVertexes() const { return _vertexes; }
-	const ShadowPrimitivesAttachment *getTriangles() const { return _triangles; }
-	const ShadowSdfImageAttachment *getSdf() const { return _sdf; }
+	const AttachmentData *getLights() const { return _lights; }
+	const AttachmentData *getVertexes() const { return _vertexes; }
+	const AttachmentData *getPrimitives() const { return _primitives; }
+	const AttachmentData *getSdf() const { return _sdf; }
 
 	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
 
 protected:
 	using QueuePass::init;
 
-	virtual void prepare(gl::Device &) override;
-
-	const ShadowLightDataAttachment *_lights = nullptr;
-	const ShadowVertexAttachment *_vertexes = nullptr;
-	const ShadowPrimitivesAttachment *_triangles = nullptr;
-	const ShadowSdfImageAttachment *_sdf = nullptr;
+	const AttachmentData *_lights = nullptr;
+	const AttachmentData *_vertexes = nullptr;
+	const AttachmentData *_primitives = nullptr;
+	const AttachmentData *_sdf = nullptr;
 };
 
-class MaterialShadowComputePassHandle : public QueuePassHandle {
+class MaterialComputeShadowPassHandle : public QueuePassHandle {
 public:
-	virtual ~MaterialShadowComputePassHandle() { }
+	virtual ~MaterialComputeShadowPassHandle() { }
 
 	virtual bool prepare(FrameQueue &, Function<void(bool)> &&) override;
 
@@ -163,7 +144,7 @@ protected:
 
 	const ShadowLightDataAttachmentHandle *_lightsBuffer = nullptr;
 	const ShadowVertexAttachmentHandle *_vertexBuffer = nullptr;
-	const ShadowPrimitivesAttachmentHandle *_trianglesBuffer = nullptr;
+	const ShadowPrimitivesAttachmentHandle *_primitivesBuffer = nullptr;
 	const ShadowSdfImageAttachmentHandle *_sdfImage = nullptr;
 
 	uint32_t _gridCellSize = 64;

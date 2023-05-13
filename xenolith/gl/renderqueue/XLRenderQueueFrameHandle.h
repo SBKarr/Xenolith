@@ -56,8 +56,10 @@ public:
 
 	const gl::ImageInfoData *getImageSpecialization(const ImageAttachment *) const;
 
-	const FrameOutputBinding *getOutputBinding(const Attachment *a) const { return _request->getOutputBinding(a); }
-	Rc<ImageStorage> getRenderTarget(const Attachment *a) const { return _request->getRenderTarget(a); }
+	const FrameOutputBinding *getOutputBinding(const Attachment *a) const { return _request->getOutputBinding(a->getData()); }
+	const FrameOutputBinding *getOutputBinding(const AttachmentData *a) const { return _request->getOutputBinding(a); }
+	Rc<ImageStorage> getRenderTarget(const Attachment *a) const { return _request->getRenderTarget(a->getData()); }
+	Rc<ImageStorage> getRenderTarget(const AttachmentData *a) const { return _request->getRenderTarget(a); }
 	const Vector<Rc<DependencyEvent>> &getSignalDependencies() const { return _request->getSignalDependencies(); }
 
 	const Vector<Rc<FrameQueue>> &getFrameQueues() const { return _queues; }
@@ -82,7 +84,7 @@ public:
 
 	virtual bool isPersistentMapping() const;
 
-	virtual Rc<AttachmentInputData> getInputData(const Attachment *);
+	virtual Rc<AttachmentInputData> getInputData(const AttachmentData *);
 
 	virtual bool isReadyForSubmit() const { return _request->isReadyForSubmit(); }
 	virtual void setReadyForSubmit(bool);

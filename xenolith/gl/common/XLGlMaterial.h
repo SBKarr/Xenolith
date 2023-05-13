@@ -160,15 +160,17 @@ class MaterialAttachment : public renderqueue::BufferAttachment {
 public:
 	virtual ~MaterialAttachment();
 
-	virtual bool init(StringView, const BufferInfo &, MaterialSet::EncodeCallback &&,
-			uint32_t materialObjectSize, MaterialType type, Vector<Rc<Material>> &&);
+	virtual bool init(AttachmentBuilder &builder, const BufferInfo &, MaterialSet::EncodeCallback &&,
+			uint32_t materialObjectSize, MaterialType type);
+
+	void addPredefinedMaterials(Vector<Rc<Material>> &&);
 
 	const Rc<gl::MaterialSet> &getMaterials() const;
 	void setMaterials(const Rc<gl::MaterialSet> &) const;
 
 	MaterialType getType() const { return _type; }
 
-	const Vector<Rc<Material>> &getInitialMaterials() const { return _initialMaterials; }
+	const Vector<Rc<Material>> &getPredefinedMaterials() const { return _predefinedMaterials; }
 
 	virtual Rc<gl::MaterialSet> allocateSet(const Device &) const;
 	virtual Rc<gl::MaterialSet> cloneSet(const Rc<MaterialSet> &) const;
@@ -186,8 +188,6 @@ public:
 protected:
 	using BufferAttachment::init;
 
-	virtual Rc<renderqueue::AttachmentDescriptor> makeDescriptor(PassData *) override;
-
 	struct DynamicImageTracker {
 		uint32_t refCount;
 		Map<MaterialId, uint32_t> materials;
@@ -198,23 +198,10 @@ protected:
 	MaterialType _type;
 	MaterialSet::EncodeCallback _encodeCallback;
 	mutable Rc<gl::MaterialSet> _data;
-	Vector<Rc<Material>> _initialMaterials;
+	Vector<Rc<Material>> _predefinedMaterials;
 
 	mutable Mutex _dynamicMutex;
 	mutable Map<Rc<DynamicImage>, DynamicImageTracker> _dynamicTrackers;
-};
-
-class MaterialAttachmentDescriptor : public renderqueue::BufferAttachmentDescriptor {
-public:
-	virtual ~MaterialAttachmentDescriptor() { }
-
-	virtual bool init(renderqueue::PassData *, renderqueue::Attachment *);
-
-	uint64_t getBoundGeneration() const;
-	void setBoundGeneration(uint64_t);
-
-protected:
-	std::atomic<uint64_t> _boundGeneration = 0;
 };
 
 }

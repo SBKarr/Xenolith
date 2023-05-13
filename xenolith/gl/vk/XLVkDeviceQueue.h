@@ -245,8 +245,8 @@ public:
 
 	void cmdBindIndexBuffer(Buffer *, VkDeviceSize offset, VkIndexType indexType);
 
-	void cmdBindDescriptorSets(RenderPassImpl *, uint32_t firstSet = 0);
-	void cmdBindDescriptorSets(RenderPassImpl *, SpanView<VkDescriptorSet>, uint32_t firstSet = 0);
+	void cmdBindDescriptorSets(RenderPassImpl *, uint32_t layoutIndex, uint32_t firstSet = 0);
+	void cmdBindDescriptorSets(RenderPassImpl *, uint32_t layoutIndex, SpanView<VkDescriptorSet>, uint32_t firstSet = 0);
 
 	void cmdBindGraphicDescriptorSets(VkPipelineLayout, SpanView<VkDescriptorSet>, uint32_t firstSet = 0);
 	void cmdBindComputeDescriptorSets(VkPipelineLayout, SpanView<VkDescriptorSet>, uint32_t firstSet = 0);
@@ -256,19 +256,28 @@ public:
 			int32_t vertexOffset, uint32_t firstInstance);
 
 	void cmdPushConstants(VkPipelineLayout layout, VkShaderStageFlags stageFlags, uint32_t offset, BytesView);
+	void cmdPushConstants(VkShaderStageFlags stageFlags, uint32_t offset, BytesView);
 
 	void cmdFillBuffer(Buffer *, uint32_t data);
 	void cmdFillBuffer(Buffer *, VkDeviceSize dstOffset, VkDeviceSize size, uint32_t data);
 
 	void cmdDispatch(uint32_t groupCountX, uint32_t groupCountY = 1, uint32_t groupCountZ = 1);
 
-	void cmdNextSubpass();
+	uint32_t cmdNextSubpass();
 
 	VkCommandBuffer getBuffer() const { return _buffer; }
+
+	uint32_t getCurrentSubpass() const { return _currentSubpass; }
+	uint32_t getBoundLayoutIndex() const { return _boundLayoutIndex; }
+	VkPipelineLayout getBoundLayout() const { return _boundLayout; }
 
 protected:
 	void addImage(Image *);
 	void addBuffer(Buffer *);
+
+	uint32_t _currentSubpass = 0;
+	uint32_t _boundLayoutIndex = 0;
+	VkPipelineLayout _boundLayout = VK_NULL_HANDLE;
 
 	const CommandPool *_pool = nullptr;
 	const DeviceTable *_table = nullptr;

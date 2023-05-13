@@ -35,7 +35,7 @@ public:
 
 	virtual ~ShadowLightDataAttachment();
 
-	virtual bool init(StringView);
+	virtual bool init(AttachmentBuilder &);
 
 	virtual bool validateInput(const Rc<gl::AttachmentInputData> &) const override;
 
@@ -50,7 +50,7 @@ class ShadowVertexAttachment : public BufferAttachment {
 public:
 	virtual ~ShadowVertexAttachment();
 
-	virtual bool init(StringView);
+	virtual bool init(AttachmentBuilder &);
 
 	virtual bool validateInput(const Rc<gl::AttachmentInputData> &) const override;
 
@@ -65,7 +65,7 @@ class ShadowPrimitivesAttachment : public BufferAttachment {
 public:
 	virtual ~ShadowPrimitivesAttachment();
 
-	virtual bool init(StringView);
+	virtual bool init(AttachmentBuilder &);
 
 protected:
 	using BufferAttachment::init;
@@ -77,7 +77,7 @@ class ShadowSdfImageAttachment : public ImageAttachment {
 public:
 	virtual ~ShadowSdfImageAttachment();
 
-	virtual bool init(StringView, Extent2 extent);
+	virtual bool init(AttachmentBuilder &, Extent2 extent);
 
 	virtual gl::ImageInfo getAttachmentInfo(const AttachmentHandle *, Extent3 e) const override;
 

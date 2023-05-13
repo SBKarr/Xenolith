@@ -76,7 +76,7 @@ class MaterialAttachment : public gl::MaterialAttachment {
 public:
 	virtual ~MaterialAttachment();
 
-	virtual bool init(StringView, const gl::BufferInfo &, Vector<Rc<gl::Material>> && = Vector<Rc<gl::Material>>());
+	virtual bool init(AttachmentBuilder &builder, const gl::BufferInfo &);
 
 	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
 

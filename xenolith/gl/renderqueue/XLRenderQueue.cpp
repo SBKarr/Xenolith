@@ -78,18 +78,11 @@ void QueueData::clear() {
 	}
 
 	for (auto &it : passes) {
-		for (auto &desc : it->passDescriptors) {
-			desc->clear();
-		}
-		for (auto &desc : it->passAttachments) {
-			desc->clear();
-		}
-
 		for (auto &subpass : it->subpasses) {
-			for (auto &pipeline : subpass.graphicPipelines) {
+			for (auto &pipeline : subpass->graphicPipelines) {
 				pipeline->pipeline = nullptr;
 			}
-			for (auto &pipeline : subpass.computePipelines) {
+			for (auto &pipeline : subpass->computePipelines) {
 				pipeline->pipeline = nullptr;
 			}
 		}
@@ -100,7 +93,7 @@ void QueueData::clear() {
 	}
 
 	for (auto &it : attachments) {
-		it->clear();
+		it->attachment = nullptr;
 	}
 
 	if (resource) {

@@ -44,8 +44,8 @@ struct FramePassData {
 	Rc<PassHandle> handle;
 	Extent2 extent;
 
-	Vector<Pair<AttachmentDescriptor *, FrameAttachmentData *>> attachments;
-	HashMap<const Attachment *, FrameAttachmentData *> attachmentMap;
+	Vector<Pair<const AttachmentPassData *, FrameAttachmentData *>> attachments;
+	HashMap<const AttachmentData *, FrameAttachmentData *> attachmentMap;
 
 	// Second value, FrameRenderPassState defines a state of required RenderPass, that is required to be reached
 	// to define current RenderPass state as Ready
@@ -119,15 +119,15 @@ public:
 	gl::Loop *getLoop() const;
 
 	const HashMap<const PassData *, FramePassData> &getRenderPasses() const { return _renderPasses; }
-	const HashMap<const Attachment *, FrameAttachmentData> &getAttachments() const { return _attachments; }
+	const HashMap<const AttachmentData *, FrameAttachmentData> &getAttachments() const { return _attachments; }
 	uint64_t getSubmissionTime() const { return _submissionTime; }
 
-	const FrameAttachmentData *getAttachment(const Attachment *) const;
+	const FrameAttachmentData *getAttachment(const AttachmentData *) const;
 	const FramePassData *getRenderPass(const PassData *) const;
 
 protected:
 	void addRequiredPass(FramePassData &, const FramePassData &required,
-			const FrameAttachmentData &attachment, const AttachmentDescriptor &);
+			const FrameAttachmentData &attachment, const AttachmentPassData &);
 
 	bool isResourcePending(const FrameAttachmentData &);
 	void waitForResource(const FrameAttachmentData &, Function<void(bool)> &&);
@@ -175,7 +175,7 @@ protected:
 	bool _success = false;
 
 	HashMap<const PassData *, FramePassData> _renderPasses;
-	HashMap<const Attachment *, FrameAttachmentData> _attachments;
+	HashMap<const AttachmentData *, FrameAttachmentData> _attachments;
 
 	std::unordered_set<FramePassData *> _renderPassesInitial;
 	std::unordered_set<FramePassData *> _renderPassesPrepared;

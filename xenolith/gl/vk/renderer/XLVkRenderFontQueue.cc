@@ -109,20 +109,16 @@ class RenderFontRenderPass : public QueuePass {
 public:
 	virtual ~RenderFontRenderPass();
 
-	virtual bool init(StringView);
+	virtual bool init(PassBuilder &passBuilder, const AttachmentData *attachment);
 
 	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
 
-	const RenderFontAttachment *getRenderFontAttachment() const {
-		return _fontAttachment;
-	}
+	const AttachmentData *getRenderFontAttachment() const { return _fontAttachment; }
 
 protected:
 	using QueuePass::init;
 
-	virtual void prepare(gl::Device &) override;
-
-	const RenderFontAttachment *_fontAttachment;
+	const AttachmentData *_fontAttachment;
 };
 
 class RenderFontRenderPassHandle : public QueuePassHandle {
@@ -152,24 +148,22 @@ protected:
 
 RenderFontQueue::~RenderFontQueue() { }
 
-bool RenderFontQueue::init(StringView name, Function<void(FrameQueue &, const Rc<AttachmentHandle> &, Function<void(bool)> &&)> &&input) {
+bool RenderFontQueue::init(StringView name) {
+	using namespace renderqueue;
 	Queue::Builder builder(name);
 
-	auto attachment = Rc<RenderFontAttachment>::create("FontAttachment");
-	auto pass = Rc<RenderFontRenderPass>::create("FontRenderPass");
+	auto attachment = builder.addAttachemnt("RenderFontQueueAttachment", [] (AttachmentBuilder &attachmentBuilder) -> Rc<Attachment> {
+		attachmentBuilder.defineAsInput();
+		attachmentBuilder.defineAsOutput();
+		return Rc<RenderFontAttachment>::create(attachmentBuilder);
+	});
 
-	if (input) {
-		attachment->setInputCallback(move(input));
-	}
-
-	builder.addRenderPass(pass);
-	builder.addPassInput(pass, 0, attachment, renderqueue::AttachmentDependencyInfo());
-	builder.addPassOutput(pass, 0, attachment, renderqueue::AttachmentDependencyInfo());
-	builder.addInput(attachment);
-	builder.addOutput(attachment);
+	builder.addPass("RenderFontQueuePass", PassType::Transfer, RenderOrdering(0), [&] (PassBuilder &passBuilder) -> Rc<Pass> {
+		return Rc<RenderFontRenderPass>::create(passBuilder, attachment);
+	});
 
 	if (Queue::init(move(builder))) {
-		_attachment = attachment.get();
+		_attachment = attachment;
 		return true;
 	}
 	return false;
@@ -533,24 +527,18 @@ void RenderFontAttachmentHandle::pushAtlasTexture(gl::DataAtlas *atlas, VkBuffer
 
 RenderFontRenderPass::~RenderFontRenderPass() { }
 
-bool RenderFontRenderPass::init(StringView name) {
-	if (QueuePass::init(name, PassType::Generic, renderqueue::RenderOrderingHighest, 1)) {
-		_queueOps = QueueOperations::Transfer;
-		return true;
+bool RenderFontRenderPass::init(PassBuilder &passBuilder, const AttachmentData *attachment) {
+	passBuilder.addAttachment(attachment);
+
+	if (!QueuePass::init(passBuilder)) {
+		return false;
 	}
-	return false;
+	_fontAttachment = attachment;
+	return true;
 }
 
 auto RenderFontRenderPass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle> {
 	return Rc<RenderFontRenderPassHandle>::create(*this, handle);
-}
-
-void RenderFontRenderPass::prepare(gl::Device &) {
-	for (auto &it : _data->passDescriptors) {
-		if (auto a = dynamic_cast<RenderFontAttachment *>(it->getAttachment())) {
-			_fontAttachment = a;
-		}
-	}
 }
 
 RenderFontRenderPassHandle::~RenderFontRenderPassHandle() { }

@@ -95,29 +95,18 @@ class MeshAttachment : public renderqueue::BufferAttachment {
 public:
 	virtual ~MeshAttachment();
 
-	virtual bool init(StringView name, const BufferInfo &info, Vector<Rc<MeshIndex>> &&initials);
+	virtual bool init(AttachmentBuilder &, const BufferInfo &info, Vector<Rc<MeshIndex>> &&initials);
 
 	const Rc<MeshSet> &getMeshes() const;
 	void setMeshes(const Rc<MeshSet> &) const;
-
-	virtual void sortDescriptors(RenderQueue &queue, Device &dev) override;
 
 	MaterialId getNextMaterialId() const;
 
 protected:
 	using BufferAttachment::init;
 
-	virtual Rc<renderqueue::AttachmentDescriptor> makeDescriptor(PassData *) override;
-
 	mutable Rc<MeshSet> _data;
 	Vector<Rc<MeshIndex>> _initials;
-};
-
-class MeshAttachmentDescriptor : public renderqueue::BufferAttachmentDescriptor {
-public:
-	virtual ~MeshAttachmentDescriptor() { }
-
-	virtual bool init(renderqueue::PassData *, renderqueue::Attachment *);
 };
 
 }

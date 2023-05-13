@@ -49,20 +49,8 @@ public:
 
 	Rc<Device> makeDevice(uint32_t deviceIndex = maxOf<uint32_t>()) const;
 
-	/* Get options for physical device list for surface
-	 *
-	 * surface - target surface
-	 * devs - device list, pair of
-	 *  - VkPhysicalDevice
-	 *  - uint32_t - bitmask for queue families (QF), bit is set when QF supports presentation
-	 *  */
-	Vector<DeviceInfo> getDeviceInfo(VkSurfaceKHR surface, const Vector<Pair<VkPhysicalDevice, uint32_t>> &devs) const;
-
 	gl::SurfaceInfo getSurfaceOptions(VkSurfaceKHR, VkPhysicalDevice) const;
 	VkExtent2D getSurfaceExtent(VkSurfaceKHR, VkPhysicalDevice) const;
-
-	//Vector<DeviceOptions> getDevices(VkSurfaceKHR, const VkPhysicalDeviceProperties *ptr = nullptr,
-	//		const Vector<Pair<VkPhysicalDevice, uint32_t>> & = Vector<Pair<VkPhysicalDevice, uint32_t>>()) const;
 
 	VkInstance getInstance() const;
 

@@ -30,8 +30,8 @@ namespace stappler::xenolith::vk {
 
 VertexMaterialAttachment::~VertexMaterialAttachment() { }
 
-bool VertexMaterialAttachment::init(StringView name, const gl::BufferInfo &info, const MaterialAttachment *m) {
-	if (BufferAttachment::init(name, info)) {
+bool VertexMaterialAttachment::init(AttachmentBuilder &builder, const gl::BufferInfo &info, const AttachmentData *m) {
+	if (BufferAttachment::init(builder, info)) {
 		_materials = m;
 		return true;
 	}
@@ -631,7 +631,7 @@ bool VertexMaterialAttachmentHandle::loadVertexes(FrameHandle &fhandle, const Rc
 	return true;
 }
 
-gl::ImageFormat MaterialVertexPass::selectDepthFormat(SpanView<gl::ImageFormat> formats) {
+gl::ImageFormat MaterialVertexPass::select2dDepthFormat(SpanView<gl::ImageFormat> formats) {
 	gl::ImageFormat ret = gl::ImageFormat::Undefined;
 
 	uint32_t score = 0;
@@ -659,23 +659,36 @@ gl::ImageFormat MaterialVertexPass::selectDepthFormat(SpanView<gl::ImageFormat> 
 	return ret;
 }
 
-bool MaterialVertexPass::init(StringView name, RenderOrdering ord, size_t subpassCount) {
-	return QueuePass::init(name, gl::RenderPassType::Graphics, ord, subpassCount);
+gl::ImageFormat MaterialVertexPass::select3dDepthFormat(SpanView<gl::ImageFormat> formats) {
+	gl::ImageFormat ret = gl::ImageFormat::Undefined;
+
+	uint32_t score = 0;
+
+	auto selectWithScore = [&] (gl::ImageFormat fmt, uint32_t sc) {
+		if (score < sc) {
+			ret = fmt;
+			score = sc;
+		}
+	};
+
+	for (auto &it : formats) {
+		switch (it) {
+		case gl::ImageFormat::D16_UNORM: selectWithScore(it, 8); break;
+		case gl::ImageFormat::X8_D24_UNORM_PACK32: selectWithScore(it, 10); break;
+		case gl::ImageFormat::D32_SFLOAT: selectWithScore(it, 12); break;
+		case gl::ImageFormat::S8_UINT: break;
+		case gl::ImageFormat::D16_UNORM_S8_UINT: selectWithScore(it, 7); break;
+		case gl::ImageFormat::D24_UNORM_S8_UINT: selectWithScore(it, 9); break;
+		case gl::ImageFormat::D32_SFLOAT_S8_UINT: selectWithScore(it, 11); break;
+		default: break;
+		}
+	}
+
+	return ret;
 }
 
 auto MaterialVertexPass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle> {
 	return Rc<MaterialVertexPassHandle>::create(*this, handle);
-}
-
-void MaterialVertexPass::prepare(gl::Device &dev) {
-	QueuePass::prepare(dev);
-	for (auto &it : _data->passDescriptors) {
-		if (auto a = dynamic_cast<MaterialAttachment *>(it->getAttachment())) {
-			_materials = a;
-		} else if (auto a = dynamic_cast<VertexMaterialAttachment *>(it->getAttachment())) {
-			_vertexes = a;
-		}
-	}
 }
 
 bool MaterialVertexPassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
@@ -740,7 +753,7 @@ void MaterialVertexPassHandle::prepareMaterialCommands(gl::MaterialSet * materia
 
 	// bind primary descriptors
 	// default texture set comes with other sets
-	buf.cmdBindDescriptorSets(pass);
+	buf.cmdBindDescriptorSets(pass, 0);
 
 	// bind global indexes
 	buf.cmdBindIndexBuffer(_vertexBuffer->getIndexes(), 0, VK_INDEX_TYPE_UINT32);
@@ -807,7 +820,7 @@ void MaterialVertexPassHandle::prepareMaterialCommands(gl::MaterialSet * materia
 				auto set = s->getSet();
 
 				// rebind texture set at last index
-				buf.cmdBindDescriptorSets((RenderPassImpl *)_data->impl.get(), makeSpanView(&set, 1), 1);
+				buf.cmdBindDescriptorSets((RenderPassImpl *)_data->impl.get(), 0, makeSpanView(&set, 1), 1);
 				boundTextureSetIndex = textureSetIndex;
 			} else {
 				stappler::log::vtext("MaterialRenderPassHandle", "Invalid textureSetlayout: ", textureSetIndex);
@@ -817,7 +830,7 @@ void MaterialVertexPassHandle::prepareMaterialCommands(gl::MaterialSet * materia
 
 		enableState(materialVertexSpan.state);
 
-		buf.cmdPushConstants(pass->getPipelineLayout(),
+		buf.cmdPushConstants(pass->getPipelineLayout(0),
 				VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, BytesView((const uint8_t *)&materialOrderIdx, sizeof(uint32_t)));
 
 		buf.cmdDrawIndexed(

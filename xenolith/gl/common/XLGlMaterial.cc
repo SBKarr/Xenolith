@@ -631,20 +631,30 @@ void Material::setLayoutIndex(uint32_t idx) {
 
 MaterialAttachment::~MaterialAttachment() { }
 
-bool MaterialAttachment::init(StringView name, const BufferInfo &info, MaterialSet::EncodeCallback &&cb,
-		uint32_t size, MaterialType type, Vector<Rc<Material>> &&initials) {
-	if (BufferAttachment::init(name, info)) {
-		_materialObjectSize = size;
-		_type = type;
-		_encodeCallback = move(cb);
-		_initialMaterials = move(initials);
-
-		for (auto &it : _initialMaterials) {
-			it->_id = _attachmentMaterialId.fetch_add(1);
-		}
-		return true;
+bool MaterialAttachment::init(AttachmentBuilder &builder, const BufferInfo &info, MaterialSet::EncodeCallback &&cb,
+		uint32_t size, MaterialType type) {
+	if (!BufferAttachment::init(builder, info)) {
+		return false;
 	}
-	return false;
+
+	_materialObjectSize = size;
+	_type = type;
+	_encodeCallback = move(cb);
+	return true;
+}
+
+void MaterialAttachment::addPredefinedMaterials(Vector<Rc<Material>> &&materials) {
+	for (auto &it : materials) {
+		it->_id = _attachmentMaterialId.fetch_add(1);
+	}
+
+	if (_predefinedMaterials.empty()) {
+		_predefinedMaterials = move(materials);
+	} else {
+		for (auto &it : materials) {
+			_predefinedMaterials.emplace_back(move(it));
+		}
+	}
 }
 
 const Rc<gl::MaterialSet> &MaterialAttachment::getMaterials() const {
@@ -728,26 +738,6 @@ void MaterialAttachment::updateDynamicImage(Loop &loop, const DynamicImage *imag
 
 MaterialId MaterialAttachment::getNextMaterialId() const {
 	return _attachmentMaterialId.fetch_add(1);
-}
-
-auto MaterialAttachment::makeDescriptor(PassData *pass) -> Rc<AttachmentDescriptor> {
-	return Rc<MaterialAttachmentDescriptor>::create(pass, this);
-}
-
-bool MaterialAttachmentDescriptor::init(PassData *data, Attachment *attachment) {
-	if (BufferAttachmentDescriptor::init(data, attachment)) {
-		_usesTextureSet = true;
-		return true;
-	}
-	return false;
-}
-
-uint64_t MaterialAttachmentDescriptor::getBoundGeneration() const {
-	return _boundGeneration.load();
-}
-
-void MaterialAttachmentDescriptor::setBoundGeneration(uint64_t id) {
-	_boundGeneration.store(id);
 }
 
 }

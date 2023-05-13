@@ -59,8 +59,8 @@ bool MeshIndex::init(StringView name, Rc<DataAtlas> &&atlas, MeshBufferInfo &&bu
 
 MeshAttachment::~MeshAttachment() { }
 
-bool MeshAttachment::init(StringView name, const BufferInfo &info, Vector<Rc<MeshIndex>> &&initials) {
-	if (!BufferAttachment::init(name, info)) {
+bool MeshAttachment::init(AttachmentBuilder &builder, const BufferInfo &info, Vector<Rc<MeshIndex>> &&initials) {
+	if (!BufferAttachment::init(builder, info)) {
 		return false;
 	}
 
@@ -78,22 +78,6 @@ void MeshAttachment::setMeshes(const Rc<MeshSet> &data) const {
 	if (tmp) {
 		tmp->clear();
 	}
-}
-
-void MeshAttachment::sortDescriptors(RenderQueue &queue, Device &dev) {
-	BufferAttachment::sortDescriptors(queue, dev);
-}
-
-auto MeshAttachment::makeDescriptor(PassData *pass) -> Rc<AttachmentDescriptor> {
-	return Rc<MeshAttachmentDescriptor>::create(pass, this);
-}
-
-bool MeshAttachmentDescriptor::init(PassData *data, Attachment *attachment) {
-	if (BufferAttachmentDescriptor::init(data, attachment)) {
-		_usesTextureSet = true;
-		return true;
-	}
-	return false;
 }
 
 }

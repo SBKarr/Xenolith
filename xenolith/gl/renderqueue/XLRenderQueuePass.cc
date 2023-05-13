@@ -22,21 +22,35 @@
 
 #include "XLRenderQueueAttachment.h"
 #include "XLRenderQueuePass.h"
+#include "XLRenderQueueQueue.h"
 
 namespace stappler::xenolith::renderqueue {
 
 Pass::~Pass() { }
 
-bool Pass::init(StringView name, PassType type, RenderOrdering order, size_t subpassCount) {
-	_name = name.str<Interface>();
-	_type = type;
-	_ordering = order;
-	_subpassCount = subpassCount;
+bool Pass::init(PassBuilder &builder) {
+	_data = builder.getData();
 	return true;
 }
 
 void Pass::invalidate() {
 
+}
+
+StringView Pass::getName() const {
+	return _data->key;
+}
+
+RenderOrdering Pass::getOrdering() const {
+	return _data->ordering;
+}
+
+size_t Pass::getSubpassCount() const {
+	return _data->subpasses.size();
+}
+
+PassType Pass::getType() const {
+	return _data->type;
 }
 
 Rc<PassHandle> Pass::makeFrameHandle(const FrameQueue &handle) {
@@ -88,10 +102,12 @@ Extent2 Pass::getSizeForFrame(const FrameQueue &queue) const {
 	}
 }
 
-const AttachmentDescriptor *Pass::getDescriptor(const Attachment *a) const {
-	for (auto &it : _data->passDescriptors) {
-		if (it->getAttachment() == a) {
-			return it;
+/*const AttachmentDescriptor *Pass::getDefaultDescriptor(uint32_t layoutIdx, const Attachment *a) const {
+	if (layoutIdx < _data->pipelineLayouts.size()) {
+		for (auto &it : _data->pipelineLayouts[layoutIdx].passDescriptors) {
+			if (it->getAttachment() == a) {
+				return it;
+			}
 		}
 	}
 	return nullptr;
@@ -104,7 +120,7 @@ const AttachmentDescriptor *Pass::getAttachment(const Attachment *a) const {
 		}
 	}
 	return nullptr;
-}
+}*/
 
 void Pass::prepare(gl::Device &device) {
 
@@ -154,7 +170,7 @@ void PassHandle::finalize(FrameQueue &, bool successful) {
 
 }
 
-AttachmentHandle *PassHandle::getAttachmentHandle(const Attachment *a) const {
+AttachmentHandle *PassHandle::getAttachmentHandle(const AttachmentData *a) const {
 	auto it = _queueData->attachmentMap.find(a);
 	if (it != _queueData->attachmentMap.end()) {
 		return it->second->handle.get();
@@ -169,6 +185,15 @@ void PassHandle::autorelease(Ref *ref) const {
 
 	std::unique_lock lock(_autoreleaseMutex);
 	_autorelease.emplace_back(ref);
+}
+
+const AttachmentPassData *PassHandle::getAttachemntData(const AttachmentData *a) const {
+	for (auto &it : a->passes) {
+		if (it->pass == _data) {
+			return it;
+		}
+	}
+	return nullptr;
 }
 
 }

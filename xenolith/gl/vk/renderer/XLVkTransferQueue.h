@@ -142,7 +142,7 @@ public:
 protected:
 	using renderqueue::Queue::init;
 
-	TransferAttachment *_attachment = nullptr;
+	const AttachmentData *_attachment = nullptr;
 };
 
 }

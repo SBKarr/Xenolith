@@ -38,7 +38,7 @@
 namespace stappler::xenolith::renderqueue {
 
 class Resource;
-class ImageAttachmentDescriptor;
+struct AttachmentPassData;
 
 }
 
@@ -307,7 +307,6 @@ struct ImageViewInfo {
 		define(std::forward<Args>(args)...);
 	}
 
-	void setup(const renderqueue::ImageAttachmentDescriptor &);
 	void setup(const ImageViewInfo &);
 	void setup(const ImageInfoData &);
 	void setup(ImageViewType value) { type = value; }
@@ -320,6 +319,7 @@ struct ImageViewInfo {
 	void setup(ComponentMappingA value) { a = value.get(); }
 	void setup(ColorMode value, bool allowSwizzle = true);
 	void setup(ImageType, ArrayLayers);
+	void setup(const renderqueue::AttachmentPassData &);
 
 	ColorMode getColorMode() const;
 

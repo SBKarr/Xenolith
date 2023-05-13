@@ -217,7 +217,7 @@ bool FrameHandle::isPersistentMapping() const {
 	return _request->isPersistentMapping();
 }
 
-Rc<AttachmentInputData> FrameHandle::getInputData(const Attachment *attachment) {
+Rc<AttachmentInputData> FrameHandle::getInputData(const AttachmentData *attachment) {
 	return _request->getInputData(attachment);
 }
 
@@ -250,7 +250,7 @@ void FrameHandle::invalidate() {
 			_valid = false;
 			_completed = true;
 
-			HashMap<const Attachment *, FrameAttachmentData *> attachments;
+			HashMap<const AttachmentData *, FrameAttachmentData *> attachments;
 			for (auto &it : _queues) {
 				for (auto &iit : it->getAttachments()) {
 					if (iit.second.handle->isOutput()) {
@@ -370,7 +370,7 @@ void FrameHandle::onComplete() {
 		}
 		_completed = true;
 
-		HashMap<const Attachment *, FrameAttachmentData *> attachments;
+		HashMap<const AttachmentData *, FrameAttachmentData *> attachments;
 		for (auto &it : _queues) {
 			for (auto &iit : it->getAttachments()) {
 				if (iit.second.handle->isOutput()) {

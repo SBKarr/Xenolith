@@ -107,14 +107,14 @@ protected:
 	using Node::init;
 	using Node::addChild; // запрет добавлять ноды напрямую на сцену
 
-	struct SubpassData {
-		renderqueue::SubpassData *subpass;
+	struct PipelineLayoutData {
+		const renderqueue::PipelineLayoutData *layout;
 		std::unordered_map<size_t, Vector<const PipelineData *>> pipelines;
 	};
 
 	struct AttachmentData {
 		const gl::MaterialAttachment *attachment;
-		Vector<SubpassData> subasses;
+		Vector<PipelineLayoutData> layouts;
 	};
 
 	virtual Rc<RenderQueue> makeQueue(RenderQueue::Builder &&);
@@ -159,8 +159,6 @@ protected:
 
 	Map<const gl::MaterialAttachment *, PendingData> _pending;
 	Rc<renderqueue::DependencyEvent> _materialDependency;
-
-	renderqueue::Attachment *_bufferAttachment = nullptr;
 
 	// отозванные ид могут быть выданы новым отзываемым материалам, чтобы не засорять биндинги
 	Vector<gl::MaterialId> _revokedIds;

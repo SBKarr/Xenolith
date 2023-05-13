@@ -46,7 +46,7 @@ bool AppScene::init(Application *app, const gl::FrameContraints &constraints) {
 	renderqueue::Queue::Builder builder("Loader");
 
 	vk::MaterialShadowPass::RenderQueueInfo info{
-		app, constraints.extent, vk::MaterialShadowPass::QueueFlags::None,
+		app->getGlLoop(), constraints.extent, vk::MaterialShadowPass::Flags::None,
 		[&] (renderqueue::Resource::Builder &resourceBuilder) {
 			resourceBuilder.addImage("xenolith-1-480.png",
 					gl::ImageInfo(gl::ImageFormat::R8G8B8A8_UNORM, gl::ImageUsage::Sampled, gl::ImageHints::Opaque),

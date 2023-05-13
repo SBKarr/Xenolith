@@ -28,52 +28,23 @@
 
 namespace stappler::xenolith::renderqueue {
 
-struct AttachmentDependencyInfo {
-	// when and how within renderpass/subpass attachment will be used for a first time
-	PipelineStage initialUsageStage = PipelineStage::None;
-	AccessType initialAccessMask = AccessType::None;
-
-	// when and how within renderpass/subpass attachment will be used for a last time
-	PipelineStage finalUsageStage = PipelineStage::None;
-	AccessType finalAccessMask = AccessType::None;
-
-	// FrameRenderPassState, after which attachment can be used on next renderpass
-	// Or Initial if no dependencies
-	FrameRenderPassState requiredRenderPassState = FrameRenderPassState::Initial;
-
-	// FrameRenderPassState that can be processed before attachment is acquired
-	FrameRenderPassState lockedRenderPassState = FrameRenderPassState::Initial;
-};
-
 class Attachment : public NamedRef {
 public:
 	using FrameQueue = renderqueue::FrameQueue;
 	using RenderQueue = renderqueue::Queue;
 	using PassData = renderqueue::PassData;
+	using AttachmentData = renderqueue::AttachmentData;
 	using AttachmentHandle = renderqueue::AttachmentHandle;
-	using AttachmentDescriptor = renderqueue::AttachmentDescriptor;
+	using AttachmentBuilder = renderqueue::AttachmentBuilder;
 
 	virtual ~Attachment() { }
 
-	virtual bool init(StringView, AttachmentType);
+	virtual bool init(AttachmentBuilder &builder);
 	virtual void clear();
 
-	virtual void addUsage(AttachmentUsage, AttachmentOps = AttachmentOps::Undefined);
-
-	AttachmentType getType() const { return _type; }
-	AttachmentUsage getUsage() const { return _usage; }
-	AttachmentOps getOps() const { return _ops; }
-	virtual StringView getName() const override { return _name; }
-	const Vector<Rc<AttachmentDescriptor>> &getDescriptors() const { return _descriptors; }
-
-	DescriptorType getDescriptorType() const { return _descriptorType; }
-	void setDescriptorType(DescriptorType type) { _descriptorType = type; }
-
-	bool isTransient() const { return _transient; }
-	void setTransient(bool value) { _transient = value; }
-
-	uint32_t getIndex() const { return _index; }
-	void setIndex(uint32_t idx) { _index = idx; }
+	virtual StringView getName() const override;
+	AttachmentUsage getUsage() const;
+	bool isTransient() const;
 
 	// Set callback for frame to acquire input for this
 	void setInputCallback(Function<void(FrameQueue &, const Rc<AttachmentHandle> &, Function<void(bool)> &&)> &&);
@@ -83,159 +54,39 @@ public:
 
 	virtual bool validateInput(const Rc<AttachmentInputData> &) const;
 
-	virtual AttachmentDescriptor *addDescriptor(PassData *);
-
 	virtual bool isCompatible(const gl::ImageInfo &) const { return false; }
 
 	virtual void sortDescriptors(Queue &queue, gl::Device &dev);
 
 	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &);
 
-	virtual Vector<PassData *> getRenderPasses() const;
-	virtual PassData *getFirstRenderPass() const;
-	virtual PassData *getLastRenderPass() const;
-	virtual PassData *getNextRenderPass(PassData *) const;
-	virtual PassData *getPrevRenderPass(PassData *) const;
+	virtual Vector<const PassData *> getRenderPasses() const;
+	virtual const PassData *getFirstRenderPass() const;
+	virtual const PassData *getLastRenderPass() const;
+	virtual const PassData *getNextRenderPass(const PassData *) const;
+	virtual const PassData *getPrevRenderPass(const PassData *) const;
+
+	const AttachmentData *getData() const { return _data; }
 
 protected:
-	virtual Rc<AttachmentDescriptor> makeDescriptor(PassData *) {
-		return nullptr;
-	}
-
-	uint32_t _index = 0;
-	String _name;
-	bool _transient = false;
-	AttachmentType _type = AttachmentType::Image;
-	AttachmentUsage _usage = AttachmentUsage::None;
-	AttachmentOps _ops = AttachmentOps::Undefined;
-	DescriptorType _descriptorType = DescriptorType::Unknown;
-	Vector<Rc<AttachmentDescriptor>> _descriptors;
+	const AttachmentData *_data = nullptr;
 
 	Function<void(FrameQueue &, const Rc<AttachmentHandle> &, Function<void(bool)> &&)> _inputCallback;
 };
-
-class AttachmentDescriptor : public NamedRef {
-public:
-	using PassData = renderqueue::PassData;
-	using Attachment = renderqueue::Attachment;
-
-	virtual ~AttachmentDescriptor() { }
-
-	virtual bool init(PassData *, Attachment *);
-
-	virtual void clear();
-	virtual void reset();
-
-	uint32_t getAttachmentIndex() const { return _attachmentIndex; }
-	void setAttachmentIndex(uint32_t idx);
-
-	uint32_t getDescriptorIndex() const { return _descriptorIndex; }
-	void setDescriptorIndex(uint32_t idx);
-
-	AttachmentOps getOps() const { return _ops; }
-	void setOps(AttachmentOps ops) { _ops = ops; }
-
-	FrameRenderPassState getRequiredRenderPassState() const { return _dependency.requiredRenderPassState; }
-	FrameRenderPassState getLockedRenderPassState() const { return _dependency.lockedRenderPassState; }
-
-	const AttachmentDependencyInfo &getDependency() const { return _dependency; }
-
-	bool hasDescriptor() const { return _descriptor.type != DescriptorType::Unknown; }
-
-	virtual StringView getName() const override { return _descriptor.attachment->getName(); }
-
-	PassData *getRenderPass() const { return _renderPass; }
-	Attachment *getAttachment() const { return _descriptor.attachment; }
-	const Vector<Rc<AttachmentRef>> &getRefs() const { return _refs; }
-	bool usesTextureSet() const { return _usesTextureSet; }
-
-	virtual AttachmentRef *addRef(uint32_t idx, AttachmentUsage, AttachmentDependencyInfo);
-
-	virtual void sortRefs(Queue &, gl::Device &dev);
-
-	const PipelineDescriptor &getDescriptor() const { return _descriptor; }
-
-	DescriptorType getDescriptorType() const { return _descriptor.type; }
-	void setDescriptorType(DescriptorType type) { _descriptor.type = type; }
-
-protected:
-	virtual Rc<AttachmentRef> makeRef(uint32_t idx, AttachmentUsage, AttachmentDependencyInfo) {
-		return nullptr;
-	}
-
-	PassData *_renderPass;
-	uint32_t _descriptorIndex = maxOf<uint32_t>();
-	uint32_t _attachmentIndex = maxOf<uint32_t>();
-	AttachmentOps _ops = AttachmentOps::Undefined;
-	Vector<Rc<AttachmentRef>> _refs;
-	PipelineDescriptor _descriptor;
-	AttachmentDependencyInfo _dependency;
-	bool _usesTextureSet = false;
-};
-
-class AttachmentRef : public Ref {
-public:
-	virtual ~AttachmentRef() { }
-
-	virtual bool init(AttachmentDescriptor *, uint32_t, AttachmentUsage, AttachmentDependencyInfo);
-
-	uint32_t getSubpass() const { return _subpass; }
-	AttachmentDescriptor *getDescriptor() const { return _descriptor; }
-	Attachment *getAttachment() const { return _descriptor->getAttachment(); }
-	AttachmentUsage getUsage() const { return _usage; }
-	const AttachmentDependencyInfo &getDependency() const { return _dependency; }
-
-	AttachmentOps getOps() const { return _ops; }
-	void setOps(AttachmentOps ops) { _ops = ops; }
-
-	void addUsage(AttachmentUsage usage) { _usage |= usage; }
-
-	// try to merge dependencies for various usage
-	void addDependency(AttachmentDependencyInfo);
-
-	virtual void updateLayout();
-
-protected:
-	AttachmentDescriptor *_descriptor = nullptr;
-	uint32_t _subpass = 0;
-	AttachmentUsage _usage = AttachmentUsage::None;
-	AttachmentOps _ops = AttachmentOps::Undefined;
-	AttachmentDependencyInfo _dependency;
-};
-
 
 class BufferAttachment : public Attachment {
 public:
 	virtual ~BufferAttachment() { }
 
-	virtual bool init(StringView, const gl::BufferInfo &);
+	virtual bool init(AttachmentBuilder &builder, const gl::BufferInfo &);
 	virtual void clear() override;
 
 	const gl::BufferInfo &getInfo() const { return _info; }
 
-	virtual BufferAttachmentDescriptor *addBufferDescriptor(PassData *);
-
 protected:
 	using Attachment::init;
 
-	virtual Rc<AttachmentDescriptor> makeDescriptor(PassData *) override;
-
 	gl::BufferInfo _info;
-};
-
-class BufferAttachmentDescriptor : public AttachmentDescriptor {
-public:
-	virtual ~BufferAttachmentDescriptor() { }
-
-	virtual BufferAttachmentRef *addBufferRef(uint32_t idx, AttachmentUsage, AttachmentDependencyInfo);
-
-protected:
-	virtual Rc<AttachmentRef> makeRef(uint32_t idx, AttachmentUsage, AttachmentDependencyInfo) override;
-};
-
-class BufferAttachmentRef : public AttachmentRef {
-public:
-protected:
 };
 
 class ImageAttachment : public Attachment {
@@ -251,7 +102,7 @@ public:
 		ColorMode colorMode;
 	};
 
-	virtual bool init(StringView, const gl::ImageInfo &, AttachmentInfo &&);
+	virtual bool init(AttachmentBuilder &builder, const gl::ImageInfo &, AttachmentInfo &&);
 
 	virtual const gl::ImageInfo &getImageInfo() const { return _imageInfo; }
 	virtual gl::ImageInfo getAttachmentInfo(const AttachmentHandle *, Extent3 e) const { return _imageInfo; }
@@ -265,133 +116,30 @@ public:
 
 	virtual void addImageUsage(gl::ImageUsage);
 
-	virtual ImageAttachmentDescriptor *addImageDescriptor(PassData *, DescriptorType = DescriptorType::Unknown);
-
 	virtual bool isCompatible(const gl::ImageInfo &) const override;
 
 	virtual Extent3 getSizeForFrame(const FrameQueue &) const;
 
+	virtual gl::ImageViewInfo getImageViewInfo(const gl::ImageInfoData &info, const AttachmentPassData &) const;
+	virtual Vector<gl::ImageViewInfo> getImageViews(const gl::ImageInfoData &info) const;
+
 protected:
 	using Attachment::init;
 
-	virtual Rc<AttachmentDescriptor> makeDescriptor(PassData *) override;
-
 	gl::ImageInfo _imageInfo;
 	AttachmentInfo _attachmentInfo;
-};
-
-class ImageAttachmentDescriptor : public AttachmentDescriptor {
-public:
-	virtual ~ImageAttachmentDescriptor() { }
-
-	virtual bool init(PassData *, ImageAttachment *);
-
-	virtual const gl::ImageInfo &getImageInfo() const { return ((ImageAttachment *)getAttachment())->getImageInfo(); }
-
-	AttachmentLoadOp getLoadOp() const { return _loadOp; }
-	void setLoadOp(AttachmentLoadOp op) { _loadOp = op; }
-
-	AttachmentLoadOp getStencilLoadOp() const { return _stencilLoadOp; }
-	void setStencilLoadOp(AttachmentLoadOp op) { _stencilLoadOp = op; }
-
-	AttachmentStoreOp getStoreOp() const { return _storeOp; }
-	void setStoreOp(AttachmentStoreOp op) { _storeOp = op; }
-
-	AttachmentStoreOp getStencilStoreOp() const { return _stencilStoreOp; }
-	void setStencilStoreOp(AttachmentStoreOp op) { _stencilStoreOp = op; }
-
-	virtual ImageAttachmentRef *addImageRef(uint32_t idx, AttachmentUsage, AttachmentLayout, AttachmentDependencyInfo, DescriptorType descType);
-
-	AttachmentLayout getInitialLayout() const { return _initialLayout; }
-	void setInitialLayout(AttachmentLayout l) { _initialLayout = l; }
-
-	AttachmentLayout getFinalLayout() const { return _finalLayout; }
-	void setFinalLayout(AttachmentLayout l) { _finalLayout = l; }
-
-	AttachmentLayout getDescriptorLayout() const { return _descriptorLayout; }
-	void setDescriptorLayout(AttachmentLayout l) { _descriptorLayout = l; }
-
-	ColorMode getColorMode() const { return _colorMode; }
-	void setColorMode(ColorMode value) { _colorMode = value; }
-
-	ImageAttachment *getImageAttachment() const;
-
-protected:
-	using AttachmentDescriptor::init;
-
-	virtual Rc<ImageAttachmentRef> makeImageRef(uint32_t idx, AttachmentUsage, AttachmentLayout, AttachmentDependencyInfo, DescriptorType);
-
-	// calculated initial layout
-	// for first descriptor in execution chain - initial layout of queue's attachment or first usage layout
-	// for others - final layout of previous descriptor in chain of execution
-	AttachmentLayout _initialLayout = AttachmentLayout::Undefined;
-
-	// calculated final layout
-	// for last descriptor in execution chain - final layout of queue's attachment or last usage layout
-	// for others - last usage layout
-	AttachmentLayout _finalLayout = AttachmentLayout::Undefined;
-
-	AttachmentLayout _descriptorLayout = AttachmentLayout::Undefined;
-
-	AttachmentLoadOp _loadOp = AttachmentLoadOp::DontCare;
-	AttachmentStoreOp _storeOp = AttachmentStoreOp::DontCare;
-	AttachmentLoadOp _stencilLoadOp = AttachmentLoadOp::DontCare;
-	AttachmentStoreOp _stencilStoreOp = AttachmentStoreOp::DontCare;
-
-	ColorMode _colorMode;
-};
-
-class ImageAttachmentRef : public AttachmentRef {
-public:
-	virtual ~ImageAttachmentRef() { }
-
-	virtual bool init(ImageAttachmentDescriptor *, uint32_t, AttachmentUsage, AttachmentLayout, AttachmentDependencyInfo, DescriptorType);
-
-	ImageAttachmentDescriptor *getImageDescriptor() const { return (ImageAttachmentDescriptor *)_descriptor; }
-
-	virtual const gl::ImageInfo &getImageInfo() const { return ((ImageAttachmentDescriptor *)_descriptor)->getImageInfo(); }
-
-	AttachmentLayout getLayout() const { return _layout; }
-	void setLayout(AttachmentLayout);
-
-	DescriptorType getDescriptorType() const { return _descriptorType; }
-
-	virtual void updateLayout() override;
-
-protected:
-	using AttachmentRef::init;
-
-	AttachmentLayout _layout = AttachmentLayout::Undefined;
-	DescriptorType _descriptorType = DescriptorType::Attachment;
 };
 
 class GenericAttachment : public Attachment {
 public:
 	virtual ~GenericAttachment() { }
 
-	virtual bool init(StringView);
+	virtual bool init(AttachmentBuilder &builder);
 
 	virtual Rc<AttachmentHandle> makeFrameHandle(const FrameQueue &) override;
 
 protected:
 	using Attachment::init;
-
-	virtual Rc<AttachmentDescriptor> makeDescriptor(PassData *) override;
-};
-
-class GenericAttachmentDescriptor : public AttachmentDescriptor {
-public:
-	virtual ~GenericAttachmentDescriptor() { }
-
-protected:
-	virtual Rc<AttachmentRef> makeRef(uint32_t idx, AttachmentUsage, AttachmentDependencyInfo) override;
-};
-
-class GenericAttachmentRef : public AttachmentRef {
-public:
-	virtual ~GenericAttachmentRef() { }
-
-protected:
 };
 
 class AttachmentHandle : public Ref {

@@ -107,7 +107,7 @@ public:
 	virtual ~ImageView() { }
 
 	bool init(Device &dev, VkImage, VkFormat format);
-	bool init(Device &dev, const renderqueue::ImageAttachmentDescriptor &desc, Image *);
+	bool init(Device &dev, const renderqueue::AttachmentPassData &desc, Image *);
 	bool init(Device &dev, Image *, const gl::ImageViewInfo &);
 
 	VkImageView getImageView() const { return _imageView; }

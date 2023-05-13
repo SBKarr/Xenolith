@@ -47,22 +47,20 @@ protected:
 	Rc<TransferResource> _resource;
 };
 
-class TransferRenderPass : public QueuePass {
+class TransferPass : public QueuePass {
 public:
-	virtual ~TransferRenderPass();
+	virtual ~TransferPass();
 
-	virtual bool init(StringView);
+	virtual bool init(PassBuilder &, const AttachmentData *);
 
 	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
 
-	TransferAttachment *getAttachment() const { return _attachment; }
+	const AttachmentData *getAttachment() const { return _attachment; }
 
 protected:
 	using QueuePass::init;
 
-	virtual void prepare(gl::Device &) override;
-
-	TransferAttachment *_attachment = nullptr;
+	const AttachmentData *_attachment = nullptr;
 };
 
 class TransferRenderPassHandle : public QueuePassHandle {
@@ -78,16 +76,18 @@ protected:
 TransferQueue::~TransferQueue() { }
 
 bool TransferQueue::init() {
-	renderqueue::Queue::Builder builder("Transfer");
+	using namespace renderqueue;
+	Queue::Builder builder("Transfer");
 
-	auto attachment = Rc<TransferAttachment>::create("TransferAttachment");
-	auto pass = Rc<TransferRenderPass>::create("TransferRenderPass");
+	auto attachment = builder.addAttachemnt("TransferAttachment", [&] (AttachmentBuilder &attachmentBuilder) -> Rc<Attachment> {
+		attachmentBuilder.defineAsInput();
+		attachmentBuilder.defineAsOutput();
+		return Rc<TransferAttachment>::create(attachmentBuilder);
+	});
 
-	builder.addRenderPass(pass);
-	builder.addPassInput(pass, 0, attachment, renderqueue::AttachmentDependencyInfo());
-	builder.addPassOutput(pass, 0, attachment, renderqueue::AttachmentDependencyInfo());
-	builder.addInput(attachment);
-	builder.addOutput(attachment);
+	builder.addPass("TransferRenderPass", PassType::Transfer, RenderOrdering(0), [&] (PassBuilder &passBuilder) -> Rc<Pass> {
+		return Rc<TransferPass>::create(passBuilder, attachment);
+	});
 
 	if (renderqueue::Queue::init(move(builder))) {
 		_attachment = attachment;
@@ -949,32 +949,27 @@ void TransferAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentInput
 }
 
 
-TransferRenderPass::~TransferRenderPass() { }
+TransferPass::~TransferPass() { }
 
-bool TransferRenderPass::init(StringView name) {
-	return QueuePass::init(name, PassType::Transfer, RenderOrdering(renderqueue::RenderOrderingHighest.get() - 1), 1);
+bool TransferPass::init(PassBuilder &passBuilder, const AttachmentData *attachment) {
+	passBuilder.addAttachment(attachment);
+
+	_attachment = attachment;
+
+	return QueuePass::init(passBuilder);
 }
 
-auto TransferRenderPass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle> {
+auto TransferPass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle> {
 	return Rc<TransferRenderPassHandle>::create(*this, handle);
-}
-
-void TransferRenderPass::prepare(gl::Device &dev) {
-	QueuePass::prepare(dev);
-	for (auto &it : _data->passDescriptors) {
-		if (auto a = dynamic_cast<TransferAttachment *>(it->getAttachment())) {
-			_attachment = a;
-		}
-	}
 }
 
 TransferRenderPassHandle::~TransferRenderPassHandle() { }
 
 Vector<const CommandBuffer *> TransferRenderPassHandle::doPrepareCommands(FrameHandle &) {
-	auto pass = (TransferRenderPass *)_renderPass.get();
+	auto pass = (TransferPass *)_renderPass.get();
 	TransferAttachmentHandle *transfer = nullptr;
 	for (auto &it : _queueData->attachments) {
-		if (it.first->getAttachment() == pass->getAttachment()) {
+		if (it.first->attachment == pass->getAttachment()) {
 			transfer = (TransferAttachmentHandle *)it.second->handle.get();
 		}
 	}
@@ -1015,10 +1010,10 @@ Vector<const CommandBuffer *> TransferRenderPassHandle::doPrepareCommands(FrameH
 
 void TransferRenderPassHandle::doComplete(FrameQueue &queue, Function<void(bool)> &&func, bool success) {
 	if (success) {
-		auto pass = (TransferRenderPass *)_renderPass.get();
+		auto pass = (TransferPass *)_renderPass.get();
 		TransferAttachmentHandle *transfer = nullptr;
 		for (auto &it : _queueData->attachments) {
-			if (it.first->getAttachment() == pass->getAttachment()) {
+			if (it.first->attachment == pass->getAttachment()) {
 				transfer = (TransferAttachmentHandle *)it.second->handle.get();
 			}
 		}

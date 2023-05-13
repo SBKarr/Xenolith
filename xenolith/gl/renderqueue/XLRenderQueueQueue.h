@@ -46,9 +46,9 @@ namespace stappler::xenolith::renderqueue {
 
 struct QueueData : NamedMem {
 	memory::pool_t *pool = nullptr;
-	memory::vector<Attachment *> input;
-	memory::vector<Attachment *> output;
-	HashTable<Rc<Attachment>> attachments;
+	memory::vector<AttachmentData *> input;
+	memory::vector<AttachmentData *> output;
+	HashTable<AttachmentData *> attachments;
 	HashTable<PassData *> passes;
 	HashTable<ProgramData *> programs;
 	HashTable<GraphicPipelineData *> graphicPipelines;
@@ -73,6 +73,8 @@ public:
 	using FrameQueue = renderqueue::FrameQueue;
 	using AttachmentHandle = renderqueue::AttachmentHandle;
 	using FrameHandle = renderqueue::FrameHandle;
+	using AttachmentData = renderqueue::AttachmentData;
+	using AttachmentBuilder = renderqueue::AttachmentBuilder;
 
 	class Builder;
 
@@ -92,12 +94,12 @@ public:
 	const HashTable<PassData *> &getPasses() const;
 	const HashTable<GraphicPipelineData *> &getGraphicPipelines() const;
 	const HashTable<ComputePipelineData *> &getComputePipelines() const;
-	const HashTable<Rc<Attachment>> &getAttachments() const;
+	const HashTable<AttachmentData *> &getAttachments() const;
 	const HashTable<Rc<Resource>> &getLinkedResources() const;
 	Rc<Resource> getInternalResource() const;
 
-	const memory::vector<Attachment *> &getInputAttachments() const;
-	const memory::vector<Attachment *> &getOutputAttachments() const;
+	const memory::vector<AttachmentData *> &getInputAttachments() const;
+	const memory::vector<AttachmentData *> &getOutputAttachments() const;
 
 	template <typename T>
 	auto getInputAttachment() const -> const T *;
@@ -112,12 +114,12 @@ public:
 	const ProgramData *getProgram(StringView) const;
 	const GraphicPipelineData *getGraphicPipeline(StringView) const;
 	const ComputePipelineData *getComputePipeline(StringView) const;
-	const Attachment *getAttachment(StringView) const;
+	const AttachmentData *getAttachment(StringView) const;
 
-	Vector<Rc<Attachment>> getOutput() const;
-	Vector<Rc<Attachment>> getOutput(AttachmentType) const;
-	Rc<Attachment> getPresentImageOutput() const;
-	Rc<Attachment> getTransferImageOutput() const;
+	Vector<AttachmentData *> getOutput() const;
+	Vector<AttachmentData *> getOutput(AttachmentType) const;
+	AttachmentData *getPresentImageOutput() const;
+	AttachmentData *getTransferImageOutput() const;
 
 	// get next frame order dumber for this queue
 	uint64_t incrementOrder();
@@ -132,76 +134,103 @@ protected:
 	QueueData *_data = nullptr;
 };
 
-class Queue::Builder final {
+class AttachmentBuilder final {
 public:
-	Builder(StringView);
-	~Builder();
+	void setType(AttachmentType type);
 
-	PassData * addRenderPass(const Rc<Pass> &);
+	void defineAsInput(AttachmentOps ops = AttachmentOps::WritesColor | AttachmentOps::WritesStencil);
+	void defineAsOutput(AttachmentOps ops = AttachmentOps::ReadColor | AttachmentOps::ReadStencil);
 
-	AttachmentRef *addPassInput(const Rc<Pass> &, uint32_t subpassIdx,
-			const Rc<BufferAttachment> &, AttachmentDependencyInfo);
-	AttachmentRef *addPassOutput(const Rc<Pass> &, uint32_t subpassIdx,
-			const Rc<BufferAttachment> &, AttachmentDependencyInfo);
+	const AttachmentData *getAttachmentData() const { return _data; }
 
-	AttachmentRef *addPassInput(const Rc<Pass> &, uint32_t subpassIdx,
-			const Rc<GenericAttachment> &, AttachmentDependencyInfo);
-	AttachmentRef *addPassOutput(const Rc<Pass> &, uint32_t subpassIdx,
-			const Rc<GenericAttachment> &, AttachmentDependencyInfo);
+protected:
+	friend class Queue::Builder;
 
-	ImageAttachmentRef *addPassInput(const Rc<Pass> &, uint32_t subpassIdx,
-			const Rc<ImageAttachment> &, AttachmentDependencyInfo, DescriptorType, AttachmentLayout);
-	ImageAttachmentRef *addPassOutput(const Rc<Pass> &, uint32_t subpassIdx,
-			const Rc<ImageAttachment> &, AttachmentDependencyInfo, DescriptorType, AttachmentLayout);
+	AttachmentBuilder(AttachmentData *);
 
-	Pair<ImageAttachmentRef *, ImageAttachmentRef *> addPassResolve(const Rc<Pass> &, uint32_t subpassIdx,
-			const Rc<ImageAttachment> &color, const Rc<ImageAttachment> &resolve,
+	AttachmentData *_data = nullptr;
+};
+
+class AttachmentPassBuilder final {
+public:
+	void setAttachmentOps(AttachmentOps);
+	void setInitialLayout(AttachmentLayout);
+	void setFinalLayout(AttachmentLayout);
+
+	void setLoadOp(AttachmentLoadOp);
+	void setStoreOp(AttachmentStoreOp);
+	void setStencilLoadOp(AttachmentLoadOp);
+	void setStencilStoreOp(AttachmentStoreOp);
+
+	void setColorMode(const ColorMode &);
+	void setDependency(const AttachmentDependencyInfo &);
+
+protected:
+	friend class PassBuilder;
+
+	AttachmentPassBuilder(AttachmentPassData *);
+
+	AttachmentPassData *_data = nullptr;
+};
+
+class DescriptorSetBuilder final {
+public:
+	bool addDescriptor(const AttachmentPassData *, DescriptorType = DescriptorType::Unknown, AttachmentLayout = AttachmentLayout::Ignored);
+
+protected:
+	friend class PipelineLayoutBuilder;
+
+	DescriptorSetBuilder(DescriptorSetData *);
+
+	DescriptorSetData *_data = nullptr;
+};
+
+class PipelineLayoutBuilder final {
+public:
+	bool addSet(const Callback<void(DescriptorSetBuilder &)> &);
+	void setUsesTextureSet(bool);
+
+protected:
+	friend class PassBuilder;
+
+	PipelineLayoutBuilder(PipelineLayoutData *);
+
+	PipelineLayoutData *_data = nullptr;
+};
+
+class SubpassBuilder final {
+public:
+	bool addColor(const AttachmentPassData *, AttachmentDependencyInfo, AttachmentLayout = AttachmentLayout::Ignored,
+			AttachmentOps = AttachmentOps::Undefined);
+	bool addInput(const AttachmentPassData *, AttachmentDependencyInfo, AttachmentLayout = AttachmentLayout::Ignored,
+			AttachmentOps = AttachmentOps::Undefined);
+
+	bool addResolve(const AttachmentPassData *color, const AttachmentPassData *resolve,
 			AttachmentDependencyInfo colorDep, AttachmentDependencyInfo resolveDep);
 
-	ImageAttachmentRef *addPassDepthStencil(const Rc<Pass> &, uint32_t subpassIdx,
-			const Rc<ImageAttachment> &, AttachmentDependencyInfo);
-
-	bool addSubpassDependency(const Rc<Pass> &, uint32_t srcSubpass, PipelineStage srcStage, AccessType srcAccess,
-			uint32_t dstSubpass, PipelineStage dstStage, AccessType dstAccess, bool byRegion = true);
-
-	bool addInput(const Rc<Attachment> &, AttachmentOps ops = AttachmentOps::WritesColor | AttachmentOps::WritesStencil);
-	bool addOutput(const Rc<Attachment> &, AttachmentOps ops = AttachmentOps::ReadColor | AttachmentOps::ReadStencil);
-
-	// add program, copy all data
-	const ProgramData * addProgram(StringView key, SpanView<uint32_t>, const ProgramInfo * = nullptr);
-
-	// add program, take shader data by ref, data should exists for all resource lifetime
-	const ProgramData * addProgramByRef(StringView key, SpanView<uint32_t>, const ProgramInfo * = nullptr);
-
-	// add program, data will be acquired with callback when needed
-	const ProgramData * addProgram(StringView key, const memory::function<void(const ProgramData::DataCallback &)> &,
-			const ProgramInfo * = nullptr);
+	bool setDepthStencil(const AttachmentPassData *, AttachmentDependencyInfo, AttachmentLayout = AttachmentLayout::Ignored,
+			AttachmentOps = AttachmentOps::Undefined);
 
 	template <typename ... Args>
-	const GraphicPipelineData * addGraphicPipeline(const Rc<Pass> &pass, uint32_t subpass, StringView key, Args && ...args) {
-		if (auto p = emplacePipeline(pass, subpass, key)) {
+	const GraphicPipelineData * addGraphicPipeline(StringView key, const PipelineLayoutData *layout, Args && ...args) {
+		if (auto p = emplacePipeline(key, layout)) {
 			if (setPipelineOptions(*p, std::forward<Args>(args)...)) {
+				finalizePipeline(p);
 				return p;
 			}
-			erasePipeline(pass, subpass, p);
+			erasePipeline(p);
 		}
 		return nullptr;
 	}
 
-	const ComputePipelineData *addComputePipeline(const Rc<Pass> &pass, StringView key, SpecializationInfo &&);
-
-	// resources, that will be compiled with RenderQueue
-	void setInternalResource(Rc<Resource> &&);
-
-	// external resources, that should be compiled when added
-	void addLinkedResource(const Rc<Resource> &);
-
-	void setBeginCallback(Function<void(FrameRequest &)> &&);
-	void setEndCallback(Function<void(FrameRequest &)> &&);
+	const ComputePipelineData *addComputePipeline(StringView key, const PipelineLayoutData *layout, SpecializationInfo &&);
 
 protected:
-	GraphicPipelineData *emplacePipeline(const Rc<Pass> &, uint32_t, StringView key);
-	void erasePipeline(const Rc<Pass> &, uint32_t, GraphicPipelineData *);
+	friend class PassBuilder;
+
+	GraphicPipelineData *emplacePipeline(StringView key, const PipelineLayoutData *);
+	void finalizePipeline(GraphicPipelineData *);
+	void erasePipeline(GraphicPipelineData *);
 
 	bool setPipelineOption(GraphicPipelineData &f, DynamicState);
 	bool setPipelineOption(GraphicPipelineData &f, const Vector<SpecializationInfo> &);
@@ -220,10 +249,67 @@ protected:
 		return setPipelineOptions(f, std::forward<Args>(args)...);
 	}
 
+	SubpassBuilder(SubpassData *);
+
+	SubpassData *_data;
+};
+
+class PassBuilder final {
+public:
+	const PipelineLayoutData * addDescriptorLayout(const Callback<void(PipelineLayoutBuilder &)> &);
+
+	const SubpassData * addSubpass(const Callback<void(SubpassBuilder &)> &);
+
+	bool addSubpassDependency(const SubpassData *src, PipelineStage srcStage, AccessType srcAccess,
+			const SubpassData *dst, PipelineStage dstStage, AccessType dstAccess, bool byRegion = true);
+
+	const AttachmentPassData *addAttachment(const AttachmentData *);
+	const AttachmentPassData *addAttachment(const AttachmentData *, const Callback<void(AttachmentPassBuilder &)> &);
+
+protected:
+	friend class Queue::Builder;
+	friend class Pass;
+
+	PassData *getData() const { return _data; }
+
+	PassBuilder(PassData *);
+
+	PassData *_data = nullptr;
+};
+
+class Queue::Builder final {
+public:
+	Builder(StringView);
+	~Builder();
+
+	const AttachmentData *addAttachemnt(StringView name, const Callback<Rc<Attachment>(AttachmentBuilder &)> &);
+
+	const PassData * addPass(StringView name, PassType, RenderOrdering, const Callback<Rc<Pass>(PassBuilder &)> &);
+
+	// add program, copy all data
+	const ProgramData * addProgram(StringView key, SpanView<uint32_t>, const ProgramInfo * = nullptr);
+
+	// add program, take shader data by ref, data should exists for all resource lifetime
+	const ProgramData * addProgramByRef(StringView key, SpanView<uint32_t>, const ProgramInfo * = nullptr);
+
+	// add program, data will be acquired with callback when needed
+	const ProgramData * addProgram(StringView key, const memory::function<void(const ProgramData::DataCallback &)> &,
+			const ProgramInfo * = nullptr);
+
+	// resources, that will be compiled with RenderQueue
+	void setInternalResource(Rc<Resource> &&);
+
+	// external resources, that should be compiled when added
+	void addLinkedResource(const Rc<Resource> &);
+
+	void setBeginCallback(Function<void(FrameRequest &)> &&);
+	void setEndCallback(Function<void(FrameRequest &)> &&);
+
+protected:
 	memory::pool_t *getPool() const;
 
-	PassData *getPassData(const Rc<Pass> &) const;
-	SubpassData *getSubpassData(const Rc<Pass> &, uint32_t) const;
+	const PassData *getPassData(const Rc<Pass> &) const;
+	const SubpassData *getSubpassData(const Rc<Pass> &, uint32_t) const;
 
 	friend class Queue;
 

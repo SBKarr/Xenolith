@@ -54,20 +54,16 @@ class MeshCompilerPass : public QueuePass {
 public:
 	virtual ~MeshCompilerPass();
 
-	virtual bool init(StringView);
+	virtual bool init(PassBuilder &, const AttachmentData *);
 
 	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
 
-	const MeshCompilerAttachment *getMeshAttachment() const {
-		return _meshAttachment;
-	}
+	const AttachmentData *getMeshAttachment() const { return _meshAttachment; }
 
 protected:
 	using QueuePass::init;
 
-	virtual void prepare(gl::Device &) override;
-
-	const MeshCompilerAttachment *_meshAttachment = nullptr;
+	const AttachmentData *_meshAttachment = nullptr;
 };
 
 class MeshCompilerPassHandle : public QueuePassHandle {
@@ -93,16 +89,19 @@ protected:
 MeshCompiler::~MeshCompiler() { }
 
 bool MeshCompiler::init() {
+	using namespace renderqueue;
+
 	Queue::Builder builder("MeshCompiler");
 
-	auto attachment = Rc<MeshCompilerAttachment>::create("MeshAttachment");
-	auto pass = Rc<MeshCompilerPass>::create("MeshPass");
+	auto attachment = builder.addAttachemnt("", [] (AttachmentBuilder &attachmentBuilder) -> Rc<Attachment> {
+		attachmentBuilder.defineAsInput();
+		attachmentBuilder.defineAsOutput();
+		return Rc<MeshCompilerAttachment>::create(attachmentBuilder);
+	});
 
-	builder.addRenderPass(pass);
-	builder.addPassInput(pass, 0, attachment, renderqueue::AttachmentDependencyInfo());
-	builder.addPassOutput(pass, 0, attachment, renderqueue::AttachmentDependencyInfo());
-	builder.addInput(attachment);
-	builder.addOutput(attachment);
+	builder.addPass("MeshPass", PassType::Transfer, RenderOrdering(0), [&] (PassBuilder &passBuilder) -> Rc<Pass> {
+		return Rc<MeshCompilerPass>::create(passBuilder, attachment);
+	});
 
 	if (renderqueue::Queue::init(move(builder))) {
 		_attachment = attachment;
@@ -246,24 +245,20 @@ void MeshCompilerAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::AttachmentI
 
 MeshCompilerPass::~MeshCompilerPass() { }
 
-bool MeshCompilerPass::init(StringView name) {
-	if (QueuePass::init(name, gl::RenderPassType::Generic, renderqueue::RenderOrderingHighest, 1)) {
-		_queueOps = QueueOperations::Transfer;
-		return true;
+bool MeshCompilerPass::init(PassBuilder &passBuilder, const AttachmentData *attachment) {
+	passBuilder.addAttachment(attachment);
+
+	if (!QueuePass::init(passBuilder)) {
+		return false;
 	}
-	return false;
+
+	_queueOps = QueueOperations::Transfer;
+	_meshAttachment = attachment;
+	return true;
 }
 
 auto MeshCompilerPass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle> {
 	return Rc<MeshCompilerPassHandle>::create(*this, handle);
-}
-
-void MeshCompilerPass::prepare(gl::Device &) {
-	for (auto &it : _data->passDescriptors) {
-		if (auto a = dynamic_cast<MeshCompilerAttachment *>(it->getAttachment())) {
-			_meshAttachment = a;
-		}
-	}
 }
 
 MeshCompilerPassHandle::~MeshCompilerPassHandle() { }

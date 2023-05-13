@@ -666,55 +666,6 @@ ImageData ImageData::make(Rc<ImageObject> &&obj) {
 	return ret;
 }
 
-void ImageViewInfo::setup(const renderqueue::ImageAttachmentDescriptor &desc) {
-	bool allowSwizzle = (desc.getDescriptorType() != renderqueue::DescriptorType::InputAttachment
-			&& desc.getDescriptorType() != renderqueue::DescriptorType::StorageImage);
-	if (allowSwizzle) {
-		for (auto &it : desc.getRefs()) {
-			if ((it->getUsage() & renderqueue::AttachmentUsage::Input) != renderqueue::AttachmentUsage::None) {
-				allowSwizzle = false;
-				break;
-			}
-		}
-	}
-
-	auto &info = desc.getImageInfo();
-
-	format = info.format;
-	baseArrayLayer = BaseArrayLayer(0);
-	layerCount = info.arrayLayers;
-	setup(info.imageType, info.arrayLayers);
-	setup(desc.getColorMode(), allowSwizzle);
-
-	if (!allowSwizzle) {
-		// input attachment cannot have swizzle mask
-
-		if (r != gl::ComponentMapping::Identity) {
-			r = gl::ComponentMapping::Identity;
-			log::vtext("gl::ImageView", "Attachment descriptor '", desc.getName(),
-					"' can not have non-identity ColorMode because it's used as input attachment");
-		}
-
-		if (g != gl::ComponentMapping::Identity) {
-			g = gl::ComponentMapping::Identity;
-			log::vtext("gl::ImageView", "Attachment descriptor '", desc.getName(),
-					"' can not have non-identity ColorMode because it's used as input attachment");
-		}
-
-		if (b != gl::ComponentMapping::Identity) {
-			b = gl::ComponentMapping::Identity;
-			log::vtext("gl::ImageView", "Attachment descriptor '", desc.getName(),
-					"' can not have non-identity ColorMode because it's used as input attachment");
-		}
-
-		if (a != gl::ComponentMapping::Identity) {
-			a = gl::ComponentMapping::Identity;
-			log::vtext("gl::ImageView", "Attachment descriptor '", desc.getName(),
-					"' can not have non-identity ColorMode because it's used as input attachment");
-		}
-	}
-}
-
 void ImageViewInfo::setup(const ImageViewInfo &value) {
 	*this = value;
 }

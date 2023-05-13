@@ -233,11 +233,8 @@ void Scene::onPresented(Director *dir) {
 	}
 	if (_materials.empty()) {
 		for (auto &it : _queue->getAttachments()) {
-			if (auto a = dynamic_cast<gl::MaterialAttachment *>(it.get())) {
+			if (auto a = dynamic_cast<gl::MaterialAttachment *>(it->attachment.get())) {
 				readInitialMaterials(a);
-			}
-			if (auto a = dynamic_cast<vk::VertexMaterialAttachment *>(it.get())) {
-				_bufferAttachment = a;
 			}
 		}
 	}
@@ -593,15 +590,15 @@ void Scene::readInitialMaterials(gl::MaterialAttachment *a) {
 
 	auto renderPass = a->getLastRenderPass();
 	while (renderPass) {
-		auto &subpasses = renderPass->subpasses;
-
-		for (auto &it : subpasses) {
-			// check if subpass has material attachment
+		auto &layouts = renderPass->pipelineLayouts;
+		for (auto &layout : layouts) {
 			bool isUsable = false;
-			for (auto &attachment : it.inputBuffers) {
-				if (attachment->getAttachment() == a) {
-					isUsable = true;
-					break;
+			for (auto &set : layout->sets) {
+				for (auto &desc : set->descriptors) {
+					if (desc->attachment->attachment->attachment == a) {
+						isUsable = true;
+						break;
+					}
 				}
 			}
 
@@ -609,9 +606,9 @@ void Scene::readInitialMaterials(gl::MaterialAttachment *a) {
 				break;
 			}
 
-			auto &sp = v.subasses.emplace_back(SubpassData({&it}));
+			auto &sp = v.layouts.emplace_back(PipelineLayoutData({layout}));
 
-			for (auto &pipeline : it.graphicPipelines) {
+			for (auto &pipeline : layout->graphicPipelines) {
 				auto hash = pipeline->material.hash();
 				auto it = sp.pipelines.find(hash);
 				if (it == sp.pipelines.end()) {
@@ -624,7 +621,7 @@ void Scene::readInitialMaterials(gl::MaterialAttachment *a) {
 
 		renderPass = a->getPrevRenderPass(renderPass);
 	}
-	for (auto &m : a->getInitialMaterials()) {
+	for (auto &m : a->getPredefinedMaterials()) {
 		addMaterial(getMaterialInfo(a->getType(), m), m->getId(), false);
 	}
 }
@@ -658,7 +655,7 @@ Bytes Scene::getDataForMaterial(const gl::MaterialAttachment *a, const MaterialI
 
 auto Scene::getPipelineForMaterial(const AttachmentData &a, const MaterialInfo &info) const -> const PipelineData * {
 	auto hash = info.pipeline.hash();
-	for (auto &it : a.subasses) {
+	for (auto &it : a.layouts) {
 		auto hashIt = it.pipelines.find(hash);
 		if (hashIt != it.pipelines.end()) {
 			for (auto &pipeline : hashIt->second) {

@@ -23,12 +23,12 @@
 #include "XLRenderQueueAttachment.h"
 #include "XLRenderQueuePass.h"
 #include "XLRenderQueueFrameHandle.h"
+#include "XLRenderQueueQueue.h"
 
 namespace stappler::xenolith::renderqueue {
 
-bool Attachment::init(StringView name, AttachmentType type) {
-	_name = name.str<Interface>();
-	_type = type;
+bool Attachment::init(AttachmentBuilder &builder) {
+	_data = builder.getAttachmentData();
 	return true;
 }
 
@@ -36,9 +36,16 @@ void Attachment::clear() {
 
 }
 
-void Attachment::addUsage(AttachmentUsage usage, AttachmentOps ops) {
-	_usage |= usage;
-	_ops |= ops;
+StringView Attachment::getName() const {
+	return _data->key;
+}
+
+AttachmentUsage Attachment::getUsage() const {
+	return _data->usage;
+}
+
+bool Attachment::isTransient() const {
+	return _data->transient;
 }
 
 void Attachment::setInputCallback(Function<void(FrameQueue &, const Rc<AttachmentHandle> &, Function<void(bool)> &&)> &&input) {
@@ -58,24 +65,10 @@ bool Attachment::validateInput(const Rc<AttachmentInputData> &) const {
 	return true;
 }
 
-AttachmentDescriptor *Attachment::addDescriptor(PassData *data) {
-	for (auto &it : _descriptors) {
-		if (it->getRenderPass() == data) {
-			return it;
-		}
-	}
-
-	if (auto d = makeDescriptor(data)) {
-		return _descriptors.emplace_back(d);
-	}
-
-	return nullptr;
-}
-
 void Attachment::sortDescriptors(Queue &queue, gl::Device &dev) {
 	Set<uint32_t> priorities;
 
-	for (auto &it : _descriptors) {
+	/*for (auto &it : _data->passes) {
 		auto pass = it->getRenderPass();
 		auto iit = priorities.find(pass->ordering.get());
 		if (iit == priorities.end()) {
@@ -93,55 +86,55 @@ void Attachment::sortDescriptors(Queue &queue, gl::Device &dev) {
 
 	for (auto &it : _descriptors) {
 		it->sortRefs(queue, dev);
-	}
+	}*/
 }
 
 Rc<AttachmentHandle> Attachment::makeFrameHandle(const FrameQueue &) {
 	return nullptr;
 }
 
-Vector<PassData *> Attachment::getRenderPasses() const {
-	Vector<PassData *> ret;
-	for (auto &it : _descriptors) {
-		ret.emplace_back(it->getRenderPass());
+Vector<const PassData *> Attachment::getRenderPasses() const {
+	Vector<const PassData *> ret;
+	for (auto &it : _data->passes) {
+		ret.emplace_back(it->pass);
 	}
 	return ret;
 }
 
-PassData *Attachment::getFirstRenderPass() const {
-	if (_descriptors.empty()) {
+const PassData *Attachment::getFirstRenderPass() const {
+	if (_data->passes.empty()) {
 		return nullptr;
 	}
 
-	return _descriptors.front()->getRenderPass();
+	return _data->passes.front()->pass;
 }
 
-PassData *Attachment::getLastRenderPass() const {
-	if (_descriptors.empty()) {
+const PassData *Attachment::getLastRenderPass() const {
+	if (_data->passes.empty()) {
 		return nullptr;
 	}
 
-	return _descriptors.back()->getRenderPass();
+	return _data->passes.back()->pass;
 }
 
-PassData *Attachment::getNextRenderPass(PassData *pass) const {
+const PassData *Attachment::getNextRenderPass(const PassData *pass) const {
 	size_t idx = 0;
-	for (auto &it : _descriptors) {
-		if (it->getRenderPass() == pass) {
+	for (auto &it : _data->passes) {
+		if (it->pass == pass) {
 			break;
 		}
 		++idx;
 	}
-	if (idx + 1 >= _descriptors.size()) {
+	if (idx + 1 >= _data->passes.size()) {
 		return nullptr;
 	}
-	return _descriptors.at(idx + 1)->getRenderPass();
+	return _data->passes.at(idx + 1)->pass;
 }
 
-PassData *Attachment::getPrevRenderPass(PassData *pass) const {
+const PassData *Attachment::getPrevRenderPass(const PassData *pass) const {
 	size_t idx = 0;
-	for (auto &it : _descriptors) {
-		if (it->getRenderPass() == pass) {
+	for (auto &it : _data->passes) {
+		if (it->pass == pass) {
 			break;
 		}
 		++ idx;
@@ -149,209 +142,14 @@ PassData *Attachment::getPrevRenderPass(PassData *pass) const {
 	if (idx == 0) {
 		return nullptr;
 	}
-	return _descriptors.at(idx - 1)->getRenderPass();
+	return _data->passes.at(idx - 1)->pass;
 }
 
-bool AttachmentDescriptor::init(PassData *pass, Attachment *attachment) {
-	_renderPass = pass;
-	_descriptor.attachment = attachment;
-	_descriptor.descriptor = this;
-	return true;
-}
-
-void AttachmentDescriptor::clear() {
-
-}
-
-void AttachmentDescriptor::reset() {
-
-}
-
-void AttachmentDescriptor::setAttachmentIndex(uint32_t idx) {
-	_attachmentIndex = idx;
-
-#if XL_FRAME_ATTACHMENTS_DEBUG
-	log::vtext("AttachmentDescriptor", "[", _renderPass->key, ":attachment:", getName(), ":", _attachmentIndex, "] ",
-			getDescriptorTypeName(_descriptor.type), ": usage:", getProgramStageDescription(_descriptor.stages));
-#endif
-}
-
-void AttachmentDescriptor::setDescriptorIndex(uint32_t idx) {
-	_descriptorIndex = idx;
-
-	if (_descriptor.type == DescriptorType::Attachment) {
-		return;
-	}
-
-	for (auto &subpass : _renderPass->subpasses) {
-		for (auto &pipeline : subpass.graphicPipelines) {
-			for (auto &it : pipeline->shaders) {
-				for (auto &binding : it.data->bindings) {
-					if (binding.set == 0 && binding.descriptor == _descriptorIndex) {
-						if (_descriptor.type == DescriptorType::Unknown) {
-							_descriptor.type = binding.type;
-						} else if (_descriptor.type != binding.type) {
-							log::vtext("AttachmentDescriptor", "[", _renderPass->key, ":", getName(), ":", _descriptorIndex,
-									"] descriptor type conflict: (code)", getDescriptorTypeName(_descriptor.type), " vs. (shader)",
-									getDescriptorTypeName(binding.type));
-						}
-						_descriptor.stages |= it.data->stage;
-						_descriptor.count = std::max(binding.count, _descriptor.count);
-					}
-				}
-			}
-		}
-		for (auto &pipeline : subpass.computePipelines) {
-			for (auto &binding : pipeline->shader.data->bindings) {
-				if (binding.set == 0 && binding.descriptor == _descriptorIndex) {
-					if (_descriptor.type == DescriptorType::Unknown) {
-						_descriptor.type = binding.type;
-					} else if (_descriptor.type != binding.type) {
-						log::vtext("AttachmentDescriptor", "[", _renderPass->key, ":", getName(), ":", _descriptorIndex,
-								"] descriptor type conflict: (code)", getDescriptorTypeName(_descriptor.type), " vs. (shader)",
-								getDescriptorTypeName(binding.type));
-					}
-					_descriptor.stages |= ProgramStage::Compute;
-					_descriptor.count = std::max(binding.count, _descriptor.count);
-				}
-			}
-		}
-	}
-
-	if (_descriptor.type == DescriptorType::Unknown) {
-		log::vtext("AttachmentDescriptor", "[", _renderPass->key, ":descriptor:", getName(), ":", _descriptorIndex, "] type is not defined");
-		return;
-	}
-
-#if XL_FRAME_ATTACHMENTS_DEBUG
-	log::vtext("AttachmentDescriptor", "[", _renderPass->key, ":descriptor:", getName(), ":", _descriptorIndex, "] ",
-			getDescriptorTypeName(_descriptor.type), "[", _descriptor.count, "]: usage:", getProgramStageDescription(_descriptor.stages));
-#endif
-}
-
-AttachmentRef *AttachmentDescriptor::addRef(uint32_t idx, AttachmentUsage usage, AttachmentDependencyInfo info) {
-	for (auto &it : _refs) {
-		if (it->getSubpass() == idx) {
-			if ((it->getUsage() & usage) != AttachmentUsage::None) {
-				return nullptr;
-			} else {
-				it->addUsage(usage);
-				it->addDependency(info);
-				return it;
-			}
-		}
-	}
-
-	if (auto ref = makeRef(idx, usage, info)) {
-		return _refs.emplace_back(ref);
-	}
-
-	return nullptr;
-}
-
-void AttachmentDescriptor::sortRefs(Queue &queue, gl::Device &dev) {
-	std::sort(_refs.begin(), _refs.end(), [&] (const Rc<AttachmentRef> &l, const Rc<AttachmentRef> &r) {
-		return l->getSubpass() < r->getSubpass();
-	});
-
-	for (auto &it : _refs) {
-		it->updateLayout();
-
-		_dependency.requiredRenderPassState = FrameRenderPassState(std::max(toInt(_dependency.requiredRenderPassState),
-				toInt(it->getDependency().requiredRenderPassState)));
-	}
-
-	_dependency.initialUsageStage = _refs.front()->getDependency().initialUsageStage;
-	_dependency.initialAccessMask = _refs.front()->getDependency().initialAccessMask;
-	_dependency.finalUsageStage = _refs.back()->getDependency().finalUsageStage;
-	_dependency.finalAccessMask = _refs.back()->getDependency().finalAccessMask;
-
-	if (_descriptor.type != DescriptorType::Unknown) {
-		return;
-	}
-
-	auto type = _descriptor.attachment->getType();
-	if (type == AttachmentType::Buffer) {
-		auto buffer = (BufferAttachment *)_descriptor.attachment;
-		if (_descriptor.attachment->getDescriptorType() != DescriptorType::Unknown) {
-			_descriptor.type = _descriptor.attachment->getDescriptorType();
-		} else {
-			DescriptorType descriptor = DescriptorType::Unknown;
-			if ((buffer->getInfo().usage & gl::BufferUsage::UniformTexelBuffer) != gl::BufferUsage::None) {
-				if (descriptor == DescriptorType::Unknown) {
-					descriptor = DescriptorType::UniformTexelBuffer;
-				} else {
-					log::vtext("Gl-Error", "Fail to deduce DescriptorType from attachment '", _descriptor.attachment->getName(), "'");
-				}
-			}
-			if ((buffer->getInfo().usage & gl::BufferUsage::StorageTexelBuffer) != gl::BufferUsage::None) {
-				if (descriptor == DescriptorType::Unknown) {
-					descriptor = DescriptorType::StorageTexelBuffer;
-				} else {
-					log::vtext("Gl-Error", "Fail to deduce DescriptorType from attachment '", _descriptor.attachment->getName(), "'");
-				}
-			}
-			if ((buffer->getInfo().usage & gl::BufferUsage::UniformBuffer) != gl::BufferUsage::None) {
-				if (descriptor == DescriptorType::Unknown) {
-					descriptor = DescriptorType::UniformBuffer;
-				} else {
-					log::vtext("Gl-Error", "Fail to deduce DescriptorType from attachment '", _descriptor.attachment->getName(), "'");
-				}
-			}
-			if ((buffer->getInfo().usage & gl::BufferUsage::StorageBuffer) != gl::BufferUsage::None) {
-				if (descriptor == DescriptorType::Unknown) {
-					descriptor = DescriptorType::StorageBuffer;
-				} else {
-					log::vtext("Gl-Error", "Fail to deduce DescriptorType from attachment '", _descriptor.attachment->getName(), "'");
-				}
-			}
-
-			if (descriptor != DescriptorType::Unknown) {
-				_descriptor.type = descriptor;
-			}
-		}
-	} else if (type == AttachmentType::Image) {
-		bool isInputAttachment = false;
-		for (auto &usage : _refs) {
-			if ((usage->getUsage() & AttachmentUsage::Input) != AttachmentUsage::None) {
-				isInputAttachment = true;
-				break;
-			}
-		}
-		if (isInputAttachment) {
-			_descriptor.type = DescriptorType::InputAttachment;
-		}
-	}
-}
-
-bool AttachmentRef::init(AttachmentDescriptor *desc, uint32_t idx, AttachmentUsage usage, AttachmentDependencyInfo dep) {
-	_descriptor = desc;
-	_subpass = idx;
-	_usage = usage;
-	_dependency = dep;
-	return true;
-}
-
-void AttachmentRef::addDependency(AttachmentDependencyInfo info) {
-	if (info.initialUsageStage != PipelineStage::None) {
-		_dependency.initialUsageStage |= info.initialUsageStage;
-		_dependency.initialAccessMask |= info.initialAccessMask;
-	}
-
-	if (info.finalUsageStage != PipelineStage::None) {
-		_dependency.finalUsageStage |= info.finalUsageStage;
-		_dependency.finalAccessMask |= info.finalAccessMask;
-	}
-}
-
-void AttachmentRef::updateLayout() {
-
-}
-
-bool BufferAttachment::init(StringView str, const gl::BufferInfo &info) {
+bool BufferAttachment::init(AttachmentBuilder &builder, const gl::BufferInfo &info) {
 	_info = info;
-	if (Attachment::init(str, AttachmentType::Buffer)) {
-		_info.key = _name;
+	builder.setType(AttachmentType::Buffer);
+	if (Attachment::init(builder)) {
+		_info.key = _data->key;
 		return true;
 	}
 	return false;
@@ -361,27 +159,12 @@ void BufferAttachment::clear() {
 	Attachment::clear();
 }
 
-BufferAttachmentDescriptor *BufferAttachment::addBufferDescriptor(PassData *pass) {
-	return (BufferAttachmentDescriptor *)addDescriptor(pass);
-}
-
-Rc<AttachmentDescriptor> BufferAttachment::makeDescriptor(PassData *pass) {
-	return Rc<BufferAttachmentDescriptor>::create(pass, this);
-}
-
-BufferAttachmentRef *BufferAttachmentDescriptor::addBufferRef(uint32_t idx, AttachmentUsage usage, AttachmentDependencyInfo info) {
-	return (BufferAttachmentRef *)addRef(idx, usage, info);
-}
-
-Rc<AttachmentRef> BufferAttachmentDescriptor::makeRef(uint32_t idx, AttachmentUsage usage, AttachmentDependencyInfo info) {
-	return Rc<BufferAttachmentRef>::create(this, idx, usage, info);
-}
-
-bool ImageAttachment::init(StringView str, const gl::ImageInfo &info, AttachmentInfo &&a) {
-	if (Attachment::init(str, AttachmentType::Image)) {
+bool ImageAttachment::init(AttachmentBuilder &builder, const gl::ImageInfo &info, AttachmentInfo &&a) {
+	builder.setType(AttachmentType::Image);
+	if (Attachment::init(builder)) {
 		_imageInfo = info;
-		_imageInfo.key = _name;
 		_attachmentInfo = move(a);
+		_imageInfo.key = _data->key;
 		return true;
 	}
 	return false;
@@ -389,14 +172,6 @@ bool ImageAttachment::init(StringView str, const gl::ImageInfo &info, Attachment
 
 void ImageAttachment::addImageUsage(gl::ImageUsage usage) {
 	_imageInfo.usage |= usage;
-}
-
-ImageAttachmentDescriptor *ImageAttachment::addImageDescriptor(PassData *data, DescriptorType type) {
-	auto ret = (ImageAttachmentDescriptor *)addDescriptor(data);
-	if (type != DescriptorType::Unknown) {
-		ret->setDescriptorType(type);
-	}
-	return ret;
 }
 
 bool ImageAttachment::isCompatible(const gl::ImageInfo &image) const {
@@ -416,224 +191,56 @@ Extent3 ImageAttachment::getSizeForFrame(const FrameQueue &frame) const {
 	return ret;
 }
 
-Rc<AttachmentDescriptor> ImageAttachment::makeDescriptor(PassData *pass) {
-	return Rc<ImageAttachmentDescriptor>::create(pass, this);
-}
-
-bool ImageAttachmentDescriptor::init(PassData *pass, ImageAttachment *attachment) {
-	if (AttachmentDescriptor::init(pass, attachment)) {
-		_colorMode = attachment->getColorMode();
-		return true;
+gl::ImageViewInfo ImageAttachment::getImageViewInfo(const gl::ImageInfoData &info, const AttachmentPassData &passAttachment) const {
+	bool allowSwizzle = true;
+	AttachmentUsage usage = AttachmentUsage::None;
+	for (auto &subpassAttachment : passAttachment.subpasses) {
+		usage |= subpassAttachment->usage;
 	}
-	return false;
+
+	if ((usage & AttachmentUsage::Input) != AttachmentUsage::None
+			|| (usage & AttachmentUsage::Resolve) != AttachmentUsage::None
+			|| (usage & AttachmentUsage::DepthStencil) != AttachmentUsage::None) {
+		allowSwizzle = false;
+	}
+
+	gl::ImageViewInfo passInfo(info);
+	passInfo.setup(passAttachment.colorMode, allowSwizzle);
+	return passInfo;
 }
 
-ImageAttachmentRef *ImageAttachmentDescriptor::addImageRef(uint32_t idx, AttachmentUsage usage, AttachmentLayout layout,
-		AttachmentDependencyInfo info, DescriptorType descType) {
-	for (auto &it : _refs) {
-		if (it->getSubpass() == idx) {
-			if ((it->getUsage() & usage) != AttachmentUsage::None) {
-				return nullptr;
-			} else {
-				auto ref = (ImageAttachmentRef *)it.get();
-				if (ref->getLayout() != layout) {
-					log::vtext("Gl-Error", "Multiple layouts defined for attachment '", _descriptor.attachment->getName(),
-							"' within renderpass ", _renderPass->key, ":", idx);
-					return nullptr;
-				}
+Vector<gl::ImageViewInfo> ImageAttachment::getImageViews(const gl::ImageInfoData &info) const {
+	Vector<gl::ImageViewInfo> ret;
 
-				it->addUsage(usage);
-				it->addDependency(info);
-				return (ImageAttachmentRef *)it.get();
-			}
+	auto addView = [&] (const gl::ImageViewInfo &info) {
+		auto it = std::find(ret.begin(), ret.end(), info);
+		if (it == ret.end()) {
+			ret.emplace_back(info);
+		}
+	};
+
+	for (auto &passAttachment : _data->passes) {
+		addView(getImageViewInfo(info, *passAttachment));
+
+		for (auto &desc : passAttachment->descriptors) {
+			bool allowSwizzle = (desc->type == DescriptorType::SampledImage);
+
+			gl::ImageViewInfo passInfo(info);
+			passInfo.setup(passAttachment->colorMode, allowSwizzle);
+			addView(passInfo);
 		}
 	}
 
-	if (auto ref = makeImageRef(idx, usage, layout, info, descType)) {
-		_refs.emplace_back(ref);
-		return ref;
-	}
-
-	return nullptr;
+	return ret;
 }
 
-ImageAttachment *ImageAttachmentDescriptor::getImageAttachment() const {
-	return (ImageAttachment *)getAttachment();
-}
-
-Rc<ImageAttachmentRef> ImageAttachmentDescriptor::makeImageRef(uint32_t idx, AttachmentUsage usage, AttachmentLayout layout,
-		AttachmentDependencyInfo info, DescriptorType descType) {
-	return Rc<ImageAttachmentRef>::create(this, idx, usage, layout, info, descType);
-}
-
-bool ImageAttachmentRef::init(ImageAttachmentDescriptor *desc, uint32_t subpass, AttachmentUsage usage, AttachmentLayout layout,
-		AttachmentDependencyInfo info, DescriptorType descType) {
-	if (AttachmentRef::init(desc, subpass, usage, info)) {
-		_layout = layout;
-		_descriptorType = descType;
-		return true;
-	}
-	return false;
-}
-
-void ImageAttachmentRef::setLayout(AttachmentLayout layout) {
-	_layout = layout;
-}
-
-void ImageAttachmentRef::updateLayout() {
-	AttachmentRef::updateLayout();
-
-	auto fmt = ((ImageAttachment *)_descriptor->getAttachment())->getImageInfo().format;
-
-	bool separateDepthStencil = false;
-	bool hasColor = false;
-	bool hasDepth = false;
-	bool hasStencil = false;
-
-	switch (fmt) {
-	case gl::ImageFormat::D16_UNORM:
-	case gl::ImageFormat::X8_D24_UNORM_PACK32:
-	case gl::ImageFormat::D32_SFLOAT:
-		hasDepth = true;
-		break;
-	case gl::ImageFormat::S8_UINT:
-		hasStencil = true;
-		break;
-	case gl::ImageFormat::D16_UNORM_S8_UINT:
-	case gl::ImageFormat::D24_UNORM_S8_UINT:
-	case gl::ImageFormat::D32_SFLOAT_S8_UINT:
-		hasDepth = true;
-		hasStencil = true;
-		break;
-	default:
-		hasColor = true;
-		break;
-	}
-
-	switch (_usage) {
-	case AttachmentUsage::Input:
-		switch (_layout) {
-		case AttachmentLayout::DepthReadOnlyStencilAttachmentOptimal:
-		case AttachmentLayout::DepthAttachmentStencilReadOnlyOptimal:
-		case AttachmentLayout::DepthReadOnlyOptimal:
-		case AttachmentLayout::StencilReadOnlyOptimal:
-		case AttachmentLayout::DepthStencilReadOnlyOptimal:
-		case AttachmentLayout::ShaderReadOnlyOptimal:
-		case AttachmentLayout::General:
-			break;
-		case AttachmentLayout::Ignored:
-			if (hasColor) {
-				_layout = AttachmentLayout::ShaderReadOnlyOptimal;
-			} else if ((!separateDepthStencil && (hasDepth || hasStencil)) || (hasDepth && hasStencil)) {
-				_layout = AttachmentLayout::DepthStencilReadOnlyOptimal;
-			} else if (hasDepth) {
-				_layout = AttachmentLayout::DepthReadOnlyOptimal;
-			} else if (hasStencil) {
-				_layout = AttachmentLayout::StencilReadOnlyOptimal;
-			} else {
-				_layout = AttachmentLayout::General;
-			}
-			break;
-		default:
-			log::vtext("Gl-Error", "Invalid layout for attachment '", _descriptor->getAttachment()->getName(),
-					"' in renderpass ", _descriptor->getRenderPass()->key, ":", _subpass);
-			break;
-		}
-		break;
-	case AttachmentUsage::Output:
-	case AttachmentUsage::Resolve:
-		switch (_layout) {
-		case AttachmentLayout::ColorAttachmentOptimal:
-		case AttachmentLayout::General:
-			break;
-		case AttachmentLayout::Ignored:
-			_layout = AttachmentLayout::ColorAttachmentOptimal;
-			break;
-		default:
-			log::vtext("Gl-Error", "Invalid layout for attachment '", _descriptor->getAttachment()->getName(),
-					"' in renderpass ", _descriptor->getRenderPass()->key, ":", _subpass);
-			break;
-		}
-		break;
-	case AttachmentUsage::InputOutput:
-		switch (_layout) {
-		case AttachmentLayout::General:
-			break;
-		case AttachmentLayout::Ignored:
-			_layout = AttachmentLayout::General;
-			break;
-		default:
-			log::vtext("Gl-Error", "Invalid layout for attachment '", _descriptor->getAttachment()->getName(),
-					"' in renderpass ", _descriptor->getRenderPass()->key, ":", _subpass);
-			break;
-		}
-		break;
-	case AttachmentUsage::DepthStencil:
-		switch (_layout) {
-		case AttachmentLayout::DepthStencilAttachmentOptimal:
-		case AttachmentLayout::DepthAttachmentOptimal:
-		case AttachmentLayout::DepthReadOnlyOptimal:
-		case AttachmentLayout::StencilAttachmentOptimal:
-		case AttachmentLayout::StencilReadOnlyOptimal:
-		case AttachmentLayout::DepthReadOnlyStencilAttachmentOptimal:
-		case AttachmentLayout::DepthAttachmentStencilReadOnlyOptimal:
-		case AttachmentLayout::DepthStencilReadOnlyOptimal:
-		case AttachmentLayout::General:
-			break;
-		case AttachmentLayout::Ignored:
-			if ((!separateDepthStencil && (hasDepth || hasStencil)) || (hasDepth && hasStencil)) {
-				_layout = AttachmentLayout::DepthStencilAttachmentOptimal;
-			} else if (hasDepth) {
-				_layout = AttachmentLayout::DepthAttachmentOptimal;
-			} else if (hasStencil) {
-				_layout = AttachmentLayout::StencilAttachmentOptimal;
-			} else {
-				_layout = AttachmentLayout::General;
-			}
-			break;
-		default:
-			log::vtext("Gl-Error", "Invalid layout for attachment '", _descriptor->getAttachment()->getName(),
-					"' in renderpass ", _descriptor->getRenderPass()->key, ":", _subpass);
-			break;
-		}
-		break;
-	case AttachmentUsage::Input | AttachmentUsage::DepthStencil:
-		switch (_layout) {
-		case AttachmentLayout::DepthReadOnlyStencilAttachmentOptimal:
-		case AttachmentLayout::DepthAttachmentStencilReadOnlyOptimal:
-		case AttachmentLayout::DepthStencilReadOnlyOptimal:
-		case AttachmentLayout::General:
-			break;
-		case AttachmentLayout::Ignored:
-			_layout = AttachmentLayout::General;
-			break;
-		default:
-			log::vtext("Gl-Error", "Invalid layout for attachment '", _descriptor->getAttachment()->getName(),
-					"' in renderpass ", _descriptor->getRenderPass()->key, ":", _subpass);
-			break;
-		}
-		break;
-	default:
-		log::vtext("Gl-Error", "Invalid usage for attachment '", _descriptor->getAttachment()->getName(),
-				"' in renderpass ", _descriptor->getRenderPass()->key, ":", _subpass);
-		break;
-	}
-}
-
-bool GenericAttachment::init(StringView name) {
-	return Attachment::init(name, AttachmentType::Generic);
+bool GenericAttachment::init(AttachmentBuilder &builder) {
+	builder.setType(AttachmentType::Generic);
+	return Attachment::init(builder);
 }
 
 Rc<AttachmentHandle> GenericAttachment::makeFrameHandle(const FrameQueue &h) {
 	return Rc<AttachmentHandle>::create(this, h);
-}
-
-Rc<AttachmentDescriptor> GenericAttachment::makeDescriptor(PassData *data) {
-	return Rc<GenericAttachmentDescriptor>::create(data, this);
-}
-
-Rc<AttachmentRef> GenericAttachmentDescriptor::makeRef(uint32_t idx, AttachmentUsage usage, AttachmentDependencyInfo info) {
-	return Rc<GenericAttachmentRef>::create(this, idx, usage, info);
 }
 
 bool AttachmentHandle::init(const Rc<Attachment> &attachment, const FrameQueue &frame) {

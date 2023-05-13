@@ -165,7 +165,7 @@ bool ImageView::init(Device &dev, VkImage image, VkFormat format) {
 	return false;
 }
 
-bool ImageView::init(Device &dev, const renderqueue::ImageAttachmentDescriptor &desc, Image *image) {
+/*bool ImageView::init(Device &dev, const renderqueue::ImageAttachmentDescriptor &desc, Image *image) {
 	gl::ImageViewInfo info(desc);
 
 	VkImageViewCreateInfo createInfo{};  sanitizeVkStruct(createInfo);
@@ -217,7 +217,7 @@ bool ImageView::init(Device &dev, const renderqueue::ImageAttachmentDescriptor &
 		}, gl::ObjectType::ImageView, ObjectHandle(_imageView));
 	}
 	return false;
-}
+}*/
 
 bool ImageView::init(Device &dev, Image *image, const gl::ImageViewInfo &info) {
 	VkImageViewCreateInfo createInfo{}; sanitizeVkStruct(createInfo);

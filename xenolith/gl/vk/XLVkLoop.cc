@@ -30,6 +30,7 @@
 #include "XLVkTransferQueue.h"
 #include "XLVkRenderFontQueue.h"
 #include "XLVkMaterialCompiler.h"
+#include "XLVkMeshCompiler.h"
 #include "XLVkRenderQueueCompiler.h"
 
 namespace stappler::xenolith::vk {
@@ -64,7 +65,7 @@ struct Loop::Internal final : memory::AllocPool {
 	}
 
 	void setDevice(Rc<Device> &&dev) {
-		requiredTasks += 3;
+		requiredTasks += 4;
 
 		device = move(dev);
 
@@ -81,10 +82,14 @@ struct Loop::Internal final : memory::AllocPool {
 
 		renderQueueCompiler = Rc<RenderQueueCompiler>::create(*device);
 		materialQueue = Rc<MaterialCompiler>::create();
+		meshQueue = Rc<MeshCompiler>::create();
 		transferQueue = Rc<TransferQueue>::create();
 
 		compileRenderQueue(materialQueue, [this] (bool success) {
 			onInitTaskPerformed(success, "MaterialQueue");
+		});
+		compileRenderQueue(meshQueue, [this] (bool success) {
+			onInitTaskPerformed(success, "MeshQueue");
 		});
 		compileRenderQueue(transferQueue, [this] (bool success) {
 			onInitTaskPerformed(success, "TransferQueue");
@@ -289,6 +294,7 @@ struct Loop::Internal final : memory::AllocPool {
 	Rc<RenderQueueCompiler> renderQueueCompiler;
 	Rc<TransferQueue> transferQueue;
 	Rc<MaterialCompiler> materialQueue;
+	Rc<MeshCompiler> meshQueue;
 	std::atomic<bool> *running = nullptr;
 	uint32_t requiredTasks = 0;
 
@@ -681,14 +687,7 @@ auto Loop::acquireImage(const ImageAttachment *a, const AttachmentHandle *h, Ext
 		}
 	}
 
-	Vector<gl::ImageViewInfo> views;
-	for (auto &desc : a->getDescriptors()) {
-		if (desc->getAttachment()->getType() == renderqueue::AttachmentType::Image) {
-			auto imgDesc = (renderqueue::ImageAttachmentDescriptor *)desc.get();
-			views.emplace_back(gl::ImageViewInfo(*imgDesc, info));
-		}
-	}
-
+	auto views = a->getImageViews(info);
 	return _frameCache->acquireImage(info, views);
 }
 

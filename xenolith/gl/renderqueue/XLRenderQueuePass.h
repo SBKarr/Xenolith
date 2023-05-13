@@ -20,7 +20,6 @@
  THE SOFTWARE.
  **/
 
-
 #ifndef XENOLITH_GL_RENDERQUEUE_XLRENDERQUEUERENDERPASS_H_
 #define XENOLITH_GL_RENDERQUEUE_XLRENDERQUEUERENDERPASS_H_
 
@@ -29,22 +28,27 @@
 
 namespace stappler::xenolith::renderqueue {
 
+class PassBuilder;
+
 class Pass : public NamedRef {
 public:
+	using Queue = renderqueue::Queue;
 	using FrameQueue = renderqueue::FrameQueue;
 	using RenderOrdering = renderqueue::RenderOrdering;
+	using PassBuilder = renderqueue::PassBuilder;
 	using PassHandle = renderqueue::PassHandle;
 	using PassType = renderqueue::PassType;
+	using AttachmentData = renderqueue::AttachmentData;
 
 	virtual ~Pass();
 
-	virtual bool init(StringView, PassType, RenderOrdering, size_t subpassCount = 1);
+	virtual bool init(PassBuilder &);
 	virtual void invalidate();
 
-	virtual StringView getName() const override { return _name; }
-	virtual RenderOrdering getOrdering() const { return _ordering; }
-	virtual size_t getSubpassCount() const { return _subpassCount; }
-	virtual PassType getType() const { return _type; }
+	virtual StringView getName() const override;
+	virtual RenderOrdering getOrdering() const;
+	virtual size_t getSubpassCount() const;
+	virtual PassType getType() const;
 
 	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &);
 
@@ -56,19 +60,14 @@ public:
 
 	virtual Extent2 getSizeForFrame(const FrameQueue &) const;
 
-	virtual const AttachmentDescriptor *getDescriptor(const Attachment *) const;
-	virtual const AttachmentDescriptor *getAttachment(const Attachment *) const;
+	//virtual const AttachmentDescriptor *getDescriptor(uint32_t layoutIdx, const Attachment *) const;
+	//virtual const AttachmentDescriptor *getAttachment(const Attachment *) const;
 
 protected:
-	friend class Queue;
+	friend class renderqueue::Queue;
 
 	// called before compilation
 	virtual void prepare(gl::Device &);
-
-	size_t _subpassCount = 1;
-	String _name;
-	PassType _type = PassType::Graphics;
-	RenderOrdering _ordering = RenderOrderingLowest;
 
 	struct FrameQueueWaiter {
 		Rc<FrameQueue> queue;
@@ -124,9 +123,11 @@ public:
 	// after submit
 	virtual void finalize(FrameQueue &, bool successful);
 
-	virtual AttachmentHandle *getAttachmentHandle(const Attachment *) const;
+	virtual AttachmentHandle *getAttachmentHandle(const AttachmentData *) const;
 
 	void autorelease(Ref *) const;
+
+	const AttachmentPassData *getAttachemntData(const AttachmentData *) const;
 
 protected:
 	bool _isAsync = false; // async passes can be submitted before previous frame submits all passes

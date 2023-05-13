@@ -52,20 +52,16 @@ class MaterialCompilationRenderPass : public QueuePass {
 public:
 	virtual ~MaterialCompilationRenderPass();
 
-	virtual bool init(StringView);
+	virtual bool init(PassBuilder &, const AttachmentData *);
 
 	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
 
-	const MaterialCompilationAttachment *getMaterialAttachment() const {
-		return _materialAttachment;
-	}
+	const AttachmentData *getMaterialAttachment() const { return _materialAttachment; }
 
 protected:
 	using QueuePass::init;
 
-	virtual void prepare(gl::Device &) override;
-
-	const MaterialCompilationAttachment *_materialAttachment = nullptr;
+	const AttachmentData *_materialAttachment = nullptr;
 };
 
 class MaterialCompilationRenderPassHandle : public QueuePassHandle {
@@ -87,16 +83,18 @@ protected:
 MaterialCompiler::~MaterialCompiler() { }
 
 bool MaterialCompiler::init() {
-	Queue::Builder builder("Material");
+	using namespace renderqueue;
+	Queue::Builder builder("MaterialCompiler");
 
-	auto attachment = Rc<MaterialCompilationAttachment>::create("MaterialAttachment");
-	auto pass = Rc<MaterialCompilationRenderPass>::create("MaterialRenderPass");
+	auto attachment = builder.addAttachemnt("MaterialAttachment", [&] (AttachmentBuilder &attachmentBuilder) -> Rc<Attachment> {
+		attachmentBuilder.defineAsInput();
+		attachmentBuilder.defineAsOutput();
+		return Rc<MaterialCompilationAttachment>::create(attachmentBuilder);
+	});
 
-	builder.addRenderPass(pass);
-	builder.addPassInput(pass, 0, attachment, renderqueue::AttachmentDependencyInfo());
-	builder.addPassOutput(pass, 0, attachment, renderqueue::AttachmentDependencyInfo());
-	builder.addInput(attachment);
-	builder.addOutput(attachment);
+	builder.addPass("MaterialRenderPass", PassType::Transfer, RenderOrdering(0), [&] (PassBuilder &passBuilder) -> Rc<Pass> {
+		return Rc<MaterialCompilationRenderPass>::create(passBuilder, attachment);
+	});
 
 	if (renderqueue::Queue::init(move(builder))) {
 		_attachment = attachment;
@@ -256,24 +254,20 @@ void MaterialCompilationAttachmentHandle::submitInput(FrameQueue &q, Rc<gl::Atta
 
 MaterialCompilationRenderPass::~MaterialCompilationRenderPass() { }
 
-bool MaterialCompilationRenderPass::init(StringView name) {
-	if (QueuePass::init(name, gl::RenderPassType::Generic, renderqueue::RenderOrderingHighest, 1)) {
-		_queueOps = QueueOperations::Transfer;
-		return true;
+bool MaterialCompilationRenderPass::init(PassBuilder &passBuilder, const AttachmentData *attachment) {
+	passBuilder.addAttachment(attachment);
+
+	if (!QueuePass::init(passBuilder)) {
+		return false;
 	}
-	return false;
+
+	_queueOps = QueueOperations::Transfer;
+	_materialAttachment = attachment;
+	return true;
 }
 
 auto MaterialCompilationRenderPass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle> {
 	return Rc<MaterialCompilationRenderPassHandle>::create(*this, handle);
-}
-
-void MaterialCompilationRenderPass::prepare(gl::Device &) {
-	for (auto &it : _data->passDescriptors) {
-		if (auto a = dynamic_cast<MaterialCompilationAttachment *>(it->getAttachment())) {
-			_materialAttachment = a;
-		}
-	}
 }
 
 MaterialCompilationRenderPassHandle::~MaterialCompilationRenderPassHandle() { }

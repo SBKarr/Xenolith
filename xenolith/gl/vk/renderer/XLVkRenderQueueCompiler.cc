@@ -59,20 +59,18 @@ class RenderQueuePass : public QueuePass {
 public:
 	virtual ~RenderQueuePass();
 
-	virtual bool init(StringView);
+	virtual bool init(PassBuilder &, const AttachmentData *);
 
 	virtual Rc<PassHandle> makeFrameHandle(const FrameQueue &) override;
 
-	const RenderQueueAttachment *getAttachment() const {
+	const AttachmentData *getAttachment() const {
 		return _attachment;
 	}
 
 protected:
 	using QueuePass::init;
 
-	virtual void prepare(gl::Device &) override;
-
-	RenderQueueAttachment *_attachment = nullptr;
+	const AttachmentData *_attachment = nullptr;
 };
 
 class RenderQueuePassHandle : public QueuePassHandle {
@@ -98,19 +96,22 @@ protected:
 RenderQueueCompiler::~RenderQueueCompiler() { }
 
 bool RenderQueueCompiler::init(Device &dev) {
-	renderqueue::Queue::Builder builder("RenderQueue");
+	using namespace renderqueue;
 
-	auto attachment = Rc<RenderQueueAttachment>::create("RenderQueueAttachment");
-	auto pass = Rc<RenderQueuePass>::create("RenderQueueRenderPass");
+	Queue::Builder builder("RenderQueueCompiler");
 
-	builder.addRenderPass(pass);
-	builder.addPassInput(pass, 0, attachment, renderqueue::AttachmentDependencyInfo());
-	builder.addPassOutput(pass, 0, attachment, renderqueue::AttachmentDependencyInfo());
-	builder.addInput(attachment);
-	builder.addOutput(attachment);
+	auto attachment = builder.addAttachemnt("RenderQueueAttachment", [&] (AttachmentBuilder &attachmentBuilder) -> Rc<Attachment> {
+		attachmentBuilder.defineAsInput();
+		attachmentBuilder.defineAsOutput();
+		return Rc<RenderQueueAttachment>::create(attachmentBuilder);
+	});
+
+	builder.addPass("RenderQueueRenderPass", PassType::Transfer, RenderOrdering(0), [&] (PassBuilder &passBuilder) -> Rc<Pass> {
+		return Rc<RenderQueuePass>::create(passBuilder, attachment);
+	});
 
 	if (Queue::init(move(builder))) {
-		_attachment = attachment.get();
+		_attachment = attachment;
 
 		prepare(dev);
 
@@ -237,15 +238,15 @@ void RenderQueueAttachmentHandle::runPipelines(FrameHandle &frame) {
 	[[maybe_unused]] size_t tasksCount = _pipelinesInQueue.load();
 	for (auto &pit : _input->queue->getPasses()) {
 		for (auto &sit : pit->subpasses) {
-			_pipelinesInQueue += sit.graphicPipelines.size() + sit.computePipelines.size();
-			tasksCount += sit.graphicPipelines.size() + sit.computePipelines.size();
+			_pipelinesInQueue += sit->graphicPipelines.size() + sit->computePipelines.size();
+			tasksCount += sit->graphicPipelines.size() + sit->computePipelines.size();
 		}
 	}
 
 	for (auto &pit : _input->queue->getPasses()) {
 		for (auto &sit : pit->subpasses) {
-			for (auto &it : sit.graphicPipelines) {
-				frame.performRequiredTask([this, pass = &sit, pipeline = it] (FrameHandle &frame) -> bool {
+			for (auto &it : sit->graphicPipelines) {
+				frame.performRequiredTask([this, pass = sit, pipeline = it] (FrameHandle &frame) -> bool {
 					auto ret = Rc<GraphicPipeline>::create(*_device, *pipeline, *pass, *_input->queue);
 					if (!ret) {
 						log::vtext("Gl-Device", "Fail to compile pipeline ", pipeline->key);
@@ -256,8 +257,8 @@ void RenderQueueAttachmentHandle::runPipelines(FrameHandle &frame) {
 					return true;
 				}, this, "RenderQueueAttachmentHandle::runPipelines");
 			}
-			for (auto &it : sit.computePipelines) {
-				frame.performRequiredTask([this, pass = &sit, pipeline = it] (FrameHandle &frame) -> bool {
+			for (auto &it : sit->computePipelines) {
+				frame.performRequiredTask([this, pass = sit, pipeline = it] (FrameHandle &frame) -> bool {
 					auto ret = Rc<ComputePipeline>::create(*_device, *pipeline, *pass, *_input->queue);
 					if (!ret) {
 						log::vtext("Gl-Device", "Fail to compile pipeline ", pipeline->key);
@@ -274,24 +275,19 @@ void RenderQueueAttachmentHandle::runPipelines(FrameHandle &frame) {
 
 RenderQueuePass::~RenderQueuePass() { }
 
-bool RenderQueuePass::init(StringView name) {
-	if (QueuePass::init(name, PassType::Transfer, renderqueue::RenderOrderingHighest, 1)) {
-		_queueOps = QueueOperations::Transfer;
-		return true;
+bool RenderQueuePass::init(PassBuilder &passBuilder, const AttachmentData *attachment) {
+	passBuilder.addAttachment(attachment);
+
+	if (!QueuePass::init(passBuilder)) {
+		return false;
 	}
-	return false;
+
+	_attachment = attachment;
+	return true;
 }
 
 auto RenderQueuePass::makeFrameHandle(const FrameQueue &handle) -> Rc<PassHandle> {
 	return Rc<RenderQueuePassHandle>::create(*this, handle);
-}
-
-void RenderQueuePass::prepare(gl::Device &) {
-	for (auto &it : _data->passDescriptors) {
-		if (auto a = dynamic_cast<RenderQueueAttachment *>(it->getAttachment())) {
-			_attachment = a;
-		}
-	}
 }
 
 RenderQueuePassHandle::~RenderQueuePassHandle() {
@@ -321,8 +317,8 @@ bool RenderQueuePassHandle::prepare(FrameQueue &frame, Function<void(bool)> &&cb
 	auto hasMaterials = false;
 	auto &res = _attachment->getTransferResource();
 	for (auto &it : _queue->getAttachments()) {
-		if (auto v = it.cast<gl::MaterialAttachment>()) {
-			if (!v->getInitialMaterials().empty()) {
+		if (auto v = it->attachment.cast<gl::MaterialAttachment>()) {
+			if (!v->getPredefinedMaterials().empty()) {
 				hasMaterials = true;
 				break;
 			}
@@ -352,7 +348,7 @@ bool RenderQueuePassHandle::prepare(FrameQueue &frame, Function<void(bool)> &&cb
 
 				if (hasMaterials) {
 					for (auto &it : _queue->getAttachments()) {
-						if (auto v = it.cast<gl::MaterialAttachment>()) {
+						if (auto v = it->attachment.cast<gl::MaterialAttachment>()) {
 							if (!prepareMaterials(frame, buf.getBuffer(), v, outputBufferBarriers)) {
 								log::vtext("vk::RenderQueueCompiler", "Fail to compile predefined materials for ", _queue->getName());
 								return false;
@@ -423,7 +419,7 @@ void RenderQueuePassHandle::finalize(FrameQueue &frame, bool successful) {
 bool RenderQueuePassHandle::prepareMaterials(FrameHandle &iframe, VkCommandBuffer buf,
 		const Rc<gl::MaterialAttachment> &attachment, Vector<VkBufferMemoryBarrier> &outputBufferBarriers) {
 	auto table = _device->getTable();
-	auto &initial = attachment->getInitialMaterials();
+	auto &initial = attachment->getPredefinedMaterials();
 	if (initial.empty()) {
 		return true;
 	}

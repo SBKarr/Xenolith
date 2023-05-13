@@ -44,7 +44,7 @@ class QueuePass : public renderqueue::Pass {
 public:
 	virtual ~QueuePass();
 
-	virtual bool init(StringView, PassType, RenderOrdering, size_t subpassCount = 1) override;
+	virtual bool init(PassBuilder &passBuilder) override;
 	virtual void invalidate() override;
 
 	QueueOperations getQueueOps() const { return _queueOps; }

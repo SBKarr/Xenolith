@@ -37,9 +37,9 @@ namespace stappler::xenolith::vk {
 
 QueuePass::~QueuePass() { }
 
-bool QueuePass::init(StringView name, PassType type, RenderOrdering ordering, size_t subpassCount) {
-	if (renderqueue::Pass::init(name, type, ordering, subpassCount)) {
-		switch (type) {
+bool QueuePass::init(PassBuilder &passBuilder) {
+	if (renderqueue::Pass::init(passBuilder)) {
+		switch (getType()) {
 		case gl::RenderPassType::Graphics:
 		case gl::RenderPassType::Generic:
 			_queueOps = QueueOperations::Graphics;
@@ -136,7 +136,12 @@ bool QueuePassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
 
 	if (_data->hasUpdateAfterBind) {
 		q.getFrame()->performInQueue([this] (FrameHandle &frame) {
-			return ((RenderPassImpl *)_data->impl.get())->writeDescriptors(*this, true);
+			for (uint32_t i = 0; i < _data->pipelineLayouts.size(); ++ i) {
+				if (!((RenderPassImpl *)_data->impl.get())->writeDescriptors(*this, i, true)) {
+					return false;
+				}
+			}
+			return true;
 		}, [this] (FrameHandle &frame, bool success) {
 			if (!success) {
 				_valid = false;
@@ -154,8 +159,10 @@ bool QueuePassHandle::prepare(FrameQueue &q, Function<void(bool)> &&cb) {
 	}
 
 	q.getFrame()->performInQueue([this] (FrameHandle &frame) {
-		if (!((RenderPassImpl *)_data->impl.get())->writeDescriptors(*this, false)) {
-			return false;
+		for (uint32_t i = 0; i < _data->pipelineLayouts.size(); ++ i) {
+			if (!((RenderPassImpl *)_data->impl.get())->writeDescriptors(*this, i, false)) {
+				return false;
+			}
 		}
 
 		auto ret = doPrepareCommands(frame);
@@ -240,7 +247,7 @@ Vector<const CommandBuffer *> QueuePassHandle::doPrepareCommands(FrameHandle &) 
 			VkRect2D scissorRect{ { 0, 0}, { currentExtent.width, currentExtent.height } };
 			buf.cmdSetScissor(0, makeSpanView(&scissorRect, 1));
 
-			auto pipeline = _data->subpasses[0].graphicPipelines.get(StringView("Default"));
+			auto pipeline = _data->subpasses[0]->graphicPipelines.get(StringView("Default"));
 
 			buf.cmdBindPipeline((GraphicPipeline *)pipeline->pipeline.get());
 			buf.cmdDraw(3, 1, 0, 0);

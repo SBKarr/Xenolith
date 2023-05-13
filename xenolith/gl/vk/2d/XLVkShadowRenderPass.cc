@@ -1,5 +1,6 @@
 /**
  Copyright (c) 2022 Roman Katuntsev <sbkarr@stappler.org>
+ Copyright (c) 2023 Stappler LLC <admin@stappler.dev>
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -768,8 +769,8 @@ bool ShadowPrimitivesAttachmentHandle::writeDescriptor(const QueuePassHandle &, 
 
 ShadowLightDataAttachment::~ShadowLightDataAttachment() { }
 
-bool ShadowLightDataAttachment::init(StringView name) {
-	if (BufferAttachment::init(name, gl::BufferInfo(gl::BufferUsage::UniformBuffer, size_t(sizeof(LightData))))) {
+bool ShadowLightDataAttachment::init(AttachmentBuilder &builder) {
+	if (BufferAttachment::init(builder, gl::BufferInfo(gl::BufferUsage::UniformBuffer, size_t(sizeof(LightData))))) {
 		return true;
 	}
 	return false;
@@ -788,8 +789,8 @@ auto ShadowLightDataAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<
 
 ShadowVertexAttachment::~ShadowVertexAttachment() { }
 
-bool ShadowVertexAttachment::init(StringView name) {
-	if (BufferAttachment::init(name, gl::BufferInfo(gl::BufferUsage::StorageBuffer))) {
+bool ShadowVertexAttachment::init(AttachmentBuilder &builder) {
+	if (BufferAttachment::init(builder, gl::BufferInfo(gl::BufferUsage::StorageBuffer))) {
 		return true;
 	}
 	return false;
@@ -808,8 +809,8 @@ auto ShadowVertexAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc<Att
 
 ShadowPrimitivesAttachment::~ShadowPrimitivesAttachment() { }
 
-bool ShadowPrimitivesAttachment::init(StringView name) {
-	if (BufferAttachment::init(name, gl::BufferInfo(gl::BufferUsage::StorageBuffer))) {
+bool ShadowPrimitivesAttachment::init(AttachmentBuilder &builder) {
+	if (BufferAttachment::init(builder, gl::BufferInfo(gl::BufferUsage::StorageBuffer))) {
 		return true;
 	}
 	return false;
@@ -821,8 +822,8 @@ auto ShadowPrimitivesAttachment::makeFrameHandle(const FrameQueue &handle) -> Rc
 
 ShadowSdfImageAttachment::~ShadowSdfImageAttachment() { }
 
-bool ShadowSdfImageAttachment::init(StringView name, Extent2 extent) {
-	return ImageAttachment::init(name, gl::ImageInfo(
+bool ShadowSdfImageAttachment::init(AttachmentBuilder &builder, Extent2 extent) {
+	return ImageAttachment::init(builder, gl::ImageInfo(
 		extent,
 		gl::ForceImageUsage(gl::ImageUsage::Storage | gl::ImageUsage::Sampled | gl::ImageUsage::TransferDst | gl::ImageUsage::TransferSrc),
 		gl::RenderPassType::Compute,
